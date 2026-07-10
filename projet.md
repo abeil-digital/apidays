@@ -105,6 +105,17 @@ d'une valeur fixe à un vrai calcul :
 Tant que ces règles ne sont pas figées, `useSoldes()` continue de renvoyer des valeurs mockées —
 c'est un choix assumé, pas un oubli.
 
+## Hébergement du code — provisoire, sur le compte GitHub personnel
+
+Le dépôt est hébergé sur le compte GitHub personnel de Vincent (`abeil-apidays`, privé), pas sur
+une organisation Abeil. C'est le même principe que pour Supabase : un choix pragmatique pour
+avancer vite tant qu'il n'y a pas de compte client, pas une décision d'architecture définitive.
+
+Rien dans le code ne dépend de cet hébergement (pas de secrets, pas de config propre à ce compte),
+donc le transfert vers une organisation GitHub Abeil — via `gh repo transfer` ou en ajoutant
+l'organisation comme remote et en poussant l'historique — se fait sans aucun impact sur le code
+ou son fonctionnement. À faire dès qu'un compte/organisation Abeil existe.
+
 ## Hors périmètre de l'Espace Salarié (rappel)
 
 Authentification réelle, Espace Manager, Espace Delphine, accès Comptable, calcul réel des
