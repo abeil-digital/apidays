@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens Apidays — équivalent Tailwind v4 d'un tailwind.config.ts.
+ * Tailwind v4 génère les utilities (bg-*, text-*, border-*, rounded-*, font-*)
+ * directement depuis les variables `@theme`, donc CE bloc EST la configuration
+ * du thème. Voir README.md > "Thème & design tokens" pour la convention.
+ *
+ * Aujourd'hui : palette neutre inspirée iOS system. Le jour où la charte
+ * graphique Abeil est validée, seules les valeurs ci-dessous changent —
+ * aucun composant ne référence de couleur en dur.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+
+  /* Couleur de marque (aujourd'hui : bleu iOS system, demain : couleur Abeil) */
+  --color-brand: #0a84ff;
+  --color-brand-foreground: #ffffff;
+
+  /* Couleur d'accent secondaire (tuile "CP théorique") */
+  --color-accent: #ff453a;
+
+  /* Fond d'app / cartes */
+  --color-surface-app: #f2f2f7;
+  --color-surface-card: #ffffff;
+
+  /* Texte & bordures neutres, du plus foncé au plus clair */
+  --color-ink-900: #1c1c1e;
+  --color-ink-500: #8a8a8e;
+  --color-ink-400: #8e8e93;
+  --color-ink-300: #e5e5ea;
+
+  /* Statuts de demande */
+  --color-status-success-bg: #e7f8ec;
+  --color-status-success-fg: #248a3d;
+  --color-status-warning-bg: #fff3e0;
+  --color-status-warning-fg: #c77700;
+  --color-status-danger-bg: #fde8e7;
+  --color-status-danger-fg: #d70015;
+
+  /* Rayons de bordure — cartes/tuiles arrondies façon iOS */
+  --radius-card: 1.375rem; /* 22px */
+  --radius-control: 1rem; /* 16px */
+}
+
+body {
+  background: var(--color-surface-app);
+  color: var(--color-ink-900);
+}
+
+@media print {
+  body {
+    background: white;
+  }
+}

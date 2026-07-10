@@ -1,0 +1,22 @@
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+
+interface BackHeaderProps {
+  href: string;
+  title: string;
+}
+
+export function BackHeader({ href, title }: BackHeaderProps) {
+  return (
+    <div className="flex items-center gap-2 px-1">
+      <Link
+        href={href}
+        aria-label="Retour"
+        className="border-ink-300 bg-surface-card text-ink-900 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border"
+      >
+        <ChevronLeft size={18} />
+      </Link>
+      <h1 className="text-ink-900 text-[1.4rem] font-bold">{title}</h1>
+    </div>
+  );
+}
