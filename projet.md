@@ -116,6 +116,22 @@ donc le transfert vers une organisation GitHub Abeil — via `gh repo transfer` 
 l'organisation comme remote et en poussant l'historique — se fait sans aucun impact sur le code
 ou son fonctionnement. À faire dès qu'un compte/organisation Abeil existe.
 
+## Déploiement — provisoire, sur le compte Vercel personnel
+
+Le projet est déployé sur le compte Vercel personnel de Vincent
+(`vincent-mayols-projects/apidays`), relié au dépôt GitHub `vincent-uzi/abeil-apidays` : chaque
+`git push` sur `main` redéploie automatiquement en production, les autres branches génèrent des
+previews. URL actuelle : https://apidays-iota.vercel.app.
+
+Même principe que pour GitHub et Supabase : un choix pour avancer vite avant qu'un compte/équipe
+Vercel Abeil n'existe, pas un choix définitif. Aucune variable d'environnement ni configuration
+spécifique à ce compte n'est en jeu à ce stade (pas de base de données branchée), donc transférer
+le projet vers une équipe Vercel Abeil plus tard (`vercel teams` + transfert de projet, ou
+recréation du lien sur le nouveau compte à partir du même dépôt GitHub) n'a aucun impact sur le
+code. À faire dès qu'un compte/équipe Vercel Abeil existe — et impérativement avant tout
+branchement de Supabase avec de vraies données, pour éviter d'avoir à migrer des secrets de
+production entre comptes.
+
 ## Hors périmètre de l'Espace Salarié (rappel)
 
 Authentification réelle, Espace Manager, Espace Delphine, accès Comptable, calcul réel des
