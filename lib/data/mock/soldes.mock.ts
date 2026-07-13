@@ -2,11 +2,12 @@ import type { Soldes } from "@/lib/types";
 
 export function seedSoldes(): Soldes {
   return {
-    cpReel: 18,
-    cpTheorique: 4,
-    rttLibresRestant: 2,
-    rttLibresTotal: 3,
-    rttImposesRestant: 3,
-    rttImposesTotal: 3,
+    cp: { valeur: 18, conditionPrefixe: "À poser avant le", conditionAccent: "31/05/2026" },
+    rtt: { valeur: 3, conditionPrefixe: "À poser avant le", conditionAccent: "31/12/2026" },
+    cpt: {
+      valeur: 2.25,
+      conditionPrefixe: "En cours d'acquisition, à poser à partir de",
+      conditionAccent: "juin 2026",
+    },
   };
 }

@@ -38,6 +38,12 @@
   --color-status-danger-bg: #fde8e7;
   --color-status-danger-fg: #d70015;
 
+  /* Cartes de solde (Dashboard) — encre ardoise commune + bandeaux pastel par catégorie */
+  --color-solde-ink: #496580;
+  --color-solde-cp: #ffdbbb;
+  --color-solde-rtt: #baddff;
+  --color-solde-cpt: #ffeedd;
+
   /* Rayons de bordure — cartes/tuiles arrondies façon iOS */
   --radius-card: 1.375rem; /* 22px */
   --radius-control: 1rem; /* 16px */

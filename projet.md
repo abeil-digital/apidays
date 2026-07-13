@@ -19,11 +19,34 @@ valider avec Abeil sont dans `20260709-abeil-Périmètre fonctionnel.pdf` (hors 
 ## Étapes livrées
 
 - **Espace Salarié** (cette étape) : dashboard (solde, demandes en cours, prochains congés),
-  nouvelle demande, historique filtrable + export impression. Utilisateur unique mocké
-  (Camille Rio), pas d'authentification réelle.
+  nouvelle demande (avec aperçu du solde avant/après), historique filtrable + export impression.
+  Utilisateur unique mocké (Camille Rio), pas d'authentification réelle.
+- **Header général** : logo Abeil + Apidays, navigation niveau 1 (Poser / Suivre / Paramétrer),
+  profil. Prépare la place pour les futurs espaces sans les construire.
 
 À venir : Espace Manager (validation/refus, vue équipe), Espace Delphine (gestion des comptes,
 export paie, correction de solde), authentification réelle, calcul réel des soldes CP/RTT.
+
+## Logo Abeil — asset temporaire
+
+Le logo affiché dans le header (`public/abeil-logo.jpeg`) est le fichier fourni tel quel par
+Vincent, au format JPEG avec un fond blanc opaque (pas de transparence). Il est affiché sur une
+pastille blanche dans le header noir pour éviter un rectangle blanc flottant à l'aspect non
+maîtrisé. Dès qu'un fichier officiel (SVG ou PNG à fond transparent) est disponible, il suffit de
+remplacer `public/abeil-logo.jpeg` et d'ajuster la référence dans
+[`components/layout/HeaderBar.tsx`](components/layout/HeaderBar.tsx) — aucun autre fichier n'est
+concerné.
+
+## Navigation niveau 1 — Poser / Suivre / Paramétrer
+
+Le header expose trois entrées ([`components/layout/niveau1.ts`](components/layout/niveau1.ts)),
+pensées comme la structure cible de l'application, pas comme des fonctionnalités livrées :
+
+- **Poser** : fonctionnel, c'est l'Espace Salarié actuel (`/`, `/nouvelle-demande`, `/historique`).
+- **Suivre** et **Paramétrer** : non cliquables (pas de route derrière), grisés, réservés
+  respectivement aux futurs espaces Manager (suivi/validation des demandes) et Delphine
+  (paramétrage RTT, gestion des comptes). Les activer consistera à leur donner un `href` dans
+  `niveau1.ts` une fois l'espace correspondant construit — aucune restructuration du header.
 
 ## Le principe temporaire : pourquoi une couche mockée plutôt que "coder en dur"
 

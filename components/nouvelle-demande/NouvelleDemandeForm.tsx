@@ -2,8 +2,9 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { CalendarDays, CheckCircle2, Coffee, Send, Sun } from "lucide-react";
+import { CheckCircle2, Coffee, Send, Sun } from "lucide-react";
 import type { TypeDemande } from "@/lib/types";
+import { formatJours, nombreJours } from "@/lib/format";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldes } from "@/hooks/useSoldes";
 import { BackHeader } from "@/components/ui/BackHeader";
@@ -25,6 +26,11 @@ export function NouvelleDemandeForm() {
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
+  const soldeActuel = soldes ? (type === "CP" ? soldes.cp.valeur : soldes.rtt.valeur) : null;
+  const joursDemandes = debut && fin && fin >= debut ? nombreJours(debut, fin) : null;
+  const soldeApres =
+    soldeActuel !== null && joursDemandes !== null ? soldeActuel - joursDemandes : null;
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -44,7 +50,7 @@ export function NouvelleDemandeForm() {
 
   if (sent) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+      <div className="mx-auto flex w-full max-w-md flex-col items-center justify-center gap-4 py-16 text-center md:max-w-2xl">
         <div className="bg-status-success-bg flex h-14 w-14 items-center justify-center rounded-full">
           <CheckCircle2 size={28} className="text-status-success-fg" />
         </div>
@@ -65,7 +71,7 @@ export function NouvelleDemandeForm() {
   }
 
   return (
-    <div className="flex flex-col gap-5 pt-5 pb-4 md:pt-0">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <BackHeader href="/" title="Nouvelle demande" />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -116,6 +122,25 @@ export function NouvelleDemandeForm() {
           </div>
         </div>
 
+        {soldeActuel !== null && (
+          <div className="rounded-control bg-surface-card flex flex-col gap-1.5 px-3.5 py-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-ink-500">Solde {type} actuel</span>
+              <span className="text-ink-900 font-bold">{formatJours(soldeActuel)} j</span>
+            </div>
+            {soldeApres !== null && (
+              <div className="flex items-center justify-between">
+                <span className="text-ink-500">Solde {type} après cette demande</span>
+                <span
+                  className={`font-bold ${soldeApres < 0 ? "text-status-danger-fg" : "text-ink-900"}`}
+                >
+                  {formatJours(soldeApres)} j
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div>
           <FieldLabel htmlFor="note">Message pour le manager (facultatif)</FieldLabel>
           <textarea
@@ -131,14 +156,6 @@ export function NouvelleDemandeForm() {
         {error && (
           <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
             {error}
-          </div>
-        )}
-
-        {soldes && (
-          <div className="rounded-control bg-surface-card text-ink-500 flex items-start gap-2 px-3.5 py-3 text-xs">
-            <CalendarDays size={15} className="mt-0.5 shrink-0" />
-            Il vous reste {soldes.cpReel} jours de CP et {soldes.rttLibresRestant} RTT libres
-            disponibles.
           </div>
         )}
 

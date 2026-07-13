@@ -7,21 +7,42 @@ export function formatDate(iso: string): string {
   }).format(d);
 }
 
-export function formatRange(debut: string, fin: string): string {
+function formatJourMois(iso: string, avecAnnee: boolean): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const jour = d.getDate();
+  const jourTexte = jour === 1 ? "1er" : String(jour);
+  const mois = new Intl.DateTimeFormat("fr-FR", { month: "short" }).format(d);
+  return avecAnnee ? `${jourTexte} ${mois} ${d.getFullYear()}` : `${jourTexte} ${mois}`;
+}
+
+/**
+ * Période d'une demande. Un seul jour : juste la date. Sinon "{début} au {fin}" —
+ * l'année du début n'est répétée que si la période chevauche deux années civiles.
+ */
+export function formatPeriodeDemande(debut: string, fin: string): string {
   if (debut === fin) return formatDate(debut);
 
   const d1 = new Date(`${debut}T00:00:00`);
   const d2 = new Date(`${fin}T00:00:00`);
-  const sameMonth = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
+  const sameYear = d1.getFullYear() === d2.getFullYear();
 
-  if (sameMonth) {
-    const day1 = new Intl.DateTimeFormat("fr-FR", { day: "numeric" }).format(d1);
-    return `${day1} – ${formatDate(fin)}`;
+  if (sameYear) {
+    return `${formatJourMois(debut, false)} au ${formatJourMois(fin, true)}`;
   }
 
-  return `${formatDate(debut)} – ${formatDate(fin)}`;
+  return `${formatJourMois(debut, true)} au ${formatJourMois(fin, true)}`;
+}
+
+export function nombreJours(debut: string, fin: string): number {
+  const d1 = new Date(`${debut}T00:00:00`);
+  const d2 = new Date(`${fin}T00:00:00`);
+  return Math.round((d2.getTime() - d1.getTime()) / 86_400_000) + 1;
 }
 
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function formatJours(valeur: number): string {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(valeur);
 }

@@ -83,11 +83,14 @@ automatiquement les utilities (`bg-brand`, `text-ink-500`, `rounded-card`, etc.)
 la configuration du thème — l'équivalent du `theme.extend` d'un `tailwind.config.ts` classique.
 
 Palette actuelle : neutre, inspirée des composants système iOS (fond gris clair, cartes blanches,
-tuiles colorées plates). Pas d'identité Abeil pour l'instant. Les tokens sont nommés
-sémantiquement (`brand`, `accent`, `ink-900`, `surface-card`, `status-success-fg`...) et non par
-valeur de couleur, précisément pour que l'arrivée de la charte Abeil soit un changement de
-**valeurs** dans `app/globals.css`, jamais une réécriture de composant : aucun composant ne
-contient de couleur en dur (`#0A84FF`, etc.).
+tuiles colorées plates), header en noir provisoire. Pas de vraie charte Abeil pour l'instant — le
+logo dans le header est le seul élément de marque, et c'est un fichier `.jpeg` fourni tel quel
+(fond blanc opaque, pas de transparence), à remplacer par un SVG/PNG officiel dès que possible.
+Les tokens sont nommés sémantiquement (`brand`, `accent`, `ink-900`, `surface-card`,
+`solde-cp`/`solde-rtt`/`solde-cpt`, `status-success-fg`...) et non par valeur de couleur,
+précisément pour que l'arrivée de la charte Abeil soit un changement de **valeurs** dans
+`app/globals.css`, jamais une réécriture de composant : aucun composant ne contient de couleur en
+dur (`#0A84FF`, etc.).
 
 ## Structure
 
@@ -100,10 +103,11 @@ app/
 
 components/
   dashboard/, nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
-  demandes/         RequestRow, RequestList, RowIcon — réutilisables entre Dashboard/Historique
+  demandes/         RequestRow, RequestList, TypeBadge — réutilisables entre Dashboard/Historique
                      (et plus tard Espace Manager pour la vue équipe)
-  layout/            AppShell, SideNav, BottomNav, TopBar — navigation par vraies routes Next.js
-  ui/                 primitives neutres (StatTile, StatusBadge, ListCard, BackHeader...)
+  layout/            AppShell, HeaderBar, niveau1.ts, SideNav, BottomNav — navigation par vraies
+                     routes Next.js, header général + sous-navigation
+  ui/                 primitives neutres (SoldeCard, StatusBadge, ListCard, BackHeader...)
 
 hooks/                useDemandes, useSoldes, useUtilisateur — seul point de contact données ↔ UI
 
@@ -118,11 +122,21 @@ lib/
 - **Navigation par vraies routes** (`/`, `/nouvelle-demande`, `/historique`) plutôt qu'un état
   `view` en mémoire comme dans le prototype d'origine : back/forward navigateur, URL partageable,
   et c'est ce que Next.js App Router fait de mieux.
+- **Header général à deux niveaux** ([`components/layout/HeaderBar.tsx`](components/layout/HeaderBar.tsx)) :
+  logo Abeil + "Apidays", navigation niveau 1 (`Poser` / `Suivre` / `Paramétrer` — seul `Poser` est
+  fonctionnel, les deux autres sont des emplacements réservés pour les futurs espaces Manager et
+  Delphine, voir [`components/layout/niveau1.ts`](components/layout/niveau1.ts)), profil à droite.
+  La sous-navigation actuelle (Accueil / Nouvelle demande / Historique) reste rattachée à `Poser`.
+- **Écrans larges** : au-delà de 1440px, tout le shell applicatif (header + sidebar + contenu) est
+  capé et centré — pas seulement le contenu — pour ne pas s'étirer sur moniteur 4K/ultrawide (voir
+  `AppShell.tsx` et `HeaderBar.tsx`, `md:max-w-[1440px]`). En dessous, comportement fluide inchangé.
 - **Authentification mockée** : un seul utilisateur (`Camille Rio`) via `useUtilisateur()`. Pas
   d'auth réelle à cette étape — hors périmètre.
 - **Soldes CP/RTT à valeurs fixes** : les règles métier (ancienneté, demi-journées, jours fériés,
   temps partiel, report/perte...) ne sont pas encore validées avec Abeil. `useSoldes()` renvoie
-  des valeurs mockées ; le calcul réel remplacera uniquement `lib/data/soldes.repository.ts`.
+  des valeurs mockées ; le calcul réel remplacera uniquement `lib/data/soldes.repository.ts`. Le
+  formulaire de nouvelle demande affiche un aperçu du solde avant/après (informatif, non bloquant
+  même si négatif — les règles de dépassement ne sont pas tranchées).
 - **Export historique = impression navigateur** (`window.print()` + classes `print:*`), en
   attendant un vrai export PDF/CSV côté Delphine plus tard.
 

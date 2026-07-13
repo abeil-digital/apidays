@@ -37,7 +37,7 @@ export function HistoriquePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 pt-5 pb-4 md:pt-0 print:pb-0">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0 print:pb-0">
       <div className="print:hidden">
         <BackHeader href="/" title="Historique" />
       </div>

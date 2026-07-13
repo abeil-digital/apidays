@@ -1,4 +1,5 @@
 import type { Demande, NouvelleDemandeInput } from "@/lib/types";
+import { todayISO } from "@/lib/format";
 import { seedDemandes } from "@/lib/data/mock/demandes.mock";
 import { simulateLatency } from "@/lib/data/mock/latency";
 
@@ -23,6 +24,7 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
   await simulateLatency();
   const demande: Demande = {
     id: `d${Date.now()}`,
+    datePose: todayISO(),
     statut: "en attente",
     commentaireManager: "",
     ...input,
