@@ -3,7 +3,7 @@
 Ce document complète le [README.md](README.md) (qui explique le _comment_ technique). Il explique
 le _pourquoi_ : le contexte métier, ce qui est provisoire par construction, et surtout **le
 principe de bascule vers Supabase**, pour qu'aucun dev (ou moi dans 6 mois) ne le redécouvre à la
-dure.
+dure. Pour un résumé rapide et à jour de l'état du projet, voir [CONTEXTE.md](CONTEXTE.md).
 
 ## Contexte
 

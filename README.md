@@ -9,7 +9,8 @@ Ce n'est pas un jetable de démo : pas de backend pour l'instant, mais le code (
 composants découpés, couche données isolée) est écrit pour durer.
 
 Ce README documente le _comment_ technique. Pour le contexte projet et le détail du principe de
-bascule vers Supabase, voir [projet.md](projet.md).
+bascule vers Supabase, voir [projet.md](projet.md). Pour un résumé rapide de l'état du projet
+(stack, décisions, à faire), voir [CONTEXTE.md](CONTEXTE.md).
 
 ## Stack
 
