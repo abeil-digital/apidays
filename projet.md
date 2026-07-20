@@ -128,16 +128,18 @@ d'une valeur fixe à un vrai calcul :
 Tant que ces règles ne sont pas figées, `useSoldes()` continue de renvoyer des valeurs mockées —
 c'est un choix assumé, pas un oubli.
 
-## Hébergement du code — provisoire, sur le compte GitHub personnel
+## Hébergement du code — GitHub Abeil (chapitre "provisoire" clos)
 
-Le dépôt est hébergé sur le compte GitHub personnel de Vincent (`abeil-apidays`, privé), pas sur
-une organisation Abeil. C'est le même principe que pour Supabase : un choix pragmatique pour
-avancer vite tant qu'il n'y a pas de compte client, pas une décision d'architecture définitive.
+Le dépôt est désormais hébergé sur l'organisation GitHub officielle **`abeil-digital`**
+(repo `abeil-digital/apidays`, privé), accessible via le compte de travail `abeil-it@proton.me`
+(compte GitHub `Abeil35`). Vincent (`vincent-uzi`) reste collaborateur avec accès _Write_.
 
-Rien dans le code ne dépend de cet hébergement (pas de secrets, pas de config propre à ce compte),
-donc le transfert vers une organisation GitHub Abeil — via `gh repo transfer` ou en ajoutant
-l'organisation comme remote et en poussant l'historique — se fait sans aucun impact sur le code
-ou son fonctionnement. À faire dès qu'un compte/organisation Abeil existe.
+Transfert effectué comme prévu, sans impact sur le code : le remote local `origin` pointe
+maintenant vers `abeil-digital/apidays.git`. L'ancien dépôt personnel reste accessible en local
+sous le remote `perso` (`vincent-uzi/abeil-apidays.git`), conservé mais non poussé par défaut.
+
+Ce chapitre du principe "provisoire" (voir plus bas pour Vercel, toujours en cours) est donc clos
+pour GitHub.
 
 ## Déploiement — provisoire, sur le compte Vercel personnel
 
