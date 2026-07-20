@@ -2,10 +2,10 @@ import { formatJours } from "@/lib/format";
 
 export type SoldeCardTone = "cp" | "rtt" | "cpt";
 
-const TONE_BAND: Record<SoldeCardTone, string> = {
-  cp: "bg-solde-cp",
-  rtt: "bg-solde-rtt",
-  cpt: "bg-solde-cpt",
+const TONE_DOT: Record<SoldeCardTone, string> = {
+  cp: "bg-cp",
+  rtt: "bg-rtt",
+  cpt: "bg-cpt",
 };
 
 interface SoldeCardProps {
@@ -24,17 +24,13 @@ export function SoldeCard({
   tone,
 }: SoldeCardProps) {
   return (
-    <div className="rounded-card bg-surface-card flex w-full overflow-hidden shadow-sm">
-      <div className={`w-2 shrink-0 ${TONE_BAND[tone]}`} />
-      <div className="flex flex-1 items-center gap-3 px-4 py-3.5">
-        <span className="text-solde-ink text-2xl font-bold">{label}</span>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-solde-ink text-lg font-bold">{formatJours(valeur)} j</span>
-          <span className="text-solde-ink/60 text-xs leading-snug">
-            {conditionPrefixe} <span className="text-solde-ink font-bold">{conditionAccent}</span>
-          </span>
-        </div>
-      </div>
+    <div className="bg-surface-card flex h-full w-full flex-col gap-1.5 rounded-xl p-4 shadow-sm">
+      <span className={`h-5 w-5 rounded-full ${TONE_DOT[tone]}`} />
+      <span className="text-ink-900 text-sm font-semibold">{label}</span>
+      <span className="text-ink-900 text-[1.6rem] font-bold">{formatJours(valeur)} j</span>
+      <span className="text-ink-500 text-xs leading-snug">
+        {conditionPrefixe} <span className="text-ink-900 font-bold">{conditionAccent}</span>
+      </span>
     </div>
   );
 }

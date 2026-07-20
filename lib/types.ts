@@ -26,10 +26,16 @@ export interface SoldeCategorie {
   conditionAccent: string;
 }
 
+export interface RttImpose {
+  date: string; // date ISO (YYYY-MM-DD)
+  motif: string;
+}
+
 export interface Soldes {
   cp: SoldeCategorie;
   rtt: SoldeCategorie;
   cpt: SoldeCategorie;
+  rttImposes: RttImpose[];
 }
 
 export interface Utilisateur {

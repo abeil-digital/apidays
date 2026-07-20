@@ -1,34 +1,22 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { NIVEAU1_ITEMS } from "@/components/layout/niveau1";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 
 /**
- * Header général de l'application — noir pour l'instant (charte Abeil à venir).
- * Porte le logo, la navigation de niveau 1 (Poser / Suivre / Paramétrer) et le
- * profil. La sous-navigation actuelle (Accueil / Nouvelle demande / Historique,
- * dans SideNav/BottomNav) reste rattachée à "Poser".
+ * Header général de l'application — fond slate. Porte le logo, la navigation
+ * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. La sous-navigation
+ * actuelle (Accueil / Nouvelle demande / Historique, dans SideNav/BottomNav)
+ * reste rattachée à "Poser".
  */
 export function HeaderBar() {
   const { utilisateur } = useUtilisateur();
 
   return (
-    <header className="bg-ink-900 mx-auto flex h-16 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 md:max-w-[1440px] md:gap-6 md:px-8 print:hidden">
-      <div className="flex shrink-0 items-center gap-2.5">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white p-1">
-          <Image
-            src="/abeil-logo.jpeg"
-            alt="Abeil"
-            width={28}
-            height={28}
-            className="h-full w-full object-contain"
-          />
-        </span>
-        <span className="text-sm font-bold whitespace-nowrap text-white">Apidays</span>
-      </div>
+    <header className="bg-slate mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 shadow-sm md:max-w-[1440px] md:gap-6 md:px-8 print:hidden">
+      <span className="text-base font-semibold whitespace-nowrap text-white">Apidays</span>
 
       <nav className="flex shrink-0 items-center gap-1">
         {NIVEAU1_ITEMS.map(({ key, label, href }) =>
@@ -36,7 +24,7 @@ export function HeaderBar() {
             <Link
               key={key}
               href={href}
-              className="rounded-control bg-white/10 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white"
+              className="border-b-2 border-white px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white"
             >
               {label}
             </Link>
@@ -44,7 +32,7 @@ export function HeaderBar() {
             <span
               key={key}
               title="Bientôt disponible"
-              className="rounded-control hidden cursor-not-allowed px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white/40 md:inline-block"
+              className="hidden cursor-not-allowed border-b-2 border-transparent px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white/60 md:inline-block"
             >
               {label}
             </span>
@@ -60,7 +48,7 @@ export function HeaderBar() {
                 {utilisateur.prenom} {utilisateur.nom}
               </div>
             </div>
-            <Avatar initiales={utilisateur.initiales} bordered />
+            <Avatar initiales={utilisateur.initiales} />
           </>
         )}
       </div>

@@ -36,6 +36,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# documents de référence hors code — jamais sur le repo (contient des données
+# de paie potentiellement sensibles et des assets de marque non encore intégrés)
+/Charte-abeil/
+/documentation-conges/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

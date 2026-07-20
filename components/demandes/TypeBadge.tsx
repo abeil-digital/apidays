@@ -1,9 +1,9 @@
 export type TypeBadgeCode = "CP" | "RTT" | "CPT";
 
 const CODE_STYLES: Record<TypeBadgeCode, string> = {
-  CP: "bg-brand text-brand-foreground",
-  RTT: "bg-ink-400 text-white",
-  CPT: "bg-solde-cpt text-solde-ink",
+  CP: "bg-cp",
+  RTT: "bg-rtt",
+  CPT: "bg-cpt",
 };
 
 interface TypeBadgeProps {
@@ -13,7 +13,7 @@ interface TypeBadgeProps {
 export function TypeBadge({ code }: TypeBadgeProps) {
   return (
     <div
-      className={`rounded-control flex h-9 w-11 shrink-0 items-center justify-center text-xs font-bold ${CODE_STYLES[code]}`}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${CODE_STYLES[code]}`}
     >
       {code}
     </div>

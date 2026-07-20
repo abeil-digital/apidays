@@ -17,7 +17,7 @@ export function SideNav() {
               key={href}
               href={href}
               className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
-                active ? "bg-brand text-brand-foreground" : "text-ink-900"
+                active ? "bg-slate/10 text-slate" : "text-ink-900/60"
               }`}
             >
               <Icon size={17} />

@@ -9,5 +9,10 @@ export function seedSoldes(): Soldes {
       conditionPrefixe: "En cours d'acquisition, à poser à partir de",
       conditionAccent: "juin 2026",
     },
+    rttImposes: [
+      { date: "2026-05-08", motif: "Pont de mai" },
+      { date: "2026-12-24", motif: "Fermeture de fin d'année" },
+      { date: "2026-12-31", motif: "Fermeture de fin d'année" },
+    ],
   };
 }
