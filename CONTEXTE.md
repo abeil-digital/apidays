@@ -17,9 +17,10 @@ de Citizen D.
 - Déploiement : Vercel, équipe `abeil-digital` (compte `abeil-it@proton.me`), projet `apidays`
   importé depuis GitHub (`abeil-digital/apidays`), déploiement auto sur push vers `main` — URL
   `https://apidays-seven.vercel.app`. **Un second projet Vercel existe** sur le compte personnel de
-  Vincent (`vincent-mayols-projects/apidays`, URL `https://apidays-iota.vercel.app`) : c'est
-  l'ancien déploiement provisoire (voir projet.md), relié au dépôt `perso`, jamais mis à jour depuis
-  la bascule Supabase — ne pas confondre les deux URLs.
+  Vincent (`vincent-mayols-projects/apidays`, URL `https://apidays-iota.vercel.app`) — **abandonné,
+  décision du 24/07/2026 : on n'y touche plus** (pas de push `perso`, pas d'env vars, pas de
+  redéploiement). Reste sur l'ancienne version mockée, pas supprimé par précaution mais plus le
+  déploiement de référence — voir projet.md.
 - Repo Git : remote `origin` → `https://github.com/abeil-digital/apidays.git` (remote `perso` en
   local, conservé, pointe vers l'ancien dépôt personnel `vincent-uzi/abeil-apidays`)
 - CLI local (`.vercel/project.json`) lié au projet `abeil-digital/apidays` (celui qui compte) ;

@@ -169,10 +169,13 @@ comptes de test Phase 0 uniquement (`@abeil.local`), aucune donnée réelle.
 **Un second projet Vercel existe encore**, sur le compte personnel de Vincent
 (`vincent-mayols-projects/apidays`, relié au dépôt `perso`/`vincent-uzi/abeil-apidays`, URL
 https://apidays-iota.vercel.app) : c'est l'ancien déploiement provisoire décrit ci-dessus dans les
-versions précédentes de ce document. Il n'a pas reçu la bascule Supabase (le remote `perso` n'est
-pas poussé par défaut) et reste sur l'ancienne version mockée. À archiver/supprimer une fois
-confirmé qu'il n'est plus référencé nulle part (lien partagé, favori...), pour ne pas laisser deux
-URLs vivantes en parallèle.
+versions précédentes de ce document. **Décision (24/07/2026) : abandonné, on n'y touche plus.** Il
+n'a pas reçu la bascule Supabase (le remote `perso` n'est pas poussé par défaut) et reste sur
+l'ancienne version mockée — c'est volontaire, ce n'est plus le déploiement de référence. Pas de
+suppression active pour l'instant (au cas où l'URL serait encore référencée quelque part), mais
+plus aucune action dessus : ni push sur `perso`, ni variables d'environnement, ni redéploiement.
+Le seul déploiement à considérer pour Apidays est désormais celui de l'équipe `abeil-digital`
+ci-dessus.
 
 **Accès CLI** : `vercel login abeil-it@proton.me` (device flow) — bien ouvrir le lien dans une
 fenêtre sans session Vercel perso déjà active, sinon le code d'autorisation s'attache au mauvais
