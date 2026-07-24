@@ -51,7 +51,7 @@ export function HistoriquePage() {
               className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                 filtre === f
                   ? "bg-brand text-brand-foreground"
-                  : "border-ink-300 bg-surface-card text-ink-900 border"
+                  : "bg-surface-card text-ink-900 shadow-sm"
               }`}
             >
               {f}
@@ -60,7 +60,7 @@ export function HistoriquePage() {
         </div>
         <button
           onClick={() => window.print()}
-          className="border-ink-300 bg-surface-card text-ink-900 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold"
+          className="bg-surface-card text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold shadow-sm"
         >
           <Printer size={13} />
           Exporter

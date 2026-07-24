@@ -88,7 +88,7 @@ export function NouvelleDemandeForm() {
                   className={`rounded-control flex flex-col items-center gap-1.5 py-3 text-sm font-semibold ${
                     active
                       ? "bg-brand text-brand-foreground"
-                      : "border-ink-300 bg-surface-card text-ink-900 border"
+                      : "bg-surface-card text-ink-900 shadow-sm"
                   }`}
                 >
                   <Icon size={18} />
@@ -107,7 +107,7 @@ export function NouvelleDemandeForm() {
               type="date"
               value={debut}
               onChange={(e) => setDebut(e.target.value)}
-              className="rounded-control border-ink-300 bg-surface-card text-ink-900 mt-2 w-full border px-3 py-2.5 text-sm"
+              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
             />
           </div>
           <div>
@@ -117,7 +117,7 @@ export function NouvelleDemandeForm() {
               type="date"
               value={fin}
               onChange={(e) => setFin(e.target.value)}
-              className="rounded-control border-ink-300 bg-surface-card text-ink-900 mt-2 w-full border px-3 py-2.5 text-sm"
+              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
             />
           </div>
         </div>
@@ -149,7 +149,7 @@ export function NouvelleDemandeForm() {
             onChange={(e) => setNote(e.target.value)}
             rows={3}
             placeholder="Ex. mariage d'un proche, rendez-vous médical…"
-            className="rounded-control border-ink-300 bg-surface-card text-ink-900 mt-2 w-full resize-none border px-3 py-2.5 text-sm"
+            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full resize-none px-3 py-2.5 text-sm"
           />
         </div>
 

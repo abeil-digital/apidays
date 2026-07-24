@@ -25,8 +25,12 @@ de Citizen D.
   Supabase, aucune donnée réelle branchée
 - Header général (navigation niveau 1 Poser/Suivre/Paramétrer, Poser seul fonctionnel), sous-nav
   Accueil/Nouvelle demande/Historique
-- Design system : palette de catégories CP/RTT/CPT centralisée dans `app/globals.css`, cartes de
-  solde, badges de type, modale "Règles de congés"
+- Design system : palette de catégories CP/RTT/CPT/mint centralisée dans `app/globals.css`
+  (reprise d'une maquette "design system" fournie en artifact, pas encore la charte Abeil), cartes
+  de solde en grille 4 colonnes (CP/RTT/CPT + CTA "Poser un congé"), badges de type circulaires,
+  modale "Règles de congés" (RTT imposés + échéances, ouverte via "découvrir")
+- Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
+  Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
 
 **En cours / pas encore fait** :

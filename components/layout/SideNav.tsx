@@ -8,7 +8,7 @@ export function SideNav() {
   const pathname = usePathname();
 
   return (
-    <div className="border-ink-300 bg-surface-card hidden w-56 shrink-0 flex-col border-r px-4 py-6 md:flex print:hidden">
+    <div className="bg-surface-card hidden w-56 shrink-0 flex-col px-4 py-6 md:flex print:hidden">
       <div className="flex flex-col gap-1">
         {NAV_TABS.map(({ href, label, Icon }) => {
           const active = pathname === href;

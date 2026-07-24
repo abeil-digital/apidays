@@ -44,7 +44,7 @@ export function ReglesCongesModal({ soldes, onClose }: ReglesCongesModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="border-ink-300 text-ink-900 w-full rounded-full border py-2.5 text-sm font-semibold"
+          className="bg-surface-app text-ink-900 w-full rounded-full py-2.5 text-sm font-semibold"
         >
           Fermer
         </button>

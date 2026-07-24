@@ -40,10 +40,11 @@
   --color-status-danger-fg: #d70015;
 
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
-  --color-cp: #6f93e5; /* bleu vif — CP */
-  --color-rtt: #99cdac; /* vert — RTT */
-  --color-cpt: #99b8d2; /* bleu gris — CPT */
-  --color-mint: #81bbb6; /* accent secondaire — carte "Poser un congé" */
+  --color-cp: #5b8def; /* bleu — CP */
+  --color-rtt: #7fbf8f; /* vert — RTT */
+  --color-cpt: #9db4c4; /* bleu gris — CPT */
+  --color-mint: #4fa893; /* accent secondaire — carte "Poser un congé" */
+  --color-mint-tint: #e7f3ef; /* accent-100 — fond du bloc "Soldes" */
 
   /* Rayons de bordure — cartes/tuiles arrondies façon iOS */
   --radius-card: 1.375rem; /* 22px */

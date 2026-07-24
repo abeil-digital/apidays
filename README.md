@@ -83,15 +83,20 @@ déclarent dans un bloc `@theme` en CSS ([`app/globals.css`](app/globals.css)), 
 automatiquement les utilities (`bg-brand`, `text-ink-500`, `rounded-card`, etc.). Ce bloc **est**
 la configuration du thème — l'équivalent du `theme.extend` d'un `tailwind.config.ts` classique.
 
-Palette actuelle : neutre, inspirée des composants système iOS (fond gris clair, cartes blanches,
-tuiles colorées plates), header en noir provisoire. Pas de vraie charte Abeil pour l'instant — le
-logo dans le header est le seul élément de marque, et c'est un fichier `.jpeg` fourni tel quel
-(fond blanc opaque, pas de transparence), à remplacer par un SVG/PNG officiel dès que possible.
-Les tokens sont nommés sémantiquement (`brand`, `accent`, `ink-900`, `surface-card`,
-`solde-cp`/`solde-rtt`/`solde-cpt`, `status-success-fg`...) et non par valeur de couleur,
-précisément pour que l'arrivée de la charte Abeil soit un changement de **valeurs** dans
-`app/globals.css`, jamais une réécriture de composant : aucun composant ne contient de couleur en
-dur (`#0A84FF`, etc.).
+Palette actuelle : header en `slate` (`#496580`), fond d'app gris clair, cartes blanches, et une
+palette de catégorie (`cp` / `rtt` / `cpt` / `mint`) reprise d'une maquette "design system" fournie
+en artifact — pas encore la charte Abeil officielle. Les tokens sont nommés sémantiquement
+(`brand`, `slate`, `ink-900`, `surface-card`, `cp`/`rtt`/`cpt`/`mint`/`mint-tint`,
+`status-success-fg`...) et non par valeur de couleur, précisément pour que l'arrivée de la charte
+Abeil soit un changement de **valeurs** dans `app/globals.css`, jamais une réécriture de
+composant : aucun composant ne contient de couleur en dur (`#0A84FF`, etc.). Le logo Abeil n'est
+plus affiché dans le header pour l'instant (texte "Apidays" seul) ; le fichier reçu
+(`public/abeil-logo.jpeg`) reste sur le disque mais n'est plus référencé.
+
+Les bordures décoratives ont été retirées des cartes/boutons au profit d'une ombre légère
+(`shadow-sm`) ou d'un simple contraste de fond — seuls les champs de formulaire (dates, message)
+gardent une délimitation, via un fond gris clair (`bg-surface-app`) plutôt qu'un trait, pour rester
+identifiables comme zones de saisie.
 
 ## Structure
 
@@ -103,12 +108,14 @@ app/
   historique/page.tsx       route "/historique" — historique + filtre + impression
 
 components/
-  dashboard/, nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
+  dashboard/         DashboardPage, ReglesCongesModal (RTT imposés + échéances, ouverte via
+                     "découvrir" dans le bloc Soldes)
+  nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
   demandes/         RequestRow, RequestList, TypeBadge — réutilisables entre Dashboard/Historique
                      (et plus tard Espace Manager pour la vue équipe)
   layout/            AppShell, HeaderBar, niveau1.ts, SideNav, BottomNav — navigation par vraies
                      routes Next.js, header général + sous-navigation
-  ui/                 primitives neutres (SoldeCard, StatusBadge, ListCard, BackHeader...)
+  ui/                 primitives neutres (SoldeCard, Modal, StatusBadge, ListCard, BackHeader...)
 
 hooks/                useDemandes, useSoldes, useUtilisateur — seul point de contact données ↔ UI
 
@@ -124,10 +131,15 @@ lib/
   `view` en mémoire comme dans le prototype d'origine : back/forward navigateur, URL partageable,
   et c'est ce que Next.js App Router fait de mieux.
 - **Header général à deux niveaux** ([`components/layout/HeaderBar.tsx`](components/layout/HeaderBar.tsx)) :
-  logo Abeil + "Apidays", navigation niveau 1 (`Poser` / `Suivre` / `Paramétrer` — seul `Poser` est
-  fonctionnel, les deux autres sont des emplacements réservés pour les futurs espaces Manager et
-  Delphine, voir [`components/layout/niveau1.ts`](components/layout/niveau1.ts)), profil à droite.
-  La sous-navigation actuelle (Accueil / Nouvelle demande / Historique) reste rattachée à `Poser`.
+  "Apidays" (texte seul, pas de logo pour l'instant), navigation niveau 1 (`Poser` / `Suivre` /
+  `Paramétrer` — seul `Poser` est fonctionnel, les deux autres sont des emplacements réservés pour
+  les futurs espaces Manager et Delphine, voir [`components/layout/niveau1.ts`](components/layout/niveau1.ts)),
+  profil à droite. La sous-navigation actuelle (Accueil / Nouvelle demande / Historique) reste
+  rattachée à `Poser`.
+- **Bloc "Soldes" du Dashboard** : les 3 cartes de solde (CP/RTT/CPT) et une 4ᵉ tuile CTA "Poser un
+  congé" (qui mène au formulaire `/nouvelle-demande`) partagent une grille `grid-cols-4` dans un
+  même panneau teinté. Le lien "découvrir" ouvre `ReglesCongesModal` — RTT imposés et échéances
+  CP/RTT, purement informatif.
 - **Écrans larges** : au-delà de 1440px, tout le shell applicatif (header + sidebar + contenu) est
   capé et centré — pas seulement le contenu — pour ne pas s'étirer sur moniteur 4K/ultrawide (voir
   `AppShell.tsx` et `HeaderBar.tsx`, `md:max-w-[1440px]`). En dessous, comportement fluide inchangé.

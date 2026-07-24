@@ -12,7 +12,7 @@ export function BackHeader({ href, title }: BackHeaderProps) {
       <Link
         href={href}
         aria-label="Retour"
-        className="border-ink-300 bg-surface-card text-ink-900 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border"
+        className="bg-surface-card text-ink-900 flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow-sm"
       >
         <ChevronLeft size={18} />
       </Link>
