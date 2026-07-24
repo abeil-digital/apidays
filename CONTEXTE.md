@@ -14,10 +14,18 @@ de Citizen D.
   parle à Supabase via `lib/supabase/client.ts` / `server.ts`) ; seul `soldes.repository.ts` reste
   mocké (`lib/data/mock/soldes.mock.ts`), les règles de calcul CP/RTT n'étant pas encore validées
   avec Abeil (voir [README.md](README.md), section "Couche données")
-- Déploiement : Vercel, projet `abeil-digital/apidays` importé depuis GitHub, déploiement auto sur
-  push vers `main`
+- Déploiement : Vercel, équipe `abeil-digital` (compte `abeil-it@proton.me`), projet `apidays`
+  importé depuis GitHub (`abeil-digital/apidays`), déploiement auto sur push vers `main` — URL
+  `https://apidays-seven.vercel.app`. **Un second projet Vercel existe** sur le compte personnel de
+  Vincent (`vincent-mayols-projects/apidays`, URL `https://apidays-iota.vercel.app`) : c'est
+  l'ancien déploiement provisoire (voir projet.md), relié au dépôt `perso`, jamais mis à jour depuis
+  la bascule Supabase — ne pas confondre les deux URLs.
 - Repo Git : remote `origin` → `https://github.com/abeil-digital/apidays.git` (remote `perso` en
   local, conservé, pointe vers l'ancien dépôt personnel `vincent-uzi/abeil-apidays`)
+- CLI local (`.vercel/project.json`) lié au projet `abeil-digital/apidays` (celui qui compte) ;
+  connexion CLI possible via `vercel login abeil-it@proton.me` (device flow — bien l'ouvrir dans une
+  fenêtre où aucune session Vercel perso n'est déjà active, sinon le code s'attache au mauvais
+  compte) puis `--scope abeil-digital`
 
 ## État actuel
 
@@ -62,7 +70,9 @@ de Citizen D.
 - Projet Supabase créé : organisation `abeil-digital`, projet `Apidays`, région West EU (Ireland),
   URL `https://eaizbjovkrdjmujxovvs.supabase.co` — clé publishable utilisée côté client
 - Variables d'environnement `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` :
-  présentes dans `.env.local` (non commité) et poussées sur Vercel (Production/Preview/Development)
+  présentes dans `.env.local` (non commité) et poussées sur le projet Vercel `abeil-digital/apidays`
+  (Production/Preview/Development) — les anciennes `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` qui
+  traînaient dessus ont été supprimées
 - Aucune couleur en dur dans les composants : tout passe par les tokens Tailwind v4 dans
   `app/globals.css` (voir README.md, section "Thème & design tokens")
 

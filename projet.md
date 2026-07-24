@@ -153,27 +153,31 @@ Transfert effectué comme prévu, sans impact sur le code : le remote local `ori
 maintenant vers `abeil-digital/apidays.git`. L'ancien dépôt personnel reste accessible en local
 sous le remote `perso` (`vincent-uzi/abeil-apidays.git`), conservé mais non poussé par défaut.
 
-Ce chapitre du principe "provisoire" (voir plus bas pour Vercel, toujours en cours) est donc clos
-pour GitHub.
+Ce chapitre du principe "provisoire" est donc clos pour GitHub — et pour Vercel aussi, voir
+juste en dessous.
 
-## Déploiement — provisoire, sur le compte Vercel personnel
+## Déploiement — sur l'équipe Vercel Abeil (chapitre "provisoire" clos)
 
-Le projet est déployé sur le compte Vercel personnel de Vincent
-(`vincent-mayols-projects/apidays`), relié au dépôt GitHub `vincent-uzi/abeil-apidays` : chaque
-`git push` sur `main` redéploie automatiquement en production, les autres branches génèrent des
-previews. URL actuelle : https://apidays-iota.vercel.app.
+Ce chapitre est désormais **clos** : une équipe Vercel Abeil (`abeil-digital`, compte
+`abeil-it@proton.me`) existe et héberge le projet officiel `apidays`, relié au dépôt GitHub
+`abeil-digital/apidays` (remote `origin`) — chaque `git push` sur `main` redéploie automatiquement
+en production. URL actuelle : https://apidays-seven.vercel.app. Les variables
+`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` du projet Supabase
+`abeil-digital/Apidays` y sont poussées (Production/Preview/Development) — pour l'instant avec des
+comptes de test Phase 0 uniquement (`@abeil.local`), aucune donnée réelle.
 
-Même principe que pour GitHub et Supabase : un choix pour avancer vite avant qu'un compte/équipe
-Vercel Abeil n'existe, pas un choix définitif. Transférer le projet vers une équipe Vercel Abeil
-plus tard (`vercel teams` + transfert de projet, ou recréation du lien sur le nouveau compte à
-partir du même dépôt GitHub) n'a aucun impact sur le code.
+**Un second projet Vercel existe encore**, sur le compte personnel de Vincent
+(`vincent-mayols-projects/apidays`, relié au dépôt `perso`/`vincent-uzi/abeil-apidays`, URL
+https://apidays-iota.vercel.app) : c'est l'ancien déploiement provisoire décrit ci-dessus dans les
+versions précédentes de ce document. Il n'a pas reçu la bascule Supabase (le remote `perso` n'est
+pas poussé par défaut) et reste sur l'ancienne version mockée. À archiver/supprimer une fois
+confirmé qu'il n'est plus référencé nulle part (lien partagé, favori...), pour ne pas laisser deux
+URLs vivantes en parallèle.
 
-**Point d'attention devenu actif** : les variables `NEXT_PUBLIC_SUPABASE_URL` /
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` du projet Supabase `abeil-digital/Apidays` sont désormais
-poussées sur ce compte Vercel personnel (Production/Preview/Development) — pour l'instant avec des
-comptes de test Phase 0 uniquement (`@abeil.local`), aucune donnée réelle. Transférer vers une
-équipe Vercel Abeil avant d'y faire transiter de vraies données de salariés reste la bonne
-séquence, pour éviter d'avoir à migrer ces secrets entre comptes une fois en production.
+**Accès CLI** : `vercel login abeil-it@proton.me` (device flow) — bien ouvrir le lien dans une
+fenêtre sans session Vercel perso déjà active, sinon le code d'autorisation s'attache au mauvais
+compte. Une fois connecté, utiliser `--scope abeil-digital` (ou `vercel link --scope abeil-digital`
+pour relier durablement un répertoire local à ce projet).
 
 ## Hors périmètre de l'Espace Salarié (rappel)
 
