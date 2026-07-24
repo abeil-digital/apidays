@@ -1,10 +1,11 @@
 # Apidays — Base de données (Supabase)
 
-Schéma cible pour la persistance réelle, conçu en parallèle du front (Espace Salarié). **Pas
-encore branché** : le SQL versionné dans [`supabase/schema.sql`](supabase/schema.sql) n'a pas
-encore été appliqué au projet Supabase `abeil-digital/Apidays`, et le code de l'app tourne
-entièrement sur des données mockées (voir [README.md](README.md), section "Couche données"). Ce
-document explique le schéma ; le fichier `.sql` fait foi pour le détail exact.
+Schéma cible pour la persistance réelle, conçu en parallèle du front (Espace Salarié). Le SQL
+versionné dans [`supabase/schema.sql`](supabase/schema.sql) est appliqué au projet Supabase
+`abeil-digital/Apidays`, et les repositories `demandes` et `utilisateur` y sont branchés (voir
+[README.md](README.md), section "Couche données") ; seul `soldes.repository.ts` reste mocké, les
+règles de calcul CP/RTT n'étant pas encore validées avec Abeil. Ce document explique le schéma ;
+le fichier `.sql` fait foi pour le détail exact.
 
 Basé sur le cadrage fonctionnel (WIP, 20/07/2026) — certains points restent à confirmer avec
 Abeil, signalés plus bas.
@@ -90,14 +91,16 @@ factices `@abeil.local` (aucune donnée réelle) : `test-admin`, `test-manager`,
 dernier rattaché au manager de test via `manager_salaries`, pour pouvoir tester le circuit de
 validation une fois les policies en place.
 
-## Prochaines étapes pour le branchement
+## Branchement — état actuel
 
-1. Appliquer `supabase/schema.sql` sur le projet Supabase (`abeil-digital/Apidays`).
-2. Renommer les variables d'environnement Vercel `VITE_SUPABASE_URL` /
-   `VITE_SUPABASE_ANON_KEY` en `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` (voir
-   [CONTEXTE.md](CONTEXTE.md)) — Next.js n'utilise pas le préfixe `VITE_`.
-3. Basculer `lib/data/*.repository.ts` un par un vers de vrais appels Supabase, en conservant la
-   même signature de fonctions (voir [projet.md](projet.md#bascule-vers-supabase--ce-qui-change-ce-qui-ne-change-pas)) —
-   aucun composant ni hook à modifier.
-4. Les champs `id` (uuid) remplaceront les identifiants mockés type `"d1"` actuellement générés
-   dans `lib/data/mock/demandes.mock.ts`.
+1. ~~Appliquer `supabase/schema.sql` sur le projet Supabase (`abeil-digital/Apidays`)~~ — fait.
+2. ~~Variables d'environnement `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`~~ —
+   fait (`.env.local` + Vercel Production/Preview/Development).
+3. `lib/data/utilisateur.repository.ts` et `lib/data/demandes.repository.ts` parlent à Supabase
+   (voir [projet.md](projet.md#bascule-vers-supabase--ce-qui-change-ce-qui-ne-change-pas)) — les
+   composants et hooks n'ont pas changé. `soldes.repository.ts` reste mocké.
+4. Les `id` (uuid) réels remplacent les identifiants mockés type `"d1"` pour les demandes issues de
+   Supabase.
+5. Authentification réelle via Supabase Auth (`proxy.ts`, page `/connexion`) — voir projet.md.
+   Seul le rôle `salarie` a été exercé de bout en bout ; les policies manager/admin restent à
+   valider une fois les espaces correspondants construits.

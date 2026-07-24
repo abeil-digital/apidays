@@ -20,7 +20,10 @@ valider avec Abeil sont dans `20260709-abeil-Périmètre fonctionnel.pdf` (hors 
 
 - **Espace Salarié** (cette étape) : dashboard (solde, demandes en cours, prochains congés),
   nouvelle demande (avec aperçu du solde avant/après), historique filtrable + export impression.
-  Utilisateur unique mocké (Camille Rio), pas d'authentification réelle.
+- **Connexion Supabase + authentification réelle** : `demandes.repository.ts` et
+  `utilisateur.repository.ts` parlent à Supabase (RLS), connexion/déconnexion via Supabase Auth
+  (page `/connexion`, `proxy.ts`) — plus d'utilisateur unique mocké "Camille Rio" pour ces deux
+  repositories. `soldes.repository.ts` reste mocké (règles de calcul non validées avec Abeil).
 - **Header général** : logo Abeil + Apidays, navigation niveau 1 (Poser / Suivre / Paramétrer),
   profil. Prépare la place pour les futurs espaces sans les construire.
 
@@ -64,52 +67,52 @@ C'est le choix (2) qui a été fait partout, précisément pour que **"pas de ba
 d'implémentation invisible depuis les composants**, et non une hypothèque sur l'architecture. Voir
 le détail des trois couches dans le [README.md](README.md), section "Couche données".
 
-## Ce qui est mocké aujourd'hui, et pourquoi c'est volontairement temporaire
+## Ce qui reste mocké aujourd'hui, et pourquoi c'est volontairement temporaire
 
-| Élément                | État actuel                                                                            | Raison                                                                                                                                                      |
-| ---------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Demandes de congés/RTT | Tableau seedé en mémoire (`lib/data/mock/demandes.mock.ts`), mutable via le repository | Pas de base de données à cette étape                                                                                                                        |
-| Soldes CP/RTT          | Valeurs fixes (`lib/data/mock/soldes.mock.ts`)                                         | Règles de calcul (ancienneté, demi-journées, temps partiel, report/perte...) non validées avec Abeil                                                        |
-| Utilisateur courant    | Un seul compte en dur (Camille Rio)                                                    | Authentification réelle hors périmètre de cette étape                                                                                                       |
-| Persistance            | Aucune — l'état repart de zéro à chaque rechargement complet de page                   | Volontaire : pas de `localStorage` ni d'API propre à un environnement de prototypage, pour ne rien introduire qui ne fonctionnerait pas tel quel sur Vercel |
+Demandes, utilisateur courant et authentification sont désormais branchés sur Supabase (voir plus
+bas) — persistance réelle, plus de redémarrage à zéro au rechargement de page. Seul le solde reste
+mocké :
 
-**Point d'attention** : ne pas "corriger" l'absence de persistance en ajoutant du `localStorage`
-en attendant Supabase. Ce serait une deuxième couche temporaire à défaire plus tard, alors que la
-vraie solution (Supabase) est déjà prévue dans l'architecture. Le seul geste correct si la
-non-persistance devient gênante avant que Supabase soit prêt : accélérer le branchement de
-Supabase, pas contourner le manque.
+| Élément       | État actuel                                     | Raison                                                                                                |
+| ------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Soldes CP/RTT | Valeurs fixes (`lib/data/mock/soldes.mock.ts`) | Règles de calcul (ancienneté, demi-journées, temps partiel, report/perte...) non validées avec Abeil |
+
+**Point d'attention** : ne pas "corriger" ce mock en ajoutant du `localStorage` en attendant que
+les règles soient validées. Ce serait une couche temporaire à défaire plus tard, alors que la
+vraie solution (calcul réel côté `soldes.repository.ts`, voir BASE-DE-DONNEES.md) est déjà prévue
+dans l'architecture.
 
 ## Bascule vers Supabase — ce qui change, ce qui ne change pas
 
-Quand Supabase est prêt (schéma de base + client configuré), la bascule se fait **fichier par
-fichier dans `lib/data/`, rien ailleurs** :
+La bascule se fait **fichier par fichier dans `lib/data/`, rien ailleurs** :
 
 1. **Ne changent pas** : tous les composants (`components/`), tous les hooks (`hooks/`), les
-   types (`lib/types.ts`). Leur contrat (noms de fonctions, formes des objets retournés) est déjà
+   types (`lib/types.ts`). Leur contrat (noms de fonctions, formes des objets retournés) était déjà
    celui d'une vraie API — c'est tout l'intérêt de la couche repository.
-2. **Changent, un par un, sans dépendance entre eux** :
-   - `lib/data/demandes.repository.ts` — `fetchDemandes()`, `creerDemande()`,
-     `reinitialiserDemandes()` (celle-ci disparaîtra probablement, voir plus bas) passent d'un
-     tableau en mémoire à des requêtes `supabase.from("demandes")...`.
-   - `lib/data/soldes.repository.ts` — `fetchSoldes()` passe d'une valeur fixe à un calcul réel
-     (fonction pure ou vue SQL) une fois les règles validées avec Abeil.
+2. **Basculés** :
+   - `lib/data/demandes.repository.ts` — `fetchDemandes()`/`creerDemande()` interrogent
+     `demandes_conges` via `lib/supabase/client.ts` (RLS + jointure `types_absences` pour le code
+     CP/RTT, calcul de `nb_demi_journees` en excluant weekends/jours fériés).
    - `lib/data/utilisateur.repository.ts` — `fetchUtilisateurCourant()` lit la session Supabase
-     Auth réelle au lieu de renvoyer un utilisateur en dur.
-3. **Disparaît** : le dossier `lib/data/mock/` — ou reste en fallback de développement local si
-   utile (seed de données de test), mais n'est plus lu en production.
-4. **Cas particulier — `reinitialiserDemandes()`** : cette fonction existe uniquement pour le
-   bouton "Réinitialiser les données de démo" de l'historique, qui n'a de sens que tant qu'il n'y
-   a pas de vraies données à perdre. À supprimer (fonction + bouton + entrée du hook) au moment de
-   la bascule Supabase, pas avant.
+     Auth réelle (jointure `utilisateurs` via `auth_id`) au lieu de renvoyer un utilisateur en dur.
+3. **Reste mocké** : `lib/data/soldes.repository.ts` — `fetchSoldes()` passera d'une valeur fixe à
+   un calcul réel une fois les règles validées avec Abeil (voir section suivante).
+   `lib/data/mock/soldes.mock.ts` reste donc utilisé ; `demandes.mock.ts`/`utilisateur.mock.ts` ne
+   sont plus lus en dehors d'éventuels tests.
+4. **`reinitialiserDemandes()` a disparu** (fonction + bouton "Réinitialiser les données de démo"
+   de l'historique + entrée du hook `useDemandes`), comme prévu au moment de la bascule.
 
-**Ce que cette convention permet concrètement** : on peut brancher Supabase progressivement
-(d'abord les demandes, puis les soldes une fois les règles validées, puis l'auth) sans jamais
-toucher à l'UI, et sans "big bang" de migration. Chaque repository est un point de bascule
-indépendant.
+**Authentification réelle** : Supabase Auth remplace l'utilisateur unique mocké "Camille Rio".
+`proxy.ts` (fichier qui remplace `middleware.ts` depuis Next.js 16) rafraîchit la session à chaque
+requête et redirige vers `/connexion` en son absence ; les routes de l'Espace Salarié vivent dans
+`app/(app)/` (groupe de routes portant l'`AppShell`), `/connexion` en dehors pour ne pas afficher
+le header/nav avant connexion. Connexion/déconnexion : Server Actions dans
+`app/connexion/actions.ts`. Testé de bout en bout avec le compte `test-salarie@abeil.local` — les
+policies manager/admin n'ont pas encore été exercées (Espace Manager/Delphine pas construits).
 
-**Le schéma cible existe désormais** — conçu en parallèle du front, pas encore appliqué au projet
-Supabase ni branché au code. Voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) pour le détail (tables,
-rôles, RLS) et [`supabase/schema.sql`](supabase/schema.sql) pour le SQL versionné.
+**Le schéma cible** est appliqué au projet Supabase et branché au code pour demandes/utilisateur.
+Voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) pour le détail (tables, rôles, RLS) et
+[`supabase/schema.sql`](supabase/schema.sql) pour le SQL versionné.
 
 **À respecter sur les prochaines fonctionnalités** (Espace Manager, Espace Delphine) : même
 patron dès le départ — repository mocké + hook, jamais d'accès direct aux données mockées depuis
@@ -161,16 +164,19 @@ Le projet est déployé sur le compte Vercel personnel de Vincent
 previews. URL actuelle : https://apidays-iota.vercel.app.
 
 Même principe que pour GitHub et Supabase : un choix pour avancer vite avant qu'un compte/équipe
-Vercel Abeil n'existe, pas un choix définitif. Aucune variable d'environnement ni configuration
-spécifique à ce compte n'est en jeu à ce stade (pas de base de données branchée), donc transférer
-le projet vers une équipe Vercel Abeil plus tard (`vercel teams` + transfert de projet, ou
-recréation du lien sur le nouveau compte à partir du même dépôt GitHub) n'a aucun impact sur le
-code. À faire dès qu'un compte/équipe Vercel Abeil existe — et impérativement avant tout
-branchement de Supabase avec de vraies données, pour éviter d'avoir à migrer des secrets de
-production entre comptes.
+Vercel Abeil n'existe, pas un choix définitif. Transférer le projet vers une équipe Vercel Abeil
+plus tard (`vercel teams` + transfert de projet, ou recréation du lien sur le nouveau compte à
+partir du même dépôt GitHub) n'a aucun impact sur le code.
+
+**Point d'attention devenu actif** : les variables `NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` du projet Supabase `abeil-digital/Apidays` sont désormais
+poussées sur ce compte Vercel personnel (Production/Preview/Development) — pour l'instant avec des
+comptes de test Phase 0 uniquement (`@abeil.local`), aucune donnée réelle. Transférer vers une
+équipe Vercel Abeil avant d'y faire transiter de vraies données de salariés reste la bonne
+séquence, pour éviter d'avoir à migrer ces secrets entre comptes une fois en production.
 
 ## Hors périmètre de l'Espace Salarié (rappel)
 
-Authentification réelle, Espace Manager, Espace Delphine, accès Comptable, calcul réel des
-soldes, connexion Supabase. Tous prévus, aucun ne nécessite de réécrire l'existant grâce à la
-convention ci-dessus.
+Espace Manager, Espace Delphine, accès Comptable, calcul réel des soldes (CP/RTT/CPT). Tous
+prévus, aucun ne nécessite de réécrire l'existant grâce à la convention ci-dessus. Authentification
+réelle et connexion Supabase sont désormais faites pour l'Espace Salarié (voir plus haut).

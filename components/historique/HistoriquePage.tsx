@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Printer, RotateCcw } from "lucide-react";
+import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
@@ -19,8 +18,7 @@ const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
 };
 
 export function HistoriquePage() {
-  const router = useRouter();
-  const { demandes, reinitialiser } = useDemandes();
+  const { demandes } = useDemandes();
   const { utilisateur } = useUtilisateur();
   const [filtre, setFiltre] = useState<Filtre>("Toutes");
 
@@ -30,11 +28,6 @@ export function HistoriquePage() {
       return statutAttendu ? d.statut === statutAttendu : true;
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
-
-  async function handleReset() {
-    await reinitialiser();
-    router.push("/");
-  }
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0 print:pb-0">
@@ -74,14 +67,6 @@ export function HistoriquePage() {
       </div>
 
       <RequestList demandes={filtered} emptyText="Aucune demande sur cette période." />
-
-      <button
-        onClick={handleReset}
-        className="text-ink-500 mt-2 flex items-center gap-1.5 self-start px-1 text-xs font-medium print:hidden"
-      >
-        <RotateCcw size={12} />
-        Réinitialiser les données de démo
-      </button>
     </div>
   );
 }

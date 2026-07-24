@@ -19,7 +19,8 @@ bascule vers Supabase, voir [projet.md](projet.md). Pour un résumé rapide de l
 - **lucide-react** pour les icônes
 - **ESLint** (config Next + `eslint-config-prettier`) et **Prettier** (+ `prettier-plugin-tailwindcss`
   pour trier automatiquement les classes)
-- Pas de base de données pour l'instant — toutes les données sont mockées (voir "Couche données")
+- **Supabase** (Postgres + Auth) — demandes, utilisateur et authentification branchés ; le solde
+  reste mocké en attendant les règles de calcul (voir "Couche données")
 
 ## Démarrer
 
@@ -41,43 +42,32 @@ couches, dans cet ordre :
 ```
 components/*        → appellent uniquement les hooks (useDemandes, useSoldes, useUtilisateur)
 hooks/*.ts           → état React (loading/error/data) + appellent un repository
-lib/data/*.repository.ts → fonctions async qui font "comme si" elles parlaient à une API
-lib/data/mock/*.mock.ts  → données mockées + seed, utilisées par les repositories aujourd'hui
+lib/data/*.repository.ts → fonctions async — parlent à Supabase (demandes, utilisateur) ou
+                           lisent encore lib/data/mock/*.mock.ts (soldes, en attendant les règles)
 ```
 
 Exemple concret avec les demandes de congés :
 
-- [`lib/data/mock/demandes.mock.ts`](lib/data/mock/demandes.mock.ts) — le jeu de données mocké
-  (`seedDemandes()`).
 - [`lib/data/demandes.repository.ts`](lib/data/demandes.repository.ts) — expose
-  `fetchDemandes()`, `creerDemande()`, `reinitialiserDemandes()`, toutes `async` et avec une
-  latence simulée (`simulateLatency`) pour que la forme de l'API soit déjà réaliste.
+  `fetchDemandes()`, `creerDemande()`, qui interrogent `demandes_conges` via
+  [`lib/supabase/client.ts`](lib/supabase/client.ts) (RLS : chacun ne voit que ses propres
+  demandes).
 - [`hooks/useDemandes.ts`](hooks/useDemandes.ts) — appelle le repository, expose
-  `{ demandes, loading, error, ajouterDemande, reinitialiser }` aux composants.
+  `{ demandes, loading, error, ajouterDemande }` aux composants.
 - [`components/dashboard/DashboardPage.tsx`](components/dashboard/DashboardPage.tsx) et les
   autres écrans n'importent **que** le hook, jamais `lib/data/*`.
 
-**Pourquoi cette séparation en trois couches (et pas juste un hook avec des données en dur) :**
-le jour où Supabase est branché, seuls les fichiers `*.repository.ts` changent (ils feront de
-vrais appels réseau au lieu de lire `*.mock.ts`) — signature identique, donc **aucun hook ni
-aucun composant d'UI n'est modifié**. C'est le seul endroit du code qui a le droit de savoir que
-la persistance n'existe pas encore.
-
-Pour toute nouvelle fonctionnalité (Espace Manager, Espace Delphine...), suivre le même patron :
-un repository dans `lib/data/`, un hook dans `hooks/`, jamais d'accès direct aux données mockées
-depuis un composant.
-
-Le schéma de base de données cible (Supabase, pas encore branché) est documenté séparément dans
+`lib/data/soldes.repository.ts` suit le même patron mais lit encore
+[`lib/data/mock/soldes.mock.ts`](lib/data/mock/soldes.mock.ts) : les règles de calcul (ancienneté,
+demi-journées, temps partiel, report/perte...) ne sont pas encore validées avec Abeil — voir
 [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md).
 
-### Stockage des données mockées
+Pour toute nouvelle fonctionnalité (Espace Manager, Espace Delphine...), suivre le même patron :
+un repository dans `lib/data/`, un hook dans `hooks/`, jamais d'accès direct à Supabase ou aux
+données mockées depuis un composant.
 
-Les demandes vivent dans une variable module-level (`lib/data/demandes.repository.ts`), donc
-l'état est partagé entre les écrans pendant la session (poser une demande sur `/nouvelle-demande`
-la fait apparaître immédiatement dans l'historique), mais repart de zéro à chaque rechargement
-complet de la page — il n'y a volontairement pas de `localStorage` ni d'API navigateur
-spécifique à un environnement de prototypage : rien qui ne fonctionnerait pas tel quel sur
-Vercel.
+Le schéma de base de données (Supabase, appliqué et branché) est documenté séparément dans
+[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md).
 
 ## Thème & design tokens
 
@@ -105,10 +95,15 @@ identifiables comme zones de saisie.
 
 ```
 app/
-  layout.tsx              racine, monte AppShell + globals.css
-  page.tsx                 route "/" — Dashboard
-  nouvelle-demande/page.tsx route "/nouvelle-demande" — formulaire
-  historique/page.tsx       route "/historique" — historique + filtre + impression
+  layout.tsx              racine minimale (html/body + globals.css)
+  connexion/page.tsx       route "/connexion" — hors AppShell, formulaire Supabase Auth
+  connexion/actions.ts      Server Actions login()/logout()
+  (app)/layout.tsx          monte AppShell — groupe de routes protégées par proxy.ts
+  (app)/page.tsx            route "/" — Dashboard
+  (app)/nouvelle-demande/page.tsx route "/nouvelle-demande" — formulaire
+  (app)/historique/page.tsx       route "/historique" — historique + filtre + impression
+
+proxy.ts                 rafraîchit la session Supabase, protège les routes hors /connexion
 
 components/
   dashboard/         DashboardPage, ReglesCongesModal (RTT imposés + échéances, ouverte via
@@ -116,8 +111,8 @@ components/
   nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
   demandes/         RequestRow, RequestList, TypeBadge — réutilisables entre Dashboard/Historique
                      (et plus tard Espace Manager pour la vue équipe)
-  layout/            AppShell, HeaderBar, niveau1.ts, SideNav, BottomNav — navigation par vraies
-                     routes Next.js, header général + sous-navigation
+  layout/            AppShell, HeaderBar (profil + déconnexion), niveau1.ts, SideNav, BottomNav —
+                     navigation par vraies routes Next.js, header général + sous-navigation
   ui/                 primitives neutres (SoldeCard, Modal, StatusBadge, ListCard, BackHeader...)
 
 hooks/                useDemandes, useSoldes, useUtilisateur — seul point de contact données ↔ UI
@@ -125,7 +120,8 @@ hooks/                useDemandes, useSoldes, useUtilisateur — seul point de c
 lib/
   types.ts             types partagés (Demande, Soldes, Utilisateur...)
   format.ts             formatage de dates (fr-FR)
-  data/                 repositories + mocks, voir "Couche données"
+  data/                 repositories (+ mock pour soldes), voir "Couche données"
+  supabase/             client.ts (navigateur), server.ts (Server Actions/cookies)
 ```
 
 ## Choix notables
@@ -146,8 +142,10 @@ lib/
 - **Écrans larges** : au-delà de 1440px, tout le shell applicatif (header + sidebar + contenu) est
   capé et centré — pas seulement le contenu — pour ne pas s'étirer sur moniteur 4K/ultrawide (voir
   `AppShell.tsx` et `HeaderBar.tsx`, `md:max-w-[1440px]`). En dessous, comportement fluide inchangé.
-- **Authentification mockée** : un seul utilisateur (`Camille Rio`) via `useUtilisateur()`. Pas
-  d'auth réelle à cette étape — hors périmètre.
+- **Authentification réelle** (Supabase Auth) : `/connexion` (hors `AppShell`), `proxy.ts`
+  rafraîchit la session et protège les autres routes, déconnexion depuis `HeaderBar`.
+  `useUtilisateur()` lit désormais la session réelle. Testé avec le rôle `salarie` ; les policies
+  manager/admin restent à exercer une fois ces espaces construits.
 - **Soldes CP/RTT à valeurs fixes** : les règles métier (ancienneté, demi-journées, jours fériés,
   temps partiel, report/perte...) ne sont pas encore validées avec Abeil. `useSoldes()` renvoie
   des valeurs mockées ; le calcul réel remplacera uniquement `lib/data/soldes.repository.ts`. Le
@@ -160,5 +158,4 @@ lib/
 
 - Espace Manager (validation/refus, vue d'équipe)
 - Espace Delphine (administratrice) : gestion des comptes, export paie, correction de solde
-- Authentification réelle, connexion Supabase (remplace uniquement `lib/data/*.repository.ts`)
-- Règles de calcul réelles des soldes CP/RTT
+- Règles de calcul réelles des soldes CP/RTT, puis branchement de `lib/data/soldes.repository.ts`

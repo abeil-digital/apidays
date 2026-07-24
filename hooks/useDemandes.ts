@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Demande, NouvelleDemandeInput } from "@/lib/types";
-import { creerDemande, fetchDemandes, reinitialiserDemandes } from "@/lib/data/demandes.repository";
+import { creerDemande, fetchDemandes } from "@/lib/data/demandes.repository";
 
 interface UseDemandesResult {
   demandes: Demande[];
   loading: boolean;
   error: string | null;
   ajouterDemande: (input: NouvelleDemandeInput) => Promise<Demande>;
-  reinitialiser: () => Promise<void>;
 }
 
 /**
@@ -49,10 +48,5 @@ export function useDemandes(): UseDemandesResult {
     return demande;
   }, []);
 
-  const reinitialiser = useCallback(async () => {
-    const seed = await reinitialiserDemandes();
-    setDemandes(seed);
-  }, []);
-
-  return { demandes, loading, error, ajouterDemande, reinitialiser };
+  return { demandes, loading, error, ajouterDemande };
 }

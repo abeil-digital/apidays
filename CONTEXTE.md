@@ -8,11 +8,12 @@ de Citizen D.
 ## Stack
 
 - Frontend : **Next.js 16 (App Router)** + TypeScript strict + Tailwind CSS v4
-- Backend : **Supabase** (Postgres + Data API) — schéma conçu (voir
-  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) et [`supabase/schema.sql`](supabase/schema.sql)), pas
-  encore appliqué ni branché : toutes les données sont mockées pour l'instant derrière une couche
-  `hooks/` → `lib/data/*.repository.ts` → `lib/data/mock/*.mock.ts` (voir [README.md](README.md),
-  section "Couche données")
+- Backend : **Supabase** (Postgres + Data API) — schéma appliqué (voir
+  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) et [`supabase/schema.sql`](supabase/schema.sql)) et
+  branché pour l'authentification, les demandes et l'utilisateur courant (`lib/data/*.repository.ts`
+  parle à Supabase via `lib/supabase/client.ts` / `server.ts`) ; seul `soldes.repository.ts` reste
+  mocké (`lib/data/mock/soldes.mock.ts`), les règles de calcul CP/RTT n'étant pas encore validées
+  avec Abeil (voir [README.md](README.md), section "Couche données")
 - Déploiement : Vercel, projet `abeil-digital/apidays` importé depuis GitHub, déploiement auto sur
   push vers `main`
 - Repo Git : remote `origin` → `https://github.com/abeil-digital/apidays.git` (remote `perso` en
@@ -23,8 +24,13 @@ de Citizen D.
 **Fait** :
 
 - Espace Salarié (Next.js) : Dashboard, Nouvelle demande, Historique — 3 routes fonctionnelles
-- Couche données isolée et mockée (demandes, soldes, utilisateur) — architecture prête pour
-  Supabase, aucune donnée réelle branchée
+- Couche données isolée (demandes, soldes, utilisateur) — demandes et utilisateur branchés sur
+  Supabase, soldes reste mocké (règles de calcul non validées)
+- Authentification réelle (Supabase Auth) : page `/connexion`, `proxy.ts` protège les routes de
+  l'Espace Salarié et rafraîchit la session, déconnexion depuis le header. Routes salarié
+  déplacées dans `app/(app)/` (groupe de routes avec l'AppShell), `/connexion` en dehors. Comptes
+  de test Phase 0 (`test-salarie@abeil.local` etc.) — plus d'utilisateur unique mocké "Camille Rio"
+  pour les demandes/utilisateur
 - Header général (navigation niveau 1 Poser/Suivre/Paramétrer, Poser seul fonctionnel), sous-nav
   Accueil/Nouvelle demande/Historique
 - Design system : palette de catégories CP/RTT/CPT/mint centralisée dans `app/globals.css`
@@ -39,15 +45,14 @@ de Citizen D.
 
 **En cours / pas encore fait** :
 
-- Connexion Supabase : appliquer `supabase/schema.sql` au projet, puis brancher les repositories —
-  aucune donnée réelle pour l'instant
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
 - Exploitation de `documentation-conges/` (état préparatoire des salaires, modèles de demande
   CP/RTT) pour définir les vraies règles de calcul de solde — **non commité**, contient
-  potentiellement des données de paie
-- Authentification réelle (un seul utilisateur mocké, Camille Rio, pour l'instant)
-- Espace Manager, Espace Delphine (administratrice), accès Comptable
+  potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
+- Espace Manager, Espace Delphine (administratrice), accès Comptable — et avec eux, les policies
+  RLS manager/admin restent à exercer en conditions réelles (seul le rôle salarié est testé pour
+  l'instant)
 
 ## Décisions prises
 
@@ -55,12 +60,9 @@ de Citizen D.
 - Repo hébergé sous l'organisation GitHub `abeil-digital` ; Vincent (`vincent-uzi`) collaborateur
   avec accès _Write_
 - Projet Supabase créé : organisation `abeil-digital`, projet `Apidays`, région West EU (Ireland),
-  URL `https://eaizbjovkrdjmujxovvs.supabase.co` — clé publishable côté client, pas encore utilisée
-  dans le code
-- Variables d'environnement Vercel configurées : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-  (⚠️ préfixe `VITE_` hérité d'un gabarit Vite — à renommer en `NEXT_PUBLIC_SUPABASE_URL` /
-  `NEXT_PUBLIC_SUPABASE_ANON_KEY` au moment du branchement réel, Next.js n'utilise pas le préfixe
-  `VITE_`)
+  URL `https://eaizbjovkrdjmujxovvs.supabase.co` — clé publishable utilisée côté client
+- Variables d'environnement `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` :
+  présentes dans `.env.local` (non commité) et poussées sur Vercel (Production/Preview/Development)
 - Aucune couleur en dur dans les composants : tout passe par les tokens Tailwind v4 dans
   `app/globals.css` (voir README.md, section "Thème & design tokens")
 
@@ -82,9 +84,6 @@ de Citizen D.
 1. Intégrer la vraie charte graphique Abeil (`Charte-abeil/`) — remplacer la palette de travail et
    le logo placeholder
 2. Dépouiller `documentation-conges/` pour définir les règles de calcul CP/RTT réelles (compléter
-   les points encore ouverts du schéma, voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md))
-3. Appliquer `supabase/schema.sql` au projet Supabase, puis brancher Supabase (remplacer
-   `lib/data/*.repository.ts` un par un, voir
-   [projet.md](projet.md#bascule-vers-supabase--ce-qui-change-ce-qui-ne-change-pas))
-4. Authentification réelle
-5. Espace Manager, puis Espace Delphine
+   les points encore ouverts du schéma, voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)), puis
+   brancher `soldes.repository.ts`
+3. Espace Manager, puis Espace Delphine

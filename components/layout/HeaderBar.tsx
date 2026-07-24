@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { NIVEAU1_ITEMS } from "@/components/layout/niveau1";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
+import { logout } from "@/app/connexion/actions";
 
 /**
  * Header général de l'application — fond slate. Porte le logo, la navigation
@@ -49,6 +51,15 @@ export function HeaderBar() {
               </div>
             </div>
             <Avatar initiales={utilisateur.initiales} />
+            <form action={logout}>
+              <button
+                type="submit"
+                title="Se déconnecter"
+                className="text-white/70 hover:text-white"
+              >
+                <LogOut size={16} />
+              </button>
+            </form>
           </>
         )}
       </div>
