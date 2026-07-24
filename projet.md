@@ -107,6 +107,10 @@ fichier dans `lib/data/`, rien ailleurs** :
 toucher à l'UI, et sans "big bang" de migration. Chaque repository est un point de bascule
 indépendant.
 
+**Le schéma cible existe désormais** — conçu en parallèle du front, pas encore appliqué au projet
+Supabase ni branché au code. Voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) pour le détail (tables,
+rôles, RLS) et [`supabase/schema.sql`](supabase/schema.sql) pour le SQL versionné.
+
 **À respecter sur les prochaines fonctionnalités** (Espace Manager, Espace Delphine) : même
 patron dès le départ — repository mocké + hook, jamais d'accès direct aux données mockées depuis
 un composant. Ne pas réintroduire de raccourci "juste pour cette fois".
@@ -114,19 +118,27 @@ un composant. Ne pas réintroduire de raccourci "juste pour cette fois".
 ## Règles métier encore à valider avec Abeil
 
 Ces points, listés dans le périmètre fonctionnel, bloquent le passage de `soldes.repository.ts`
-d'une valeur fixe à un vrai calcul :
+d'une valeur fixe à un vrai calcul. Le schéma de base de données (voir
+[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)) a modélisé une réponse de travail pour certains — encore
+**WIP**, pas une validation formelle avec Abeil :
 
-- Ancienneté : majoration des CP selon seuils, jours supplémentaires
-- Répartition RTT imposés vs libres : quantité, règle de calcul
-- CP/RTT non pris en fin de période : report ou perte
-- Demi-journées : les congés se posent-ils en jours pleins uniquement ?
-- Jours fériés inclus dans une période de congé : décomptés ou non
-- Temps partiel : le calcul de solde diffère-t-il ?
-- Solde négatif / anticipation : peut-on poser un congé non encore acquis ?
-- Chevauchement d'une demande sur deux années
+- ~~Demi-journées : les congés se posent-ils en jours pleins uniquement ?~~ → modélisé : oui,
+  demi-journées possibles (`demi_debut`/`demi_fin`)
+- ~~Jours fériés inclus dans une période de congé : décomptés ou non~~ → modélisé : exclus du
+  décompte
+- ~~Solde négatif / anticipation : peut-on poser un congé non encore acquis ?~~ → modélisé : oui,
+  via le solde théorique (`is_anticipation`)
+- ~~CP/RTT non pris en fin de période : report ou perte~~ → modélisé : CP reportables (période
+  juin → mai), RTT perdus en fin d'année civile
+- **Toujours ouvert** — Ancienneté : majoration des CP selon seuils, jours supplémentaires (le
+  champ `anciennete_date_reference` existe, sans règle de calcul)
+- **Toujours ouvert** — Répartition RTT imposés vs libres : quantité, règle de calcul
+- **Toujours ouvert** — Temps partiel : le calcul de solde diffère-t-il ? (`taux_temps_partiel`
+  modélisé, sans formule)
+- **Toujours ouvert** — Chevauchement d'une demande sur deux années (pas traité dans le schéma)
 
-Tant que ces règles ne sont pas figées, `useSoldes()` continue de renvoyer des valeurs mockées —
-c'est un choix assumé, pas un oubli.
+Tant que ces règles ne sont pas figées avec Abeil, `useSoldes()` continue de renvoyer des valeurs
+mockées — c'est un choix assumé, pas un oubli.
 
 ## Hébergement du code — GitHub Abeil (chapitre "provisoire" clos)
 

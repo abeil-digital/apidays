@@ -8,9 +8,11 @@ de Citizen D.
 ## Stack
 
 - Frontend : **Next.js 16 (App Router)** + TypeScript strict + Tailwind CSS v4
-- Backend : **Supabase** (Postgres + Data API) — prévu, pas encore branché : toutes les données
-  sont mockées pour l'instant derrière une couche `hooks/` → `lib/data/*.repository.ts` →
-  `lib/data/mock/*.mock.ts` (voir [README.md](README.md), section "Couche données")
+- Backend : **Supabase** (Postgres + Data API) — schéma conçu (voir
+  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) et [`supabase/schema.sql`](supabase/schema.sql)), pas
+  encore appliqué ni branché : toutes les données sont mockées pour l'instant derrière une couche
+  `hooks/` → `lib/data/*.repository.ts` → `lib/data/mock/*.mock.ts` (voir [README.md](README.md),
+  section "Couche données")
 - Déploiement : Vercel, projet `abeil-digital/apidays` importé depuis GitHub, déploiement auto sur
   push vers `main`
 - Repo Git : remote `origin` → `https://github.com/abeil-digital/apidays.git` (remote `perso` en
@@ -32,10 +34,13 @@ de Citizen D.
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
+- Schéma de base de données Supabase conçu (11 tables, RLS + policies par rôle
+  salarié/manager/admin) — voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)
 
 **En cours / pas encore fait** :
 
-- Connexion Supabase (base de données réelle) — aucune donnée réelle pour l'instant
+- Connexion Supabase : appliquer `supabase/schema.sql` au projet, puis brancher les repositories —
+  aucune donnée réelle pour l'instant
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
 - Exploitation de `documentation-conges/` (état préparatoire des salaires, modèles de demande
@@ -76,8 +81,10 @@ de Citizen D.
 
 1. Intégrer la vraie charte graphique Abeil (`Charte-abeil/`) — remplacer la palette de travail et
    le logo placeholder
-2. Dépouiller `documentation-conges/` pour définir les règles de calcul CP/RTT réelles
-3. Brancher Supabase (remplacer `lib/data/*.repository.ts` un par un, voir
+2. Dépouiller `documentation-conges/` pour définir les règles de calcul CP/RTT réelles (compléter
+   les points encore ouverts du schéma, voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md))
+3. Appliquer `supabase/schema.sql` au projet Supabase, puis brancher Supabase (remplacer
+   `lib/data/*.repository.ts` un par un, voir
    [projet.md](projet.md#bascule-vers-supabase--ce-qui-change-ce-qui-ne-change-pas))
 4. Authentification réelle
 5. Espace Manager, puis Espace Delphine

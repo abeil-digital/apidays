@@ -67,6 +67,9 @@ Pour toute nouvelle fonctionnalité (Espace Manager, Espace Delphine...), suivre
 un repository dans `lib/data/`, un hook dans `hooks/`, jamais d'accès direct aux données mockées
 depuis un composant.
 
+Le schéma de base de données cible (Supabase, pas encore branché) est documenté séparément dans
+[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md).
+
 ### Stockage des données mockées
 
 Les demandes vivent dans une variable module-level (`lib/data/demandes.repository.ts`), donc
