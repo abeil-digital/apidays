@@ -155,3 +155,29 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
 
   return mapDemandeDepuisDb(data);
 }
+
+/**
+ * Annule une demande en attente (retrait par le salarié lui-même). La policy
+ * RLS "demandes: salarié modifie une demande en attente" n'autorise déjà que
+ * ça — pas de vérification de statut à refaire ici. `.select().single()`
+ * force une erreur si la ligne n'a pas été affectée (déjà traitée par un
+ * manager, id inconnu...), au lieu du succès silencieux à 0 ligne que
+ * renverrait un `update()` filtré par la RLS.
+ *
+ * Pas encore appelée par un hook/composant (aucune UI d'annulation pour
+ * l'instant) — prête pour quand cette fonctionnalité sera spécifiée.
+ */
+export async function annulerDemande(id: string): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("demandes_conges")
+    .update({ statut: "annulee" })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error("Impossible d'annuler la demande (déjà traitée, ou introuvable).");
+  }
+}
