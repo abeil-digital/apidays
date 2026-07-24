@@ -45,5 +45,6 @@ export async function fetchUtilisateurCourant(): Promise<Utilisateur> {
     nom: data.nom,
     poste: POSTE_PAR_ROLE[data.role] ?? data.role,
     initiales: `${data.prenom.charAt(0)}${data.nom.charAt(0)}`.toUpperCase(),
+    role: data.role,
   };
 }

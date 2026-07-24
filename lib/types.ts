@@ -38,10 +38,44 @@ export interface Soldes {
   rttImposes: RttImpose[];
 }
 
+export type RoleUtilisateur = "salarie" | "manager" | "admin";
+
 export interface Utilisateur {
   id: string;
   prenom: string;
   nom: string;
   poste: string;
   initiales: string;
+  role: RoleUtilisateur;
+}
+
+// --- Espace Paramétrer > Gestion des utilisateurs ---
+
+export type StatutUtilisateur = "actif" | "archive";
+
+export type TypeContrat = "temps_plein" | "temps_partiel";
+
+export interface UtilisateurAdmin {
+  id: string;
+  prenom: string;
+  nom: string;
+  email: string;
+  dateEntree: string; // date ISO (YYYY-MM-DD)
+  typeContrat: TypeContrat;
+  tauxTempsPartiel: number | null; // 0-1 (ex. 0.8 pour 80%), null si temps plein
+  ancienneteDateReference: string | null; // date ISO, si différente de dateEntree
+  role: RoleUtilisateur;
+  statut: StatutUtilisateur;
+  dateArchivage: string | null; // date ISO, renseignée si statut = "archive"
+}
+
+export interface UtilisateurAdminInput {
+  prenom: string;
+  nom: string;
+  email: string;
+  dateEntree: string;
+  typeContrat: TypeContrat;
+  tauxTempsPartiel: number | null;
+  ancienneteDateReference: string | null;
+  role: RoleUtilisateur;
 }

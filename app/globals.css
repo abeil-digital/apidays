@@ -31,13 +31,16 @@
   --color-ink-500: #6b7280;
   --color-ink-300: #e5e7eb;
 
-  /* Statuts de demande — sémantiques, ne pas teinter avec la palette de marque */
+  /* Statuts — sémantiques, ne pas teinter avec la palette de marque. Utilisés par
+     components/ui/Badge.tsx (tone success/warning/danger/neutral). */
   --color-status-success-bg: #e7f8ec;
   --color-status-success-fg: #248a3d;
   --color-status-warning-bg: #fff3e0;
   --color-status-warning-fg: #c77700;
   --color-status-danger-bg: #fde8e7;
   --color-status-danger-fg: #d70015;
+  --color-status-neutral-bg: #e5e7eb;
+  --color-status-neutral-fg: #6b7280;
 
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
   --color-cp: #5b8def; /* bleu — CP */

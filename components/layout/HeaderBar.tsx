@@ -1,32 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
-import { NIVEAU1_ITEMS } from "@/components/layout/niveau1";
+import { getNiveau1Items, isNiveau1Actif } from "@/components/layout/niveau1";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { logout } from "@/app/connexion/actions";
 
 /**
  * Header général de l'application — fond slate. Porte le logo, la navigation
- * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. La sous-navigation
- * actuelle (Accueil / Nouvelle demande / Historique, dans SideNav/BottomNav)
- * reste rattachée à "Poser".
+ * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. "Paramétrer" n'est
+ * cliquable que pour manager/admin (voir niveau1.ts). La sous-navigation
+ * (SideNav/BottomNav) dépend de la section active — voir tabs.ts.
  */
 export function HeaderBar() {
   const { utilisateur } = useUtilisateur();
+  const pathname = usePathname();
+  const niveau1Items = getNiveau1Items(utilisateur?.role);
 
   return (
     <header className="bg-slate mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 shadow-sm md:max-w-[1440px] md:gap-6 md:px-8 print:hidden">
       <span className="text-base font-semibold whitespace-nowrap text-white">Apidays</span>
 
       <nav className="flex shrink-0 items-center gap-1">
-        {NIVEAU1_ITEMS.map(({ key, label, href }) =>
+        {niveau1Items.map(({ key, label, href }) =>
           href ? (
             <Link
               key={key}
               href={href}
-              className="border-b-2 border-white px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white"
+              className={`border-b-2 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white ${
+                isNiveau1Actif(key, pathname) ? "border-white" : "border-transparent text-white/60"
+              }`}
             >
               {label}
             </Link>

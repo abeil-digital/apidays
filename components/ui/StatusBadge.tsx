@@ -1,32 +1,17 @@
 import { CheckCircle2, Hourglass, XCircle, type LucideIcon } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
 
 interface StatusConfig {
-  bg: string;
-  fg: string;
+  tone: BadgeTone;
   label: string;
   Icon: LucideIcon;
 }
 
 const STATUT_CONFIG: Record<StatutDemande, StatusConfig> = {
-  validé: {
-    bg: "bg-status-success-bg",
-    fg: "text-status-success-fg",
-    label: "Validé",
-    Icon: CheckCircle2,
-  },
-  "en attente": {
-    bg: "bg-status-warning-bg",
-    fg: "text-status-warning-fg",
-    label: "En attente",
-    Icon: Hourglass,
-  },
-  refusé: {
-    bg: "bg-status-danger-bg",
-    fg: "text-status-danger-fg",
-    label: "Refusé",
-    Icon: XCircle,
-  },
+  validé: { tone: "success", label: "Validé", Icon: CheckCircle2 },
+  "en attente": { tone: "warning", label: "En attente", Icon: Hourglass },
+  refusé: { tone: "danger", label: "Refusé", Icon: XCircle },
 };
 
 interface StatusBadgeProps {
@@ -34,14 +19,12 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ statut }: StatusBadgeProps) {
-  const { bg, fg, label, Icon } = STATUT_CONFIG[statut];
+  const { tone, label, Icon } = STATUT_CONFIG[statut];
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${bg} ${fg}`}
-    >
+    <Badge tone={tone}>
       <Icon size={13} strokeWidth={2.5} />
       {label}
-    </span>
+    </Badge>
   );
 }

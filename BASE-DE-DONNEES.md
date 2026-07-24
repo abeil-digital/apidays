@@ -102,5 +102,9 @@ validation une fois les policies en place.
 4. Les `id` (uuid) réels remplacent les identifiants mockés type `"d1"` pour les demandes issues de
    Supabase.
 5. Authentification réelle via Supabase Auth (`proxy.ts`, page `/connexion`) — voir projet.md.
-   Seul le rôle `salarie` a été exercé de bout en bout ; les policies manager/admin restent à
-   valider une fois les espaces correspondants construits.
+6. Premier écran de l'Espace Delphine — Paramétrer > Gestion des utilisateurs
+   (`lib/data/utilisateurs.repository.ts`, `/parametrer/utilisateurs`) — exerce pour la première
+   fois les policies `manager`/`admin` sur `utilisateurs` en conditions réelles : admin voit/gère
+   tout, manager voit son équipe en lecture seule (les policies `insert`/`update` sont
+   admin-only — une tentative de création/modification par un manager échoue proprement côté UI).
+   Accès route bloqué pour `salarie` dans `proxy.ts`.

@@ -1,9 +1,10 @@
 # Apidays — Espace Salarié
 
 Outil de gestion des congés/RTT pour Abeil (bureau d'étude en aménagement/VRD, Rennes/Saint-Malo).
-Ce dépôt couvre la première étape du produit : l'**Espace Salarié** — dashboard, dépôt d'une
-demande de congé/RTT, historique. Les espaces Manager et Delphine (administratrice) viendront
-dans des étapes suivantes, en réutilisant une partie des composants ci-dessous.
+Ce dépôt couvre l'**Espace Salarié** (dashboard, dépôt d'une demande de congé/RTT, historique) et
+le tout premier écran de l'**Espace Delphine** (administratrice) : Paramétrer > Gestion des
+utilisateurs. Le reste de l'Espace Delphine et l'Espace Manager viendront dans des étapes
+suivantes, en réutilisant une partie des composants ci-dessous.
 
 Ce n'est pas un jetable de démo : pas de backend pour l'instant, mais le code (TypeScript strict,
 composants découpés, couche données isolée) est écrit pour durer.
@@ -91,6 +92,34 @@ Les bordures décoratives ont été retirées des cartes/boutons au profit d'une
 gardent une délimitation, via un fond gris clair (`bg-surface-app`) plutôt qu'un trait, pour rester
 identifiables comme zones de saisie.
 
+## Composants du design system
+
+Primitifs bas niveau dans `components/ui/`, à réutiliser avant d'écrire un nouveau style à la main :
+
+- **`Badge`** ([`components/ui/Badge.tsx`](components/ui/Badge.tsx)) — pastille de statut
+  générique, brique de premier niveau pour tout badge à venir (validation manager, exports
+  paie...). Un seul prop `tone`, le libellé est un enfant libre (pas une énumération fermée) :
+
+  ```tsx
+  <Badge tone="success">Actif</Badge>
+  <Badge tone="warning">En attente</Badge>
+  <Badge tone="danger">Refusé</Badge>
+  <Badge tone="neutral">Archivé</Badge>
+  ```
+
+  Chaque `tone` est mappé sur les tokens `@theme` `--color-status-<tone>-bg`/`-fg` (voir
+  "Thème & design tokens" ci-dessus) — jamais de couleur en dur. `StatusBadge`
+  ([`components/ui/StatusBadge.tsx`](components/ui/StatusBadge.tsx)) est une fine couche par-dessus
+  pour les statuts de demande (`StatutDemande` → tone + libellé + icône) : aucun appelant existant
+  (`RequestRow`...) n'a changé. `UtilisateursListPage` (Actif/Archivé) consomme `Badge` directement,
+  sans réimplémenter le style à la main.
+
+- **`Modal`** ([`components/ui/Modal.tsx`](components/ui/Modal.tsx)) — modale générique (fond +
+  carte + bouton fermer), réutilisée pour `ReglesCongesModal` (Dashboard) et la confirmation
+  d'archivage (`UtilisateurFichePage`).
+- **`Avatar`** ([`components/ui/Avatar.tsx`](components/ui/Avatar.tsx)) — pastille d'initiales
+  neutre (header), sans logique de tonalité.
+
 ## Structure
 
 ```
@@ -102,8 +131,12 @@ app/
   (app)/page.tsx            route "/" — Dashboard
   (app)/nouvelle-demande/page.tsx route "/nouvelle-demande" — formulaire
   (app)/historique/page.tsx       route "/historique" — historique + filtre + impression
+  (app)/parametrer/utilisateurs/page.tsx           route "/parametrer/utilisateurs" — tableau
+  (app)/parametrer/utilisateurs/nouveau/page.tsx    route "/parametrer/utilisateurs/nouveau"
+  (app)/parametrer/utilisateurs/[id]/page.tsx        route "/parametrer/utilisateurs/:id" — fiche
 
-proxy.ts                 rafraîchit la session Supabase, protège les routes hors /connexion
+proxy.ts                 rafraîchit la session Supabase, protège les routes hors /connexion,
+                         bloque /parametrer/* pour le rôle salarié
 
 components/
   dashboard/         DashboardPage, ReglesCongesModal (RTT imposés + échéances, ouverte via
@@ -111,14 +144,19 @@ components/
   nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
   demandes/         RequestRow, RequestList, TypeBadge — réutilisables entre Dashboard/Historique
                      (et plus tard Espace Manager pour la vue équipe)
-  layout/            AppShell, HeaderBar (profil + déconnexion), niveau1.ts, SideNav, BottomNav —
-                     navigation par vraies routes Next.js, header général + sous-navigation
-  ui/                 primitives neutres (SoldeCard, Modal, StatusBadge, ListCard, BackHeader...)
+  parametrer/        UtilisateursListPage (tableau, filtres, tri), UtilisateurFichePage
+                     (création/édition/archivage) — Espace Delphine
+  layout/            AppShell, HeaderBar (profil + déconnexion), niveau1.ts (nav niveau 1,
+                     dépendante du rôle), tabs.ts (sous-nav dépendante de la section active),
+                     SideNav, BottomNav
+  ui/                 primitives neutres (Badge, SoldeCard, Modal, StatusBadge, ListCard,
+                     BackHeader...) — voir "Composants du design system" ci-dessus
 
-hooks/                useDemandes, useSoldes, useUtilisateur — seul point de contact données ↔ UI
+hooks/                useDemandes, useSoldes, useUtilisateur, useUtilisateursAdmin,
+                     useUtilisateurAdmin — seul point de contact données ↔ UI
 
 lib/
-  types.ts             types partagés (Demande, Soldes, Utilisateur...)
+  types.ts             types partagés (Demande, Soldes, Utilisateur, UtilisateurAdmin...)
   format.ts             formatage de dates (fr-FR)
   data/                 repositories (+ mock pour soldes), voir "Couche données"
   supabase/             client.ts (navigateur), server.ts (Server Actions/cookies)
@@ -131,10 +169,20 @@ lib/
   et c'est ce que Next.js App Router fait de mieux.
 - **Header général à deux niveaux** ([`components/layout/HeaderBar.tsx`](components/layout/HeaderBar.tsx)) :
   "Apidays" (texte seul, pas de logo pour l'instant), navigation niveau 1 (`Poser` / `Suivre` /
-  `Paramétrer` — seul `Poser` est fonctionnel, les deux autres sont des emplacements réservés pour
-  les futurs espaces Manager et Delphine, voir [`components/layout/niveau1.ts`](components/layout/niveau1.ts)),
-  profil à droite. La sous-navigation actuelle (Accueil / Nouvelle demande / Historique) reste
-  rattachée à `Poser`.
+  `Paramétrer`). `Poser` fonctionnel pour tous, `Paramétrer` cliquable pour manager/admin
+  uniquement (`getNiveau1Items(role)` dans
+  [`components/layout/niveau1.ts`](components/layout/niveau1.ts)), `Suivre` reste un emplacement
+  réservé pour le futur Espace Manager. Profil + déconnexion à droite. La sous-navigation
+  (Accueil/Nouvelle demande/Historique vs Utilisateurs) dépend de la section active
+  (`getNavTabs(pathname)` dans [`components/layout/tabs.ts`](components/layout/tabs.ts)).
+- **Gestion des utilisateurs** (Paramétrer, `/parametrer/utilisateurs`) : tableau (recherche
+  nom/email, filtres rôle/statut/contrat, tri Nom/Date d'entrée, "Actif" par défaut), lignes
+  cliquables vers une fiche création/édition partagée
+  ([`components/parametrer/UtilisateurFichePage.tsx`](components/parametrer/UtilisateurFichePage.tsx)),
+  archivage avec confirmation (`Modal`). Aucune logique d'autorisation dupliquée côté UI : la RLS
+  Supabase déjà en place fait foi (admin voit/gère tout, manager voit son équipe en lecture seule
+  côté création/modification — une tentative de création par un manager échoue proprement, message
+  d'erreur affiché).
 - **Bloc "Soldes" du Dashboard** : les 3 cartes de solde (CP/RTT/CPT) et une 4ᵉ tuile CTA "Poser un
   congé" (qui mène au formulaire `/nouvelle-demande`) partagent une grille `grid-cols-4` dans un
   même panneau teinté. Le lien "découvrir" ouvre `ReglesCongesModal` — RTT imposés et échéances
@@ -157,5 +205,5 @@ lib/
 ## Prochaines étapes (hors périmètre ici)
 
 - Espace Manager (validation/refus, vue d'équipe)
-- Espace Delphine (administratrice) : gestion des comptes, export paie, correction de solde
+- Suite de l'Espace Delphine : paramétrage RTT imposés, export paie, correction de solde
 - Règles de calcul réelles des soldes CP/RTT, puis branchement de `lib/data/soldes.repository.ts`

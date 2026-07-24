@@ -40,8 +40,15 @@ de Citizen D.
   déplacées dans `app/(app)/` (groupe de routes avec l'AppShell), `/connexion` en dehors. Comptes
   de test Phase 0 (`test-salarie@abeil.local` etc.) — plus d'utilisateur unique mocké "Camille Rio"
   pour les demandes/utilisateur
-- Header général (navigation niveau 1 Poser/Suivre/Paramétrer, Poser seul fonctionnel), sous-nav
-  Accueil/Nouvelle demande/Historique
+- Header général (navigation niveau 1 Poser/Suivre/Paramétrer) — "Poser" fonctionnel pour tous,
+  "Paramétrer" cliquable pour manager/admin uniquement (grisé pour salarié, comme "Suivre" pour
+  tous), sous-nav dépendante de la section active (`niveau1.ts`/`tabs.ts`)
+- Espace Delphine (premier écran) : Paramétrer > Gestion des utilisateurs
+  (`/parametrer/utilisateurs`) — tableau (recherche, filtres rôle/statut/contrat, tri Nom/Date
+  d'entrée, filtre "Actif" par défaut), fiche création/édition (`UtilisateurFichePage`), archivage
+  avec confirmation. Accès route protégé pour les salariés dans `proxy.ts` ; la RLS fait le reste
+  (admin voit/gère tout, manager voit son équipe sans pouvoir créer/modifier — policies
+  insert/update admin uniquement)
 - Design system : palette de catégories CP/RTT/CPT/mint centralisée dans `app/globals.css`
   (reprise d'une maquette "design system" fournie en artifact, pas encore la charte Abeil), cartes
   de solde en grille 4 colonnes (CP/RTT/CPT + CTA "Poser un congé"), badges de type circulaires,
@@ -59,9 +66,8 @@ de Citizen D.
 - Exploitation de `documentation-conges/` (état préparatoire des salaires, modèles de demande
   CP/RTT) pour définir les vraies règles de calcul de solde — **non commité**, contient
   potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
-- Espace Manager, Espace Delphine (administratrice), accès Comptable — et avec eux, les policies
-  RLS manager/admin restent à exercer en conditions réelles (seul le rôle salarié est testé pour
-  l'instant)
+- Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
+  solde), accès Comptable
 
 ## Décisions prises
 
@@ -97,4 +103,5 @@ de Citizen D.
 2. Dépouiller `documentation-conges/` pour définir les règles de calcul CP/RTT réelles (compléter
    les points encore ouverts du schéma, voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)), puis
    brancher `soldes.repository.ts`
-3. Espace Manager, puis Espace Delphine
+3. Suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de solde), puis
+   Espace Manager
