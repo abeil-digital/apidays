@@ -94,7 +94,12 @@ identifiables comme zones de saisie.
 
 ## Composants du design system
 
-Primitifs bas niveau dans `components/ui/`, à réutiliser avant d'écrire un nouveau style à la main :
+Primitifs bas niveau dans `components/ui/`, à réutiliser avant d'écrire un nouveau style à la main.
+**Référence vivante : [`/design-system`](app/design-system/page.tsx)**
+([`components/design-system/DesignSystemPage.tsx`](components/design-system/DesignSystemPage.tsx))
+— importe et rend les vrais composants avec de vraies props (palette, typographie, composants,
+états). Si un composant change, cette page change avec lui : c'est elle qu'il faut consulter et
+mettre à jour au fil de l'eau, pas cette section markdown qui peut se désynchroniser.
 
 - **`Badge`** ([`components/ui/Badge.tsx`](components/ui/Badge.tsx)) — pastille de statut
   générique, brique de premier niveau pour tout badge à venir (validation manager, exports
@@ -127,6 +132,7 @@ app/
   layout.tsx              racine minimale (html/body + globals.css)
   connexion/page.tsx       route "/connexion" — hors AppShell, formulaire Supabase Auth
   connexion/actions.ts      Server Actions login()/logout()
+  design-system/page.tsx    route "/design-system" — référence vivante du design system
   (app)/layout.tsx          monte AppShell — groupe de routes protégées par proxy.ts
   (app)/page.tsx            route "/" — Dashboard
   (app)/nouvelle-demande/page.tsx route "/nouvelle-demande" — formulaire
@@ -146,6 +152,7 @@ components/
                      (et plus tard Espace Manager pour la vue équipe)
   parametrer/        UtilisateursListPage (tableau, filtres, tri), UtilisateurFichePage
                      (création/édition/archivage) — Espace Delphine
+  design-system/     DesignSystemPage — référence vivante, importe les vrais composants ui/
   layout/            AppShell, HeaderBar (profil + déconnexion), niveau1.ts (nav niveau 1,
                      dépendante du rôle), tabs.ts (sous-nav dépendante de la section active),
                      SideNav, BottomNav
@@ -207,3 +214,8 @@ lib/
 - Espace Manager (validation/refus, vue d'équipe)
 - Suite de l'Espace Delphine : paramétrage RTT imposés, export paie, correction de solde
 - Règles de calcul réelles des soldes CP/RTT, puis branchement de `lib/data/soldes.repository.ts`
+- Consolidation design system identifiée par audit (24/07/2026), pas encore traitée : mapping
+  couleur CP/RTT/CPT dupliqué entre `SoldeCard`/`TypeBadge`, pas de composant `Input`/`Select`
+  partagé (style répété), pas de composant "pill toggle" partagé (`NouvelleDemandeForm` /
+  `HistoriquePage`) — `/design-system` sert d'aide visuelle pour vérifier chaque composant au fil
+  de cette consolidation

@@ -1,0 +1,271 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import { Avatar } from "@/components/ui/Avatar";
+import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ListCard } from "@/components/ui/ListCard";
+import { Modal } from "@/components/ui/Modal";
+import { FieldLabel } from "@/components/ui/FieldLabel";
+import { SectionLabel } from "@/components/ui/SectionLabel";
+import { SoldeCard } from "@/components/ui/SoldeCard";
+import { TypeBadge } from "@/components/demandes/TypeBadge";
+import type { StatutDemande } from "@/lib/types";
+
+/**
+ * Page de référence du design system — importe et rend les VRAIS composants
+ * de `components/ui/` (et alentours) avec des props représentatives. Le but
+ * est qu'elle reste juste dans le temps : si un composant change, cette page
+ * change avec lui automatiquement, sans maintenance manuelle d'une doc à
+ * part. Ne rien recréer visuellement ici — toujours importer.
+ */
+
+const PALETTE: { token: string; className: string }[] = [
+  { token: "brand", className: "bg-brand" },
+  { token: "brand-foreground", className: "bg-brand-foreground" },
+  { token: "slate", className: "bg-slate" },
+  { token: "surface-app", className: "bg-surface-app" },
+  { token: "surface-card", className: "bg-surface-card" },
+  { token: "ink-900", className: "bg-ink-900" },
+  { token: "ink-500", className: "bg-ink-500" },
+  { token: "ink-300", className: "bg-ink-300" },
+  { token: "cp", className: "bg-cp" },
+  { token: "rtt", className: "bg-rtt" },
+  { token: "cpt", className: "bg-cpt" },
+  { token: "mint", className: "bg-mint" },
+  { token: "mint-tint", className: "bg-mint-tint" },
+  { token: "status-success-bg", className: "bg-status-success-bg" },
+  { token: "status-success-fg", className: "bg-status-success-fg" },
+  { token: "status-warning-bg", className: "bg-status-warning-bg" },
+  { token: "status-warning-fg", className: "bg-status-warning-fg" },
+  { token: "status-danger-bg", className: "bg-status-danger-bg" },
+  { token: "status-danger-fg", className: "bg-status-danger-fg" },
+  { token: "status-neutral-bg", className: "bg-status-neutral-bg" },
+  { token: "status-neutral-fg", className: "bg-status-neutral-fg" },
+];
+
+const BADGE_TONES: BadgeTone[] = ["success", "warning", "danger", "neutral"];
+const STATUTS_DEMANDE: StatutDemande[] = ["validé", "en attente", "refusé"];
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-4">
+      <h2 className="text-ink-900 border-ink-300 border-b pb-2 text-lg font-bold">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function ComponentExample({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-ink-500 text-xs font-semibold">{title}</div>
+      <div className="flex flex-wrap items-center gap-3">{children}</div>
+    </div>
+  );
+}
+
+export function DesignSystemPage() {
+  const [modalOuverte, setModalOuverte] = useState(false);
+
+  return (
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-8">
+      <div>
+        <h1 className="text-ink-900 text-[1.7rem] font-bold">Design system</h1>
+        <p className="text-ink-500 mt-1 text-sm">
+          Référence vivante — cette page importe les vrais composants de <code>components/ui/</code>{" "}
+          (et alentours) avec de vraies props. Si un composant change, cette page change avec lui.
+        </p>
+      </div>
+
+      <Section title="Palette">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {PALETTE.map(({ token, className }) => (
+            <div key={token} className="flex flex-col gap-1.5">
+              <div className={`border-ink-300 h-16 w-full rounded-lg border ${className}`} />
+              <code className="text-ink-500 text-xs">{token}</code>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Typographie">
+        <div className="flex flex-col">
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-900 text-[1.7rem] font-bold">Bonjour, Camille</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-[1.7rem] font-bold text-ink-900
+            </code>
+          </div>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <SectionLabel>Demandes en cours</SectionLabel>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-sm font-bold text-ink-900 (SectionLabel)
+            </code>
+          </div>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-900 text-sm">Congé payé du 10 au 12 août 2026.</span>
+            <code className="text-ink-500 shrink-0 text-xs">text-sm text-ink-900</code>
+          </div>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-500 text-xs">3 jours - posé le 24 juil. 2026</span>
+            <code className="text-ink-500 shrink-0 text-xs">text-xs text-ink-500</code>
+          </div>
+          <div className="flex items-baseline justify-between gap-4 py-3">
+            <span className="text-ink-500 text-[10px] font-semibold">HISTORIQUE</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-[10px] font-semibold text-ink-500
+            </code>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Composants">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <ComponentExample title="Avatar">
+            <Avatar initiales="CR" />
+            <Avatar initiales="ST" />
+          </ComponentExample>
+
+          <ComponentExample title="Badge (4 tons)">
+            {BADGE_TONES.map((tone) => (
+              <Badge key={tone} tone={tone}>
+                {tone}
+              </Badge>
+            ))}
+          </ComponentExample>
+
+          <ComponentExample title="StatusBadge (StatutDemande)">
+            {STATUTS_DEMANDE.map((statut) => (
+              <StatusBadge key={statut} statut={statut} />
+            ))}
+          </ComponentExample>
+
+          <ComponentExample title="TypeBadge">
+            <TypeBadge code="CP" />
+            <TypeBadge code="RTT" />
+            <TypeBadge code="CPT" />
+          </ComponentExample>
+
+          <ComponentExample title="FieldLabel">
+            <div>
+              <FieldLabel htmlFor="design-system-champ-exemple">Libellé de champ</FieldLabel>
+              <input
+                id="design-system-champ-exemple"
+                readOnly
+                value="Valeur d'exemple"
+                className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              />
+            </div>
+          </ComponentExample>
+
+          <ComponentExample title="SectionLabel">
+            <SectionLabel>Titre de section</SectionLabel>
+          </ComponentExample>
+
+          <ComponentExample title="Modal">
+            <button
+              type="button"
+              onClick={() => setModalOuverte(true)}
+              className="bg-brand text-brand-foreground rounded-full px-4 py-2 text-sm font-semibold"
+            >
+              Ouvrir la modale
+            </button>
+          </ComponentExample>
+
+          <ComponentExample title="SoldeCard">
+            <div className="grid w-full grid-cols-3 gap-3">
+              <SoldeCard
+                label="CP"
+                valeur={18}
+                conditionPrefixe="À poser avant le"
+                conditionAccent="31/05/2026"
+                tone="cp"
+              />
+              <SoldeCard
+                label="RTT"
+                valeur={3}
+                conditionPrefixe="À poser avant le"
+                conditionAccent="31/12/2026"
+                tone="rtt"
+              />
+              <SoldeCard
+                label="CPT"
+                valeur={2.25}
+                conditionPrefixe="En cours d'acquisition"
+                conditionAccent="juin 2026"
+                tone="cpt"
+              />
+            </div>
+          </ComponentExample>
+        </div>
+
+        <div>
+          <div className="text-ink-500 mb-2 text-xs font-semibold">ListCard</div>
+          <ListCard>
+            <div className="border-ink-300/60 border-b px-4 py-3 text-sm">
+              Élément d&rsquo;exemple 1
+            </div>
+            <div className="border-ink-300/60 border-b px-4 py-3 text-sm">
+              Élément d&rsquo;exemple 2
+            </div>
+            <div className="px-4 py-3 text-sm">Élément d&rsquo;exemple 3</div>
+          </ListCard>
+        </div>
+      </Section>
+
+      <Section title="États">
+        <div className="flex flex-col gap-6">
+          <div>
+            <p className="text-ink-500 mb-2 text-xs">
+              Les 4 tons de <code>Badge</code> sont montrés ci-dessus (section Composants).
+            </p>
+          </div>
+
+          <ComponentExample title="Champ de formulaire — normal / focus / erreur">
+            <div className="flex w-full flex-col gap-3 sm:flex-row">
+              <div className="flex-1">
+                <FieldLabel htmlFor="design-system-champ-normal">Normal</FieldLabel>
+                <input
+                  id="design-system-champ-normal"
+                  placeholder="Valeur"
+                  className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                />
+              </div>
+              <div className="flex-1">
+                <FieldLabel htmlFor="design-system-champ-focus">Focus</FieldLabel>
+                <input
+                  id="design-system-champ-focus"
+                  placeholder="Valeur"
+                  className="rounded-control bg-surface-app text-ink-900 outline-brand mt-2 w-full px-3 py-2.5 text-sm outline-2 outline-offset-2"
+                />
+              </div>
+              <div className="flex-1">
+                <FieldLabel htmlFor="design-system-champ-erreur">
+                  Avec message d&rsquo;erreur
+                </FieldLabel>
+                <input
+                  id="design-system-champ-erreur"
+                  placeholder="Valeur"
+                  className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                />
+                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mt-2 px-3 py-2 text-xs">
+                  Champ obligatoire.
+                </div>
+              </div>
+            </div>
+          </ComponentExample>
+        </div>
+      </Section>
+
+      {modalOuverte && (
+        <Modal title="Exemple de modale" onClose={() => setModalOuverte(false)}>
+          <p className="text-ink-500 text-sm">
+            Contenu d&rsquo;exemple — même composant <code>Modal</code> que{" "}
+            <code>ReglesCongesModal</code> et la confirmation d&rsquo;archivage.
+          </p>
+        </Modal>
+      )}
+    </div>
+  );
+}

@@ -53,6 +53,12 @@ de Citizen D.
   (reprise d'une maquette "design system" fournie en artifact, pas encore la charte Abeil), cartes
   de solde en grille 4 colonnes (CP/RTT/CPT + CTA "Poser un congé"), badges de type circulaires,
   modale "Règles de congés" (RTT imposés + échéances, ouverte via "découvrir")
+- `Badge` (`components/ui/Badge.tsx`) généralisé — tons success/warning/danger/neutral sur les
+  tokens `@theme` (`--color-status-neutral-bg/-fg` ajouté). `StatusBadge` en est une fine couche
+  (statuts de demande), sans rien casser côté appelants. Page de référence vivante
+  **`/design-system`** (`components/design-system/DesignSystemPage.tsx`) : importe les vrais
+  composants `components/ui/*` avec des props représentatives (palette, typographie, composants,
+  états) — à tenir à jour à chaque évolution de composant plutôt qu'une doc externe séparée
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
@@ -68,6 +74,12 @@ de Citizen D.
   potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
   solde), accès Comptable
+- Consolidation design system identifiée par audit (24/07/2026), pas encore traitée : mapping
+  couleur CP/RTT/CPT dupliqué entre `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour
+  la même correspondance) ; pas de composant `Input`/`Select` partagé (style répété ~12 fois entre
+  `UtilisateurFichePage`, `NouvelleDemandeForm`, `connexion/page.tsx`) ; pas de composant "pill
+  toggle" partagé (dupliqué entre `NouvelleDemandeForm` et `HistoriquePage`). La page
+  `/design-system` sert d'aide visuelle pour cette consolidation au fur et à mesure.
 
 ## Décisions prises
 
