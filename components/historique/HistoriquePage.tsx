@@ -61,7 +61,7 @@ export function HistoriquePage() {
       </div>
 
       <div className="hidden px-1 print:block">
-        <h1 className="text-ink-900 text-[1.3rem] font-bold">
+        <h1 className="text-ink-900 text-2xl font-semibold">
           Historique des congés — {utilisateur ? `${utilisateur.prenom} ${utilisateur.nom}` : ""}
         </h1>
       </div>

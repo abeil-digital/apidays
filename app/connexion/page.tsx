@@ -16,7 +16,7 @@ export default function ConnexionPage() {
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
       >
         <div>
-          <div className="text-ink-900 text-[1.3rem] font-bold">Apidays</div>
+          <div className="text-ink-900 text-2xl font-semibold">Apidays</div>
           <p className="text-ink-500 text-sm">Connexion à l&rsquo;espace salarié</p>
         </div>
 

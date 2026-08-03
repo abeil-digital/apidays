@@ -23,7 +23,7 @@ export function BottomNav() {
               className={`flex flex-col items-center gap-1 py-2.5 ${active ? "text-brand" : "text-ink-500"}`}
             >
               <Icon size={20} strokeWidth={active ? 2.4 : 2} />
-              <span className="text-[10px] font-semibold">{label}</span>
+              <span className="text-xs font-semibold">{label}</span>
             </Link>
           );
         })}

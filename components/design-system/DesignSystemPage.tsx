@@ -71,7 +71,7 @@ export function DesignSystemPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-8">
       <div>
-        <h1 className="text-ink-900 text-[1.7rem] font-bold">Design system</h1>
+        <h1 className="text-ink-900 text-2xl font-semibold">Design system</h1>
         <p className="text-ink-500 mt-1 text-sm">
           Référence vivante — cette page importe les vrais composants de <code>components/ui/</code>{" "}
           (et alentours) avec de vraies props. Si un composant change, cette page change avec lui.
@@ -92,30 +92,29 @@ export function DesignSystemPage() {
       <Section title="Typographie">
         <div className="flex flex-col">
           <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
-            <span className="text-ink-900 text-[1.7rem] font-bold">Bonjour, Camille</span>
+            <span className="text-ink-900 text-2xl font-semibold">Bonjour, Camille</span>
             <code className="text-ink-500 shrink-0 text-xs">
-              text-[1.7rem] font-bold text-ink-900
+              text-2xl font-semibold text-ink-900
             </code>
           </div>
           <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
             <SectionLabel>Demandes en cours</SectionLabel>
             <code className="text-ink-500 shrink-0 text-xs">
-              text-sm font-bold text-ink-900 (SectionLabel)
+              text-sm font-bold text-ink-900 (SectionLabel — pas encore aligné sur la nouvelle
+              convention text-lg font-medium)
             </code>
           </div>
           <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
-            <span className="text-ink-900 text-sm">Congé payé du 10 au 12 août 2026.</span>
-            <code className="text-ink-500 shrink-0 text-xs">text-sm text-ink-900</code>
+            <span className="text-ink-900 text-base">Congé payé du 10 au 12 août 2026.</span>
+            <code className="text-ink-500 shrink-0 text-xs">text-base</code>
           </div>
           <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
-            <span className="text-ink-500 text-xs">3 jours - posé le 24 juil. 2026</span>
-            <code className="text-ink-500 shrink-0 text-xs">text-xs text-ink-500</code>
+            <span className="text-ink-500 text-sm">3 jours - posé le 24 juil. 2026</span>
+            <code className="text-ink-500 shrink-0 text-xs">text-sm text-ink-500</code>
           </div>
           <div className="flex items-baseline justify-between gap-4 py-3">
-            <span className="text-ink-500 text-[10px] font-semibold">HISTORIQUE</span>
-            <code className="text-ink-500 shrink-0 text-xs">
-              text-[10px] font-semibold text-ink-500
-            </code>
+            <span className="text-ink-500 text-xs">HISTORIQUE</span>
+            <code className="text-ink-500 shrink-0 text-xs">text-xs text-ink-500</code>
           </div>
         </div>
       </Section>

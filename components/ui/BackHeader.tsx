@@ -16,7 +16,7 @@ export function BackHeader({ href, title }: BackHeaderProps) {
       >
         <ChevronLeft size={18} />
       </Link>
-      <h1 className="text-ink-900 text-[1.4rem] font-bold">{title}</h1>
+      <h1 className="text-ink-900 text-2xl font-semibold">{title}</h1>
     </div>
   );
 }

@@ -35,7 +35,7 @@ export function DashboardPage() {
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
       <div className="px-1 pt-5 md:pt-0">
-        <h1 className="text-ink-900 text-[1.7rem] font-bold">Bonjour, {utilisateur.prenom}</h1>
+        <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
       <div className="flex flex-col gap-2">

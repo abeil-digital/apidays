@@ -54,6 +54,21 @@
   --radius-control: 1rem; /* 16px */
 }
 
+/*
+ * Échelle typographique — toujours les classes Tailwind standard, jamais de
+ * taille arbitraire (text-[...]). Voir /design-system pour la référence
+ * vivante avec les vrais composants.
+ *
+ *   Usage                          Classe
+ *   ------------------------------  --------------------------
+ *   Titre de page                   text-2xl font-semibold
+ *   Titre de section                text-lg font-medium
+ *   Titre de carte                  text-base font-medium
+ *   Corps de texte                  text-base
+ *   Texte secondaire                text-sm text-ink-500
+ *   Légende / méta                  text-xs text-ink-500
+ */
+
 body {
   background: var(--color-surface-app);
   color: var(--color-ink-900);

@@ -27,7 +27,7 @@ export function SoldeCard({
     <div className="bg-surface-card flex h-full w-full flex-col gap-1.5 rounded-xl p-4 shadow-sm">
       <span className={`h-5 w-5 rounded-full ${TONE_DOT[tone]}`} />
       <span className="text-ink-900 text-sm font-semibold">{label}</span>
-      <span className="text-ink-900 text-[1.6rem] font-bold">{formatJours(valeur)} j</span>
+      <span className="text-ink-900 text-2xl font-bold">{formatJours(valeur)} j</span>
       <span className="text-ink-500 text-xs leading-snug">
         {conditionPrefixe} <span className="text-ink-900 font-bold">{conditionAccent}</span>
       </span>

@@ -55,7 +55,7 @@ export function NouvelleDemandeForm() {
           <CheckCircle2 size={28} className="text-status-success-fg" />
         </div>
         <div>
-          <div className="text-ink-900 text-[1.3rem] font-bold">Demande envoyée</div>
+          <div className="text-ink-900 text-2xl font-semibold">Demande envoyée</div>
           <p className="text-ink-500 mt-1 max-w-xs text-sm">
             Votre manager va recevoir un e-mail et pourra approuver ou refuser cette demande.
           </p>
