@@ -2,7 +2,9 @@
 
 import { useActionState } from "react";
 import { login, type LoginState } from "@/app/connexion/actions";
+import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
+import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: LoginState = {};
 
@@ -22,25 +24,25 @@ export default function ConnexionPage() {
 
         <div>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <input
+          <Input
             id="email"
             name="email"
             type="email"
             required
             autoComplete="email"
-            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+            className="mt-2 w-full"
           />
         </div>
 
         <div>
           <FieldLabel htmlFor="password">Mot de passe</FieldLabel>
-          <input
+          <Input
             id="password"
             name="password"
             type="password"
             required
             autoComplete="current-password"
-            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+            className="mt-2 w-full"
           />
         </div>
 
@@ -50,13 +52,9 @@ export default function ConnexionPage() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-card bg-brand text-brand-foreground w-full py-3 text-sm font-semibold disabled:opacity-60"
-        >
+        <Button type="submit" disabled={pending} className="rounded-card w-full py-3">
           {pending ? "Connexion…" : "Se connecter"}
-        </button>
+        </Button>
       </form>
     </div>
   );

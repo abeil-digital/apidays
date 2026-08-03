@@ -88,9 +88,9 @@ plus affiché dans le header pour l'instant (texte "Apidays" seul) ; le fichier 
 (`public/abeil-logo.jpeg`) reste sur le disque mais n'est plus référencé.
 
 Les bordures décoratives ont été retirées des cartes/boutons au profit d'une ombre légère
-(`shadow-sm`) ou d'un simple contraste de fond — seuls les champs de formulaire (dates, message)
-gardent une délimitation, via un fond gris clair (`bg-surface-app`) plutôt qu'un trait, pour rester
-identifiables comme zones de saisie.
+(`shadow-sm`) ou d'un simple contraste de fond — seuls les champs de formulaire (`Input`/`Select`/
+`Textarea`) gardent une délimitation, via un fond blanc et un liséré gris (`border-ink-300`, rouge
+en cas d'erreur), pour rester identifiables comme zones de saisie.
 
 ## Composants du design system
 
@@ -119,6 +119,30 @@ mettre à jour au fil de l'eau, pas cette section markdown qui peut se désynchr
   (`RequestRow`...) n'a changé. `UtilisateursListPage` (Actif/Archivé) consomme `Badge` directement,
   sans réimplémenter le style à la main.
 
+- **`Button`** ([`components/ui/Button.tsx`](components/ui/Button.tsx)) — bouton d'action
+  générique, au même titre que `Badge`. Un seul prop `variant` :
+
+  ```tsx
+  <Button variant="primary">Se connecter</Button>
+  <Button variant="secondary">Annuler</Button>
+  <Button variant="ghost">Fermer</Button>
+  ```
+
+  `primary` (défaut) est sur le token `mint` — pas `brand` (bleu iOS générique) : tous les boutons
+  d'action de l'app ont été migrés de `bg-brand` vers `Button` (voir migration du 24/07/2026). La
+  forme (arrondi, padding, largeur pleine ou non) reste au choix de l'appelant via `className`, car
+  elle varie légitimement selon le contexte — seule la couleur/tonalité est standardisée. `href`
+  fait rendre un `next/link` plutôt qu'un `<button>`, même style, pour les actions qui naviguent.
+  Les sélecteurs à état (toggle CP/RTT, filtres Toutes/Validées/Refusées) ne sont **pas** des
+  `Button` — c'est un pattern différent ("pill toggle"), pas encore consolidé (voir plus bas).
+
+- **`Input` / `Select` / `Textarea`** ([`components/ui/Input.tsx`](components/ui/Input.tsx),
+  [`Select.tsx`](components/ui/Select.tsx), [`Textarea.tsx`](components/ui/Textarea.tsx)) — champs
+  de formulaire génériques, fond blanc + liséré gris (`border-ink-300`), liséré rouge via la prop
+  `error` en cas de message d'erreur. Comme pour `Button`, la disposition (`mt-2 w-full` sous un
+  `FieldLabel`, ou une largeur spécifique dans une barre d'outils comme `UtilisateursListPage`)
+  reste au choix de l'appelant via `className` — le composant ne fixe que l'apparence (fond,
+  bordure, rayon, padding, taille de texte).
 - **`Modal`** ([`components/ui/Modal.tsx`](components/ui/Modal.tsx)) — modale générique (fond +
   carte + bouton fermer), réutilisée pour `ReglesCongesModal` (Dashboard) et la confirmation
   d'archivage (`UtilisateurFichePage`).
@@ -214,8 +238,8 @@ lib/
 - Espace Manager (validation/refus, vue d'équipe)
 - Suite de l'Espace Delphine : paramétrage RTT imposés, export paie, correction de solde
 - Règles de calcul réelles des soldes CP/RTT, puis branchement de `lib/data/soldes.repository.ts`
-- Consolidation design system identifiée par audit (24/07/2026), pas encore traitée : mapping
-  couleur CP/RTT/CPT dupliqué entre `SoldeCard`/`TypeBadge`, pas de composant `Input`/`Select`
-  partagé (style répété), pas de composant "pill toggle" partagé (`NouvelleDemandeForm` /
-  `HistoriquePage`) — `/design-system` sert d'aide visuelle pour vérifier chaque composant au fil
-  de cette consolidation
+- Consolidation design system identifiée par audit (24/07/2026) : `Badge`, `Button`,
+  `Input`/`Select`/`Textarea` faits. Reste à traiter — mapping couleur CP/RTT/CPT dupliqué entre
+  `SoldeCard`/`TypeBadge`, pas de composant "pill toggle" partagé (toggle CP/RTT dans
+  `NouvelleDemandeForm`, filtres Toutes/Validées/Refusées dans `HistoriquePage`) — `/design-system`
+  sert d'aide visuelle pour vérifier chaque composant au fil de cette consolidation

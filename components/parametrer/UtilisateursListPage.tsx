@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, UserPlus } from "lucide-react";
 import type {
@@ -13,7 +12,10 @@ import type {
 import { formatDate } from "@/lib/format";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 
 const ROLE_LABEL: Record<RoleUtilisateur, string> = {
   salarie: "Salarié·e",
@@ -101,51 +103,45 @@ export function UtilisateursListPage() {
     <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
       <div className="flex items-center justify-between px-1">
         <h1 className="text-ink-900 text-2xl font-semibold">Utilisateurs</h1>
-        <Link
+        <Button
           href="/parametrer/utilisateurs/nouveau"
-          className="bg-brand text-brand-foreground flex shrink-0 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-semibold"
+          className="shrink-0 rounded-full px-4 py-2.5"
         >
           <UserPlus size={16} />
           <span className="hidden sm:inline">Créer un profil</span>
-        </Link>
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-1">
-        <input
+        <Input
           type="search"
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           placeholder="Rechercher un nom ou un email…"
-          className="rounded-control bg-surface-card min-w-48 flex-1 px-3 py-2 text-sm shadow-sm"
+          className="min-w-48 flex-1"
         />
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}
-          className="rounded-control bg-surface-card px-3 py-2 text-sm shadow-sm"
-        >
+        <Select value={role} onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}>
           <option value="tous">Tous les rôles</option>
           <option value="salarie">Salarié·e</option>
           <option value="manager">Manager</option>
           <option value="admin">Admin</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={statut}
           onChange={(e) => setStatut(e.target.value as StatutUtilisateur | "tous")}
-          className="rounded-control bg-surface-card px-3 py-2 text-sm shadow-sm"
         >
           <option value="actif">Actifs</option>
           <option value="archive">Archivés</option>
           <option value="tous">Tous les statuts</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={contrat}
           onChange={(e) => setContrat(e.target.value as TypeContrat | "tous")}
-          className="rounded-control bg-surface-card px-3 py-2 text-sm shadow-sm"
         >
           <option value="tous">Tous les contrats</option>
           <option value="temps_plein">Temps plein</option>
           <option value="temps_partiel">Temps partiel</option>
-        </select>
+        </Select>
       </div>
 
       {error && (

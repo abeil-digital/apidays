@@ -59,6 +59,15 @@ de Citizen D.
   **`/design-system`** (`components/design-system/DesignSystemPage.tsx`) : importe les vrais
   composants `components/ui/*` avec des props représentatives (palette, typographie, composants,
   états) — à tenir à jour à chaque évolution de composant plutôt qu'une doc externe séparée
+- Tailles de texte arbitraires (`text-[...]`) remplacées par l'échelle Tailwind standard (titre de
+  page → `text-2xl font-semibold`), convention documentée en commentaire dans `app/globals.css`
+- `Input`/`Select`/`Textarea` (`components/ui/`) généralisés — fond blanc, liséré gris normal/rouge
+  en erreur (prop `error`), disposition (`mt-2 w-full` ou largeur spécifique) laissée à l'appelant.
+  Migré partout (connexion, nouvelle demande, fiche utilisateur, filtres de la liste utilisateurs)
+- `Button` (`components/ui/Button.tsx`) généralisé — variantes primary/secondary/ghost, couleur
+  `primary` passée de `bg-brand` (bleu) à `bg-mint` (vert). Les 6 boutons d'action de l'app qui
+  utilisaient `bg-brand` à la main sont migrés ; les sélecteurs à état (toggle CP/RTT, filtres
+  Historique) restent volontairement à part (pattern différent, pas encore consolidé)
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
@@ -74,12 +83,11 @@ de Citizen D.
   potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
   solde), accès Comptable
-- Consolidation design system identifiée par audit (24/07/2026), pas encore traitée : mapping
-  couleur CP/RTT/CPT dupliqué entre `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour
-  la même correspondance) ; pas de composant `Input`/`Select` partagé (style répété ~12 fois entre
-  `UtilisateurFichePage`, `NouvelleDemandeForm`, `connexion/page.tsx`) ; pas de composant "pill
-  toggle" partagé (dupliqué entre `NouvelleDemandeForm` et `HistoriquePage`). La page
-  `/design-system` sert d'aide visuelle pour cette consolidation au fur et à mesure.
+- Consolidation design system identifiée par audit (24/07/2026) : `Badge`, `Button`,
+  `Input`/`Select`/`Textarea` faits. Reste : mapping couleur CP/RTT/CPT dupliqué entre
+  `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour la même correspondance) ; pas de
+  composant "pill toggle" partagé (dupliqué entre `NouvelleDemandeForm` et `HistoriquePage`). La
+  page `/design-system` sert d'aide visuelle pour cette consolidation au fur et à mesure.
 
 ## Décisions prises
 

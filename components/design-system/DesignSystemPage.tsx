@@ -3,10 +3,12 @@
 import { useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { Button, type ButtonVariant } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ListCard } from "@/components/ui/ListCard";
 import { Modal } from "@/components/ui/Modal";
 import { FieldLabel } from "@/components/ui/FieldLabel";
+import { Input } from "@/components/ui/Input";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SoldeCard } from "@/components/ui/SoldeCard";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
@@ -45,6 +47,7 @@ const PALETTE: { token: string; className: string }[] = [
 ];
 
 const BADGE_TONES: BadgeTone[] = ["success", "warning", "danger", "neutral"];
+const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost"];
 const STATUTS_DEMANDE: StatutDemande[] = ["validé", "en attente", "refusé"];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -134,6 +137,14 @@ export function DesignSystemPage() {
             ))}
           </ComponentExample>
 
+          <ComponentExample title="Button (3 variantes)">
+            {BUTTON_VARIANTS.map((variant) => (
+              <Button key={variant} variant={variant} className="rounded-full px-4 py-2">
+                {variant}
+              </Button>
+            ))}
+          </ComponentExample>
+
           <ComponentExample title="StatusBadge (StatutDemande)">
             {STATUTS_DEMANDE.map((statut) => (
               <StatusBadge key={statut} statut={statut} />
@@ -146,14 +157,14 @@ export function DesignSystemPage() {
             <TypeBadge code="CPT" />
           </ComponentExample>
 
-          <ComponentExample title="FieldLabel">
+          <ComponentExample title="FieldLabel + Input">
             <div>
               <FieldLabel htmlFor="design-system-champ-exemple">Libellé de champ</FieldLabel>
-              <input
+              <Input
                 id="design-system-champ-exemple"
                 readOnly
                 value="Valeur d'exemple"
-                className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                className="mt-2 w-full"
               />
             </div>
           </ComponentExample>
@@ -163,13 +174,9 @@ export function DesignSystemPage() {
           </ComponentExample>
 
           <ComponentExample title="Modal">
-            <button
-              type="button"
-              onClick={() => setModalOuverte(true)}
-              className="bg-brand text-brand-foreground rounded-full px-4 py-2 text-sm font-semibold"
-            >
+            <Button onClick={() => setModalOuverte(true)} className="rounded-full px-4 py-2">
               Ouvrir la modale
-            </button>
+            </Button>
           </ComponentExample>
 
           <ComponentExample title="SoldeCard">
@@ -221,32 +228,33 @@ export function DesignSystemPage() {
             </p>
           </div>
 
-          <ComponentExample title="Champ de formulaire — normal / focus / erreur">
+          <ComponentExample title="Champ de formulaire (Input) — normal / focus / erreur">
             <div className="flex w-full flex-col gap-3 sm:flex-row">
               <div className="flex-1">
                 <FieldLabel htmlFor="design-system-champ-normal">Normal</FieldLabel>
-                <input
+                <Input
                   id="design-system-champ-normal"
                   placeholder="Valeur"
-                  className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                  className="mt-2 w-full"
                 />
               </div>
               <div className="flex-1">
                 <FieldLabel htmlFor="design-system-champ-focus">Focus</FieldLabel>
-                <input
+                <Input
                   id="design-system-champ-focus"
                   placeholder="Valeur"
-                  className="rounded-control bg-surface-app text-ink-900 outline-brand mt-2 w-full px-3 py-2.5 text-sm outline-2 outline-offset-2"
+                  className="outline-brand mt-2 w-full outline-2 outline-offset-2"
                 />
               </div>
               <div className="flex-1">
                 <FieldLabel htmlFor="design-system-champ-erreur">
                   Avec message d&rsquo;erreur
                 </FieldLabel>
-                <input
+                <Input
                   id="design-system-champ-erreur"
                   placeholder="Valeur"
-                  className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                  error
+                  className="mt-2 w-full"
                 />
                 <div className="rounded-control bg-status-danger-bg text-status-danger-fg mt-2 px-3 py-2 text-xs">
                   Champ obligatoire.

@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
 import { CheckCircle2, Coffee, Send, Sun } from "lucide-react";
 import type { TypeDemande } from "@/lib/types";
 import { formatJours, nombreJours } from "@/lib/format";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldes } from "@/hooks/useSoldes";
 import { BackHeader } from "@/components/ui/BackHeader";
+import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 const TYPES: { key: TypeDemande; label: string; Icon: typeof Sun }[] = [
   { key: "CP", label: "Congé payé", Icon: Sun },
@@ -60,12 +62,9 @@ export function NouvelleDemandeForm() {
             Votre manager va recevoir un e-mail et pourra approuver ou refuser cette demande.
           </p>
         </div>
-        <Link
-          href="/"
-          className="bg-brand text-brand-foreground rounded-full px-5 py-2.5 text-sm font-semibold"
-        >
+        <Button href="/" className="rounded-full px-5 py-2.5">
           Retour au tableau de bord
-        </Link>
+        </Button>
       </div>
     );
   }
@@ -102,22 +101,22 @@ export function NouvelleDemandeForm() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <FieldLabel htmlFor="debut">Date de début</FieldLabel>
-            <input
+            <Input
               id="debut"
               type="date"
               value={debut}
               onChange={(e) => setDebut(e.target.value)}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             />
           </div>
           <div>
             <FieldLabel htmlFor="fin">Date de fin</FieldLabel>
-            <input
+            <Input
               id="fin"
               type="date"
               value={fin}
               onChange={(e) => setFin(e.target.value)}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             />
           </div>
         </div>
@@ -143,13 +142,13 @@ export function NouvelleDemandeForm() {
 
         <div>
           <FieldLabel htmlFor="note">Message pour le manager (facultatif)</FieldLabel>
-          <textarea
+          <Textarea
             id="note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             rows={3}
             placeholder="Ex. mariage d'un proche, rendez-vous médical…"
-            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full resize-none px-3 py-2.5 text-sm"
+            className="mt-2 w-full"
           />
         </div>
 
@@ -159,13 +158,10 @@ export function NouvelleDemandeForm() {
           </div>
         )}
 
-        <button
-          type="submit"
-          className="rounded-card bg-brand text-brand-foreground flex w-full items-center justify-center gap-2 py-3.5 text-sm font-semibold"
-        >
+        <Button type="submit" className="rounded-card w-full py-3.5">
           <Send size={16} />
           Envoyer la demande
-        </button>
+        </Button>
       </form>
     </div>
   );

@@ -12,7 +12,10 @@ import type {
 import { formatDate } from "@/lib/format";
 import { useUtilisateurAdmin } from "@/hooks/useUtilisateurAdmin";
 import { BackHeader } from "@/components/ui/BackHeader";
+import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
 
 interface UtilisateurFichePageProps {
@@ -92,65 +95,65 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
         <div className="grid grid-cols-2 gap-3">
           <div>
             <FieldLabel htmlFor="prenom">Prénom</FieldLabel>
-            <input
+            <Input
               id="prenom"
               value={champs.prenom}
               onChange={(e) => setChamps({ ...champs, prenom: e.target.value })}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             />
           </div>
           <div>
             <FieldLabel htmlFor="nom">Nom</FieldLabel>
-            <input
+            <Input
               id="nom"
               value={champs.nom}
               onChange={(e) => setChamps({ ...champs, nom: e.target.value })}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             />
           </div>
         </div>
 
         <div>
           <FieldLabel htmlFor="email">Email</FieldLabel>
-          <input
+          <Input
             id="email"
             type="email"
             value={champs.email}
             onChange={(e) => setChamps({ ...champs, email: e.target.value })}
-            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+            className="mt-2 w-full"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <FieldLabel htmlFor="dateEntree">Date d&rsquo;entrée</FieldLabel>
-            <input
+            <Input
               id="dateEntree"
               type="date"
               value={champs.dateEntree}
               onChange={(e) => setChamps({ ...champs, dateEntree: e.target.value })}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             />
           </div>
           <div>
             <FieldLabel htmlFor="role">Rôle</FieldLabel>
-            <select
+            <Select
               id="role"
               value={champs.role}
               onChange={(e) => setChamps({ ...champs, role: e.target.value as RoleUtilisateur })}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             >
               <option value="salarie">Salarié·e</option>
               <option value="manager">Manager</option>
               <option value="admin">Admin</option>
-            </select>
+            </Select>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <FieldLabel htmlFor="typeContrat">Contrat</FieldLabel>
-            <select
+            <Select
               id="typeContrat"
               value={champs.typeContrat}
               onChange={(e) => {
@@ -162,16 +165,16 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
                 });
                 if (typeContrat === "temps_plein") setTauxAffiche("");
               }}
-              className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+              className="mt-2 w-full"
             >
               <option value="temps_plein">Temps plein</option>
               <option value="temps_partiel">Temps partiel</option>
-            </select>
+            </Select>
           </div>
           {champs.typeContrat === "temps_partiel" && (
             <div>
               <FieldLabel htmlFor="taux">Taux (%)</FieldLabel>
-              <input
+              <Input
                 id="taux"
                 type="number"
                 min={1}
@@ -186,7 +189,7 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
                     tauxTempsPartiel: valeur && !Number.isNaN(n) ? n / 100 : null,
                   });
                 }}
-                className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+                className="mt-2 w-full"
               />
             </div>
           )}
@@ -199,14 +202,14 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
               (si différente de la date d&rsquo;entrée)
             </span>
           </FieldLabel>
-          <input
+          <Input
             id="anciennete"
             type="date"
             value={champs.ancienneteDateReference ?? ""}
             onChange={(e) =>
               setChamps({ ...champs, ancienneteDateReference: e.target.value || null })
             }
-            className="rounded-control bg-surface-app text-ink-900 mt-2 w-full px-3 py-2.5 text-sm"
+            className="mt-2 w-full"
           />
         </div>
 
@@ -216,14 +219,10 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={envoi}
-          className="rounded-card bg-brand text-brand-foreground flex w-full items-center justify-center gap-2 py-3.5 text-sm font-semibold disabled:opacity-60"
-        >
+        <Button type="submit" disabled={envoi} className="rounded-card w-full py-3.5">
           <Check size={16} />
           {id ? "Enregistrer" : "Créer le profil"}
-        </button>
+        </Button>
       </form>
 
       {id && statut === "actif" && (
