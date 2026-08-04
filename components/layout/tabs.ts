@@ -1,4 +1,4 @@
-import { History, Home, PlusCircle, Users, type LucideIcon } from "lucide-react";
+import { CalendarClock, History, Home, PlusCircle, Users, type LucideIcon } from "lucide-react";
 
 export interface NavTab {
   href: string;
@@ -14,6 +14,7 @@ const POSER_TABS: NavTab[] = [
 
 const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/utilisateurs", label: "Utilisateurs", Icon: Users },
+  { href: "/parametrer/conges-rtt", label: "Congés & RTT", Icon: CalendarClock },
 ];
 
 /**

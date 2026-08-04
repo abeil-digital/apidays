@@ -76,8 +76,16 @@ de Citizen D.
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
-- Schéma de base de données Supabase conçu (11 tables, RLS + policies par rôle
+- Schéma de base de données Supabase conçu (13 tables, RLS + policies par rôle
   salarié/manager/admin) — voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)
+- Paramétrer > Congés & RTT (`/parametrer/conges-rtt`) : moteur de calcul générique des soldes
+  CP/RTT, indépendant des règles Abeil (celles-ci restent dans une sous-section "Calendrier" à
+  venir). Trois blocs : Congés Payés (période de référence, acquisition/mois, report,
+  anticipation), Ancienneté (rattachée aux CP, plusieurs règles non cumulables, la plus favorable
+  s'applique), RTT (mêmes champs que CP, sans ancienneté). Tables `regles_acquisition` (upsert par
+  type d'absence) et `regles_anciennete` — code applicatif fait et vérifié en base réelle
+  (`lib/data/reglesConges.repository.ts`, `hooks/useReglesConges.ts`,
+  `components/parametrer/CongesRttPage.tsx`)
 
 **En cours / pas encore fait** :
 
@@ -98,6 +106,9 @@ de Citizen D.
   [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)) — à supprimer, et `nature_contrat` à passer en
   `not null` avec défaut, une fois tous les profils repassés en édition (les profils existants ont
   `nature_contrat = null`, affiché "Non précisé" dans le tableau)
+- Écran Congés & RTT : vérifié de bout en bout en base réelle (bloc CP, ancienneté, bloc RTT,
+  persistance après rechargement) — migration appliquée (tables + RLS + policies + grants).
+  **Prochaine session : ajustements UI** sur cet écran
 
 ## Décisions prises
 

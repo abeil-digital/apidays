@@ -79,3 +79,34 @@ export interface UtilisateurAdminInput {
   ancienneteDateReference: string | null;
   role: RoleUtilisateur;
 }
+
+// --- Espace Paramétrer > Congés & RTT ---
+
+export interface RegleAcquisition {
+  id: string;
+  typeAbsence: TypeDemande;
+  periodeDebutMois: number; // 1-12
+  periodeDebutJour: number; // 1-31
+  tauxAcquisitionMensuel: number; // jours/mois
+  reportAutorise: boolean;
+  anticipationAutorisee: boolean;
+}
+
+export interface RegleAcquisitionInput {
+  periodeDebutMois: number;
+  periodeDebutJour: number;
+  tauxAcquisitionMensuel: number;
+  reportAutorise: boolean;
+  anticipationAutorisee: boolean;
+}
+
+export interface RegleAnciennete {
+  id: string;
+  seuilAnnees: number;
+  joursSupplementaires: number;
+}
+
+export interface RegleAncienneteInput {
+  seuilAnnees: number;
+  joursSupplementaires: number;
+}

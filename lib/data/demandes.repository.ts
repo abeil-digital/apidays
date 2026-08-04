@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Demande, NouvelleDemandeInput, StatutDemande, TypeDemande } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
+import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 
 /**
  * Repository des demandes de congés/RTT.
@@ -56,26 +57,6 @@ async function getUtilisateurId(supabase: SupabaseClient): Promise<string> {
     throw new Error("Utilisateur non identifié.");
   }
   return data;
-}
-
-// Table de référence (2 lignes, CP/RTT) — mise en cache en mémoire, elle ne
-// change pas en cours de session.
-let typesAbsenceCache: Partial<Record<TypeDemande, string>> | null = null;
-
-async function getTypeAbsenceId(supabase: SupabaseClient, type: TypeDemande): Promise<string> {
-  if (!typesAbsenceCache) {
-    const { data, error } = await supabase.from("types_absences").select("id, code");
-    if (error || !data) {
-      throw new Error("Impossible de charger les types d'absence.");
-    }
-    typesAbsenceCache = Object.fromEntries(data.map((t) => [t.code, t.id]));
-  }
-
-  const id = typesAbsenceCache![type];
-  if (!id) {
-    throw new Error(`Type d'absence inconnu : ${type}`);
-  }
-  return id;
 }
 
 /**

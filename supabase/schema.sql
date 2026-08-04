@@ -176,6 +176,32 @@ create table rtt_imposes (
 );
 
 -- ------------------------------------------------------------
+-- MOTEUR DE CALCUL DES SOLDES (porté par le Manager)
+-- Paramétrage générique, indépendant des règles spécifiques Abeil
+-- (celles-ci restent dans parametrage_periode/rtt_imposes ci-dessus).
+-- ------------------------------------------------------------
+create table regles_acquisition (
+  id uuid primary key default gen_random_uuid(),
+  type_absence_id uuid not null references types_absences(id),
+  periode_debut_mois int not null,  -- 1-12
+  periode_debut_jour int not null,  -- 1-31
+  taux_acquisition_mensuel numeric(5,2) not null,
+  report_autorise boolean not null default false,
+  anticipation_autorisee boolean not null default false,
+  updated_at timestamptz not null default now(),
+  unique (type_absence_id)
+);
+
+-- Jours supplémentaires selon l'ancienneté — rattaché aux CP uniquement
+create table regles_anciennete (
+  id uuid primary key default gen_random_uuid(),
+  type_absence_id uuid not null references types_absences(id),
+  seuil_annees int not null,
+  jours_supplementaires numeric(4,1) not null,
+  created_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------
 -- INDEX UTILES
 -- ------------------------------------------------------------
 create index idx_demandes_utilisateur on demandes_conges(utilisateur_id);
@@ -204,6 +230,8 @@ alter table demandes_conges enable row level security;
 alter table jours_feries enable row level security;
 alter table parametrage_periode enable row level security;
 alter table rtt_imposes enable row level security;
+alter table regles_acquisition enable row level security;
+alter table regles_anciennete enable row level security;
 
 -- ------------------------------------------------------------
 -- PROFILS DE TEST (Phase 0) — liés aux comptes Supabase Auth
@@ -430,6 +458,28 @@ create policy "rtt_imposes: manager et admin modifient"
   with check (my_role() in ('manager', 'admin'));
 
 -- ------------------------------------------------------------
+-- POLICIES — regles_acquisition & regles_anciennete (moteur de calcul,
+-- porté par le Manager) — mêmes policies que parametrage_periode
+-- ------------------------------------------------------------
+create policy "regles_acquisition: lecture par tout utilisateur authentifié"
+  on regles_acquisition for select
+  using (auth.role() = 'authenticated');
+
+create policy "regles_acquisition: manager et admin modifient"
+  on regles_acquisition for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
+create policy "regles_anciennete: lecture par tout utilisateur authentifié"
+  on regles_anciennete for select
+  using (auth.role() = 'authenticated');
+
+create policy "regles_anciennete: manager et admin modifient"
+  on regles_anciennete for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
+-- ------------------------------------------------------------
 -- GRANTS — nécessaires en complément de RLS : RLS filtre les
 -- LIGNES visibles, mais Postgres exige aussi les droits de base
 -- sur la table pour le rôle. Sans ce GRANT, la requête est
@@ -448,5 +498,7 @@ grant select, insert, update, delete on
   demandes_conges,
   jours_feries,
   parametrage_periode,
-  rtt_imposes
+  rtt_imposes,
+  regles_acquisition,
+  regles_anciennete
 to authenticated;

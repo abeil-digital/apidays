@@ -25,6 +25,8 @@ Abeil, signalés plus bas.
 | `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte)                                                                              |
 | `parametrage_periode`    | Paramétrage annuel porté par le Manager (semaine du 15 août imposée, etc.)                                                                   |
 | `rtt_imposes`            | Dates de RTT imposées pour une période donnée                                                                                                |
+| `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)       |
+| `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)        |
 
 ## Points de modélisation notables
 
@@ -49,6 +51,14 @@ Abeil, signalés plus bas.
   ce champ (l'app l'affiche "Non précisé" et le complète dès la première modification du profil).
   Nettoyage (suppression des anciennes colonnes, `not null` + défaut sur `nature_contrat`) à faire
   une fois tous les profils repassés en édition.
+- **Moteur de calcul CP/RTT paramétrable, indépendant des règles Abeil** : `regles_acquisition`
+  (upsert par type d'absence, contrainte `unique(type_absence_id)`) porte la période de référence
+  (mois/jour de début), le taux d'acquisition mensuel, le report et l'anticipation — générique, pas
+  spécifique à Abeil. Les règles propres à Abeil (16 demi-journées le vendredi, semaine du 15 août
+  imposée, RTT imposés/libres) restent dans `parametrage_periode`/`rtt_imposes`, traitées à part
+  dans une sous-section "Calendrier" à venir. `regles_anciennete` ne concerne que les CP ; plusieurs
+  règles peuvent coexister mais ne se cumulent pas entre elles côté métier (seule la plus favorable
+  s'applique — logique portée par l'application, pas contrainte en base).
 
 ## Rôles & sécurité (RLS)
 
@@ -66,9 +76,9 @@ d'autorisation :
 
 Logique générale des policies : chacun lit ses propres données ; un manager lit/valide celles de
 son équipe (via `is_manager_of`) ; l'admin (Delphine) a un accès large sur tout. Les tables
-référentielles (`types_absences`, `jours_feries`, `parametrage_periode`, `rtt_imposes`) sont en
-lecture ouverte à tout utilisateur authentifié, modification réservée à manager/admin selon la
-table.
+référentielles (`types_absences`, `jours_feries`, `parametrage_periode`, `rtt_imposes`,
+`regles_acquisition`, `regles_anciennete`) sont en lecture ouverte à tout utilisateur authentifié,
+modification réservée à manager/admin selon la table.
 
 **RLS ne suffit pas seul** : Postgres exige aussi des `GRANT` de base sur chaque table pour le rôle
 `authenticated` — sans ça, la requête est bloquée avant même l'évaluation des policies. Voir la
