@@ -17,8 +17,8 @@ interface UtilisateurRow {
   nom: string;
   email: string;
   date_entree: string;
-  type_contrat: UtilisateurAdmin["typeContrat"];
-  taux_temps_partiel: number | string | null;
+  nature_contrat: UtilisateurAdmin["natureContrat"];
+  taux_activite: number | string;
   anciennete_date_reference: string | null;
   role: UtilisateurAdmin["role"];
   statut: UtilisateurAdmin["statut"];
@@ -26,7 +26,7 @@ interface UtilisateurRow {
 }
 
 const SELECT_UTILISATEUR =
-  "id, prenom, nom, email, date_entree, type_contrat, taux_temps_partiel, anciennete_date_reference, role, statut, date_archivage";
+  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage";
 
 function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
   return {
@@ -35,8 +35,8 @@ function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
     nom: row.nom,
     email: row.email,
     dateEntree: row.date_entree,
-    typeContrat: row.type_contrat,
-    tauxTempsPartiel: row.taux_temps_partiel !== null ? Number(row.taux_temps_partiel) : null,
+    natureContrat: row.nature_contrat,
+    tauxActivite: Number(row.taux_activite),
     ancienneteDateReference: row.anciennete_date_reference,
     role: row.role,
     statut: row.statut,
@@ -50,8 +50,8 @@ function paramsDepuisInput(input: UtilisateurAdminInput) {
     nom: input.nom,
     email: input.email,
     date_entree: input.dateEntree,
-    type_contrat: input.typeContrat,
-    taux_temps_partiel: input.typeContrat === "temps_partiel" ? input.tauxTempsPartiel : null,
+    nature_contrat: input.natureContrat,
+    taux_activite: input.tauxActivite,
     anciennete_date_reference: input.ancienneteDateReference || null,
     role: input.role,
   };

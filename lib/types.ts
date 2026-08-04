@@ -53,7 +53,7 @@ export interface Utilisateur {
 
 export type StatutUtilisateur = "actif" | "archive";
 
-export type TypeContrat = "temps_plein" | "temps_partiel";
+export type NatureContrat = "cdi" | "cdd" | "alternance" | "stage";
 
 export interface UtilisateurAdmin {
   id: string;
@@ -61,8 +61,8 @@ export interface UtilisateurAdmin {
   nom: string;
   email: string;
   dateEntree: string; // date ISO (YYYY-MM-DD)
-  typeContrat: TypeContrat;
-  tauxTempsPartiel: number | null; // 0-1 (ex. 0.8 pour 80%), null si temps plein
+  natureContrat: NatureContrat | null; // null sur les profils créés avant ce champ
+  tauxActivite: number; // pourcentage, 100 = temps plein (ex. 80, 50, 33.33)
   ancienneteDateReference: string | null; // date ISO, si différente de dateEntree
   role: RoleUtilisateur;
   statut: StatutUtilisateur;
@@ -74,8 +74,8 @@ export interface UtilisateurAdminInput {
   nom: string;
   email: string;
   dateEntree: string;
-  typeContrat: TypeContrat;
-  tauxTempsPartiel: number | null;
+  natureContrat: NatureContrat;
+  tauxActivite: number;
   ancienneteDateReference: string | null;
   role: RoleUtilisateur;
 }

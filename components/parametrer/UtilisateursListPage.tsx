@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, UserPlus } from "lucide-react";
 import type {
+  NatureContrat,
   RoleUtilisateur,
   StatutUtilisateur,
-  TypeContrat,
   UtilisateurAdmin,
 } from "@/lib/types";
 import { formatDate } from "@/lib/format";
@@ -23,10 +23,17 @@ const ROLE_LABEL: Record<RoleUtilisateur, string> = {
   admin: "Admin",
 };
 
-const CONTRAT_LABEL: Record<TypeContrat, string> = {
-  temps_plein: "Temps plein",
-  temps_partiel: "Temps partiel",
+const NATURE_CONTRAT_LABEL: Record<NatureContrat, string> = {
+  cdi: "CDI",
+  cdd: "CDD",
+  alternance: "Alternance",
+  stage: "Stage",
 };
+
+function formatTauxActivite(taux: number): string {
+  if (taux === 100) return "Temps plein";
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(taux)}%`;
+}
 
 type Champ = "nom" | "dateEntree";
 type Direction = "asc" | "desc";
@@ -64,7 +71,7 @@ export function UtilisateursListPage() {
   const [recherche, setRecherche] = useState("");
   const [role, setRole] = useState<RoleUtilisateur | "tous">("tous");
   const [statut, setStatut] = useState<StatutUtilisateur | "tous">("actif");
-  const [contrat, setContrat] = useState<TypeContrat | "tous">("tous");
+  const [natureFiltre, setNatureFiltre] = useState<NatureContrat | "tous">("tous");
   const [tri, setTri] = useState<Champ>("nom");
   const [direction, setDirection] = useState<Direction>("asc");
 
@@ -83,7 +90,7 @@ export function UtilisateursListPage() {
     return [...utilisateurs]
       .filter((u) => (statut === "tous" ? true : u.statut === statut))
       .filter((u) => (role === "tous" ? true : u.role === role))
-      .filter((u) => (contrat === "tous" ? true : u.typeContrat === contrat))
+      .filter((u) => (natureFiltre === "tous" ? true : u.natureContrat === natureFiltre))
       .filter((u) => {
         if (!rechercheNormalisee) return true;
         return `${u.nom} ${u.prenom} ${u.email}`.toLowerCase().includes(rechercheNormalisee);
@@ -93,7 +100,7 @@ export function UtilisateursListPage() {
           tri === "nom" ? a.nom.localeCompare(b.nom) : a.dateEntree.localeCompare(b.dateEntree);
         return direction === "asc" ? cmp : -cmp;
       });
-  }, [utilisateurs, recherche, role, statut, contrat, tri, direction]);
+  }, [utilisateurs, recherche, role, statut, natureFiltre, tri, direction]);
 
   function allerALaFiche(u: UtilisateurAdmin) {
     router.push(`/parametrer/utilisateurs/${u.id}`);
@@ -135,12 +142,14 @@ export function UtilisateursListPage() {
           <option value="tous">Tous les statuts</option>
         </Select>
         <Select
-          value={contrat}
-          onChange={(e) => setContrat(e.target.value as TypeContrat | "tous")}
+          value={natureFiltre}
+          onChange={(e) => setNatureFiltre(e.target.value as NatureContrat | "tous")}
         >
           <option value="tous">Tous les contrats</option>
-          <option value="temps_plein">Temps plein</option>
-          <option value="temps_partiel">Temps partiel</option>
+          <option value="cdi">CDI</option>
+          <option value="cdd">CDD</option>
+          <option value="alternance">Alternance</option>
+          <option value="stage">Stage</option>
         </Select>
       </div>
 
@@ -196,7 +205,10 @@ export function UtilisateursListPage() {
                   <td className="px-4 py-3">{u.prenom}</td>
                   <td className="text-ink-500 px-4 py-3">{u.email}</td>
                   <td className="px-4 py-3">{formatDate(u.dateEntree)}</td>
-                  <td className="px-4 py-3">{CONTRAT_LABEL[u.typeContrat]}</td>
+                  <td className="px-4 py-3">
+                    {u.natureContrat ? NATURE_CONTRAT_LABEL[u.natureContrat] : "Non précisé"} ·{" "}
+                    {formatTauxActivite(u.tauxActivite)}
+                  </td>
                   <td className="px-4 py-3">{ROLE_LABEL[u.role]}</td>
                   <td className="px-4 py-3">
                     <Badge tone={u.statut === "actif" ? "success" : "neutral"}>

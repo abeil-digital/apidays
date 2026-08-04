@@ -68,6 +68,11 @@ de Citizen D.
   `primary` passée de `bg-brand` (bleu) à `bg-mint` (vert). Les 6 boutons d'action de l'app qui
   utilisaient `bg-brand` à la main sont migrés ; les sélecteurs à état (toggle CP/RTT, filtres
   Historique) restent volontairement à part (pattern différent, pas encore consolidé)
+- Fiche utilisateur : le champ "Contrat" scindé en deux — **Nature du contrat**
+  (CDI/CDD/Alternance/Stage) et **Durée de travail** (préréglages 100/80/50/33,33 % + "Autre" en
+  saisie libre). Tableau : colonne "Contrat" combinée (`CDI · Temps plein`, `CDD · 80%`). Champs DB
+  `nature_contrat`/`taux_activite`, migration additive (24/07/2026) — voir "En cours" ci-dessous
+  pour l'état transitoire de la base
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
@@ -88,6 +93,11 @@ de Citizen D.
   `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour la même correspondance) ; pas de
   composant "pill toggle" partagé (dupliqué entre `NouvelleDemandeForm` et `HistoriquePage`). La
   page `/design-system` sert d'aide visuelle pour cette consolidation au fur et à mesure.
+- Nettoyage DB en attente : `type_contrat`/`taux_temps_partiel` (colonnes `utilisateurs`) sont
+  dépréciées mais encore en base (migration additive volontaire du 24/07/2026, voir
+  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)) — à supprimer, et `nature_contrat` à passer en
+  `not null` avec défaut, une fois tous les profils repassés en édition (les profils existants ont
+  `nature_contrat = null`, affiché "Non précisé" dans le tableau)
 
 ## Décisions prises
 

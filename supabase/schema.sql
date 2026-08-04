@@ -15,7 +15,8 @@
 -- ------------------------------------------------------------
 create type user_role as enum ('salarie', 'manager', 'admin');
 create type statut_utilisateur as enum ('actif', 'archive');
-create type type_contrat as enum ('temps_plein', 'temps_partiel');
+create type type_contrat as enum ('temps_plein', 'temps_partiel'); -- déprécié, voir nature_contrat/taux_activite plus bas
+create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
 create type type_absence_code as enum ('CP', 'RTT');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
@@ -34,8 +35,14 @@ create table utilisateurs (
   -- (voir manager_salaries) plutôt qu'un simple manager_id, car plusieurs
   -- associés peuvent avoir le droit de validation
   date_entree date not null,
+  -- type_contrat / taux_temps_partiel : dépréciés au profit de nature_contrat /
+  -- taux_activite ci-dessous (24/07/2026). Gardés en base pour l'instant, migration
+  -- additive volontaire — pas de suppression ni de backfill forcé à ce stade. À
+  -- retirer une fois nature_contrat renseigné sur tous les profils existants.
   type_contrat type_contrat not null default 'temps_plein',
   taux_temps_partiel numeric(4,2), -- ex: 0.80 pour 80%, null si temps plein
+  nature_contrat nature_contrat, -- nullable : pas de valeur par défaut forcée sur les profils existants
+  taux_activite numeric(5,2) default 100.00, -- pourcentage, 100 = temps plein (ex. 80, 50, 33.33)
   anciennete_date_reference date, -- si différente de date_entree, à préciser avec Abeil
   statut statut_utilisateur not null default 'actif',
   date_archivage date,
@@ -201,6 +208,8 @@ alter table rtt_imposes enable row level security;
 -- ------------------------------------------------------------
 -- PROFILS DE TEST (Phase 0) — liés aux comptes Supabase Auth
 -- ------------------------------------------------------------
+-- nature_contrat volontairement absent ici : ces profils ont été créés avant
+-- l'ajout de la colonne (nullable, pas de backfill forcé) — voir plus haut.
 insert into utilisateurs (auth_id, prenom, nom, email, role, date_entree, type_contrat)
 values
   ('44268804-dff6-4d08-a23d-cb452dd83420', 'Delphine', 'Test', 'test-admin@abeil.local', 'admin', '2020-01-01', 'temps_plein'),

@@ -4,8 +4,8 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, Check } from "lucide-react";
 import type {
+  NatureContrat,
   RoleUtilisateur,
-  TypeContrat,
   UtilisateurAdmin,
   UtilisateurAdminInput,
 } from "@/lib/types";
@@ -27,11 +27,23 @@ const CHAMPS_VIDES: UtilisateurAdminInput = {
   nom: "",
   email: "",
   dateEntree: "",
-  typeContrat: "temps_plein",
-  tauxTempsPartiel: null,
+  natureContrat: "cdi",
+  tauxActivite: 100,
   ancienneteDateReference: null,
   role: "salarie",
 };
+
+const PRESETS_DUREE: { value: string; label: string }[] = [
+  { value: "100", label: "Temps plein (100 %)" },
+  { value: "80", label: "80 %" },
+  { value: "50", label: "Mi-temps (50 %)" },
+  { value: "33.33", label: "Tiers-temps (33,33 %)" },
+];
+
+function presetPourTaux(taux: number): string {
+  const preset = PRESETS_DUREE.find((p) => Number(p.value) === taux);
+  return preset ? preset.value : "autre";
+}
 
 interface FormulaireProps {
   id?: string;
@@ -51,8 +63,9 @@ interface FormulaireProps {
 function Formulaire({ id, initial, statut, creer, modifier, archiver }: FormulaireProps) {
   const router = useRouter();
   const [champs, setChamps] = useState<UtilisateurAdminInput>(initial);
-  const [tauxAffiche, setTauxAffiche] = useState(
-    initial.tauxTempsPartiel !== null ? String(Math.round(initial.tauxTempsPartiel * 100)) : "",
+  const [dureeSelection, setDureeSelection] = useState(() => presetPourTaux(initial.tauxActivite));
+  const [tauxAutre, setTauxAutre] = useState(() =>
+    presetPourTaux(initial.tauxActivite) === "autre" ? String(initial.tauxActivite) : "",
   );
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
@@ -152,48 +165,69 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor="typeContrat">Contrat</FieldLabel>
+            <FieldLabel htmlFor="natureContrat">Nature du contrat</FieldLabel>
             <Select
-              id="typeContrat"
-              value={champs.typeContrat}
+              id="natureContrat"
+              value={champs.natureContrat}
+              onChange={(e) =>
+                setChamps({ ...champs, natureContrat: e.target.value as NatureContrat })
+              }
+              className="mt-2 w-full"
+            >
+              <option value="cdi">CDI</option>
+              <option value="cdd">CDD</option>
+              <option value="alternance">Alternance</option>
+              <option value="stage">Stage</option>
+            </Select>
+          </div>
+          <div>
+            <FieldLabel htmlFor="dureeTravail">Durée de travail</FieldLabel>
+            <Select
+              id="dureeTravail"
+              value={dureeSelection}
               onChange={(e) => {
-                const typeContrat = e.target.value as TypeContrat;
-                setChamps({
-                  ...champs,
-                  typeContrat,
-                  tauxTempsPartiel: typeContrat === "temps_plein" ? null : champs.tauxTempsPartiel,
-                });
-                if (typeContrat === "temps_plein") setTauxAffiche("");
+                const valeur = e.target.value;
+                setDureeSelection(valeur);
+                if (valeur === "autre") {
+                  setTauxAutre(String(champs.tauxActivite));
+                } else {
+                  setChamps({ ...champs, tauxActivite: Number(valeur) });
+                }
               }}
               className="mt-2 w-full"
             >
-              <option value="temps_plein">Temps plein</option>
-              <option value="temps_partiel">Temps partiel</option>
+              {PRESETS_DUREE.map((preset) => (
+                <option key={preset.value} value={preset.value}>
+                  {preset.label}
+                </option>
+              ))}
+              <option value="autre">Autre</option>
             </Select>
           </div>
-          {champs.typeContrat === "temps_partiel" && (
-            <div>
-              <FieldLabel htmlFor="taux">Taux (%)</FieldLabel>
-              <Input
-                id="taux"
-                type="number"
-                min={1}
-                max={100}
-                value={tauxAffiche}
-                onChange={(e) => {
-                  const valeur = e.target.value;
-                  setTauxAffiche(valeur);
-                  const n = Number(valeur);
-                  setChamps({
-                    ...champs,
-                    tauxTempsPartiel: valeur && !Number.isNaN(n) ? n / 100 : null,
-                  });
-                }}
-                className="mt-2 w-full"
-              />
-            </div>
-          )}
         </div>
+
+        {dureeSelection === "autre" && (
+          <div>
+            <FieldLabel htmlFor="tauxAutre">Pourcentage</FieldLabel>
+            <Input
+              id="tauxAutre"
+              type="number"
+              min={1}
+              max={100}
+              step="0.01"
+              value={tauxAutre}
+              onChange={(e) => {
+                const valeur = e.target.value;
+                setTauxAutre(valeur);
+                const n = Number(valeur);
+                if (valeur && !Number.isNaN(n)) {
+                  setChamps({ ...champs, tauxActivite: n });
+                }
+              }}
+              className="mt-2 w-full"
+            />
+          </div>
+        )}
 
         <div>
           <FieldLabel htmlFor="anciennete">
@@ -295,8 +329,8 @@ export function UtilisateurFichePage({ id }: UtilisateurFichePageProps) {
         nom: utilisateur.nom,
         email: utilisateur.email,
         dateEntree: utilisateur.dateEntree,
-        typeContrat: utilisateur.typeContrat,
-        tauxTempsPartiel: utilisateur.tauxTempsPartiel,
+        natureContrat: utilisateur.natureContrat ?? "cdi",
+        tauxActivite: utilisateur.tauxActivite,
         ancienneteDateReference: utilisateur.ancienneteDateReference,
         role: utilisateur.role,
       }

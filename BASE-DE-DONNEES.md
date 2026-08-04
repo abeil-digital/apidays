@@ -41,6 +41,14 @@ Abeil, signalés plus bas.
   d'une demande encore en attente par le salarié lui-même.
 - **`nb_demi_journees` est calculé côté application**, pas en base — le commentaire du schéma
   précise "jours fériés/weekends exclus".
+- **Contrat en deux dimensions indépendantes** : `nature_contrat` (CDI/CDD/Alternance/Stage) et
+  `taux_activite` (pourcentage, 100 = temps plein, ex. 80, 50, 33.33), qui remplacent à terme
+  l'ancien `type_contrat`/`taux_temps_partiel` (binaire temps plein/partiel). **Migration additive
+  volontaire (24/07/2026)** : les deux anciennes colonnes restent en base pour l'instant, pas de
+  suppression ni de backfill forcé — `nature_contrat` est donc `null` sur les profils créés avant
+  ce champ (l'app l'affiche "Non précisé" et le complète dès la première modification du profil).
+  Nettoyage (suppression des anciennes colonnes, `not null` + défaut sur `nature_contrat`) à faire
+  une fois tous les profils repassés en édition.
 
 ## Rôles & sécurité (RLS)
 
@@ -78,7 +86,7 @@ Le schéma précise/tranche plusieurs points listés dans [projet.md](projet.md#
 | CP reportables en fin de période ?       | **Oui** (période juin → mai) — d'après le commentaire du schéma                                                                                         |
 | RTT reportables en fin de période ?      | **Non**, perdus en fin d'année civile — d'après le commentaire du schéma                                                                                |
 | Ancienneté : date de référence           | **Toujours ouvert** — `anciennete_date_reference` existe mais le commentaire dit explicitement "à préciser avec Abeil"                                  |
-| Temps partiel : calcul de solde          | **Toujours ouvert** — `type_contrat`/`taux_temps_partiel` modélisés, mais aucune formule de calcul encore posée                                         |
+| Temps partiel : calcul de solde          | **Toujours ouvert** — `taux_activite` modélisé (pourcentage, toute nature de contrat), mais aucune formule de calcul encore posée                       |
 | Chevauchement d'une demande sur 2 années | **Pas explicitement traité** — `soldes` a une période par type/année ; le cas d'une demande à cheval sur deux périodes n'est pas visible dans le schéma |
 
 À noter : ce cadrage est encore **WIP** (20/07/2026) — les réponses ci-dessus reflètent l'état du
