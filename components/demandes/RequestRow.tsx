@@ -10,12 +10,16 @@ interface RequestRowProps {
 
 export function RequestRow({ demande, isLast }: RequestRowProps) {
   const jours = nombreJours(demande.debut, demande.fin);
+  // "Congés anticipés" n'est pas un type d'absence distinct en base (voir
+  // NouvelleDemandeForm) — c'est un CP avec is_anticipation=true, affiché
+  // avec le badge "CPT" pour le distinguer visuellement d'un CP classique.
+  const codeBadge = demande.type === "CP" && demande.isAnticipation ? "CPT" : demande.type;
 
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-ink-300/60 border-b"}`}
     >
-      <TypeBadge code={demande.type} />
+      <TypeBadge code={codeBadge} />
       <div className="min-w-0 flex-1">
         <div className="text-ink-900 text-sm font-bold">
           {formatPeriodeDemande(demande.debut, demande.fin)}

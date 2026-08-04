@@ -18,13 +18,14 @@ interface DemandeRow {
   date_fin: string;
   created_at: string;
   statut: string;
+  is_anticipation: boolean;
   commentaire_salarie: string | null;
   commentaire_decision: string | null;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
 }
 
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, created_at, statut, commentaire_salarie, commentaire_decision, types_absences(code)";
+  "id, date_debut, date_fin, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, types_absences(code)";
 
 // Aucune demande créée par l'app ne passe par "annulee" (pas de flux
 // d'annulation côté salarié à ce stade) — voir projet.md.
@@ -42,6 +43,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
   return {
     id: row.id,
     type: typeAbsence?.code ?? "CP",
+    isAnticipation: row.is_anticipation,
     debut: row.date_debut,
     fin: row.date_fin,
     datePose: row.created_at.slice(0, 10),
@@ -125,6 +127,7 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
       date_debut: input.debut,
       date_fin: input.fin,
       nb_demi_journees: nbDemiJournees,
+      is_anticipation: input.isAnticipation,
       commentaire_salarie: input.note || null,
     })
     .select(SELECT_DEMANDE)

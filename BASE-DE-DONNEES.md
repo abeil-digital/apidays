@@ -18,7 +18,7 @@ Abeil, signalés plus bas.
 | `manager_salaries`       | Rattachement salarié ↔ manager(s) habilité(s) à valider (plusieurs managers possibles)                                                       |
 | `delegations_validation` | Délégation temporaire du droit de validation (absence d'un manager)                                                                          |
 | `copies_notifications`   | Destinataires en copie des mails de validation/refus d'un manager                                                                            |
-| `types_absences`         | Référentiel CP / RTT                                                                                                                         |
+| `types_absences`         | Référentiel des types d'absence — CP, RTT, et 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM)                                       |
 | `soldes`                 | Solde réel + théorique, par utilisateur, par type d'absence, par période                                                                     |
 | `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine                                                                                    |
 | `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                             |
@@ -59,6 +59,15 @@ Abeil, signalés plus bas.
   dans une sous-section "Calendrier" à venir. `regles_anciennete` ne concerne que les CP ; plusieurs
   règles peuvent coexister mais ne se cumulent pas entre elles côté métier (seule la plus favorable
   s'applique — logique portée par l'application, pas contrainte en base).
+- **Types d'absence étendus au-delà de CP/RTT** (04/08/2026) : `types_absences.necessite_solde`
+  (booléen, défaut `true`) distingue les types adossés à un compteur de solde (CP, RTT) des 4 types
+  "hors compteur" ajoutés — CSS (congé sans solde), CE (congé exceptionnel), RECUP (récupération),
+  EVT_FAM (événement familial) — qui n'ont ni ligne `soldes` ni règle d'acquisition, mais restent
+  visibles dans les demandes pour le contrôle mensuel de Delphine. **"Congés anticipés" n'est pas un
+  type d'absence distinct** : c'est un CP (`type_absence_code = 'CP'`) posé avec
+  `demandes_conges.is_anticipation = true`, qui consomme `soldes.solde_theorique` au lieu de
+  `solde_reel` — affiché côté UI avec un badge "CPT" pour le distinguer visuellement d'un CP
+  classique (voir `components/demandes/TypeBadge.tsx`).
 
 ## Rôles & sécurité (RLS)
 

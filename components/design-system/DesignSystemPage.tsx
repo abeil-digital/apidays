@@ -34,6 +34,10 @@ const PALETTE: { token: string; className: string }[] = [
   { token: "cp", className: "bg-cp" },
   { token: "rtt", className: "bg-rtt" },
   { token: "cpt", className: "bg-cpt" },
+  { token: "css", className: "bg-css" },
+  { token: "ce", className: "bg-ce" },
+  { token: "recup", className: "bg-recup" },
+  { token: "evtfam", className: "bg-evtfam" },
   { token: "mint", className: "bg-mint" },
   { token: "mint-tint", className: "bg-mint-tint" },
   { token: "status-success-bg", className: "bg-status-success-bg" },
@@ -155,6 +159,10 @@ export function DesignSystemPage() {
             <TypeBadge code="CP" />
             <TypeBadge code="RTT" />
             <TypeBadge code="CPT" />
+            <TypeBadge code="CSS" />
+            <TypeBadge code="CE" />
+            <TypeBadge code="RECUP" />
+            <TypeBadge code="EVT_FAM" />
           </ComponentExample>
 
           <ComponentExample title="FieldLabel + Input">

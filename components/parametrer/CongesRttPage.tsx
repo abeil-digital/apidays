@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Trash2 } from "lucide-react";
 import type {
   RegleAcquisition,
   RegleAcquisitionInput,
@@ -12,11 +12,9 @@ import type {
 import { formatJours } from "@/lib/format";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { Button } from "@/components/ui/Button";
-import { EmptyRow } from "@/components/ui/EmptyRow";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
 import { ListCard } from "@/components/ui/ListCard";
-import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 
 type PresetPeriode =
@@ -33,7 +31,7 @@ const PRESET_PERIODE_VALEUR: Record<
 };
 
 const PRESET_PERIODE_LABEL: Record<PresetPeriode, string> = {
-  juin_mai: "Juin → mai",
+  juin_mai: "1er Juin - 31 Mai",
   annee_civile: "Année civile",
   annee_scolaire: "Année scolaire (septembre)",
   avril_mars: "Avril → mars",
@@ -69,18 +67,21 @@ function presetPourPeriode(mois: number, jour: number): PresetPeriode {
 
 function RadioOuiNon({
   name,
+  titre,
   valeur,
   onChange,
   guidance,
 }: {
   name: string;
+  titre: string;
   valeur: boolean;
   onChange: (valeur: boolean) => void;
   guidance: string;
 }) {
   return (
     <div>
-      <div className="flex gap-5">
+      <FieldLabel>{titre}</FieldLabel>
+      <div className="mt-2 flex gap-5">
         <label className="text-ink-900 flex items-center gap-1.5 text-sm">
           <input type="radio" name={name} checked={valeur} onChange={() => onChange(true)} />
           Oui
@@ -100,9 +101,12 @@ interface BlocAcquisitionProps {
   type: TypeDemande;
   ordrePresets: PresetPeriode[];
   regle: RegleAcquisition | undefined;
+  titreReport: string;
   guidanceReport: string;
+  titreAnticipation: string;
   guidanceAnticipation: string;
   onEnregistrer: (type: TypeDemande, input: RegleAcquisitionInput) => Promise<RegleAcquisition>;
+  children?: ReactNode;
 }
 
 function BlocAcquisition({
@@ -110,9 +114,12 @@ function BlocAcquisition({
   type,
   ordrePresets,
   regle,
+  titreReport,
   guidanceReport,
+  titreAnticipation,
   guidanceAnticipation,
   onEnregistrer,
+  children,
 }: BlocAcquisitionProps) {
   const presetParDefaut = ordrePresets[0];
   const baseParDefaut =
@@ -131,6 +138,12 @@ function BlocAcquisition({
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
+  const [modifie, setModifie] = useState(false);
+
+  function marquerModifie() {
+    setModifie(true);
+    setEnregistre(false);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -156,6 +169,7 @@ function BlocAcquisition({
         anticipationAutorisee: anticipation,
       });
       setEnregistre(true);
+      setModifie(false);
     } catch {
       setErreur("Impossible d'enregistrer ces réglages.");
     } finally {
@@ -168,20 +182,45 @@ function BlocAcquisition({
       <h2 className="text-ink-900 text-lg font-semibold">{titre}</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div>
-          <FieldLabel htmlFor={`${type}-periode`}>Période de référence</FieldLabel>
-          <Select
-            id={`${type}-periode`}
-            value={preset}
-            onChange={(e) => setPreset(e.target.value as PresetPeriode)}
-            className="mt-2 w-full"
-          >
-            {ordrePresets.map((p) => (
-              <option key={p} value={p}>
-                {PRESET_PERIODE_LABEL[p]}
-              </option>
-            ))}
-          </Select>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel htmlFor={`${type}-periode`}>Période de référence</FieldLabel>
+            <Select
+              id={`${type}-periode`}
+              value={preset}
+              onChange={(e) => {
+                setPreset(e.target.value as PresetPeriode);
+                marquerModifie();
+              }}
+              className="mt-2 block w-40"
+            >
+              {ordrePresets.map((p) => (
+                <option key={p} value={p}>
+                  {PRESET_PERIODE_LABEL[p]}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor={`${type}-acquisition`}>Acquisition</FieldLabel>
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                id={`${type}-acquisition`}
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Ex. 2.08"
+                value={acquisition}
+                onChange={(e) => {
+                  setAcquisition(e.target.value);
+                  marquerModifie();
+                }}
+                className="w-20"
+              />
+              <span className="text-ink-500 text-sm">jours / mois</span>
+            </div>
+          </div>
         </div>
 
         {preset === "personnalisee" && (
@@ -194,7 +233,10 @@ function BlocAcquisition({
                 min={1}
                 max={12}
                 value={mois}
-                onChange={(e) => setMois(Number(e.target.value))}
+                onChange={(e) => {
+                  setMois(Number(e.target.value));
+                  marquerModifie();
+                }}
                 className="mt-2 w-full"
               />
             </div>
@@ -206,38 +248,35 @@ function BlocAcquisition({
                 min={1}
                 max={31}
                 value={jour}
-                onChange={(e) => setJour(Number(e.target.value))}
+                onChange={(e) => {
+                  setJour(Number(e.target.value));
+                  marquerModifie();
+                }}
                 className="mt-2 w-full"
               />
             </div>
           </div>
         )}
 
-        <div>
-          <FieldLabel htmlFor={`${type}-acquisition`}>Acquisition (jours/mois)</FieldLabel>
-          <Input
-            id={`${type}-acquisition`}
-            type="number"
-            min={0}
-            step="0.01"
-            placeholder="Ex. 2.08"
-            value={acquisition}
-            onChange={(e) => setAcquisition(e.target.value)}
-            className="mt-2 w-full"
-          />
-        </div>
-
         <RadioOuiNon
           name={`${type}-report`}
+          titre={titreReport}
           valeur={report}
-          onChange={setReport}
+          onChange={(valeur) => {
+            setReport(valeur);
+            marquerModifie();
+          }}
           guidance={guidanceReport}
         />
 
         <RadioOuiNon
           name={`${type}-anticipation`}
+          titre={titreAnticipation}
           valeur={anticipation}
-          onChange={setAnticipation}
+          onChange={(valeur) => {
+            setAnticipation(valeur);
+            marquerModifie();
+          }}
           guidance={guidanceAnticipation}
         />
 
@@ -253,35 +292,50 @@ function BlocAcquisition({
           </div>
         )}
 
-        <Button type="submit" disabled={envoi} className="rounded-card w-full py-3">
-          Enregistrer
+        <Button
+          type="submit"
+          disabled={envoi || !modifie}
+          className="rounded-card w-fit self-start px-6 py-3"
+        >
+          {envoi ? "Enregistrement…" : "Enregistrer"}
         </Button>
       </form>
+
+      {children && (
+        <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">{children}</div>
+      )}
     </div>
   );
 }
 
-interface ModalAjoutRegleAncienneteProps {
-  onClose: () => void;
-  onAjouter: (input: RegleAncienneteInput) => Promise<RegleAnciennete>;
+interface LigneFormulaireAncienneteProps {
+  valeurInitiale?: RegleAnciennete;
+  onValider: (input: RegleAncienneteInput) => Promise<void>;
+  onAnnuler: () => void;
 }
 
-function ModalAjoutRegleAnciennete({ onClose, onAjouter }: ModalAjoutRegleAncienneteProps) {
-  const [seuil, setSeuil] = useState("");
-  const [jours, setJours] = useState("");
+function LigneFormulaireAnciennete({
+  valeurInitiale,
+  onValider,
+  onAnnuler,
+}: LigneFormulaireAncienneteProps) {
+  const [jours, setJours] = useState(
+    valeurInitiale ? String(valeurInitiale.joursSupplementaires) : "",
+  );
+  const [seuil, setSeuil] = useState(valeurInitiale ? String(valeurInitiale.seuilAnnees) : "");
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    const seuilAnnees = Number(seuil);
     const joursSupplementaires = Number(jours);
-    if (!seuil || !jours || Number.isNaN(seuilAnnees) || Number.isNaN(joursSupplementaires)) {
-      setErreur("Merci d'indiquer une ancienneté et un nombre de jours valides.");
+    const seuilAnnees = Number(seuil);
+    if (!jours || !seuil || Number.isNaN(joursSupplementaires) || Number.isNaN(seuilAnnees)) {
+      setErreur("Merci d'indiquer des valeurs valides.");
       return;
     }
-    if (seuilAnnees <= 0 || joursSupplementaires <= 0) {
+    if (joursSupplementaires <= 0 || seuilAnnees <= 0) {
       setErreur("Les valeurs doivent être supérieures à 0.");
       return;
     }
@@ -289,127 +343,138 @@ function ModalAjoutRegleAnciennete({ onClose, onAjouter }: ModalAjoutRegleAncien
     setErreur("");
     setEnvoi(true);
     try {
-      await onAjouter({ seuilAnnees, joursSupplementaires });
-      onClose();
+      await onValider({ seuilAnnees, joursSupplementaires });
     } catch {
-      setErreur("Impossible d'ajouter cette règle.");
+      setErreur("Impossible d'enregistrer cette règle.");
       setEnvoi(false);
     }
   }
 
   return (
-    <Modal title="Paramétrer une règle d'ancienneté" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div>
-          <FieldLabel htmlFor="regle-seuil">Ancienneté (années)</FieldLabel>
-          <Input
-            id="regle-seuil"
-            type="number"
-            min={1}
-            placeholder="Ex. 5"
-            value={seuil}
-            onChange={(e) => setSeuil(e.target.value)}
-            className="mt-2 w-full"
-          />
-        </div>
-        <div>
-          <FieldLabel htmlFor="regle-jours">Jours supplémentaires</FieldLabel>
-          <Input
-            id="regle-jours"
-            type="number"
-            min={0.5}
-            step="0.5"
-            placeholder="Ex. 1"
-            value={jours}
-            onChange={(e) => setJours(e.target.value)}
-            className="mt-2 w-full"
-          />
-        </div>
-
-        {erreur && (
-          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-            {erreur}
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-ink-900 rounded-full px-4 py-2 text-sm font-semibold"
-          >
-            Annuler
-          </button>
-          <Button type="submit" disabled={envoi} className="rounded-full px-4 py-2">
-            Ajouter
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="number"
+          min={0.5}
+          step="0.5"
+          placeholder="Ex. 1"
+          value={jours}
+          onChange={(e) => setJours(e.target.value)}
+          className="w-16"
+          aria-label="Jours de CP supplémentaires"
+        />
+        <span className="text-ink-900 text-sm">jour(s) de CP supplémentaire tous les</span>
+        <Input
+          type="number"
+          min={1}
+          placeholder="Ex. 5"
+          value={seuil}
+          onChange={(e) => setSeuil(e.target.value)}
+          className="w-16"
+          aria-label="Ancienneté en années"
+        />
+        <span className="text-ink-900 text-sm">ans</span>
+        <Button type="submit" disabled={envoi} className="rounded-full px-4 py-1.5 text-xs">
+          Valider
+        </Button>
+        <button
+          type="button"
+          onClick={onAnnuler}
+          className="text-ink-500 text-xs font-semibold underline"
+        >
+          Annuler
+        </button>
+      </div>
+      {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
+    </form>
   );
 }
 
 interface BlocAncienneteProps {
   regles: RegleAnciennete[];
   onAjouter: (input: RegleAncienneteInput) => Promise<RegleAnciennete>;
+  onModifier: (id: string, input: RegleAncienneteInput) => Promise<RegleAnciennete>;
   onSupprimer: (id: string) => Promise<void>;
 }
 
-function BlocAnciennete({ regles, onAjouter, onSupprimer }: BlocAncienneteProps) {
-  const [modalOuverte, setModalOuverte] = useState(false);
+function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAncienneteProps) {
+  const [ligneOuverte, setLigneOuverte] = useState<string | "nouvelle" | null>(null);
 
   return (
-    <div className="bg-surface-card rounded-card flex flex-col gap-4 p-5 shadow-sm">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-ink-900 text-lg font-semibold">Ancienneté</h2>
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => setModalOuverte(true)}
-          className="shrink-0 rounded-full px-4 py-2"
-        >
-          <Plus size={16} />
-          Paramétrer une règle
-        </Button>
-      </div>
+    <div className="flex flex-col gap-3">
+      <h2 className="text-ink-900 text-base font-semibold">Ancienneté</h2>
 
       <p className="text-ink-500 text-xs">
         Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté. Les règles ne se
         cumulent pas entre elles : seule la plus favorable au collaborateur s&rsquo;applique.
       </p>
 
-      {regles.length === 0 ? (
-        <EmptyRow text="Aucune règle définie — ex. 1 jour pour 5 ans, 2 jours pour 10 ans." />
-      ) : (
+      {regles.length > 0 && (
         <ListCard>
           {regles.map((regle, i) => (
             <div
               key={regle.id}
-              className={`flex items-center justify-between px-4 py-3 text-sm ${
-                i === regles.length - 1 ? "" : "border-ink-300/60 border-b"
-              }`}
+              className={i === regles.length - 1 ? "" : "border-ink-300/60 border-b"}
             >
-              <span className="text-ink-900">
-                {formatJours(regle.joursSupplementaires)} jour
-                {regle.joursSupplementaires > 1 ? "s" : ""} supplémentaire
-                {regle.joursSupplementaires > 1 ? "s" : ""} à partir de {regle.seuilAnnees} an
-                {regle.seuilAnnees > 1 ? "s" : ""}
-              </span>
-              <button
-                type="button"
-                onClick={() => onSupprimer(regle.id)}
-                aria-label="Supprimer cette règle"
-                className="text-status-danger-fg shrink-0"
-              >
-                <Trash2 size={16} />
-              </button>
+              {ligneOuverte === regle.id ? (
+                <LigneFormulaireAnciennete
+                  valeurInitiale={regle}
+                  onValider={async (input) => {
+                    await onModifier(regle.id, input);
+                    setLigneOuverte(null);
+                  }}
+                  onAnnuler={() => setLigneOuverte(null)}
+                />
+              ) : (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                  <span className="text-ink-900">
+                    {formatJours(regle.joursSupplementaires)} jour
+                    {regle.joursSupplementaires > 1 ? "s" : ""} de CP supplémentaire
+                    {regle.joursSupplementaires > 1 ? "s" : ""} tous les {regle.seuilAnnees} an
+                    {regle.seuilAnnees > 1 ? "s" : ""}
+                  </span>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setLigneOuverte(regle.id)}
+                      className="text-ink-500 text-xs font-semibold underline"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSupprimer(regle.id)}
+                      aria-label="Supprimer cette règle"
+                      className="text-status-danger-fg shrink-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </ListCard>
       )}
 
-      {modalOuverte && (
-        <ModalAjoutRegleAnciennete onClose={() => setModalOuverte(false)} onAjouter={onAjouter} />
+      {ligneOuverte === "nouvelle" ? (
+        <ListCard>
+          <LigneFormulaireAnciennete
+            onValider={async (input) => {
+              await onAjouter(input);
+              setLigneOuverte(null);
+            }}
+            onAnnuler={() => setLigneOuverte(null)}
+          />
+        </ListCard>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setLigneOuverte("nouvelle")}
+          className="text-ink-900 w-fit text-xs font-semibold underline"
+        >
+          + ajouter une règle
+        </button>
       )}
     </div>
   );
@@ -423,6 +488,7 @@ export function CongesRttPage() {
     error,
     enregistrerAcquisition,
     ajouterRegleAnciennete,
+    modifierRegleAnciennete,
     retirerRegleAnciennete,
   } = useReglesConges();
 
@@ -430,7 +496,7 @@ export function CongesRttPage() {
   const regleRtt = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold">Congés &amp; RTT</h1>
 
       {error && (
@@ -449,16 +515,19 @@ export function CongesRttPage() {
             type="CP"
             ordrePresets={ORDRE_PRESETS_CP}
             regle={regleCp}
+            titreReport="Congés reportés"
             guidanceReport="Les congés non posés sur une année sont reportés l'année suivante"
+            titreAnticipation="Congés anticipés"
             guidanceAnticipation="Les collaborateurs peuvent poser des congés anticipés"
             onEnregistrer={enregistrerAcquisition}
-          />
-
-          <BlocAnciennete
-            regles={reglesAnciennete}
-            onAjouter={ajouterRegleAnciennete}
-            onSupprimer={retirerRegleAnciennete}
-          />
+          >
+            <BlocAnciennete
+              regles={reglesAnciennete}
+              onAjouter={ajouterRegleAnciennete}
+              onModifier={modifierRegleAnciennete}
+              onSupprimer={retirerRegleAnciennete}
+            />
+          </BlocAcquisition>
 
           <BlocAcquisition
             key={regleRtt?.id ?? "rtt-nouveau"}
@@ -466,7 +535,9 @@ export function CongesRttPage() {
             type="RTT"
             ordrePresets={ORDRE_PRESETS_RTT}
             regle={regleRtt}
+            titreReport="RTT reportées"
             guidanceReport="Les RTT non posées sur une année sont reportées l'année suivante"
+            titreAnticipation="RTT anticipées"
             guidanceAnticipation="Les collaborateurs peuvent poser des RTT anticipées"
             onEnregistrer={enregistrerAcquisition}
           />

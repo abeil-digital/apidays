@@ -1,10 +1,11 @@
-export type TypeDemande = "CP" | "RTT";
+export type TypeDemande = "CP" | "RTT" | "CSS" | "CE" | "RECUP" | "EVT_FAM";
 
 export type StatutDemande = "en attente" | "validé" | "refusé";
 
 export interface Demande {
   id: string;
   type: TypeDemande;
+  isAnticipation: boolean; // vrai uniquement pour un CP posé contre le solde théorique
   debut: string; // date ISO (YYYY-MM-DD)
   fin: string; // date ISO (YYYY-MM-DD)
   datePose: string; // date ISO (YYYY-MM-DD) — date de soumission de la demande
@@ -15,6 +16,7 @@ export interface Demande {
 
 export interface NouvelleDemandeInput {
   type: TypeDemande;
+  isAnticipation: boolean;
   debut: string;
   fin: string;
   note: string;

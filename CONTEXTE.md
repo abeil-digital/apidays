@@ -86,6 +86,11 @@ de Citizen D.
   type d'absence) et `regles_anciennete` — code applicatif fait et vérifié en base réelle
   (`lib/data/reglesConges.repository.ts`, `hooks/useReglesConges.ts`,
   `components/parametrer/CongesRttPage.tsx`)
+- Types d'absence étendus au-delà de CP/RTT (04/08/2026) : 4 nouveaux types sans compteur de solde
+  (CSS, CE, RECUP, EVT_FAM — `types_absences.necessite_solde = false`) et logique "Congés
+  anticipés" (CP + `is_anticipation`, consomme `solde_theorique`, badge "CPT"). Formulaire "Nouvelle
+  demande" mis à jour (sélecteur 7 options) — migration appliquée et vérifiée en base réelle
+  (demande CSS et CP anticipé posées et visibles dans l'Historique avec le bon badge)
 
 **En cours / pas encore fait** :
 
@@ -95,7 +100,9 @@ de Citizen D.
   CP/RTT) pour définir les vraies règles de calcul de solde — **non commité**, contient
   potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
-  solde), accès Comptable
+  solde), accès Comptable — **le récapitulatif mensuel n'existe pas encore en code** (aucune
+  route/composant), donc son extension aux 4 nouveaux types sans compteur (CSS/CE/RECUP/EVT_FAM,
+  04/08/2026) reste à faire quand cet écran sera construit, pas avant
 - Consolidation design system identifiée par audit (24/07/2026) : `Badge`, `Button`,
   `Input`/`Select`/`Textarea` faits. Reste : mapping couleur CP/RTT/CPT dupliqué entre
   `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour la même correspondance) ; pas de

@@ -17,7 +17,7 @@ create type user_role as enum ('salarie', 'manager', 'admin');
 create type statut_utilisateur as enum ('actif', 'archive');
 create type type_contrat as enum ('temps_plein', 'temps_partiel'); -- déprécié, voir nature_contrat/taux_activite plus bas
 create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
-create type type_absence_code as enum ('CP', 'RTT');
+create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
 
@@ -85,12 +85,19 @@ create table copies_notifications (
 create table types_absences (
   id uuid primary key default gen_random_uuid(),
   code type_absence_code not null unique,
-  libelle text not null
+  libelle text not null,
+  necessite_solde boolean not null default true -- false pour les types sans compteur (CSS, CE, RECUP, EVT_FAM)
 );
 
-insert into types_absences (code, libelle) values
-  ('CP', 'Congés payés'),
-  ('RTT', 'RTT');
+insert into types_absences (code, libelle, necessite_solde) values
+  ('CP', 'Congés payés', true),
+  ('RTT', 'RTT', true),
+  ('CSS', 'Congé sans solde', false),
+  ('CE', 'Congé exceptionnel', false),
+  ('RECUP', 'Récupération', false),
+  ('EVT_FAM', 'Événement Familial', false);
+-- Pas de ligne "Congés anticipés" : c'est un CP posé avec is_anticipation=true
+-- (voir demandes_conges.is_anticipation ci-dessous), pas un type distinct.
 
 -- ------------------------------------------------------------
 -- SOLDES — deux compteurs distincts, périodes de référence différentes

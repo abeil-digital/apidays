@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { CheckCircle2, Coffee, Send, Sun } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
 import type { TypeDemande } from "@/lib/types";
 import { formatJours, nombreJours } from "@/lib/format";
 import { useDemandes } from "@/hooks/useDemandes";
@@ -10,25 +10,51 @@ import { BackHeader } from "@/components/ui/BackHeader";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 
-const TYPES: { key: TypeDemande; label: string; Icon: typeof Sun }[] = [
-  { key: "CP", label: "Congé payé", Icon: Sun },
-  { key: "RTT", label: "RTT", Icon: Coffee },
+interface OptionType {
+  key: string;
+  label: string;
+  type: TypeDemande;
+  isAnticipation: boolean;
+}
+
+// "Congés anticipés" n'est pas un type d'absence à part en base : c'est un CP
+// (type "CP") posé avec is_anticipation=true, qui consomme le solde théorique
+// plutôt que le solde réel — voir BASE-DE-DONNEES.md.
+const OPTIONS: OptionType[] = [
+  { key: "CP", label: "Congés Payés", type: "CP", isAnticipation: false },
+  { key: "RTT", label: "RTT", type: "RTT", isAnticipation: false },
+  { key: "CP_ANTICIPE", label: "Congés anticipés", type: "CP", isAnticipation: true },
+  { key: "CSS", label: "Congé sans solde", type: "CSS", isAnticipation: false },
+  { key: "CE", label: "Congé exceptionnel", type: "CE", isAnticipation: false },
+  { key: "RECUP", label: "Récupération", type: "RECUP", isAnticipation: false },
+  { key: "EVT_FAM", label: "Événement Familial", type: "EVT_FAM", isAnticipation: false },
 ];
 
 export function NouvelleDemandeForm() {
   const { ajouterDemande } = useDemandes();
   const { soldes } = useSoldes();
 
-  const [type, setType] = useState<TypeDemande>("CP");
+  const [optionKey, setOptionKey] = useState("CP");
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
-  const soldeActuel = soldes ? (type === "CP" ? soldes.cp.valeur : soldes.rtt.valeur) : null;
+  const option = OPTIONS.find((o) => o.key === optionKey)!;
+
+  const soldeActuel = soldes
+    ? optionKey === "CP"
+      ? soldes.cp.valeur
+      : optionKey === "RTT"
+        ? soldes.rtt.valeur
+        : optionKey === "CP_ANTICIPE"
+          ? soldes.cpt.valeur
+          : null
+    : null;
   const joursDemandes = debut && fin && fin >= debut ? nombreJours(debut, fin) : null;
   const soldeApres =
     soldeActuel !== null && joursDemandes !== null ? soldeActuel - joursDemandes : null;
@@ -46,7 +72,13 @@ export function NouvelleDemandeForm() {
     }
 
     setError("");
-    await ajouterDemande({ type, debut, fin, note });
+    await ajouterDemande({
+      type: option.type,
+      isAnticipation: option.isAnticipation,
+      debut,
+      fin,
+      note,
+    });
     setSent(true);
   }
 
@@ -70,32 +102,24 @@ export function NouvelleDemandeForm() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <BackHeader href="/" title="Nouvelle demande" />
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
-          <FieldLabel>Type</FieldLabel>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {TYPES.map(({ key, label, Icon }) => {
-              const active = type === key;
-              return (
-                <button
-                  type="button"
-                  key={key}
-                  onClick={() => setType(key)}
-                  className={`rounded-control flex flex-col items-center gap-1.5 py-3 text-sm font-semibold ${
-                    active
-                      ? "bg-brand text-brand-foreground"
-                      : "bg-surface-card text-ink-900 shadow-sm"
-                  }`}
-                >
-                  <Icon size={18} />
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+          <FieldLabel htmlFor="type">Type</FieldLabel>
+          <Select
+            id="type"
+            value={optionKey}
+            onChange={(e) => setOptionKey(e.target.value)}
+            className="mt-2 w-full"
+          >
+            {OPTIONS.map((o) => (
+              <option key={o.key} value={o.key}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -121,15 +145,15 @@ export function NouvelleDemandeForm() {
           </div>
         </div>
 
-        {soldeActuel !== null && (
+        {soldeActuel !== null ? (
           <div className="rounded-control bg-surface-card flex flex-col gap-1.5 px-3.5 py-3 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-ink-500">Solde {type} actuel</span>
+              <span className="text-ink-500">Solde {option.label} actuel</span>
               <span className="text-ink-900 font-bold">{formatJours(soldeActuel)} j</span>
             </div>
             {soldeApres !== null && (
               <div className="flex items-center justify-between">
-                <span className="text-ink-500">Solde {type} après cette demande</span>
+                <span className="text-ink-500">Solde {option.label} après cette demande</span>
                 <span
                   className={`font-bold ${soldeApres < 0 ? "text-status-danger-fg" : "text-ink-900"}`}
                 >
@@ -138,6 +162,10 @@ export function NouvelleDemandeForm() {
               </div>
             )}
           </div>
+        ) : (
+          <p className="text-ink-500 px-1 text-xs">
+            Aucun solde associé à ce type d&rsquo;absence.
+          </p>
         )}
 
         <div>
@@ -158,7 +186,7 @@ export function NouvelleDemandeForm() {
           </div>
         )}
 
-        <Button type="submit" className="rounded-card w-full py-3.5">
+        <Button type="submit" className="rounded-card w-fit self-start px-6 py-3.5">
           <Send size={16} />
           Envoyer la demande
         </Button>

@@ -146,6 +146,29 @@ export async function creerRegleAnciennete(input: RegleAncienneteInput): Promise
   return mapRegleAncienneteDepuisDb(data);
 }
 
+export async function modifierRegleAnciennete(
+  id: string,
+  input: RegleAncienneteInput,
+): Promise<RegleAnciennete> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("regles_anciennete")
+    .update({
+      seuil_annees: input.seuilAnnees,
+      jours_supplementaires: input.joursSupplementaires,
+    })
+    .eq("id", id)
+    .select(SELECT_REGLE_ANCIENNETE)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible de modifier cette règle.");
+  }
+
+  return mapRegleAncienneteDepuisDb(data);
+}
+
 export async function supprimerRegleAnciennete(id: string): Promise<void> {
   const supabase = createClient();
 

@@ -13,6 +13,7 @@ import {
   enregistrerRegleAcquisition,
   fetchReglesAcquisition,
   fetchReglesAnciennete,
+  modifierRegleAnciennete as modifierRegleAncienneteApi,
   supprimerRegleAnciennete,
 } from "@/lib/data/reglesConges.repository";
 
@@ -26,6 +27,7 @@ interface UseReglesCongesResult {
     input: RegleAcquisitionInput,
   ) => Promise<RegleAcquisition>;
   ajouterRegleAnciennete: (input: RegleAncienneteInput) => Promise<RegleAnciennete>;
+  modifierRegleAnciennete: (id: string, input: RegleAncienneteInput) => Promise<RegleAnciennete>;
   retirerRegleAnciennete: (id: string) => Promise<void>;
 }
 
@@ -78,6 +80,14 @@ export function useReglesConges(): UseReglesCongesResult {
     return regle;
   }, []);
 
+  const modifierRegleAnciennete = useCallback(async (id: string, input: RegleAncienneteInput) => {
+    const regle = await modifierRegleAncienneteApi(id, input);
+    setReglesAnciennete((prev) =>
+      prev.map((r) => (r.id === id ? regle : r)).sort((a, b) => a.seuilAnnees - b.seuilAnnees),
+    );
+    return regle;
+  }, []);
+
   const retirerRegleAnciennete = useCallback(async (id: string) => {
     await supprimerRegleAnciennete(id);
     setReglesAnciennete((prev) => prev.filter((r) => r.id !== id));
@@ -90,6 +100,7 @@ export function useReglesConges(): UseReglesCongesResult {
     error,
     enregistrerAcquisition,
     ajouterRegleAnciennete,
+    modifierRegleAnciennete,
     retirerRegleAnciennete,
   };
 }

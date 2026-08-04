@@ -45,7 +45,14 @@
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
   --color-cp: #5b8def; /* bleu — CP */
   --color-rtt: #7fbf8f; /* vert — RTT */
-  --color-cpt: #9db4c4; /* bleu gris — CPT */
+  --color-cpt: #9db4c4; /* bleu gris — CPT (congés anticipés, solde théorique) */
+  /* Types sans compteur de solde (CSS, CE, RECUP, EVT_FAM) — tons neutres/pastel,
+     délibérément moins saturés que CP/RTT/CPT pour signaler visuellement
+     l'absence d'impact sur un solde */
+  --color-css: #a89f96; /* taupe — congé sans solde */
+  --color-ce: #d9a35c; /* ambre — congé exceptionnel */
+  --color-recup: #9b8bc4; /* violet — récupération */
+  --color-evtfam: #d98ca6; /* rose — événement familial */
   --color-mint: #4fa893; /* accent secondaire — carte "Poser un congé" */
   --color-mint-tint: #e7f3ef; /* accent-100 — fond du bloc "Soldes" */
 
