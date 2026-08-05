@@ -1,5 +1,5 @@
 import type { Demande } from "@/lib/types";
-import { formatDate, formatPeriodeDemande, nombreJours } from "@/lib/format";
+import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 
@@ -9,7 +9,7 @@ interface RequestRowProps {
 }
 
 export function RequestRow({ demande, isLast }: RequestRowProps) {
-  const jours = nombreJours(demande.debut, demande.fin);
+  const jours = demande.nbDemiJournees / 2;
   // "Congés anticipés" n'est pas un type d'absence distinct en base (voir
   // NouvelleDemandeForm) — c'est un CP avec is_anticipation=true, affiché
   // avec le badge "CPT" pour le distinguer visuellement d'un CP classique.
@@ -25,7 +25,7 @@ export function RequestRow({ demande, isLast }: RequestRowProps) {
           {formatPeriodeDemande(demande.debut, demande.fin)}
         </div>
         <div className="text-ink-500 text-xs">
-          {jours} jour{jours > 1 ? "s" : ""} - posé le{" "}
+          {formatJours(jours)} jour{jours > 1 ? "s" : ""} - posé le{" "}
           <span className="font-bold">{formatDate(demande.datePose)}</span>
         </div>
         {demande.commentaireManager && (

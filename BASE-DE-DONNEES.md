@@ -18,13 +18,13 @@ Abeil, signalés plus bas.
 | `manager_salaries`       | Rattachement salarié ↔ manager(s) habilité(s) à valider (plusieurs managers possibles)                                                       |
 | `delegations_validation` | Délégation temporaire du droit de validation (absence d'un manager)                                                                          |
 | `copies_notifications`   | Destinataires en copie des mails de validation/refus d'un manager                                                                            |
-| `types_absences`         | Référentiel des types d'absence — CP, RTT, et 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM)                                       |
+| `types_absences`         | Référentiel des types d'absence — CP, RTT, 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM), et DJ_IMPOSEE (demi-journées imposées)  |
 | `soldes`                 | Solde réel + théorique, par utilisateur, par type d'absence, par période                                                                     |
 | `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine                                                                                    |
 | `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                             |
-| `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte)                                                                              |
-| `parametrage_periode`    | Paramétrage annuel porté par le Manager (semaine du 15 août imposée, etc.)                                                                   |
-| `rtt_imposes`            | Dates de RTT imposées pour une période donnée                                                                                                |
+| `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte, et écran Paramétrer > Calendrier)                                            |
+| `parametrage_periode`    | Paramétrage annuel porté par le Manager — semaine du 15 août imposée, nombre cible et jour de semaine par défaut des DJ imposées             |
+| `demi_journees_imposees` | Demi-journées imposées (DJ imposées) pour une période donnée — indépendant du solde RTT calculé dans Congés & RTT                            |
 | `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)       |
 | `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)        |
 
@@ -54,11 +54,26 @@ Abeil, signalés plus bas.
 - **Moteur de calcul CP/RTT paramétrable, indépendant des règles Abeil** : `regles_acquisition`
   (upsert par type d'absence, contrainte `unique(type_absence_id)`) porte la période de référence
   (mois/jour de début), le taux d'acquisition mensuel, le report et l'anticipation — générique, pas
-  spécifique à Abeil. Les règles propres à Abeil (16 demi-journées le vendredi, semaine du 15 août
-  imposée, RTT imposés/libres) restent dans `parametrage_periode`/`rtt_imposes`, traitées à part
-  dans une sous-section "Calendrier" à venir. `regles_anciennete` ne concerne que les CP ; plusieurs
+  spécifique à Abeil. Les règles propres à Abeil (demi-journées imposées, semaine du 15 août
+  imposée) sont dans `parametrage_periode`/`demi_journees_imposees`, traitées dans l'écran
+  Paramétrer > Calendrier (voir ci-dessous). `regles_anciennete` ne concerne que les CP ; plusieurs
   règles peuvent coexister mais ne se cumulent pas entre elles côté métier (seule la plus favorable
   s'applique — logique portée par l'application, pas contrainte en base).
+- **Demi-journées imposées (DJ imposées), indépendantes du solde RTT** (05/08/2026) : écran
+  Paramétrer > Calendrier, deux vues — "Année en cours" (lecture seule + correction ponctuelle
+  d'une DJ mal saisie) et "Paramétrage année à venir" (sélection des vendredis de l'année + ajout
+  libre de dates hors vendredi, figée par un bouton "Valider" qui remplace intégralement les lignes
+  `demi_journees_imposees` de la période). Catégorisées sous le code technique `DJ_IMPOSEE` de
+  `types_absences` (`necessite_solde = false`) — **volontairement indépendant du moteur
+  `regles_acquisition`** : le nombre de RTT disponible (paramétré dans Congés & RTT) et le nombre de
+  DJ imposées (paramétré dans Calendrier) sont deux compteurs distincts qui ne se recoupent pas en
+  base. Le nombre cible de DJ (16 par défaut) et le jour de semaine par défaut (vendredi, ISO 5)
+  sont des colonnes de configuration sur `parametrage_periode`
+  (`nb_demi_journees_cible`/`jour_semaine_defaut`), pas des valeurs figées en dur — la nomenclature
+  "DJ imposées" elle-même reste provisoire, à confirmer avec Delphine. Jours fériés légaux calculés
+  côté app (`lib/joursFeries.ts`, incluant Pâques mobile) et pré-remplis sur demande dans
+  `jours_feries`, avec ajout manuel possible (ex. lundi de Pentecôte) ; policy RLS élargie à
+  manager+admin (auparavant admin seul).
 - **Types d'absence étendus au-delà de CP/RTT** (04/08/2026) : `types_absences.necessite_solde`
   (booléen, défaut `true`) distingue les types adossés à un compteur de solde (CP, RTT) des 4 types
   "hors compteur" ajoutés — CSS (congé sans solde), CE (congé exceptionnel), RECUP (récupération),

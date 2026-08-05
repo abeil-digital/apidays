@@ -2,8 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { CheckCircle2, Send } from "lucide-react";
-import type { TypeDemande } from "@/lib/types";
-import { formatJours, nombreJours } from "@/lib/format";
+import type { DemiJournee, TypeDemande } from "@/lib/types";
+import { formatDate, formatJours, nombreJours } from "@/lib/format";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldes } from "@/hooks/useSoldes";
 import { BackHeader } from "@/components/ui/BackHeader";
@@ -33,6 +33,8 @@ const OPTIONS: OptionType[] = [
   { key: "EVT_FAM", label: "Événement Familial", type: "EVT_FAM", isAnticipation: false },
 ];
 
+type DureeUnJour = "entiere" | "matin" | "apres_midi";
+
 export function NouvelleDemandeForm() {
   const { ajouterDemande } = useDemandes();
   const { soldes } = useSoldes();
@@ -40,11 +42,46 @@ export function NouvelleDemandeForm() {
   const [optionKey, setOptionKey] = useState("CP");
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
+  const [demiDebut, setDemiDebut] = useState<DemiJournee>("matin");
+  const [demiFin, setDemiFin] = useState<DemiJournee>("apres_midi");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
 
   const option = OPTIONS.find((o) => o.key === optionKey)!;
+  const unSeulJour = Boolean(debut && fin && debut === fin);
+
+  function handleDebutChange(valeur: string) {
+    setDebut(valeur);
+    setDemiDebut("matin");
+    setDemiFin("apres_midi");
+  }
+
+  function handleFinChange(valeur: string) {
+    setFin(valeur);
+    setDemiDebut("matin");
+    setDemiFin("apres_midi");
+  }
+
+  const dureeUnJour: DureeUnJour =
+    demiDebut === "matin" && demiFin === "apres_midi"
+      ? "entiere"
+      : demiDebut === "matin"
+        ? "matin"
+        : "apres_midi";
+
+  function handleDureeUnJourChange(valeur: DureeUnJour) {
+    if (valeur === "entiere") {
+      setDemiDebut("matin");
+      setDemiFin("apres_midi");
+    } else if (valeur === "matin") {
+      setDemiDebut("matin");
+      setDemiFin("matin");
+    } else {
+      setDemiDebut("apres_midi");
+      setDemiFin("apres_midi");
+    }
+  }
 
   const soldeActuel = soldes
     ? optionKey === "CP"
@@ -55,7 +92,21 @@ export function NouvelleDemandeForm() {
           ? soldes.cpt.valeur
           : null
     : null;
-  const joursDemandes = debut && fin && fin >= debut ? nombreJours(debut, fin) : null;
+
+  // Estimation côté client (calendaire, jours fériés/weekends non exclus) —
+  // le décompte exact en demi-journées est calculé côté serveur à la
+  // création de la demande (voir lib/data/demandes.repository.ts).
+  let joursDemandes: number | null = null;
+  if (debut && fin && fin >= debut) {
+    if (unSeulJour) {
+      joursDemandes = dureeUnJour === "entiere" ? 1 : 0.5;
+    } else {
+      const base = nombreJours(debut, fin);
+      const ajustDebut = demiDebut === "apres_midi" ? 0.5 : 0;
+      const ajustFin = demiFin === "matin" ? 0.5 : 0;
+      joursDemandes = base - ajustDebut - ajustFin;
+    }
+  }
   const soldeApres =
     soldeActuel !== null && joursDemandes !== null ? soldeActuel - joursDemandes : null;
 
@@ -77,6 +128,8 @@ export function NouvelleDemandeForm() {
       isAnticipation: option.isAnticipation,
       debut,
       fin,
+      demiDebut,
+      demiFin,
       note,
     });
     setSent(true);
@@ -129,7 +182,7 @@ export function NouvelleDemandeForm() {
               id="debut"
               type="date"
               value={debut}
-              onChange={(e) => setDebut(e.target.value)}
+              onChange={(e) => handleDebutChange(e.target.value)}
               className="mt-2 w-full"
             />
           </div>
@@ -139,11 +192,57 @@ export function NouvelleDemandeForm() {
               id="fin"
               type="date"
               value={fin}
-              onChange={(e) => setFin(e.target.value)}
+              onChange={(e) => handleFinChange(e.target.value)}
               className="mt-2 w-full"
             />
           </div>
         </div>
+
+        {debut &&
+          fin &&
+          fin >= debut &&
+          (unSeulJour ? (
+            <div>
+              <FieldLabel htmlFor="duree">Durée</FieldLabel>
+              <Select
+                id="duree"
+                value={dureeUnJour}
+                onChange={(e) => handleDureeUnJourChange(e.target.value as DureeUnJour)}
+                className="mt-2 w-full"
+              >
+                <option value="entiere">Journée entière</option>
+                <option value="matin">Matin uniquement</option>
+                <option value="apres_midi">Après-midi uniquement</option>
+              </Select>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <FieldLabel htmlFor="demi-debut">Le {formatDate(debut)}</FieldLabel>
+                <Select
+                  id="demi-debut"
+                  value={demiDebut}
+                  onChange={(e) => setDemiDebut(e.target.value as DemiJournee)}
+                  className="mt-2 w-full"
+                >
+                  <option value="matin">Journée entière</option>
+                  <option value="apres_midi">Après-midi uniquement</option>
+                </Select>
+              </div>
+              <div>
+                <FieldLabel htmlFor="demi-fin">Le {formatDate(fin)}</FieldLabel>
+                <Select
+                  id="demi-fin"
+                  value={demiFin}
+                  onChange={(e) => setDemiFin(e.target.value as DemiJournee)}
+                  className="mt-2 w-full"
+                >
+                  <option value="apres_midi">Journée entière</option>
+                  <option value="matin">Matin uniquement</option>
+                </Select>
+              </div>
+            </div>
+          ))}
 
         {soldeActuel !== null ? (
           <div className="rounded-control bg-surface-card flex flex-col gap-1.5 px-3.5 py-3 text-xs">

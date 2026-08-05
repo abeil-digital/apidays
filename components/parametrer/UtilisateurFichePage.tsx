@@ -253,7 +253,11 @@ function Formulaire({ id, initial, statut, creer, modifier, archiver }: Formulai
           </div>
         )}
 
-        <Button type="submit" disabled={envoi} className="rounded-card w-full py-3.5">
+        <Button
+          type="submit"
+          disabled={envoi}
+          className="rounded-card w-fit self-start px-6 py-3.5"
+        >
           <Check size={16} />
           {id ? "Enregistrer" : "Créer le profil"}
         </Button>
@@ -339,7 +343,7 @@ export function UtilisateurFichePage({ id }: UtilisateurFichePageProps) {
   const titre = utilisateur ? `${utilisateur.prenom} ${utilisateur.nom}` : "Créer un profil";
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <BackHeader href="/parametrer/utilisateurs" title={titre} />
 
       {utilisateur?.statut === "archive" && (

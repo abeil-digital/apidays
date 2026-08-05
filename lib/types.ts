@@ -1,5 +1,10 @@
 export type TypeDemande = "CP" | "RTT" | "CSS" | "CE" | "RECUP" | "EVT_FAM";
 
+// Code technique supplémentaire de `types_absences`, jamais choisi par le
+// salarié (pas une option du formulaire "Nouvelle demande") — sert à
+// catégoriser les demi-journées imposées (Paramétrer > Calendrier).
+export type TypeAbsenceCode = TypeDemande | "DJ_IMPOSEE";
+
 export type StatutDemande = "en attente" | "validé" | "refusé";
 
 export interface Demande {
@@ -8,6 +13,9 @@ export interface Demande {
   isAnticipation: boolean; // vrai uniquement pour un CP posé contre le solde théorique
   debut: string; // date ISO (YYYY-MM-DD)
   fin: string; // date ISO (YYYY-MM-DD)
+  demiDebut: DemiJournee; // 'apres_midi' = demi-journée de début seulement
+  demiFin: DemiJournee; // 'matin' = demi-journée de fin seulement
+  nbDemiJournees: number; // peut valoir .5 en jours (ex. 3 demi-journées = 1.5 jour)
   datePose: string; // date ISO (YYYY-MM-DD) — date de soumission de la demande
   statut: StatutDemande;
   note: string;
@@ -19,6 +27,8 @@ export interface NouvelleDemandeInput {
   isAnticipation: boolean;
   debut: string;
   fin: string;
+  demiDebut: DemiJournee;
+  demiFin: DemiJournee;
   note: string;
 }
 
@@ -111,4 +121,45 @@ export interface RegleAnciennete {
 export interface RegleAncienneteInput {
   seuilAnnees: number;
   joursSupplementaires: number;
+}
+
+// --- Espace Paramétrer > Calendrier (DJ imposées, semaine du 15 août, jours fériés) ---
+
+export type DemiJournee = "matin" | "apres_midi";
+
+export interface ParametragePeriode {
+  id: string;
+  annee: number;
+  semaineAoutImposee: string; // date ISO — lundi de la semaine contenant le 15 août
+  nbDemiJourneesCible: number; // valeur de configuration, pas figée en dur (16 par défaut)
+  jourSemaineDefaut: number; // ISO : 1=lundi … 5=vendredi … 7=dimanche
+}
+
+export interface ParametragePeriodeInput {
+  annee: number;
+  semaineAoutImposee: string;
+  nbDemiJourneesCible: number;
+  jourSemaineDefaut: number;
+}
+
+export interface DjImposee {
+  id: string;
+  date: string; // date ISO
+  demiJournee: DemiJournee;
+}
+
+export interface DjImposeeInput {
+  date: string;
+  demiJournee: DemiJournee;
+}
+
+export interface JourFerie {
+  id: string;
+  date: string; // date ISO
+  libelle: string;
+}
+
+export interface JourFerieInput {
+  date: string;
+  libelle: string;
 }

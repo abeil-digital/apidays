@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Demande, NouvelleDemandeInput, StatutDemande, TypeDemande } from "@/lib/types";
+import type {
+  Demande,
+  DemiJournee,
+  NouvelleDemandeInput,
+  StatutDemande,
+  TypeDemande,
+} from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 
@@ -16,6 +22,9 @@ interface DemandeRow {
   id: string;
   date_debut: string;
   date_fin: string;
+  demi_debut: DemiJournee;
+  demi_fin: DemiJournee;
+  nb_demi_journees: number;
   created_at: string;
   statut: string;
   is_anticipation: boolean;
@@ -25,7 +34,7 @@ interface DemandeRow {
 }
 
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, types_absences(code)";
+  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, types_absences(code)";
 
 // Aucune demande créée par l'app ne passe par "annulee" (pas de flux
 // d'annulation côté salarié à ce stade) — voir projet.md.
@@ -46,6 +55,9 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     isAnticipation: row.is_anticipation,
     debut: row.date_debut,
     fin: row.date_fin,
+    demiDebut: row.demi_debut,
+    demiFin: row.demi_fin,
+    nbDemiJournees: Number(row.nb_demi_journees),
     datePose: row.created_at.slice(0, 10),
     statut: STATUT_DEPUIS_DB[row.statut] ?? "en attente",
     note: row.commentaire_salarie ?? "",
@@ -63,13 +75,18 @@ async function getUtilisateurId(supabase: SupabaseClient): Promise<string> {
 
 /**
  * Nombre de demi-journées entre deux dates (incluses), jours fériés et
- * weekends exclus — voir BASE-DE-DONNEES.md. Demi-journées de début/fin non
- * gérées côté UI pour l'instant : chaque jour ouvré compte pour 2 demi-journées.
+ * weekends exclus — voir BASE-DE-DONNEES.md. Chaque jour ouvré compte pour 2
+ * demi-journées, sauf le premier jour si `demiDebut = "apres_midi"` (matin
+ * non posé) et le dernier jour si `demiFin = "matin"` (après-midi non posé) —
+ * l'ajustement ne s'applique que si ce jour est effectivement un jour ouvré
+ * du décompte (sinon demande sur un jour férié/weekend n'a pas de sens).
  */
 async function calculerNbDemiJournees(
   supabase: SupabaseClient,
   debut: string,
   fin: string,
+  demiDebut: DemiJournee,
+  demiFin: DemiJournee,
 ): Promise<number> {
   const { data: feries } = await supabase
     .from("jours_feries")
@@ -78,20 +95,27 @@ async function calculerNbDemiJournees(
     .lte("date", fin);
   const joursFeries = new Set((feries ?? []).map((f: { date: string }) => f.date));
 
-  let nbJoursOuvres = 0;
-  const cursor = new Date(`${debut}T00:00:00`);
-  const finDate = new Date(`${fin}T00:00:00`);
+  // Dates manipulées en UTC (Date.UTC) pour éviter tout décalage de fuseau
+  // horaire côté navigateur — un `new Date(iso + "T00:00:00")` en UTC+1/+2
+  // décale silencieusement le curseur d'un jour (minuit local = veille en UTC).
+  const joursOuvres: string[] = [];
+  const cursor = new Date(`${debut}T00:00:00Z`);
+  const finDate = new Date(`${fin}T00:00:00Z`);
 
   while (cursor <= finDate) {
-    const jourSemaine = cursor.getDay();
+    const jourSemaine = cursor.getUTCDay();
     const iso = cursor.toISOString().slice(0, 10);
     if (jourSemaine !== 0 && jourSemaine !== 6 && !joursFeries.has(iso)) {
-      nbJoursOuvres += 1;
+      joursOuvres.push(iso);
     }
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  return nbJoursOuvres * 2;
+  let total = joursOuvres.length * 2;
+  if (joursOuvres[0] === debut && demiDebut === "apres_midi") total -= 1;
+  if (joursOuvres[joursOuvres.length - 1] === fin && demiFin === "matin") total -= 1;
+
+  return total;
 }
 
 export async function fetchDemandes(): Promise<Demande[]> {
@@ -116,7 +140,7 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
   const [utilisateurId, typeAbsenceId, nbDemiJournees] = await Promise.all([
     getUtilisateurId(supabase),
     getTypeAbsenceId(supabase, input.type),
-    calculerNbDemiJournees(supabase, input.debut, input.fin),
+    calculerNbDemiJournees(supabase, input.debut, input.fin, input.demiDebut, input.demiFin),
   ]);
 
   const { data, error } = await supabase
@@ -126,6 +150,8 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
       type_absence_id: typeAbsenceId,
       date_debut: input.debut,
       date_fin: input.fin,
+      demi_debut: input.demiDebut,
+      demi_fin: input.demiFin,
       nb_demi_journees: nbDemiJournees,
       is_anticipation: input.isAnticipation,
       commentaire_salarie: input.note || null,

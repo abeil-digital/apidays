@@ -91,6 +91,28 @@ de Citizen D.
   anticipés" (CP + `is_anticipation`, consomme `solde_theorique`, badge "CPT"). Formulaire "Nouvelle
   demande" mis à jour (sélecteur 7 options) — migration appliquée et vérifiée en base réelle
   (demande CSS et CP anticipé posées et visibles dans l'Historique avec le bon badge)
+- Paramétrer > Calendrier (`/parametrer/calendrier`, 05/08/2026) : demi-journées imposées (DJ
+  imposées, nomenclature provisoire) et jours fériés, indépendant du solde RTT de Congés & RTT.
+  Deux vues — "Année en cours" (lecture seule + correction ponctuelle d'une DJ mal saisie, semaine
+  du 15 août calculée automatiquement) et "Paramétrage année à venir" (vendredis décochés par
+  défaut, compteur configurable 16→0, ajout de dates libres hors vendredi, bouton "Valider" qui
+  remplace intégralement les DJ de la période). Jours fériés légaux français calculés côté app avec
+  Pâques mobile (`lib/joursFeries.ts`, algorithme de Meeus/Jones/Butcher), pré-remplissage sur
+  demande + ajout manuel. Nombre cible et jour de semaine par défaut configurables en base
+  (`parametrage_periode.nb_demi_journees_cible`/`jour_semaine_defaut`), pas figés en dur. Table
+  `demi_journees_imposees` (renommée depuis `rtt_imposes`), type technique `DJ_IMPOSEE` dans
+  `types_absences`, policy `jours_feries` élargie à manager+admin (auparavant admin seul) — testé
+  de bout en bout en base réelle (calcul Pâques 2026/2027, pré-remplissage, ajout/suppression jour
+  férié, sélection/validation/remise à zéro des DJ, persistance après rechargement)
+- Pose de congé à la demi-journée (05/08/2026) : le concept existait en base
+  (`demandes_conges.demi_debut`/`demi_fin`/`nb_demi_journees`) mais n'était pas branché côté
+  application. Formulaire "Nouvelle demande" : sélecteur "Durée" (Journée entière/Matin/Après-midi)
+  sur un jour unique, deux sélecteurs indépendants (début/fin) sur une plage. Décompte réel calculé
+  côté serveur (`calculerNbDemiJournees`), Historique affiche le vrai nombre de jours
+  (`demande.nbDemiJournees`) au lieu d'une estimation calendaire. Corrigé au passage : bug de
+  fuseau horaire dans `calculerNbDemiJournees` (dates locales `new Date(iso+"T00:00:00")` décalées
+  d'un jour en UTC+1/+2, désormais en UTC explicite comme `lib/joursFeries.ts`) — vérifié en base
+  réelle (jour unique matin/après-midi, plage multi-jours avec demi-journée de fin)
 
 **En cours / pas encore fait** :
 

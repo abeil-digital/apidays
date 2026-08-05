@@ -17,7 +17,7 @@ create type user_role as enum ('salarie', 'manager', 'admin');
 create type statut_utilisateur as enum ('actif', 'archive');
 create type type_contrat as enum ('temps_plein', 'temps_partiel'); -- déprécié, voir nature_contrat/taux_activite plus bas
 create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
-create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM');
+create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM', 'DJ_IMPOSEE');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
 
@@ -86,7 +86,7 @@ create table types_absences (
   id uuid primary key default gen_random_uuid(),
   code type_absence_code not null unique,
   libelle text not null,
-  necessite_solde boolean not null default true -- false pour les types sans compteur (CSS, CE, RECUP, EVT_FAM)
+  necessite_solde boolean not null default true -- false pour les types sans compteur (CSS, CE, RECUP, EVT_FAM, DJ_IMPOSEE)
 );
 
 insert into types_absences (code, libelle, necessite_solde) values
@@ -95,9 +95,13 @@ insert into types_absences (code, libelle, necessite_solde) values
   ('CSS', 'Congé sans solde', false),
   ('CE', 'Congé exceptionnel', false),
   ('RECUP', 'Récupération', false),
-  ('EVT_FAM', 'Événement Familial', false);
+  ('EVT_FAM', 'Événement Familial', false),
+  ('DJ_IMPOSEE', 'Demi-journée imposée', false);
 -- Pas de ligne "Congés anticipés" : c'est un CP posé avec is_anticipation=true
 -- (voir demandes_conges.is_anticipation ci-dessous), pas un type distinct.
+-- DJ_IMPOSEE catégorise demi_journees_imposees (Paramétrer > Calendrier) —
+-- mécanisme indépendant du solde RTT calculé dans Congés & RTT, jamais
+-- choisi par le salarié dans "Nouvelle demande".
 
 -- ------------------------------------------------------------
 -- SOLDES — deux compteurs distincts, périodes de référence différentes
@@ -163,21 +167,29 @@ create table jours_feries (
 );
 
 -- ------------------------------------------------------------
--- PARAMÉTRAGE ANNUEL (porté par le Manager)
--- RTT imposés vs libres, semaine du 15 août imposée, etc.
+-- PARAMÉTRAGE ANNUEL (porté par le Manager) — écran Paramétrer > Calendrier
+-- Demi-journées imposées (DJ imposées), semaine du 15 août imposée, etc.
+-- Le nombre cible de DJ (16) et le jour de semaine par défaut (vendredi)
+-- sont des données de configuration, pas des valeurs figées en dur — voir
+-- lib/joursFeries.ts et components/parametrer/CalendrierPage.tsx.
 -- ------------------------------------------------------------
 create table parametrage_periode (
   id uuid primary key default gen_random_uuid(),
   annee int not null unique,
-  semaine_aout_imposee date not null, -- lundi de la semaine du 15 août
+  semaine_aout_imposee date not null, -- lundi de la semaine du 15 août, calculé automatiquement
+  nb_demi_journees_cible int not null default 16, -- configurable, pas figé en dur
+  jour_semaine_defaut int not null default 5, -- ISO : 1=lundi … 5=vendredi … 7=dimanche, configurable
   defini_par uuid references utilisateurs(id),
   created_at timestamptz not null default now()
 );
 
--- Dates de RTT imposées pour une période donnée (répartition mixte libre/imposé)
-create table rtt_imposes (
+-- Demi-journées imposées pour une période donnée — nomenclature "DJ imposées"
+-- provisoire (à confirmer avec Delphine), catégorisées sous le type
+-- DJ_IMPOSEE de types_absences, indépendant du solde RTT (regles_acquisition).
+create table demi_journees_imposees (
   id uuid primary key default gen_random_uuid(),
   parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
+  type_absence_id uuid not null references types_absences(id),
   date date not null,
   demi_journee demi_journee not null default 'matin'
 );
@@ -185,7 +197,7 @@ create table rtt_imposes (
 -- ------------------------------------------------------------
 -- MOTEUR DE CALCUL DES SOLDES (porté par le Manager)
 -- Paramétrage générique, indépendant des règles spécifiques Abeil
--- (celles-ci restent dans parametrage_periode/rtt_imposes ci-dessus).
+-- (celles-ci restent dans parametrage_periode/demi_journees_imposees ci-dessus).
 -- ------------------------------------------------------------
 create table regles_acquisition (
   id uuid primary key default gen_random_uuid(),
@@ -236,7 +248,7 @@ alter table historique_soldes enable row level security;
 alter table demandes_conges enable row level security;
 alter table jours_feries enable row level security;
 alter table parametrage_periode enable row level security;
-alter table rtt_imposes enable row level security;
+alter table demi_journees_imposees enable row level security;
 alter table regles_acquisition enable row level security;
 alter table regles_anciennete enable row level security;
 
@@ -438,13 +450,13 @@ create policy "jours_feries: lecture par tout utilisateur authentifié"
   on jours_feries for select
   using (auth.role() = 'authenticated');
 
-create policy "jours_feries: admin modifie"
+create policy "jours_feries: manager et admin modifient"
   on jours_feries for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
 
 -- ------------------------------------------------------------
--- POLICIES — parametrage_periode & rtt_imposes (porté par le Manager)
+-- POLICIES — parametrage_periode & demi_journees_imposees (porté par le Manager)
 -- ------------------------------------------------------------
 create policy "parametrage_periode: lecture par tout utilisateur authentifié"
   on parametrage_periode for select
@@ -455,12 +467,12 @@ create policy "parametrage_periode: manager et admin modifient"
   using (my_role() in ('manager', 'admin'))
   with check (my_role() in ('manager', 'admin'));
 
-create policy "rtt_imposes: lecture par tout utilisateur authentifié"
-  on rtt_imposes for select
+create policy "demi_journees_imposees: lecture par tout utilisateur authentifié"
+  on demi_journees_imposees for select
   using (auth.role() = 'authenticated');
 
-create policy "rtt_imposes: manager et admin modifient"
-  on rtt_imposes for all
+create policy "demi_journees_imposees: manager et admin modifient"
+  on demi_journees_imposees for all
   using (my_role() in ('manager', 'admin'))
   with check (my_role() in ('manager', 'admin'));
 
@@ -505,7 +517,7 @@ grant select, insert, update, delete on
   demandes_conges,
   jours_feries,
   parametrage_periode,
-  rtt_imposes,
+  demi_journees_imposees,
   regles_acquisition,
   regles_anciennete
 to authenticated;

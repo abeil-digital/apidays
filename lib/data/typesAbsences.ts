@@ -1,17 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TypeDemande } from "@/lib/types";
+import type { TypeAbsenceCode } from "@/lib/types";
 
 /**
- * Table de référence `types_absences` (CP, RTT, CSS, CE, RECUP, EVT_FAM) —
- * mise en cache en mémoire, elle ne change pas en cours de session. Partagé
- * entre `demandes.repository.ts` et `reglesConges.repository.ts`, tous deux
- * ayant besoin de résoudre un code vers l'id `types_absences`.
+ * Table de référence `types_absences` (CP, RTT, CSS, CE, RECUP, EVT_FAM,
+ * DJ_IMPOSEE) — mise en cache en mémoire, elle ne change pas en cours de
+ * session. Partagé entre `demandes.repository.ts`, `reglesConges.repository.ts`
+ * et `calendrier.repository.ts`, tous ayant besoin de résoudre un code vers
+ * l'id `types_absences`.
  */
-let typesAbsenceCache: Partial<Record<TypeDemande, string>> | null = null;
+let typesAbsenceCache: Partial<Record<TypeAbsenceCode, string>> | null = null;
 
 export async function getTypeAbsenceId(
   supabase: SupabaseClient,
-  type: TypeDemande,
+  type: TypeAbsenceCode,
 ): Promise<string> {
   if (!typesAbsenceCache) {
     const { data, error } = await supabase.from("types_absences").select("id, code");
