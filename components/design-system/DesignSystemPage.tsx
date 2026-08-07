@@ -6,6 +6,7 @@ import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ListCard } from "@/components/ui/ListCard";
+import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { Modal } from "@/components/ui/Modal";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
@@ -38,6 +39,8 @@ const PALETTE: { token: string; className: string }[] = [
   { token: "ce", className: "bg-ce" },
   { token: "recup", className: "bg-recup" },
   { token: "evtfam", className: "bg-evtfam" },
+  { token: "dji", className: "bg-dji" },
+  { token: "ferie", className: "bg-ferie" },
   { token: "mint", className: "bg-mint" },
   { token: "mint-tint", className: "bg-mint-tint" },
   { token: "status-success-bg", className: "bg-status-success-bg" },
@@ -69,6 +72,48 @@ function ComponentExample({ title, children }: { title: string; children: ReactN
       <div className="text-ink-500 text-xs font-semibold">{title}</div>
       <div className="flex flex-wrap items-center gap-3">{children}</div>
     </div>
+  );
+}
+
+/**
+ * Données d'exemple figées (pas de hook, pas d'appel réseau) pour illustrer
+ * les 3 règles de gestion de `MiniCalendrier` en un seul mois : isolé (6, 7,
+ * 10 — demi-journées), groupe multi-semaines avec un férié qui n'interrompt
+ * pas la continuité (13→24, férié le 14), jour travaillé qui interrompt
+ * (rien entre 17 et 20 puisqu'ils sont dans des groupes différents ici).
+ */
+const DEMO_FERIES = new Set(["2026-07-14"]);
+const DEMO_CONGE = { debut: "2026-07-13", fin: "2026-07-24" };
+const DEMO_DJI: Record<string, "gauche" | "droite"> = {
+  "2026-07-06": "gauche",
+  "2026-07-07": "droite",
+  "2026-07-10": "gauche",
+};
+
+function demoEstEnConge(iso: string): boolean {
+  return iso >= DEMO_CONGE.debut && iso <= DEMO_CONGE.fin;
+}
+
+function demoTipoDuJour(iso: string): PastilleJour | null {
+  if (DEMO_FERIES.has(iso)) return { classeFond: "bg-ferie" };
+  if (demoEstEnConge(iso)) return { classeFond: "bg-cp" };
+  const cote = DEMO_DJI[iso];
+  if (cote) return { moitie: { couleur: "var(--color-dji)", cote } };
+  return null;
+}
+
+function demoEstEnGroupe(isoA: string, isoB: string): boolean {
+  return demoEstEnConge(isoA) && demoEstEnConge(isoB);
+}
+
+function MiniCalendrierDemo() {
+  return (
+    <MiniCalendrier
+      annee={2026}
+      moisIndex={6}
+      tipoDuJour={demoTipoDuJour}
+      estEnGroupe={demoEstEnGroupe}
+    />
   );
 }
 
@@ -163,6 +208,16 @@ export function DesignSystemPage() {
             <TypeBadge code="CE" />
             <TypeBadge code="RECUP" />
             <TypeBadge code="EVT_FAM" />
+            <TypeBadge code="DJI" />
+            <TypeBadge code="CPI" />
+            <TypeBadge code="FERIE" />
+          </ComponentExample>
+
+          <ComponentExample title="TypeBadge (variant outline)">
+            <TypeBadge code="DJI" variant="outline" label="Matin" />
+            <TypeBadge code="DJI" variant="outline" label="A. Midi" />
+            <TypeBadge code="CP" variant="outline" />
+            <TypeBadge code="RTT" variant="outline" />
           </ComponentExample>
 
           <ComponentExample title="FieldLabel + Input">
@@ -211,6 +266,10 @@ export function DesignSystemPage() {
                 tone="cpt"
               />
             </div>
+          </ComponentExample>
+
+          <ComponentExample title="MiniCalendrier">
+            <MiniCalendrierDemo />
           </ComponentExample>
         </div>
 

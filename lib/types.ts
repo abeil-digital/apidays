@@ -1,9 +1,9 @@
 export type TypeDemande = "CP" | "RTT" | "CSS" | "CE" | "RECUP" | "EVT_FAM";
 
-// Code technique supplémentaire de `types_absences`, jamais choisi par le
-// salarié (pas une option du formulaire "Nouvelle demande") — sert à
-// catégoriser les demi-journées imposées (Paramétrer > Calendrier).
-export type TypeAbsenceCode = TypeDemande | "DJ_IMPOSEE";
+// Codes techniques supplémentaires de `types_absences`, jamais choisis par le
+// salarié (pas une option du formulaire "Nouvelle demande") — servent à
+// catégoriser les demi-journées et périodes imposées (Paramétrer > Calendrier).
+export type TypeAbsenceCode = TypeDemande | "DJ_IMPOSEE" | "CP_IMPOSE";
 
 export type StatutDemande = "en attente" | "validé" | "refusé";
 
@@ -162,4 +162,19 @@ export interface JourFerie {
 export interface JourFerieInput {
   date: string;
   libelle: string;
+}
+
+export interface CongeImpose {
+  id: string;
+  debut: string; // date ISO
+  fin: string; // date ISO
+  demiDebut: DemiJournee; // 'apres_midi' = la période démarre l'après-midi
+  demiFin: DemiJournee; // 'matin' = la période s'arrête le matin
+}
+
+export interface CongeImposeInput {
+  debut: string;
+  fin: string;
+  demiDebut: DemiJournee;
+  demiFin: DemiJournee;
 }

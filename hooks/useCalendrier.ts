@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+  CongeImpose,
+  CongeImposeInput,
   DjImposee,
   DjImposeeInput,
   JourFerie,
@@ -10,34 +12,40 @@ import type {
   ParametragePeriodeInput,
 } from "@/lib/types";
 import {
+  ajouterCongeImpose,
+  ajouterDjImposee,
   ajouterJourFerie,
   enregistrerParametragePeriode,
+  fetchCongesImposes,
   fetchDjImposees,
   fetchJoursFeries,
   fetchParametragePeriode,
-  modifierDjImposee,
   preRemplirJoursFeriesLegaux,
   remplacerDjImposees,
+  supprimerCongeImpose,
   supprimerDjImposee,
   supprimerJourFerie,
 } from "@/lib/data/calendrier.repository";
-import { joursFeriesLegaux } from "@/lib/joursFeries";
+import { joursFeriesLegaux, lundiSemaineDu15Aout } from "@/lib/joursFeries";
 
 interface UseCalendrierResult {
   parametrage: ParametragePeriode | null;
   djImposees: DjImposee[];
   joursFeries: JourFerie[];
+  congesImposes: CongeImpose[];
   loading: boolean;
   error: string | null;
   validerParametrage: (
     input: ParametragePeriodeInput,
     djs: DjImposeeInput[],
   ) => Promise<ParametragePeriode>;
-  modifierDj: (id: string, input: DjImposeeInput) => Promise<DjImposee>;
+  ajouterDj: (input: DjImposeeInput) => Promise<DjImposee>;
   supprimerDj: (id: string) => Promise<void>;
   ajouterFerie: (input: JourFerieInput) => Promise<JourFerie>;
   supprimerFerie: (id: string) => Promise<void>;
   preRemplirFeries: () => Promise<JourFerie[]>;
+  ajouterConge: (input: CongeImposeInput) => Promise<CongeImpose>;
+  supprimerConge: (id: string) => Promise<void>;
 }
 
 /** Charge et pilote le calendrier (paramétrage, DJ imposées, jours fériés) d'une année donnée. */
@@ -45,6 +53,7 @@ export function useCalendrier(annee: number): UseCalendrierResult {
   const [parametrage, setParametrage] = useState<ParametragePeriode | null>(null);
   const [djImposees, setDjImposees] = useState<DjImposee[]>([]);
   const [joursFeries, setJoursFeries] = useState<JourFerie[]>([]);
+  const [congesImposes, setCongesImposes] = useState<CongeImpose[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,11 +66,14 @@ export function useCalendrier(annee: number): UseCalendrierResult {
           fetchParametragePeriode(annee),
           fetchJoursFeries(annee),
         ]);
-        const djs = p ? await fetchDjImposees(p.id) : [];
+        const [djs, conges] = p
+          ? await Promise.all([fetchDjImposees(p.id), fetchCongesImposes(p.id)])
+          : [[], []];
         if (cancelled) return;
         setParametrage(p);
         setJoursFeries(feries);
         setDjImposees(djs);
+        setCongesImposes(conges);
         setError(null);
       } catch {
         if (!cancelled) setError("Impossible de charger le calendrier.");
@@ -75,6 +87,19 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     };
   }, [annee]);
 
+  /** Récupère le paramétrage de l'année, ou le crée avec les valeurs par défaut s'il n'existe pas encore. */
+  const assurerParametrage = useCallback(async () => {
+    if (parametrage) return parametrage;
+    const p = await enregistrerParametragePeriode({
+      annee,
+      semaineAoutImposee: lundiSemaineDu15Aout(annee),
+      nbDemiJourneesCible: 16,
+      jourSemaineDefaut: 5,
+    });
+    setParametrage(p);
+    return p;
+  }, [annee, parametrage]);
+
   const validerParametrage = useCallback(
     async (input: ParametragePeriodeInput, djs: DjImposeeInput[]) => {
       const p = await enregistrerParametragePeriode(input);
@@ -86,13 +111,15 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     [],
   );
 
-  const modifierDj = useCallback(async (id: string, input: DjImposeeInput) => {
-    const dj = await modifierDjImposee(id, input);
-    setDjImposees((prev) =>
-      prev.map((d) => (d.id === id ? dj : d)).sort((a, b) => a.date.localeCompare(b.date)),
-    );
-    return dj;
-  }, []);
+  const ajouterDj = useCallback(
+    async (input: DjImposeeInput) => {
+      const p = await assurerParametrage();
+      const dj = await ajouterDjImposee(p.id, input);
+      setDjImposees((prev) => [...prev, dj].sort((a, b) => a.date.localeCompare(b.date)));
+      return dj;
+    },
+    [assurerParametrage],
+  );
 
   const supprimerDj = useCallback(async (id: string) => {
     await supprimerDjImposee(id);
@@ -116,17 +143,35 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     return tous;
   }, [annee]);
 
+  const ajouterConge = useCallback(
+    async (input: CongeImposeInput) => {
+      const p = await assurerParametrage();
+      const conge = await ajouterCongeImpose(p.id, input);
+      setCongesImposes((prev) => [...prev, conge].sort((a, b) => a.debut.localeCompare(b.debut)));
+      return conge;
+    },
+    [assurerParametrage],
+  );
+
+  const supprimerConge = useCallback(async (id: string) => {
+    await supprimerCongeImpose(id);
+    setCongesImposes((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
   return {
     parametrage,
     djImposees,
     joursFeries,
+    congesImposes,
     loading,
     error,
     validerParametrage,
-    modifierDj,
+    ajouterDj,
     supprimerDj,
     ajouterFerie,
     supprimerFerie,
     preRemplirFeries,
+    ajouterConge,
+    supprimerConge,
   };
 }

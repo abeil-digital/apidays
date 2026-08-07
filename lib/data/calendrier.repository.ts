@@ -1,4 +1,6 @@
 import type {
+  CongeImpose,
+  CongeImposeInput,
   DemiJournee,
   DjImposee,
   DjImposeeInput,
@@ -157,19 +159,26 @@ export async function remplacerDjImposees(
   return data.map(mapDjImposeeDepuisDb);
 }
 
-/** Correction ponctuelle d'une DJ mal saisie (vue "Année en cours"). */
-export async function modifierDjImposee(id: string, input: DjImposeeInput): Promise<DjImposee> {
+export async function ajouterDjImposee(
+  parametragePeriodeId: string,
+  input: DjImposeeInput,
+): Promise<DjImposee> {
   const supabase = createClient();
+  const typeAbsenceId = await getTypeAbsenceId(supabase, "DJ_IMPOSEE");
 
   const { data, error } = await supabase
     .from("demi_journees_imposees")
-    .update({ date: input.date, demi_journee: input.demiJournee })
-    .eq("id", id)
+    .insert({
+      parametrage_periode_id: parametragePeriodeId,
+      type_absence_id: typeAbsenceId,
+      date: input.date,
+      demi_journee: input.demiJournee,
+    })
     .select(SELECT_DJ_IMPOSEE)
     .single();
 
   if (error || !data) {
-    throw new Error("Impossible de modifier cette demi-journée imposée.");
+    throw new Error("Impossible d'ajouter cette demi-journée imposée.");
   }
 
   return mapDjImposeeDepuisDb(data);
@@ -178,15 +187,87 @@ export async function modifierDjImposee(id: string, input: DjImposeeInput): Prom
 export async function supprimerDjImposee(id: string): Promise<void> {
   const supabase = createClient();
 
-  const { error } = await supabase
-    .from("demi_journees_imposees")
-    .delete()
-    .eq("id", id)
-    .select()
-    .single();
+  const { error } = await supabase.from("demi_journees_imposees").delete().eq("id", id);
 
   if (error) {
     throw new Error("Impossible de supprimer cette demi-journée imposée.");
+  }
+}
+
+interface CongeImposeRow {
+  id: string;
+  date_debut: string;
+  date_fin: string;
+  demi_debut: DemiJournee;
+  demi_fin: DemiJournee;
+}
+
+const SELECT_CONGE_IMPOSE = "id, date_debut, date_fin, demi_debut, demi_fin";
+
+function mapCongeImposeDepuisDb(row: CongeImposeRow): CongeImpose {
+  return {
+    id: row.id,
+    debut: row.date_debut,
+    fin: row.date_fin,
+    demiDebut: row.demi_debut,
+    demiFin: row.demi_fin,
+  };
+}
+
+export async function fetchCongesImposes(parametragePeriodeId: string): Promise<CongeImpose[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("conges_imposes")
+    .select(SELECT_CONGE_IMPOSE)
+    .eq("parametrage_periode_id", parametragePeriodeId)
+    .order("date_debut", { ascending: true });
+
+  if (error) {
+    throw new Error("Impossible de charger les congés imposés.");
+  }
+
+  return (data ?? []).map(mapCongeImposeDepuisDb);
+}
+
+export async function ajouterCongeImpose(
+  parametragePeriodeId: string,
+  input: CongeImposeInput,
+): Promise<CongeImpose> {
+  const supabase = createClient();
+  const typeAbsenceId = await getTypeAbsenceId(supabase, "CP_IMPOSE");
+
+  const { data, error } = await supabase
+    .from("conges_imposes")
+    .insert({
+      parametrage_periode_id: parametragePeriodeId,
+      type_absence_id: typeAbsenceId,
+      date_debut: input.debut,
+      date_fin: input.fin,
+      demi_debut: input.demiDebut,
+      demi_fin: input.demiFin,
+    })
+    .select(SELECT_CONGE_IMPOSE)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible d'ajouter cette période de congés imposés.");
+  }
+
+  return mapCongeImposeDepuisDb(data);
+}
+
+export async function supprimerCongeImpose(id: string): Promise<void> {
+  const supabase = createClient();
+
+  // Pas de `.select().single()` après le delete : ça exigerait exactement
+  // une ligne renvoyée et lèverait une erreur si la période a déjà été
+  // supprimée (double-clic, état local pas encore resynchronisé) — un delete
+  // qui ne trouve rien n'est pas une erreur en soi.
+  const { error } = await supabase.from("conges_imposes").delete().eq("id", id);
+
+  if (error) {
+    throw new Error("Impossible de supprimer cette période de congés imposés.");
   }
 }
 
@@ -238,7 +319,7 @@ export async function ajouterJourFerie(input: JourFerieInput): Promise<JourFerie
 export async function supprimerJourFerie(id: string): Promise<void> {
   const supabase = createClient();
 
-  const { error } = await supabase.from("jours_feries").delete().eq("id", id).select().single();
+  const { error } = await supabase.from("jours_feries").delete().eq("id", id);
 
   if (error) {
     throw new Error("Impossible de supprimer ce jour férié.");

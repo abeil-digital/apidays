@@ -172,12 +172,7 @@ export async function modifierRegleAnciennete(
 export async function supprimerRegleAnciennete(id: string): Promise<void> {
   const supabase = createClient();
 
-  const { error } = await supabase
-    .from("regles_anciennete")
-    .delete()
-    .eq("id", id)
-    .select()
-    .single();
+  const { error } = await supabase.from("regles_anciennete").delete().eq("id", id);
 
   if (error) {
     throw new Error("Impossible de supprimer cette règle.");

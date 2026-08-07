@@ -51,8 +51,10 @@
      l'absence d'impact sur un solde */
   --color-css: #a89f96; /* taupe — congé sans solde */
   --color-ce: #d9a35c; /* ambre — congé exceptionnel */
-  --color-recup: #9b8bc4; /* violet — récupération */
+  --color-recup: #496580; /* bleu slate — récupération */
   --color-evtfam: #d98ca6; /* rose — événement familial */
+  --color-dji: #9b8bc4; /* violet — demi-journée imposée (paramétrage Manager, pas un compteur salarié) */
+  --color-ferie: #d4b106; /* or — jour férié (vue calendrier) */
   --color-mint: #4fa893; /* accent secondaire — carte "Poser un congé" */
   --color-mint-tint: #e7f3ef; /* accent-100 — fond du bloc "Soldes" */
 

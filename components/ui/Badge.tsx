@@ -12,6 +12,7 @@ const TONE_STYLES: Record<BadgeTone, string> = {
 interface BadgeProps {
   tone: BadgeTone;
   children: ReactNode;
+  className?: string;
 }
 
 /**
@@ -20,10 +21,10 @@ interface BadgeProps {
  * pastille de statut (validation manager, exports paie...) doit passer par
  * `Badge` plutôt que réimplémenter le style à la main.
  */
-export function Badge({ tone, children }: BadgeProps) {
+export function Badge({ tone, children, className = "" }: BadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${TONE_STYLES[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${TONE_STYLES[tone]} ${className}`}
     >
       {children}
     </span>

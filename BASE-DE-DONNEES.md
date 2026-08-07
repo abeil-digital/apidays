@@ -18,13 +18,14 @@ Abeil, signalés plus bas.
 | `manager_salaries`       | Rattachement salarié ↔ manager(s) habilité(s) à valider (plusieurs managers possibles)                                                       |
 | `delegations_validation` | Délégation temporaire du droit de validation (absence d'un manager)                                                                          |
 | `copies_notifications`   | Destinataires en copie des mails de validation/refus d'un manager                                                                            |
-| `types_absences`         | Référentiel des types d'absence — CP, RTT, 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM), et DJ_IMPOSEE (demi-journées imposées)  |
+| `types_absences`         | Référentiel des types d'absence — CP, RTT, 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM), DJ_IMPOSEE et CP_IMPOSE                 |
 | `soldes`                 | Solde réel + théorique, par utilisateur, par type d'absence, par période                                                                     |
 | `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine                                                                                    |
 | `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                             |
 | `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte, et écran Paramétrer > Calendrier)                                            |
 | `parametrage_periode`    | Paramétrage annuel porté par le Manager — semaine du 15 août imposée, nombre cible et jour de semaine par défaut des DJ imposées             |
 | `demi_journees_imposees` | Demi-journées imposées (DJ imposées) pour une période donnée — indépendant du solde RTT calculé dans Congés & RTT                            |
+| `conges_imposes`         | Périodes de congés imposés (ex. semaine du 15 août) pour une période donnée — indépendant du solde CP calculé dans Congés & RTT              |
 | `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)       |
 | `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)        |
 

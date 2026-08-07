@@ -7,7 +7,7 @@ export function formatDate(iso: string): string {
   }).format(d);
 }
 
-function formatJourMois(iso: string, avecAnnee: boolean): string {
+export function formatJourMois(iso: string, avecAnnee: boolean): string {
   const d = new Date(`${iso}T00:00:00`);
   const jour = d.getDate();
   const jourTexte = jour === 1 ? "1er" : String(jour);

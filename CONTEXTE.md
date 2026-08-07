@@ -76,7 +76,7 @@ de Citizen D.
 - Bordures décoratives retirées des cartes/boutons (ombre légère ou fond à la place) ; le logo
   Abeil n'est plus affiché dans le header pour l'instant (texte seul)
 - Dépôt transféré sur l'organisation GitHub `abeil-digital` (repo officiel)
-- Schéma de base de données Supabase conçu (13 tables, RLS + policies par rôle
+- Schéma de base de données Supabase conçu (14 tables, RLS + policies par rôle
   salarié/manager/admin) — voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)
 - Paramétrer > Congés & RTT (`/parametrer/conges-rtt`) : moteur de calcul générique des soldes
   CP/RTT, indépendant des règles Abeil (celles-ci restent dans une sous-section "Calendrier" à
@@ -93,8 +93,8 @@ de Citizen D.
   (demande CSS et CP anticipé posées et visibles dans l'Historique avec le bon badge)
 - Paramétrer > Calendrier (`/parametrer/calendrier`, 05/08/2026) : demi-journées imposées (DJ
   imposées, nomenclature provisoire) et jours fériés, indépendant du solde RTT de Congés & RTT.
-  Deux vues — "Année en cours" (lecture seule + correction ponctuelle d'une DJ mal saisie, semaine
-  du 15 août calculée automatiquement) et "Paramétrage année à venir" (vendredis décochés par
+  Deux vues — "Année en cours" (ajout/suppression ponctuels via un mode édition, semaine du 15 août
+  calculée automatiquement — voir plus bas) et "Paramétrage année à venir" (vendredis décochés par
   défaut, compteur configurable 16→0, ajout de dates libres hors vendredi, bouton "Valider" qui
   remplace intégralement les DJ de la période). Jours fériés légaux français calculés côté app avec
   Pâques mobile (`lib/joursFeries.ts`, algorithme de Meeus/Jones/Butcher), pré-remplissage sur
@@ -104,6 +104,99 @@ de Citizen D.
   `types_absences`, policy `jours_feries` élargie à manager+admin (auparavant admin seul) — testé
   de bout en bout en base réelle (calcul Pâques 2026/2027, pré-remplissage, ajout/suppression jour
   férié, sélection/validation/remise à zéro des DJ, persistance après rechargement)
+- Vue "Année en cours" du Calendrier restructurée en dashboard (05/08/2026), inspirée de l'Accueil
+  "Poser" : layout 2/3 (DJ imposées) — 1/3 (congés imposés + jours fériés en sidebar, chaque entrée
+  en carte indépendante à coins carrés avec espacement). Badges `TypeBadge` "DJI" (`--color-dji`,
+  violet) et "CPI" (même couleur que CP)
+- DJ imposées en cartes (05/08/2026) : grille 5 cartes/ligne (`bg-surface-card rounded-xl
+shadow-sm`, style `SoldeCard`) remplaçant la liste `ListCard` initiale — jour de la semaine en
+  toutes lettres + date en mois complet (`text-base`), durée "0,5j" (`text-ink-500 text-sm`),
+  pastille Matin/A. Midi. La correction inline d'une DJ mal saisie est retirée
+  (`modifierDj`/`modifierDjImposee` supprimés du hook et du repository, plus d'usage). `TypeBadge`
+  gagne une **variante `outline`** (`variant="outline"`, prop `label` pour un texte personnalisé) —
+  liséré + texte de la couleur du code, fond transparent, même palette que la variante cercle par
+  défaut ; documentée dans `/design-system`
+- Mode édition des DJ imposées (`BlocDjImposees`) : les icônes Supprimer sont masquées par défaut,
+  révélées par un lien "Modifier" aligné à droite du titre de section (bascule "Terminer"). En mode
+  édition, une carte "Ajouter une demi-journée" (style `bg-mint`, identique au bouton "Poser un
+  congé" de l'Accueil) s'ajoute en dernière position de la grille, même gabarit que les autres
+  cartes (stretch de grille) ; cliquer dessus la remplace par un formulaire inline (date + Select
+  Matin/Après-midi). Nouvelle fonction repository `ajouterDjImposee` (insertion unitaire, à la
+  différence de `remplacerDjImposees` qui fige toute la liste depuis "Paramétrage année à venir") —
+  testé en base réelle (ajout, persistance après rechargement, suppression)
+- Congés imposés (période du Manager, ex. semaine du 15 août imposée) : section "Congés imposés"
+  dans la colonne de droite de la vue "Année en cours" — badge "CPI", période "Du J mois au J mois",
+  nombre de jours calendaires, ajout via lien "+ Ajouter congés imposés" (formulaire inline
+  début/fin). Table `conges_imposes` (`parametrage_periode_id`, `type_absence_id`, `date_debut`,
+  `date_fin`), type technique `CP_IMPOSE` dans `types_absences` (`necessite_solde = false`),
+  indépendant du solde CP calculé dans Congés & RTT — mêmes policies RLS que `demi_journees_imposees`
+  (lecture authentifiée, écriture manager/admin). Le `parametrage_periode` de l'année est créé à la
+  volée (valeurs par défaut 16 DJ / vendredi) si l'ajout d'un congé imposé précède toute
+  validation de la vue "Paramétrage année à venir" — testé en base réelle (ajout, persistance après
+  rechargement, suppression)
+- **Calendrier 2 (`/parametrer/calendrier2`, scénarisation, 06/08/2026)** : vue calendrier
+  synthétique — 12 `MiniCalendrier` (grille fluide `[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]`,
+  `max-w-[900px]` pour plafonner à 4 colonnes même sur grand écran, jamais de resize continu d'une
+  carte — le nombre de colonnes s'adapte, pas leur taille) + une légende (`TypeBadge` CPI/DJI/FERIE).
+  Nav de second niveau sous Paramétrer, toggle séparé de la vue "Calendrier" existante. Section
+  encore en scénarisation (pas de vérification systématique passée dessus par consigne explicite),
+  mais son composant central est promu design system car destiné à être réutilisé :
+  - **`components/ui/MiniCalendrier.tsx`** — composant DS pur/présentationnel (aucune notion
+    DJI/CPI/férié dedans, tout passe par les props `tipoDuJour`/`estEnGroupe`), documenté dans
+    `/design-system` avec des données figées (pas de hook). Règles de gestion (détail complet en
+    JSDoc en tête du fichier — à lire avant toute réutilisation) :
+    - Grille L-V (5 colonnes), week-ends jamais affichés, y compris dans le décompte d'une période.
+    - Un jour = une pastille max ; en cas de conflit de type le même jour, l'appelant tranche (dans
+      Calendrier : priorité férié > congé imposé (CPI) > demi-journée imposée (DJI), voir
+      `VueCalendrierGrille.tipoDuJour` dans `CalendrierPage.tsx`).
+    - Jours consécutifs → barre continue ("pilule") ; l'arrondi ne marque que les extrémités RÉELLES
+      de la période (dates calendaires, week-ends inclus), jamais la fin d'une ligne d'affichage —
+      un vendredi qui se prolonge le lundi suivant reste écarré des deux côtés. La continuité est
+      décidée par l'appelant via `estEnGroupe` (ex. un jour férié à l'intérieur d'un congé n'interrompt
+      pas la période même s'il change de couleur) ; un jour sans pastille (travaillé) interrompt
+      toujours le groupe.
+    - **Anti-seam** : les jours consécutifs de même groupe ET même apparence exacte sont fusionnés
+      en un seul élément DOM (`grid-column: span N`, sous-grille interne pour aligner les chiffres)
+      plutôt que plusieurs `<span>` collés — élimine les liserés de sous-pixel entre jours de même
+      couleur. Un changement de couleur (ex. férié au milieu d'un congé) reste un élément séparé
+      (frontière réelle, pas un artefact) mais garde l'arrondi de groupe.
+    - Survol d'un jour quelconque de la période → toute la période en `brightness-110` (état porté
+      par un `groupeId` commun, pas par jour) ; pas de scale/liseré au survol, ça casse la
+      continuité visuelle d'une barre groupée (essayé puis retiré).
+    - Demi-journée (variante "moitié") : gauche = matin, droite = après-midi, moitié pleine = posée,
+      l'autre à 45 % d'alpha (`color-mix`) — jamais fusionnée avec un voisin.
+    - **Cas à la marge — variante "partage"** : un jour couvert à la fois par un congé imposé (CPI,
+      jour plein) ET une DJI (demi-journée) ne doit pas faire disparaître silencieusement la DJI
+      derrière le CPI. Le jour se partage alors en deux couleurs PLEINES (pas d'alpha, contrairement
+      à "moitié") — chaque type sur sa vraie moitié réelle (matin/après-midi). Distinct de "moitié"
+      qui n'a qu'une seule couleur avec sa version alpha en contrepoint.
+  - Nouveau token couleur `--color-ferie` (or) et badge `TypeBadge code="FERIE"` (label "FE").
+- **Popin "Congés imposés" (06/08/2026, layout initial — voir refonte 07/08/2026 plus bas)**,
+  accessible depuis la légende de Calendrier 2 (carte CPI, icône `+`) — `ModalCongesImposes` dans
+  `CalendrierPage.tsx`. `Modal` (`components/ui/Modal.tsx`) généralisé : `title` accepte un
+  `ReactNode` (plus seulement `string`), header recentré (bouton fermer sorti du flux en absolu),
+  `className` pour élargir le panneau (`max-w-md` par défaut ailleurs).
+  - **`components/ui/DatePicker.tsx`** (nouveau composant DS) : remplace `<input type="date">` pour
+    les champs Du/Au — `react-day-picker` avec un `disabled` prop qui grise/bloque directement les
+    week-ends et jours fériés DANS le calendrier (le natif ne permet pas de styler des jours
+    précis). Reste un vrai champ texte tapable (jj/mm/aaaa) en plus du clic calendrier — une date
+    tapée n'est commise que si elle est complète, valide, et non désactivée. Locale FR, accent
+    `--color-mint`.
+  - **"soit N jours" = jours ouvrés, pas calendaires** : `joursOuvres()` compte L-V hors jours
+    fériés, et déduit 0,5 pour chaque jour ouvré de la période qui a déjà une DJI posée (une DJI
+    n'est pas disponible en entier). Même logique côté jour unique.
+  - Alternative retenue pour ce besoin (weekends/fériés non sélectionnables) : `react-day-picker` +
+    predicate `disabled`, plutôt qu'un calendrier maison ou juste une validation après coup — voir
+    discussion dans l'historique de session si le sujet revient (bénéfices/risques de réutiliser
+    cette brique pour `NouvelleDemandeForm` plus tard : logique de jour dispo oui, composants
+    visuels tels quels non — DJI est une demi-journée, pas compatible avec le modèle `disabled`
+    tout-ou-rien, et `NouvelleDemandeForm` a déjà sa propre UI demi-journée).
+  - **Bug corrigé** : `supprimerCongeImpose`/`supprimerDjImposee`/`supprimerJourFerie`/
+    `supprimerRegleAnciennete` utilisaient `.delete().select().single()`, qui exige exactement une
+    ligne renvoyée et lève une erreur si la suppression ne trouve rien (double-clic, état local pas
+    encore resynchronisé) — alors que la suppression a réellement eu lieu. Retiré le
+    `.select().single()` dans les 4 fonctions ; un delete qui ne trouve rien n'est plus une erreur.
+    Vérifié avec un double-clic volontaire en base réelle.
 - Pose de congé à la demi-journée (05/08/2026) : le concept existait en base
   (`demandes_conges.demi_debut`/`demi_fin`/`nb_demi_journees`) mais n'était pas branché côté
   application. Formulaire "Nouvelle demande" : sélecteur "Durée" (Journée entière/Matin/Après-midi)
@@ -113,6 +206,65 @@ de Citizen D.
   fuseau horaire dans `calculerNbDemiJournees` (dates locales `new Date(iso+"T00:00:00")` décalées
   d'un jour en UTC+1/+2, désormais en UTC explicite comme `lib/joursFeries.ts`) — vérifié en base
   réelle (jour unique matin/après-midi, plage multi-jours avec demi-journée de fin)
+- **Popin "Demi-journées imposées" (07/08/2026)**, `ModalDjImposees` dans `CalendrierPage.tsx`,
+  ouverte depuis la légende de Calendrier 2 (carte DJI, icône `+`) — devient le gabarit de
+  référence repris ensuite par la popin CPI (voir plus bas). Deux colonnes de largeur fixe (comme
+  DJI, popin `max-w-4xl`) : à gauche colonne "Sélection" (`bg-surface-app`) avec onglets
+  Vendredis/Autre date ; à droite (`md:w-80`) le référentiel des DJI déjà posées, compteur
+  `(N/16)`. Composants DS introduits à cette occasion :
+  - **`SelectPille`** (local à `CalendrierPage.tsx` pour l'instant, candidat DS) : select stylé en
+    pilule (fond + coins arrondis, chevron bas), remplace `SelectSouligne` partout (CPI compris,
+    `SelectSouligne` supprimé). Prend `disabled` en compte pour un rendu grisé (ligne déjà posée).
+  - **Hover → aperçu calendrier en contexte** : survoler une ligne déjà posée affiche un
+    `MiniCalendrier` du mois concerné en `position: fixed`, ancré via `getBoundingClientRect()`
+    capturé **dans le handler d'événement** (`onMouseEnter`), jamais recalculé en lisant un `ref`
+    pendant le rendu — cette dernière approche donne des coordonnées incohérentes dans ce
+    environnement de preview (position figée/mauvaise au premier hover). Toujours calé au même
+    endroit (ancre = le conteneur de la liste, pas la ligne survolée).
+  - Snippet cliqué sur le calendrier principal (`SnippetDji`) : suppression uniquement, pas
+    d'édition de créneau depuis le calendrier (le créneau se change dans la popin).
+- **Popin "Jours fériés" (07/08/2026)**, `ModalJoursFeries` — sur le même gabarit référentiel (liste
+  seule, pas d'ajout/suppression manuels : les 11 fériés légaux sont fixes). Seule vraie décision
+  annuelle : le **lundi de Pentecôte** (journée de solidarité), avec 2 boutons radio
+  Travaillé/Férié. Persisté **sans nouvelle colonne** : "travaillée" = la ligne correspondante est
+  simplement absente de `jours_feries` (réutilise `ajouterFerie`/`supprimerFerie`) ; la liste
+  affichée s'appuie sur `joursFeriesLegaux(annee)` (référentiel fixe) et pas sur les lignes
+  réellement en base, pour que la ligne Pentecôte reste visible (grisée, badge `Badge tone="warning"`
+  "Travaillé") même absente de la DB. `Badge` (`components/ui/Badge.tsx`) gagne un `className`
+  optionnel pour ce besoin.
+- Clic sur une pastille du calendrier principal → snippet contextuel selon le type, priorité
+  identique à l'affichage (férié > CPI > DJI) : `SnippetConge` (Modifier/Supprimer),
+  `SnippetDji` (Supprimer), `SnippetFerie` (lecture seule, aucune action — un jour férié légal ne
+  s'édite pas depuis le calendrier).
+- **Popin "Congés imposés" refondue (07/08/2026)** sur le gabarit DJI ci-dessus (même tailles :
+  popin `max-w-4xl`, colonne "Sélection" `md:w-64`, liste `md:w-80`) — `ModalCongesImposes`
+  entièrement réécrite :
+  - Colonne "Sélection" (gauche, `bg-surface-app`) : Du/Au empilés verticalement, chacun avec son
+    `DatePicker` + `SelectPille` (fond `bg-mint-tint` autour du bloc, comme l'onglet "Autre date"
+    de DJI) ; un seul jour (Du = Au) → un seul sélecteur (celui du bas), 3 options
+    Journée/Matin/A. midi qui pilotent `demiDebut`+`demiFin` ensemble (évite la combinaison
+    contradictoire d'un jour à la fois "après-midi au début" et "matin à la fin"). Bouton
+    "+ Ajouter" (icône `PlusCircle`).
+  - Liste (droite, "le cœur") : cliquer une ligne la charge en édition dans la colonne de gauche
+    (surlignage `bg-mint-tint`, "Annuler"/"Supprimer" affichés) ; survol → aperçu calendrier en
+    contexte comme DJI. Deux gabarits de ligne : un jour unique reprend exactement le gabarit DJI
+    (encart jour + date + `SelectPille` actif Journée/Matin/A. midi + suppression) ; une **période**
+    affiche un "gros composant" — deux mini-snippets Du/Au empilés et reliés par un connecteur
+    vertical (`absolute` entre les deux encarts jour), chacun avec son propre `SelectPille`
+    (Journée/A. midi au Du, Journée/Matin au Au), nombre de jours en sous-titre sous la date de fin,
+    une seule corbeille pour toute la période. La modale ne se ferme plus après ajout/modification
+    (seul "Fermer"/la croix le fait), comme DJI.
+  - `Modal` gagne une prop **`align`** (`"center"` par défaut inchangé partout ailleurs, `"top"`
+    pour DJI et CPI) — fixe le panneau à une position stable en haut de l'écran, indépendante de la
+    hauteur du contenu (une liste plus ou moins longue ne doit pas déplacer visuellement la popin
+    d'une ouverture à l'autre).
+  - **CPI posable à la demi-journée, avec vraie persistance (07/08/2026)** : colonnes
+    `demi_debut`/`demi_fin` (`demi_journee` enum, comme `demandes`/`demi_journees_imposees`)
+    ajoutées à `conges_imposes` — migration lancée manuellement par Vincent dans le SQL editor
+    Supabase (pas d'accès DB admin depuis cet environnement, seule la clé anon est dans
+    `.env.local`), `supabase/schema.sql` mis à jour en conséquence. `CongeImpose`/`CongeImposeInput`
+    (`lib/types.ts`) et `calendrier.repository.ts` étendus. Vérifié en base réelle (ajout à la
+    demi-journée, persistance après rechargement complet, changement de créneau depuis la liste).
 
 **En cours / pas encore fait** :
 

@@ -17,7 +17,7 @@ create type user_role as enum ('salarie', 'manager', 'admin');
 create type statut_utilisateur as enum ('actif', 'archive');
 create type type_contrat as enum ('temps_plein', 'temps_partiel'); -- déprécié, voir nature_contrat/taux_activite plus bas
 create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
-create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM', 'DJ_IMPOSEE');
+create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM', 'DJ_IMPOSEE', 'CP_IMPOSE');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
 
@@ -96,12 +96,14 @@ insert into types_absences (code, libelle, necessite_solde) values
   ('CE', 'Congé exceptionnel', false),
   ('RECUP', 'Récupération', false),
   ('EVT_FAM', 'Événement Familial', false),
-  ('DJ_IMPOSEE', 'Demi-journée imposée', false);
+  ('DJ_IMPOSEE', 'Demi-journée imposée', false),
+  ('CP_IMPOSE', 'Congé payé imposé', false);
 -- Pas de ligne "Congés anticipés" : c'est un CP posé avec is_anticipation=true
 -- (voir demandes_conges.is_anticipation ci-dessous), pas un type distinct.
--- DJ_IMPOSEE catégorise demi_journees_imposees (Paramétrer > Calendrier) —
--- mécanisme indépendant du solde RTT calculé dans Congés & RTT, jamais
--- choisi par le salarié dans "Nouvelle demande".
+-- DJ_IMPOSEE catégorise demi_journees_imposees et CP_IMPOSE catégorise
+-- conges_imposes (Paramétrer > Calendrier) — mécanismes indépendants des
+-- soldes RTT/CP calculés dans Congés & RTT, jamais choisis par le salarié
+-- dans "Nouvelle demande".
 
 -- ------------------------------------------------------------
 -- SOLDES — deux compteurs distincts, périodes de référence différentes
@@ -194,6 +196,26 @@ create table demi_journees_imposees (
   demi_journee demi_journee not null default 'matin'
 );
 
+-- Périodes de congés imposés (ex. semaine du 15 août) pour une période
+-- donnée, catégorisées sous le type CP_IMPOSE de types_absences,
+-- indépendant du solde CP (regles_acquisition).
+create table conges_imposes (
+  id uuid primary key default gen_random_uuid(),
+  parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
+  type_absence_id uuid not null references types_absences(id),
+  date_debut date not null,
+  date_fin date not null,
+  -- Même sémantique que demandes.demi_debut/demi_fin : 'apres_midi' au
+  -- début = la période démarre l'après-midi (matin travaillé) ; 'matin' à
+  -- la fin = la période s'arrête le matin (après-midi travaillé). Un seul
+  -- jour (date_debut = date_fin) avec demi_debut='apres_midi' et
+  -- demi_fin='matin' correspondrait à une demi-journée nulle — géré côté
+  -- appli, pas de contrainte en base pour l'instant.
+  demi_debut demi_journee not null default 'matin',
+  demi_fin demi_journee not null default 'apres_midi',
+  created_at timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- MOTEUR DE CALCUL DES SOLDES (porté par le Manager)
 -- Paramétrage générique, indépendant des règles spécifiques Abeil
@@ -249,6 +271,7 @@ alter table demandes_conges enable row level security;
 alter table jours_feries enable row level security;
 alter table parametrage_periode enable row level security;
 alter table demi_journees_imposees enable row level security;
+alter table conges_imposes enable row level security;
 alter table regles_acquisition enable row level security;
 alter table regles_anciennete enable row level security;
 
@@ -476,6 +499,15 @@ create policy "demi_journees_imposees: manager et admin modifient"
   using (my_role() in ('manager', 'admin'))
   with check (my_role() in ('manager', 'admin'));
 
+create policy "conges_imposes: lecture par tout utilisateur authentifié"
+  on conges_imposes for select
+  using (auth.role() = 'authenticated');
+
+create policy "conges_imposes: manager et admin modifient"
+  on conges_imposes for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
 -- ------------------------------------------------------------
 -- POLICIES — regles_acquisition & regles_anciennete (moteur de calcul,
 -- porté par le Manager) — mêmes policies que parametrage_periode
@@ -518,6 +550,7 @@ grant select, insert, update, delete on
   jours_feries,
   parametrage_periode,
   demi_journees_imposees,
+  conges_imposes,
   regles_acquisition,
   regles_anciennete
 to authenticated;
