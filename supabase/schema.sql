@@ -182,7 +182,8 @@ create table parametrage_periode (
   nb_demi_journees_cible int not null default 16, -- configurable, pas figé en dur
   jour_semaine_defaut int not null default 5, -- ISO : 1=lundi … 5=vendredi … 7=dimanche, configurable
   defini_par uuid references utilisateurs(id),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  valide_le timestamptz -- date de publication du paramétrage (visible par les collaborateurs) ; null = brouillon
 );
 
 -- Demi-journées imposées pour une période donnée — nomenclature "DJ imposées"
@@ -233,6 +234,20 @@ create table regles_acquisition (
   unique (type_absence_id)
 );
 
+-- Objectifs annuels de volume CPI/DJI, paramétrés depuis Congés & RTT et
+-- consommés par l'écran Calendrier (cible affichée sur les pastilles de
+-- progression CPI/DJI, condition de publication du paramétrage d'une année).
+-- Une seule ligne (id fixe) — pas de table de paramètres génériques dans ce
+-- projet, on garde le même schéma singleton que le seed ci-dessous.
+create table objectifs_calendrier (
+  id uuid primary key default '00000000-0000-0000-0000-000000000001',
+  cible_jours_cpi numeric(5,2) not null default 5,
+  cible_demi_journees_dji int not null default 16,
+  updated_at timestamptz not null default now()
+);
+
+insert into objectifs_calendrier (id) values ('00000000-0000-0000-0000-000000000001');
+
 -- Jours supplémentaires selon l'ancienneté — rattaché aux CP uniquement
 create table regles_anciennete (
   id uuid primary key default gen_random_uuid(),
@@ -273,6 +288,7 @@ alter table parametrage_periode enable row level security;
 alter table demi_journees_imposees enable row level security;
 alter table conges_imposes enable row level security;
 alter table regles_acquisition enable row level security;
+alter table objectifs_calendrier enable row level security;
 alter table regles_anciennete enable row level security;
 
 -- ------------------------------------------------------------
@@ -521,6 +537,15 @@ create policy "regles_acquisition: manager et admin modifient"
   using (my_role() in ('manager', 'admin'))
   with check (my_role() in ('manager', 'admin'));
 
+create policy "objectifs_calendrier: lecture par tout utilisateur authentifié"
+  on objectifs_calendrier for select
+  using (auth.role() = 'authenticated');
+
+create policy "objectifs_calendrier: manager et admin modifient"
+  on objectifs_calendrier for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
 create policy "regles_anciennete: lecture par tout utilisateur authentifié"
   on regles_anciennete for select
   using (auth.role() = 'authenticated');
@@ -552,5 +577,6 @@ grant select, insert, update, delete on
   demi_journees_imposees,
   conges_imposes,
   regles_acquisition,
-  regles_anciennete
+  regles_anciennete,
+  objectifs_calendrier
 to authenticated;

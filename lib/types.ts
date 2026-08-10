@@ -123,6 +123,18 @@ export interface RegleAncienneteInput {
   joursSupplementaires: number;
 }
 
+/** Objectifs annuels de volume CPI/DJI — réglage global (pas par année),
+ * consommé par l'écran Calendrier pour les cibles de progression. */
+export interface ObjectifsCalendrier {
+  cibleJoursCpi: number;
+  cibleDemiJourneesDji: number;
+}
+
+export interface ObjectifsCalendrierInput {
+  cibleJoursCpi: number;
+  cibleDemiJourneesDji: number;
+}
+
 // --- Espace Paramétrer > Calendrier (DJ imposées, semaine du 15 août, jours fériés) ---
 
 export type DemiJournee = "matin" | "apres_midi";
@@ -133,6 +145,7 @@ export interface ParametragePeriode {
   semaineAoutImposee: string; // date ISO — lundi de la semaine contenant le 15 août
   nbDemiJourneesCible: number; // valeur de configuration, pas figée en dur (16 par défaut)
   jourSemaineDefaut: number; // ISO : 1=lundi … 5=vendredi … 7=dimanche
+  valideLe: string | null; // date ISO de publication (null = brouillon, non visible par les collaborateurs)
 }
 
 export interface ParametragePeriodeInput {

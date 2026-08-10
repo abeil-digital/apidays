@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type SelectHTMLAttributes,
-} from "react";
-import { Check, ChevronDown, Eye, Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Check, Eye, Pencil, PlusCircle, TriangleAlert, Trash2 } from "lucide-react";
 import type {
   CongeImpose,
   CongeImposeInput,
@@ -20,17 +13,20 @@ import type {
 import { formatDate, formatJourMois, formatJours, nombreJours } from "@/lib/format";
 import { datesDuJourDeLaSemaine, joursFeriesLegaux, lundiSemaineDu15Aout } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
+import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
+import { JourBadge } from "@/components/ui/JourBadge";
 import { ListCard } from "@/components/ui/ListCard";
 import { MiniCalendrier, MOIS_FR, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { Modal } from "@/components/ui/Modal";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { Select } from "@/components/ui/Select";
+import { SelectPille } from "@/components/ui/SelectPille";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 
 const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
@@ -808,10 +804,9 @@ function FormulaireParametrageAnneeAVenir({
 interface ModalCongesImposesProps {
   annee: number;
   congesImposes: CongeImpose[];
-  /** Période à modifier (clic depuis le calendrier) — `null`/absent = création. */
-  congeInitial?: CongeImpose | null;
   joursFeries: JourFerie[];
   djImposees: DjImposee[];
+  cibleJoursCpi: number;
   onAjouter: (input: CongeImposeInput) => Promise<CongeImpose>;
   onSupprimer: (id: string) => Promise<void>;
   onClose: () => void;
@@ -820,6 +815,24 @@ interface ModalCongesImposesProps {
 function moisDeIso(iso: string): { annee: number; moisIndex: number } {
   const [annee, mois] = iso.split("-").map(Number);
   return { annee, moisIndex: mois - 1 };
+}
+
+/** Index de semaine (0-based) d'un jour dans son mois, même logique que le
+ * placement des cellules dans `MiniCalendrier` (semaines de L à V) — pour
+ * cropper l'aperçu ("demi-calendrier") sur la semaine pertinente. */
+function semaineIndexDeJour(iso: string): number {
+  const [annee, mois, jourCible] = iso.split("-").map(Number);
+  let offset = -1;
+  let compte = 0;
+  let index = -1;
+  for (let jour = 1; jour <= jourCible; jour++) {
+    const jourSemaine = new Date(Date.UTC(annee, mois - 1, jour)).getUTCDay();
+    if (jourSemaine === 0 || jourSemaine === 6) continue;
+    if (offset === -1) offset = jourSemaine - 1;
+    compte += 1;
+    index = offset + compte - 1;
+  }
+  return Math.floor(index / 5);
 }
 
 function estJourOuvre(iso: string, joursFeries: JourFerie[]): boolean {
@@ -868,6 +881,25 @@ function congesImposesInclut(congesImposes: CongeImpose[], iso: string): boolean
   return congesImposes.some((c) => iso >= c.debut && iso <= c.fin);
 }
 
+/** Durée en jours (ouvrés, demi-journées de début/fin comprises) d'une
+ * période de congé imposé déjà posée — pour le compteur de volume. */
+function dureeCongeImpose(c: CongeImpose, joursFeries: JourFerie[]): number {
+  const base = joursOuvres(c.debut, c.fin, joursFeries);
+  const ajustDebut = c.demiDebut === "apres_midi" ? 0.5 : 0;
+  const ajustFin = c.demiFin === "matin" ? 0.5 : 0;
+  return base - ajustDebut - ajustFin;
+}
+
+
+/** Couleur de la pastille de volume selon l'avancement vers une cible —
+ * gris = rien posé, orange = entamé, vert = cible atteinte ou dépassée. */
+function classesPastilleVolume(valeur: number, cible: number): string {
+  if (valeur <= 0) return "bg-surface-app text-ink-500";
+  if (valeur > cible) return "bg-status-danger-bg text-status-danger-fg";
+  if (valeur >= cible) return "bg-status-success-bg text-status-success-fg";
+  return "bg-status-warning-bg text-status-warning-fg";
+}
+
 /** Variante DJ de `estJourDesactiveCalendrier` — exclut en plus les jours déjà
  * couverts par une période de congés imposés. */
 function estJourDesactiveDj(
@@ -883,36 +915,40 @@ function estJourDesactiveDj(
 }
 
 /**
- * Popin CPI — DRAFT calqué sur le gabarit de la popin DJI (mode reflexion) :
- * à gauche la colonne "Sélection" (Du/Au empilés verticalement, chacun avec
- * son créneau, un seul bouton Validation) ; à droite (le "cœur") le
- * référentiel des périodes déjà posées, cliquables pour passer en édition +
- * survolables pour un aperçu calendrier en contexte (comme le hover DJI).
- * Deux gabarits de ligne dans la liste : un jour/demi-journée isolé reprend
- * le gabarit DJI (encart jour + date + durée) ; une période affiche deux
- * mini-repères date reliés par "au", suivis de "soit N jours". Contrairement
- * à DJI, la modale ne se ferme plus après un ajout/une modification — seul
- * le bouton Fermer/la croix le fait.
+ * Popin CPI — calquée sur le gabarit de la popin DJI : à gauche la colonne
+ * "Sélection" (Du/Au empilés verticalement, chacun avec son créneau) ; à
+ * droite (le "cœur") le référentiel des périodes déjà posées, survolables
+ * pour un aperçu calendrier en contexte (comme le hover DJI). Deux gabarits
+ * de ligne dans la liste : un jour/demi-journée isolé reprend le gabarit DJI
+ * (encart jour + date + durée) ; une période affiche deux mini-repères date
+ * reliés par "au", suivis de "soit N jours".
+ *
+ * Les DATES d'une période déjà posée ne sont PAS modifiables (décision
+ * produit — changer les dates reviendrait à un delete+recreate silencieux
+ * qu'on ne veut pas exposer comme une "vraie" édition) : les lignes ne sont
+ * plus cliquables pour recharger le formulaire, et le snippet calendrier
+ * (`SnippetConge`) ne propose plus que Supprimer. Le CRÉNEAU (demi-journée)
+ * de chaque ligne reste ajustable directement via son `SelectPille` — même
+ * mécanique delete+recreate en interne, mais gardée comme un simple réglage
+ * de créneau plutôt qu'une édition complète, avec gestion d'erreur.
  */
 function ModalCongesImposes({
-  annee,
   congesImposes,
-  congeInitial,
   joursFeries,
   djImposees,
+  cibleJoursCpi,
   onAjouter,
   onSupprimer,
   onClose,
 }: ModalCongesImposesProps) {
-  const [congeCible, setCongeCible] = useState<CongeImpose | null>(congeInitial ?? null);
-  const [debut, setDebut] = useState(congeInitial?.debut ?? "");
-  const [fin, setFin] = useState(congeInitial?.fin ?? "");
+  const [debut, setDebut] = useState("");
+  const [fin, setFin] = useState("");
   // Gestion demi-journée alignée sur NouvelleDemandeForm : un seul jour →
   // matin/après-midi/journée entière ; une période → seulement "après-midi
   // au premier jour" et "matin au dernier jour" (une période ne commence/finit
   // jamais à moitié dans l'autre sens).
-  const [demiDebut, setDemiDebut] = useState<DemiJournee>(congeInitial?.demiDebut ?? "matin");
-  const [demiFin, setDemiFin] = useState<DemiJournee>(congeInitial?.demiFin ?? "apres_midi");
+  const [demiDebut, setDemiDebut] = useState<DemiJournee>("matin");
+  const [demiFin, setDemiFin] = useState<DemiJournee>("apres_midi");
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [survolConge, setSurvolConge] = useState<{ conge: CongeImpose; ancre: DOMRect } | null>(
@@ -920,20 +956,10 @@ function ModalCongesImposes({
   );
 
   function reinitialiser() {
-    setCongeCible(null);
     setDebut("");
     setFin("");
     setDemiDebut("matin");
     setDemiFin("apres_midi");
-    setErreur("");
-  }
-
-  function selectionnerConge(c: CongeImpose) {
-    setCongeCible(c);
-    setDebut(c.debut);
-    setFin(c.fin);
-    setDemiDebut(c.demiDebut);
-    setDemiFin(c.demiFin);
     setErreur("");
   }
 
@@ -1006,37 +1032,18 @@ function ModalCongesImposes({
     setErreur("");
     setEnvoi(true);
     try {
-      // Pas de fonction de mise à jour côté repository — modifier une période
-      // revient à supprimer l'ancienne puis en recréer une nouvelle avec les
-      // dates saisies.
-      if (congeCible) {
-        await onSupprimer(congeCible.id);
-      }
       await onAjouter({ debut, fin, demiDebut, demiFin });
       reinitialiser();
     } catch {
-      setErreur(
-        congeCible ? "Impossible de modifier cette période." : "Impossible d'ajouter cette période.",
-      );
+      setErreur("Impossible d'ajouter cette période.");
     } finally {
       setEnvoi(false);
     }
   }
 
-  async function handleSupprimer() {
-    if (!congeCible) return;
-    setEnvoi(true);
-    try {
-      await onSupprimer(congeCible.id);
-      reinitialiser();
-    } catch {
-      setErreur("Impossible de supprimer cette période.");
-      setEnvoi(false);
-    }
-  }
-
-  // Changer le créneau d'un jour unique déjà posé, directement depuis la
-  // liste — même logique delete+recreate que la modification complète.
+  // Les dates d'une période posée ne se modifient plus (voir JSDoc plus
+  // haut), mais le créneau (demi-journée) reste ajustable directement depuis
+  // la liste — même logique delete+recreate que DJI, avec gestion d'erreur.
   async function changerDureeUnJour(c: CongeImpose, valeur: DureeDj) {
     setErreur("");
     const [demiDebutNouveau, demiFinNouveau]: [DemiJournee, DemiJournee] =
@@ -1059,7 +1066,7 @@ function ModalCongesImposes({
   }
 
   // Idem pour une période : changer indépendamment le créneau de début ou
-  // de fin, sans toucher à l'autre borne.
+  // de fin, sans toucher à l'autre borne (ni aux dates).
   async function changerDemiDebut(c: CongeImpose, demiDebut: DemiJournee) {
     setErreur("");
     try {
@@ -1092,7 +1099,10 @@ function ModalCongesImposes({
     if (enConge) return { classeFond: "bg-cp" };
     if (dj) {
       return {
-        moitie: { couleur: "var(--color-dji)", cote: dj.demiJournee === "matin" ? "gauche" : "droite" },
+        moitie: {
+          couleur: "var(--color-dji)",
+          cote: dj.demiJournee === "matin" ? "gauche" : "droite",
+        },
       };
     }
     return null;
@@ -1101,12 +1111,21 @@ function ModalCongesImposes({
     return congesImposesInclut(congesImposes, isoA) && congesImposesInclut(congesImposes, isoB);
   }
 
+  const totalJoursCpiModal = congesImposes.reduce(
+    (somme, c) => somme + dureeCongeImpose(c, joursFeries),
+    0,
+  );
+
   return (
     <Modal
       title={
         <span className="flex w-full flex-col items-center gap-1.5">
           <TypeBadge code="CPI" />
-          Congés imposés {annee}
+          <span
+            className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleVolume(totalJoursCpiModal, cibleJoursCpi)}`}
+          >
+            {formatJours(totalJoursCpiModal)}/{cibleJoursCpi} jours
+          </span>
         </span>
       }
       onClose={onClose}
@@ -1118,18 +1137,7 @@ function ModalCongesImposes({
           onSubmit={handleSubmit}
           className="bg-surface-app flex flex-col gap-3 p-3 md:w-64 md:shrink-0"
         >
-          <div className="flex items-center justify-between">
-            <SectionLabel>Sélection</SectionLabel>
-            {congeCible && (
-              <button
-                type="button"
-                onClick={reinitialiser}
-                className="text-ink-500 text-xs font-semibold underline"
-              >
-                Annuler
-              </button>
-            )}
-          </div>
+          <SectionLabel>Sélection</SectionLabel>
 
           <div className="bg-mint-tint flex flex-col gap-3 p-3">
             <div>
@@ -1199,20 +1207,14 @@ function ModalCongesImposes({
           {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
 
           <div className="mt-1 flex items-center gap-3">
-            <Button type="submit" disabled={envoi} className="w-fit rounded-full px-4 py-2.5 text-xs">
+            <Button
+              type="submit"
+              disabled={envoi}
+              className="w-fit rounded-full px-4 py-2.5 text-xs transition-opacity duration-150 enabled:hover:opacity-80"
+            >
               <PlusCircle size={16} />
               Ajouter
             </Button>
-            {congeCible && (
-              <button
-                type="button"
-                onClick={handleSupprimer}
-                disabled={envoi}
-                className="text-status-danger-fg text-xs font-semibold underline"
-              >
-                Supprimer
-              </button>
-            )}
           </div>
         </form>
 
@@ -1226,79 +1228,78 @@ function ModalCongesImposes({
               {congesImposes.map((c, i) => {
                 const unJour = c.debut === c.fin;
                 const bordure = i === congesImposes.length - 1 ? "" : "border-ink-300/60 border-b";
-                const selectionne = congeCible?.id === c.id ? "bg-mint-tint" : "";
                 return (
                   <div
                     key={c.id}
-                    onClick={() => selectionnerConge(c)}
                     onMouseEnter={(e) =>
-                      setSurvolConge({ conge: c, ancre: e.currentTarget.getBoundingClientRect() })
+                      setSurvolConge({
+                        conge: c,
+                        ancre: (
+                          e.currentTarget.parentElement as HTMLElement
+                        ).getBoundingClientRect(),
+                      })
                     }
                     onMouseLeave={() => setSurvolConge(null)}
-                    className={`flex cursor-pointer items-center gap-3 px-5 py-4 ${bordure} ${selectionne}`}
+                    className={`flex items-center gap-3 px-5 py-4 ${bordure}`}
                   >
                     {unJour ? (
                       <>
-                        <div className="bg-surface-app text-ink-900 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
-                          {nomJourSemaine(c.debut).slice(0, 2)}
-                        </div>
+                        <JourBadge>{nomJourSemaine(c.debut).slice(0, 2)}</JourBadge>
                         <div className="w-28 shrink-0">
                           <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
                             {formatJourMoisComplet(c.debut)}
                           </div>
                           <div className="text-ink-500 text-xs">
-                            {c.demiDebut === "matin" && c.demiFin === "apres_midi" ? "1 jour" : "0,5 jour"}
+                            {c.demiDebut === "matin" && c.demiFin === "apres_midi"
+                              ? "1 jour"
+                              : "0,5 jour"}
                           </div>
                         </div>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <SelectPille
-                            value={
-                              c.demiDebut === "matin" && c.demiFin === "apres_midi"
-                                ? "entiere"
-                                : c.demiDebut === "matin"
-                                  ? "matin"
-                                  : "apres_midi"
-                            }
-                            onChange={(e) => changerDureeUnJour(c, e.target.value as DureeDj)}
-                          >
-                            <option value="entiere">Journée</option>
-                            <option value="matin">Matin</option>
-                            <option value="apres_midi">A. midi</option>
-                          </SelectPille>
-                        </div>
+                        <SelectPille
+                          value={
+                            c.demiDebut === "matin" && c.demiFin === "apres_midi"
+                              ? "entiere"
+                              : c.demiDebut === "matin"
+                                ? "matin"
+                                : "apres_midi"
+                          }
+                          onChange={(e) => changerDureeUnJour(c, e.target.value as DureeDj)}
+                        >
+                          <option value="entiere">Journée</option>
+                          <option value="matin">Matin</option>
+                          <option value="apres_midi">A. midi</option>
+                        </SelectPille>
                       </>
                     ) : (
                       // Gros composant période : deux snippets "jour" (Du/Au)
-                      // empilés et reliés par un connecteur vertical, chacun
-                      // avec son propre sélecteur de créneau.
+                      // empilés et reliés par un connecteur vertical — les
+                      // dates ne se modifient pas, seul le créneau de chaque
+                      // borne reste ajustable via son propre SelectPille.
                       <div className="relative flex flex-1 flex-col gap-3 py-1">
                         <div
                           aria-hidden
                           className="bg-ink-300 absolute top-9 bottom-9 left-[18px] w-px"
                         />
                         <div className="flex items-center gap-3">
-                          <div className="bg-surface-app text-ink-900 relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
+                          <JourBadge className="relative z-10">
                             {nomJourSemaine(c.debut).slice(0, 2)}
-                          </div>
+                          </JourBadge>
                           <span className="text-ink-900 w-28 shrink-0 text-sm font-bold whitespace-nowrap">
                             {formatJourMoisComplet(c.debut)}
                           </span>
-                          <div onClick={(e) => e.stopPropagation()} className="ml-auto">
-                            <SelectPille
-                              value={c.demiDebut}
-                              onChange={(e) =>
-                                changerDemiDebut(c, e.target.value as DemiJournee)
-                              }
-                            >
-                              <option value="matin">Journée</option>
-                              <option value="apres_midi">A. midi</option>
-                            </SelectPille>
-                          </div>
+                          <SelectPille
+                            value={c.demiDebut}
+                            onChange={(e) => changerDemiDebut(c, e.target.value as DemiJournee)}
+                            className="ml-auto"
+                          >
+                            <option value="matin">Journée</option>
+                            <option value="apres_midi">A. midi</option>
+                          </SelectPille>
                         </div>
                         <div className="flex items-center gap-3">
-                          <div className="bg-surface-app text-ink-900 relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
+                          <JourBadge className="relative z-10">
                             {nomJourSemaine(c.fin).slice(0, 2)}
-                          </div>
+                          </JourBadge>
                           <div className="w-28 shrink-0">
                             <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
                               {formatJourMoisComplet(c.fin)}
@@ -1307,26 +1308,22 @@ function ModalCongesImposes({
                               {nombreJours(c.debut, c.fin)} jours
                             </div>
                           </div>
-                          <div onClick={(e) => e.stopPropagation()} className="ml-auto">
-                            <SelectPille
-                              value={c.demiFin}
-                              onChange={(e) => changerDemiFin(c, e.target.value as DemiJournee)}
-                            >
-                              <option value="apres_midi">Journée</option>
-                              <option value="matin">Matin</option>
-                            </SelectPille>
-                          </div>
+                          <SelectPille
+                            value={c.demiFin}
+                            onChange={(e) => changerDemiFin(c, e.target.value as DemiJournee)}
+                            className="ml-auto"
+                          >
+                            <option value="apres_midi">Journée</option>
+                            <option value="matin">Matin</option>
+                          </SelectPille>
                         </div>
                       </div>
                     )}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSupprimer(c.id);
-                      }}
+                      onClick={() => onSupprimer(c.id)}
                       aria-label="Supprimer cette période de congés imposés"
-                      className="text-status-danger-fg ml-auto shrink-0"
+                      className="text-status-danger-fg ml-auto shrink-0 transition-transform duration-150 hover:scale-125"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -1338,25 +1335,35 @@ function ModalCongesImposes({
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        <Button type="button" onClick={onClose} className="w-fit rounded-full px-6 py-2.5 text-xs">
-          Fermer
-        </Button>
-      </div>
-
       {survolConge &&
         (() => {
           const { conge, ancre } = survolConge;
           const debutMois = moisDeIso(conge.debut);
           const finMois = moisDeIso(conge.fin);
-          const mois =
-            debutMois.annee === finMois.annee && debutMois.moisIndex === finMois.moisIndex
-              ? [debutMois]
-              : [debutMois, finMois];
+          const memesMois =
+            debutMois.annee === finMois.annee && debutMois.moisIndex === finMois.moisIndex;
+          // Période à cheval sur deux mois → "demi-calendrier" : le mois de
+          // début n'affiche que ses semaines à partir de la période, le mois
+          // de fin que ses semaines jusqu'à la période (MiniCalendrier garde
+          // toujours l'en-tête jours de la semaine).
+          const mois = memesMois
+            ? [{ ...debutMois, premiereSemaine: undefined, derniereSemaine: undefined }]
+            : [
+                {
+                  ...debutMois,
+                  premiereSemaine: semaineIndexDeJour(conge.debut),
+                  derniereSemaine: undefined,
+                },
+                {
+                  ...finMois,
+                  premiereSemaine: undefined,
+                  derniereSemaine: semaineIndexDeJour(conge.fin),
+                },
+              ];
           return (
             <div
-              style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
-              className="bg-surface-card pointer-events-none z-30 flex flex-wrap gap-3 rounded-xl p-3 shadow-lg"
+              style={{ position: "fixed", top: ancre.top, left: ancre.right + 12 }}
+              className="pointer-events-none z-30 flex flex-col gap-3"
             >
               {mois.map((m) => (
                 <MiniCalendrier
@@ -1365,6 +1372,8 @@ function ModalCongesImposes({
                   moisIndex={m.moisIndex}
                   tipoDuJour={tipoApercuSurvol}
                   estEnGroupe={estEnGroupeApercuSurvol}
+                  premiereSemaine={m.premiereSemaine}
+                  derniereSemaine={m.derniereSemaine}
                 />
               ))}
             </div>
@@ -1377,18 +1386,18 @@ function ModalCongesImposes({
 interface SnippetCongeProps {
   conge: CongeImpose;
   ancre: DOMRect;
-  onEditer: () => void;
   onSupprimer: () => Promise<void>;
   onFermer: () => void;
 }
 
 /**
  * Petit popover positionné juste sous la période cliquée sur le calendrier
- * (via `ancre`, le `DOMRect` du jour/segment cliqué) — deux actions : Modifier
- * (ouvre la popin d'édition) et Supprimer (bascule sur une confirmation
- * inline avant d'agir, avec gestion d'erreur).
+ * (via `ancre`, le `DOMRect` du jour/segment cliqué) — suppression uniquement
+ * (bascule sur une confirmation inline avant d'agir, avec gestion d'erreur) :
+ * une période de congés imposés déjà posée ne se modifie pas, seulement
+ * supprimer puis reposer si besoin.
  */
-function SnippetConge({ conge, ancre, onEditer, onSupprimer, onFermer }: SnippetCongeProps) {
+function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps) {
   const [confirmation, setConfirmation] = useState(false);
   const [suppression, setSuppression] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -1448,22 +1457,13 @@ function SnippetConge({ conge, ancre, onEditer, onSupprimer, onFermer }: Snippet
           </div>
         </div>
       ) : (
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={onEditer}
-            className="text-ink-900 text-xs font-semibold underline"
-          >
-            Modifier
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmation(true)}
-            className="text-status-danger-fg text-xs font-semibold underline"
-          >
-            Supprimer
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setConfirmation(true)}
+          className="text-status-danger-fg w-fit text-xs font-semibold underline"
+        >
+          Supprimer
+        </button>
       )}
     </div>
   );
@@ -1471,34 +1471,12 @@ function SnippetConge({ conge, ancre, onEditer, onSupprimer, onFermer }: Snippet
 
 type DureeDj = "matin" | "apres_midi" | "entiere";
 
-/** Select stylé en pilule (fond + coins arrondis complets, chevron bas) —
- * utilisé pour les sélecteurs de créneau DJI et CPI. */
-function SelectPille(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  const { className, disabled, ...rest } = props;
-  const couleur = disabled ? "border-ink-300 text-ink-500" : "border-mint text-ink-900";
-  const couleurChevron = disabled ? "text-ink-500" : "text-mint";
-  return (
-    <div className="relative inline-block">
-      <select
-        disabled={disabled}
-        {...rest}
-        className={`bg-surface-card appearance-none rounded-full border py-1 pr-6 pl-3 text-xs ${couleur} ${className ?? ""}`}
-      />
-      <ChevronDown
-        size={12}
-        className={`pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 ${couleurChevron}`}
-      />
-    </div>
-  );
-}
-
-const OBJECTIF_DJ = 16;
-
 interface ModalDjImposeesProps {
   annee: number;
   djImposees: DjImposee[];
   joursFeries: JourFerie[];
   congesImposes: CongeImpose[];
+  cibleDemiJourneesDji: number;
   onAjouter: (input: DjImposeeInput) => Promise<DjImposee>;
   onSupprimer: (id: string) => Promise<void>;
   onClose: () => void;
@@ -1517,6 +1495,7 @@ function ModalDjImposees({
   djImposees,
   joursFeries,
   congesImposes,
+  cibleDemiJourneesDji,
   onAjouter,
   onSupprimer,
   onClose,
@@ -1528,6 +1507,14 @@ function ModalDjImposees({
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
   const [survolDj, setSurvolDj] = useState<{ dj: DjImposee; ancre: DOMRect } | null>(null);
+  // Retour visuel après un ajout — flash mint qui s'estompe, pour que
+  // l'admin retrouve la ligne qu'il vient de cocher sur une liste longue.
+  const [dateFlash, setDateFlash] = useState<string | null>(null);
+  useEffect(() => {
+    if (!dateFlash) return;
+    const timer = setTimeout(() => setDateFlash(null), 1200);
+    return () => clearTimeout(timer);
+  }, [dateFlash]);
 
   const vendredis = useMemo(() => datesDuJourDeLaSemaine(annee, 5), [annee]);
   const datesAjoutees = new Set(djImposees.map((dj) => dj.date));
@@ -1571,6 +1558,7 @@ function ModalDjImposees({
       }
       setDateAutre("");
       setCreneauAutre("apres_midi");
+      setDateFlash(date);
     } catch {
       setErreur("Impossible d'ajouter cette demi-journée.");
     } finally {
@@ -1580,15 +1568,36 @@ function ModalDjImposees({
 
   // Pas de fonction de mise à jour côté repository — changer le créneau d'une
   // DJI déjà posée revient à la supprimer puis en recréer une avec le nouveau
-  // créneau (même logique que la modification d'un CPI).
-  async function changerCreneau(dj: DjImposee, demiJournee: DemiJournee) {
+  // créneau (même logique que la modification d'un CPI). Choisir "Journée"
+  // complète la demi-journée manquante plutôt que de remplacer celle-ci (les
+  // deux demi-journées du jour restent deux lignes distinctes dans la liste).
+  async function changerCreneau(dj: DjImposee, valeur: DureeDj) {
     setErreur("");
     setEnvoi(true);
     try {
-      await onSupprimer(dj.id);
-      await onAjouter({ date: dj.date, demiJournee });
+      if (valeur === "entiere") {
+        const autre: DemiJournee = dj.demiJournee === "matin" ? "apres_midi" : "matin";
+        const existeDeja = djImposees.some((d) => d.date === dj.date && d.demiJournee === autre);
+        if (!existeDeja) await onAjouter({ date: dj.date, demiJournee: autre });
+      } else if (valeur !== dj.demiJournee) {
+        await onSupprimer(dj.id);
+        await onAjouter({ date: dj.date, demiJournee: valeur });
+      }
     } catch {
       setErreur("Impossible de modifier ce créneau.");
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  async function supprimerDate(date: string) {
+    setErreur("");
+    setEnvoi(true);
+    try {
+      const aSupprimer = djImposees.filter((dj) => dj.date === date);
+      await Promise.all(aSupprimer.map((dj) => onSupprimer(dj.id)));
+    } catch {
+      setErreur("Impossible de supprimer cette demi-journée.");
     } finally {
       setEnvoi(false);
     }
@@ -1655,55 +1664,82 @@ function ModalDjImposees({
                 const estCpi = congesImposesInclut(congesImposes, date);
                 const desactive = !ajoute && (estFerie || estCpi);
                 const bordure = i === vendredis.length - 1 ? "" : "border-ink-300/60 border-b";
+                const moisCourant = new Date(`${date}T00:00:00Z`).getUTCMonth();
+                const nouveauMois =
+                  i === 0 ||
+                  new Date(`${vendredis[i - 1]}T00:00:00Z`).getUTCMonth() !== moisCourant;
                 return (
-                  <div
-                    key={date}
-                    className={`flex items-center justify-between px-4 py-2.5 text-sm ${bordure}`}
-                  >
-                    <span
-                      className={`text-xs ${ajoute || desactive ? "text-ink-500" : "text-ink-900"}`}
-                    >
-                      <span className="font-bold">
-                        {new Date(`${date}T00:00:00Z`).getUTCDate()}
-                      </span>{" "}
-                      {new Intl.DateTimeFormat("fr-FR", { month: "long", timeZone: "UTC" }).format(
-                        new Date(`${date}T00:00:00Z`),
-                      )}
-                    </span>
-                    {desactive ? (
-                      <TypeBadge code={estFerie ? "FERIE" : "CPI"} variant="pill" />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <SelectPille
-                          value={ajoute ? valeurAjoutee : (creneauxParDate[date] ?? "apres_midi")}
-                          disabled={ajoute}
-                          onChange={(e) =>
-                            setCreneauxParDate((prev) => ({
-                              ...prev,
-                              [date]: e.target.value as DureeDj,
-                            }))
-                          }
-                        >
-                          <option value="matin">Matin</option>
-                          <option value="apres_midi">A. midi</option>
-                          <option value="entiere">Journée</option>
-                        </SelectPille>
-                        {ajoute ? (
-                          <Check size={18} className="text-mint shrink-0" />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => ajouterDate(date, creneauxParDate[date] ?? "apres_midi")}
-                            disabled={envoi}
-                            aria-label="Ajouter cette demi-journée"
-                            className="text-mint shrink-0"
-                          >
-                            <PlusCircle size={18} />
-                          </button>
-                        )}
+                  <Fragment key={date}>
+                    {nouveauMois && (
+                      <div className="bg-surface-app text-ink-500 px-4 py-1 text-xs font-semibold">
+                        {MOIS_FR[moisCourant]}
                       </div>
                     )}
-                  </div>
+                    <div
+                      className={`flex items-center justify-between px-4 py-2.5 text-sm transition-colors duration-700 ${bordure} ${
+                        dateFlash === date ? "bg-mint-tint" : ""
+                      }`}
+                    >
+                      <span
+                        className={`text-xs ${ajoute || desactive ? "text-ink-500" : "text-ink-900"}`}
+                      >
+                        <span className="font-bold">
+                          {new Date(`${date}T00:00:00Z`).getUTCDate()}
+                        </span>{" "}
+                        {new Intl.DateTimeFormat("fr-FR", {
+                          month: "long",
+                          timeZone: "UTC",
+                        }).format(new Date(`${date}T00:00:00Z`))}
+                      </span>
+                      {desactive ? (
+                        <TypeBadge code={estFerie ? "FERIE" : "CPI"} variant="pill" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <SelectPille
+                            value={ajoute ? valeurAjoutee : (creneauxParDate[date] ?? "apres_midi")}
+                            disabled={ajoute}
+                            onChange={(e) =>
+                              setCreneauxParDate((prev) => ({
+                                ...prev,
+                                [date]: e.target.value as DureeDj,
+                              }))
+                            }
+                          >
+                            <option value="matin">Matin</option>
+                            <option value="apres_midi">A. midi</option>
+                            <option value="entiere">Journée</option>
+                          </SelectPille>
+                          {ajoute ? (
+                            <button
+                              type="button"
+                              onClick={() => supprimerDate(date)}
+                              disabled={envoi}
+                              aria-label="Supprimer cette demi-journée"
+                              className="group/dj relative size-[18px] shrink-0"
+                            >
+                              <Check size={18} className="text-mint block group-hover/dj:hidden" />
+                              <Trash2
+                                size={18}
+                                className="text-status-danger-fg hidden group-hover/dj:block"
+                              />
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                ajouterDate(date, creneauxParDate[date] ?? "apres_midi")
+                              }
+                              disabled={envoi}
+                              aria-label="Ajouter cette demi-journée"
+                              className="text-mint shrink-0 transition-transform duration-150 hover:scale-125"
+                            >
+                              <PlusCircle size={18} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -1734,7 +1770,7 @@ function ModalDjImposees({
                 type="button"
                 disabled={!dateAutre || envoi}
                 onClick={() => ajouterDate(dateAutre, creneauAutre)}
-                className="w-fit rounded-full px-4 py-2.5 text-xs"
+                className="w-fit rounded-full px-4 py-2.5 text-xs transition-opacity duration-150 enabled:hover:opacity-80"
               >
                 Ajouter
               </Button>
@@ -1744,63 +1780,67 @@ function ModalDjImposees({
         </div>
 
         <div className="flex flex-col gap-3 md:w-80 md:shrink-0">
-          <SectionLabel>
-            Demi-journées imposées ({djImposees.length}/{OBJECTIF_DJ})
-          </SectionLabel>
+          <span
+            className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleVolume(djImposees.length, cibleDemiJourneesDji)}`}
+          >
+            {djImposees.length}/{cibleDemiJourneesDji} demi-journées
+          </span>
           {djImposees.length === 0 ? (
             <EmptyRow text="Aucune demi-journée imposée pour cette année." />
           ) : (
             <div className="rounded-card bg-surface-card max-h-96 overflow-y-auto">
-              {djImposees.map((dj, i) => (
-                <div
-                  key={dj.id}
-                  onMouseEnter={(e) =>
-                    setSurvolDj({
-                      dj,
-                      ancre: (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(),
-                    })
-                  }
-                  onMouseLeave={() => setSurvolDj(null)}
-                  className={`flex items-center gap-4 px-5 py-4 ${
-                    i === djImposees.length - 1 ? "" : "border-ink-300/60 border-b"
-                  }`}
-                >
-                  <div className="bg-surface-app text-ink-900 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold">
-                    {nomJourSemaine(dj.date).slice(0, 2)}
-                  </div>
-                  <div className="w-28 shrink-0">
-                    <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
-                      {formatJourMoisComplet(dj.date)}
+              {djImposees.map((dj, i) => {
+                const creneauxMemeDate = new Set(
+                  djImposees.filter((d) => d.date === dj.date).map((d) => d.demiJournee),
+                );
+                const valeurSelect: DureeDj =
+                  creneauxMemeDate.has("matin") && creneauxMemeDate.has("apres_midi")
+                    ? "entiere"
+                    : dj.demiJournee;
+                return (
+                  <div
+                    key={dj.id}
+                    onMouseEnter={(e) =>
+                      setSurvolDj({
+                        dj,
+                        ancre: (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(),
+                      })
+                    }
+                    onMouseLeave={() => setSurvolDj(null)}
+                    className={`flex items-center gap-4 px-5 py-4 ${
+                      i === djImposees.length - 1 ? "" : "border-ink-300/60 border-b"
+                    }`}
+                  >
+                    <JourBadge>{nomJourSemaine(dj.date).slice(0, 2)}</JourBadge>
+                    <div className="w-28 shrink-0">
+                      <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
+                        {formatJourMoisComplet(dj.date)}
+                      </div>
+                      <div className="text-ink-500 text-xs">0,5 jour</div>
                     </div>
-                    <div className="text-ink-500 text-xs">0,5 jour</div>
+                    <SelectPille
+                      value={valeurSelect}
+                      disabled={envoi}
+                      onChange={(e) => changerCreneau(dj, e.target.value as DureeDj)}
+                    >
+                      <option value="matin">Matin</option>
+                      <option value="apres_midi">A. midi</option>
+                      <option value="entiere">Journée</option>
+                    </SelectPille>
+                    <button
+                      type="button"
+                      onClick={() => onSupprimer(dj.id)}
+                      aria-label="Supprimer cette demi-journée imposée"
+                      className="text-status-danger-fg ml-auto shrink-0 transition-transform duration-150 hover:scale-125"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
-                  <SelectPille
-                    value={dj.demiJournee}
-                    disabled={envoi}
-                    onChange={(e) => changerCreneau(dj, e.target.value as DemiJournee)}
-                  >
-                    <option value="matin">Matin</option>
-                    <option value="apres_midi">A. midi</option>
-                  </SelectPille>
-                  <button
-                    type="button"
-                    onClick={() => onSupprimer(dj.id)}
-                    aria-label="Supprimer cette demi-journée imposée"
-                    className="text-status-danger-fg ml-auto shrink-0"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <Button type="button" onClick={onClose} className="w-fit rounded-full px-6 py-2.5 text-xs">
-          Validation
-        </Button>
       </div>
 
       {survolDj &&
@@ -1981,7 +2021,7 @@ function ModalJoursFeries({
       <div className="flex flex-col gap-3">
         <div className="bg-mint-tint flex items-center gap-4 p-3 text-sm">
           <span className="text-ink-900 font-semibold">Lundi de Pentecôte</span>
-          <label className="flex items-center gap-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 has-[:disabled]:cursor-not-allowed">
             <input
               type="radio"
               name="pentecote"
@@ -1991,7 +2031,7 @@ function ModalJoursFeries({
             />
             <span className="text-ink-900">Travaillé</span>
           </label>
-          <label className="flex items-center gap-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 has-[:disabled]:cursor-not-allowed">
             <input
               type="radio"
               name="pentecote"
@@ -2002,6 +2042,15 @@ function ModalJoursFeries({
             <span className="text-ink-900">Férié</span>
           </label>
         </div>
+        <span
+          className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
+            joursFeries.length > 0
+              ? "bg-status-success-bg text-status-success-fg"
+              : "bg-surface-app text-ink-500"
+          }`}
+        >
+          {joursFeries.length} {joursFeries.length === 1 ? "jour" : "jours"}
+        </span>
         {erreur && <p className="text-status-danger-fg px-1 text-xs">{erreur}</p>}
 
         {joursFeries.length === 0 ? (
@@ -2029,13 +2078,7 @@ function ModalJoursFeries({
                     i === referentiel.length - 1 ? "" : "border-ink-300/60 border-b"
                   }`}
                 >
-                  <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold ${
-                      neutralise ? "bg-surface-app text-ink-500" : "bg-surface-app text-ink-900"
-                    }`}
-                  >
-                    {nomJourSemaine(f.date).slice(0, 2)}
-                  </div>
+                  <JourBadge muted={neutralise}>{nomJourSemaine(f.date).slice(0, 2)}</JourBadge>
                   <div className="w-28 shrink-0">
                     <div
                       className={`text-sm font-bold whitespace-nowrap ${
@@ -2056,12 +2099,6 @@ function ModalJoursFeries({
             })}
           </div>
         )}
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <Button type="button" onClick={onClose} className="w-fit rounded-full px-6 py-2.5 text-xs">
-          Fermer
-        </Button>
       </div>
     </Modal>
   );
@@ -2100,9 +2137,41 @@ function SnippetFerie({ ferie, ancre, onFermer }: SnippetFerieProps) {
 }
 
 function VueCalendrierGrille({ annee }: { annee: number }) {
+  const estAnneeLive = annee === new Date().getFullYear();
   const calendrier = useCalendrier(annee);
+  const { objectifs } = useObjectifsCalendrier();
+
+  // Compteurs de volume affichés sur les cartes légende — pas de cible ni de
+  // jauge, juste ce qui est déjà posé, pour un état "en un coup d'œil".
+  const totalJoursCpi = useMemo(
+    () =>
+      calendrier.congesImposes.reduce(
+        (somme, c) => somme + dureeCongeImpose(c, calendrier.joursFeries),
+        0,
+      ),
+    [calendrier.congesImposes, calendrier.joursFeries],
+  );
+  const totalDemiJourneesDji = calendrier.djImposees.length;
+  const totalJoursFeries = calendrier.joursFeries.length;
+  // Cibles CPI/DJI : réglage global (Congés & RTT), pas de variation par
+  // année. `parametrage_periode.nb_demi_journees_cible` n'est PAS utilisé ici
+  // — cette colonne est `not null default 16`, donc toujours renseignée dès
+  // qu'une année a été touchée une seule fois, ce qui masquerait en
+  // permanence toute mise à jour du réglage global (bug constaté : changer
+  // la cible DJI dans Congés & RTT n'avait aucun effet sur le Calendrier).
+  const cibleJoursCpi = objectifs?.cibleJoursCpi ?? 5;
+  const cibleDemiJourneesDji = objectifs?.cibleDemiJourneesDji ?? 16;
+  const classesPastilleCpi = classesPastilleVolume(totalJoursCpi, cibleJoursCpi);
+  const classesPastilleDji = classesPastilleVolume(totalDemiJourneesDji, cibleDemiJourneesDji);
+  const classesPastilleFeries =
+    totalJoursFeries > 0
+      ? "bg-status-success-bg text-status-success-fg"
+      : "bg-surface-app text-ink-500";
+  const pretAPublier =
+    totalJoursCpi === cibleJoursCpi &&
+    totalDemiJourneesDji === cibleDemiJourneesDji &&
+    totalJoursFeries > 0;
   const [modalCongesOuvert, setModalCongesOuvert] = useState(false);
-  const [congeAModifier, setCongeAModifier] = useState<CongeImpose | null>(null);
   const [snippetConge, setSnippetConge] = useState<{ conge: CongeImpose; ancre: DOMRect } | null>(
     null,
   );
@@ -2112,6 +2181,32 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
   const [snippetFerie, setSnippetFerie] = useState<{ ferie: JourFerie; ancre: DOMRect } | null>(
     null,
   );
+  const [publicationEnCours, setPublicationEnCours] = useState(false);
+  const [erreurPublication, setErreurPublication] = useState("");
+
+  async function handlePublier() {
+    setErreurPublication("");
+    setPublicationEnCours(true);
+    try {
+      await calendrier.publierParametrage();
+    } catch {
+      setErreurPublication("Impossible de publier le paramétrage.");
+    } finally {
+      setPublicationEnCours(false);
+    }
+  }
+
+  async function handleDepublier() {
+    setErreurPublication("");
+    setPublicationEnCours(true);
+    try {
+      await calendrier.depublierParametrage();
+    } catch {
+      setErreurPublication("Impossible d'annuler la publication.");
+    } finally {
+      setPublicationEnCours(false);
+    }
+  }
 
   if (calendrier.loading) {
     return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
@@ -2201,57 +2296,124 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
         ))}
       </div>
 
-      <div className="flex w-full flex-col gap-3 md:w-52 md:shrink-0">
+      <div className="flex w-full flex-col gap-3 md:w-64 md:shrink-0">
         <button
           type="button"
-          onClick={() => {
-            setCongeAModifier(null);
-            setModalCongesOuvert(true);
-          }}
-          className="bg-surface-card group flex items-center gap-2.5 rounded-xl p-4 text-left shadow-sm"
+          onClick={() => setModalCongesOuvert(true)}
+          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
         >
           <TypeBadge code="CPI" />
-          <span className="text-ink-900 flex-1 text-sm">Congés imposés</span>
-          <PlusCircle
-            size={18}
-            className="text-mint shrink-0 transition-transform duration-150 group-hover:scale-125"
-          />
+          <div className="flex flex-1 flex-col">
+            <span className="text-ink-900 text-sm">Congés imposés</span>
+            <span
+              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleCpi}`}
+            >
+              {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
+            </span>
+          </div>
+          {estAnneeLive ? (
+            <Eye
+              size={18}
+              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+            />
+          ) : (
+            <PlusCircle
+              size={18}
+              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+            />
+          )}
         </button>
         <button
           type="button"
           onClick={() => setModalDjOuvert(true)}
-          className="bg-surface-card group flex items-center gap-2.5 rounded-xl p-4 text-left shadow-sm"
+          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
         >
           <TypeBadge code="DJI" />
-          <span className="text-ink-900 flex-1 text-sm">Demi-journée imposée</span>
-          <PlusCircle
-            size={18}
-            className="text-mint shrink-0 transition-transform duration-150 group-hover:scale-125"
-          />
+          <div className="flex flex-1 flex-col">
+            <span className="text-ink-900 text-sm">Demi-journées imposées</span>
+            <span
+              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleDji}`}
+            >
+              {totalDemiJourneesDji} {totalDemiJourneesDji === 1 ? "demi-journée" : "demi-journées"}
+            </span>
+          </div>
+          {estAnneeLive ? (
+            <Eye
+              size={18}
+              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+            />
+          ) : (
+            <PlusCircle
+              size={18}
+              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+            />
+          )}
         </button>
         <button
           type="button"
           onClick={() => setModalFeriesOuvert(true)}
-          className="bg-surface-card group flex items-center gap-2.5 rounded-xl p-4 text-left shadow-sm"
+          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
         >
           <TypeBadge code="FERIE" />
-          <span className="text-ink-900 flex-1 text-sm">Jour férié</span>
+          <div className="flex flex-1 flex-col">
+            <span className="text-ink-900 text-sm">Jours fériés</span>
+            <span
+              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleFeries}`}
+            >
+              {totalJoursFeries} {totalJoursFeries === 1 ? "jour" : "jours"}
+            </span>
+          </div>
           <Eye
             size={18}
-            className="text-mint shrink-0 transition-transform duration-150 group-hover:scale-125"
+            className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
           />
         </button>
+
+        {!estAnneeLive &&
+          (calendrier.parametrage?.valideLe ? (
+            <div className="flex flex-col gap-1 px-1">
+              <p className="text-ink-500 text-sm">
+                Publié le {formatDate(calendrier.parametrage.valideLe.slice(0, 10))} — visible par
+                les collaborateurs
+              </p>
+              <button
+                type="button"
+                onClick={handleDepublier}
+                disabled={publicationEnCours}
+                className="text-ink-500 w-fit text-xs underline underline-offset-2 disabled:opacity-60"
+              >
+                {publicationEnCours ? "Annulation…" : "Annuler la publication"}
+              </button>
+              {erreurPublication && (
+                <p className="text-status-danger-fg text-xs">{erreurPublication}</p>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-ink-500 px-1 text-sm">
+                <span className="bg-status-warning-bg text-status-warning-fg px-1">Brouillon</span>{" "}
+                ce calendrier n&rsquo;est pas visible par les collaborateurs
+              </p>
+              <Button
+                type="button"
+                variant={pretAPublier ? "primary" : "secondary"}
+                onClick={handlePublier}
+                disabled={publicationEnCours || !pretAPublier}
+                className="rounded-card w-full px-4 py-2.5"
+              >
+                {publicationEnCours ? "Publication…" : "Publier"}
+              </Button>
+              {erreurPublication && (
+                <p className="text-status-danger-fg text-xs">{erreurPublication}</p>
+              )}
+            </div>
+          ))}
       </div>
 
       {snippetConge && (
         <SnippetConge
           conge={snippetConge.conge}
           ancre={snippetConge.ancre}
-          onEditer={() => {
-            setCongeAModifier(snippetConge.conge);
-            setModalCongesOuvert(true);
-            setSnippetConge(null);
-          }}
           onSupprimer={async () => {
             await calendrier.supprimerConge(snippetConge.conge.id);
             setSnippetConge(null);
@@ -2262,12 +2424,11 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
 
       {modalCongesOuvert && (
         <ModalCongesImposes
-          key={congeAModifier?.id ?? "nouveau"}
           annee={annee}
           congesImposes={calendrier.congesImposes}
-          congeInitial={congeAModifier}
           joursFeries={calendrier.joursFeries}
           djImposees={calendrier.djImposees}
+          cibleJoursCpi={cibleJoursCpi}
           onAjouter={calendrier.ajouterConge}
           onSupprimer={calendrier.supprimerConge}
           onClose={() => setModalCongesOuvert(false)}
@@ -2300,6 +2461,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
           djImposees={calendrier.djImposees}
           joursFeries={calendrier.joursFeries}
           congesImposes={calendrier.congesImposes}
+          cibleDemiJourneesDji={cibleDemiJourneesDji}
           onAjouter={calendrier.ajouterDj}
           onSupprimer={calendrier.supprimerDj}
           onClose={() => setModalDjOuvert(false)}
@@ -2375,12 +2537,46 @@ export function CalendrierPage() {
  */
 export function Calendrier2Page() {
   const anneeEnCours = new Date().getFullYear();
+  const anneeAVenir = anneeEnCours + 1;
+  const [annee, setAnnee] = useState(anneeEnCours);
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold">Calendrier 2 (scénarisation)</h1>
 
-      <VueCalendrierGrille annee={anneeEnCours} />
+      <div className="flex gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setAnnee(anneeEnCours)}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            annee === anneeEnCours
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeEnCours}
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnnee(anneeAVenir)}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            annee === anneeAVenir
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeAVenir} - Brouillon
+        </button>
+      </div>
+
+      {new Date().getMonth() === 11 && (
+        <div className="bg-status-warning-bg text-status-warning-fg rounded-control flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
+          <TriangleAlert size={18} className="shrink-0" />
+          {`Pensez à paramétrer les jours imposés de ${anneeAVenir} avant la fin de l’année.`}
+        </div>
+      )}
+
+      <VueCalendrierGrille key={annee} annee={annee} />
     </div>
   );
 }

@@ -26,10 +26,11 @@ interface ParametragePeriodeRow {
   semaine_aout_imposee: string;
   nb_demi_journees_cible: number;
   jour_semaine_defaut: number;
+  valide_le: string | null;
 }
 
 const SELECT_PARAMETRAGE_PERIODE =
-  "id, annee, semaine_aout_imposee, nb_demi_journees_cible, jour_semaine_defaut";
+  "id, annee, semaine_aout_imposee, nb_demi_journees_cible, jour_semaine_defaut, valide_le";
 
 function mapParametragePeriodeDepuisDb(row: ParametragePeriodeRow): ParametragePeriode {
   return {
@@ -38,6 +39,7 @@ function mapParametragePeriodeDepuisDb(row: ParametragePeriodeRow): ParametrageP
     semaineAoutImposee: row.semaine_aout_imposee,
     nbDemiJourneesCible: row.nb_demi_journees_cible,
     jourSemaineDefaut: row.jour_semaine_defaut,
+    valideLe: row.valide_le,
   };
 }
 
@@ -81,6 +83,42 @@ export async function enregistrerParametragePeriode(
 
   if (error || !data) {
     throw new Error("Impossible d'enregistrer le paramétrage de l'année.");
+  }
+
+  return mapParametragePeriodeDepuisDb(data);
+}
+
+/** Publie le paramétrage de l'année — le rend visible par les collaborateurs. */
+export async function publierParametragePeriode(id: string): Promise<ParametragePeriode> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("parametrage_periode")
+    .update({ valide_le: new Date().toISOString() })
+    .eq("id", id)
+    .select(SELECT_PARAMETRAGE_PERIODE)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible de publier le paramétrage de l'année.");
+  }
+
+  return mapParametragePeriodeDepuisDb(data);
+}
+
+/** Annule la publication du paramétrage de l'année — repasse en brouillon. */
+export async function depublierParametragePeriode(id: string): Promise<ParametragePeriode> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("parametrage_periode")
+    .update({ valide_le: null })
+    .eq("id", id)
+    .select(SELECT_PARAMETRAGE_PERIODE)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible d'annuler la publication du paramétrage de l'année.");
   }
 
   return mapParametragePeriodeDepuisDb(data);

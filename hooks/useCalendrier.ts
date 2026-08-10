@@ -19,8 +19,10 @@ import {
   fetchCongesImposes,
   fetchDjImposees,
   fetchJoursFeries,
+  depublierParametragePeriode,
   fetchParametragePeriode,
   preRemplirJoursFeriesLegaux,
+  publierParametragePeriode,
   remplacerDjImposees,
   supprimerCongeImpose,
   supprimerDjImposee,
@@ -46,6 +48,8 @@ interface UseCalendrierResult {
   preRemplirFeries: () => Promise<JourFerie[]>;
   ajouterConge: (input: CongeImposeInput) => Promise<CongeImpose>;
   supprimerConge: (id: string) => Promise<void>;
+  publierParametrage: () => Promise<ParametragePeriode>;
+  depublierParametrage: () => Promise<ParametragePeriode>;
 }
 
 /** Charge et pilote le calendrier (paramétrage, DJ imposées, jours fériés) d'une année donnée. */
@@ -158,6 +162,20 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     setCongesImposes((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  const publierParametrageAction = useCallback(async () => {
+    const p = await assurerParametrage();
+    const publie = await publierParametragePeriode(p.id);
+    setParametrage(publie);
+    return publie;
+  }, [assurerParametrage]);
+
+  const depublierParametrageAction = useCallback(async () => {
+    if (!parametrage) throw new Error("Aucun paramétrage à dépublier.");
+    const brouillon = await depublierParametragePeriode(parametrage.id);
+    setParametrage(brouillon);
+    return brouillon;
+  }, [parametrage]);
+
   return {
     parametrage,
     djImposees,
@@ -173,5 +191,7 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     preRemplirFeries,
     ajouterConge,
     supprimerConge,
+    publierParametrage: publierParametrageAction,
+    depublierParametrage: depublierParametrageAction,
   };
 }

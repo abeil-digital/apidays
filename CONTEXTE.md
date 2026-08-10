@@ -265,6 +265,100 @@ shadow-sm`, style `SoldeCard`) remplaçant la liste `ListCard` initiale — jour
     `.env.local`), `supabase/schema.sql` mis à jour en conséquence. `CongeImpose`/`CongeImposeInput`
     (`lib/types.ts`) et `calendrier.repository.ts` étendus. Vérifié en base réelle (ajout à la
     demi-journée, persistance après rechargement complet, changement de créneau depuis la liste).
+- **CPI non modifiable une fois posé (08/08/2026)** : décision produit — les DATES d'une période
+  déjà créée ne sont plus éditables (plus de clic-pour-charger-en-édition, plus de bouton
+  "Modifier" dans `SnippetConge`/`ModalCongesImposes` ; seule action restante sur une ligne :
+  Supprimer). Le CRÉNEAU (demi-journée) reste ajustable directement via son `SelectPille` dans la
+  liste (delete+recreate en interne, avec gestion d'erreur) — c'est la seule édition encore permise.
+- **Promotion DS + documentation `/design-system` (09/08/2026)** : `SelectPille` et `JourBadge`
+  promus de code local à `components/ui/` (import réel dans la page DS, jamais recréé
+  visuellement). Nouvelles sections DS : popins référentielles DJI/CPI/Fériés, transitions, états
+  hover.
+- **Onglets année + compteurs de volume + publication (10/08/2026), `Calendrier2Page`/
+  `VueCalendrierGrille`** :
+  - Deux onglets année sur `/parametrer/calendrier2` : année en cours (icône `Eye` sur ses cartes
+    légende, plus de `+` — cohérent avec "déjà live") et année N+1 "Brouillon" (icône `+`, cartes
+    éditables).
+  - `datesDuJourDeLaSemaine` (`lib/joursFeries.ts`) exclut désormais les jours fériés légaux — un
+    1er janvier tombant un vendredi n'est plus proposé/coché par défaut comme DJI (bug trouvé en
+    testant le paramétrage 2027, où le 1/01/2027 est un vendredi).
+  - Cartes légende CPI/DJI/Fériés : compteur de volume posé (pas de cible/jauge, juste ce qui existe
+    — `X jours`/`X demi-journées`/`X jours`, en toutes lettres, pastille `bg-surface-app` sous le
+    libellé).
+  - Colonne `parametrage_periode.valide_le` (timestamptz, nullable — migration manuelle en base
+    réelle comme d'habitude) : `null` = brouillon, une date = publié. Bouton "Publier" (visible
+    uniquement sur l'année non live, quand pas encore publié) + lien texte "Annuler la publication"
+    (une fois publié) — `publierParametragePeriode`/`depublierParametragePeriode` dans
+    `calendrier.repository.ts`, exposés par `useCalendrier`. **Le flag n'est pour l'instant lu par
+    aucun écran salarié — voir "Zones grises" ci-dessous.**
+  - Bandeau d'alerte (`bg-status-warning-bg`/`text-status-warning-fg`, pleine largeur, sous les
+    onglets année) : affiché uniquement en décembre (`new Date().getMonth() === 11`), incite à
+    paramétrer l'année suivante avant la fin de l'année.
+  - **Pastilles de volume couleur + blocage de publication** : `classesPastilleVolume(valeur, cible)`
+    — gris (0), orange (entamé, sous la cible), vert (cible atteinte pile), **rouge** (cible
+    dépassée). Cible CPI fixe (`CIBLE_JOURS_CPI = 5`, constante en dur, pas de champ éditable —
+    règle d'entreprise supposée stable) ; cible DJI = `parametrage.nbDemiJourneesCible` (déjà
+    configurable, défaut 16). Le bouton "Publier" n'est actionnable que si CPI et DJI sont
+    **exactement** à leur cible (`===`, pas `>=`) et qu'au moins un férié existe ; sinon il reste en
+    variant `secondary` (gris/neutre, pas juste une opacité réduite sur le bouton vert — lecture plus
+    claire de l'état "pas prêt").
+  - **Mêmes pastilles reprises dans les 3 popins** (`ModalCongesImposes`/`ModalDjImposees`/
+    `ModalJoursFeries`) : titre du haut de la popin CPI remplacé par la pastille `X/5 jours` ;
+    en-tête de liste DJI ("Demi-journées imposées (N/16)") remplacé par la pastille `X/16
+    demi-journées` ; popin Fériés — pastille simple `X jours` (pas de fraction/cible, "remplis par
+    défaut") posée sur la même ligne que le sélecteur Lundi de Pentecôte, poussé à droite.
+  - **Onglet "Vendredis" de la popin DJI** : survoler une ligne déjà cochée (coche verte) la
+    transforme en poubelle rouge (`supprimerDate` — supprime toutes les demi-journées DJI de cette
+    date, donc 1 ou 2 enregistrements si "Journée" complète).
+  - **Sélecteur de créneau de la liste "cœur" DJI** gagne l'option "Journée" (comme les autres
+    `SelectPille` de l'app) : la choisir AJOUTE la demi-journée manquante du même jour plutôt que de
+    remplacer la ligne courante (les deux demi-journées restent deux lignes distinctes dans la
+    liste, `changerCreneau` mis à jour en conséquence).
+
+**Important — à garder en tête pour plus tard** : le système de paramétrage (CPI/DJI/Fériés,
+publication) est amené à avoir un **impact direct sur le dashboard collaborateur** une fois branché
+(cf. le flag `valide_le` actuellement lu par aucun écran salarié, voir "Zones grises" ci-dessous) —
+quelle que soit la logique retenue pour la validation/publication, elle doit rester compatible avec cet
+usage futur, pas juste avec l'écran admin actuel.
+
+**Idée non développée (10/08/2026)** : déplacer le pilotage du volume cible CPI (aujourd'hui la
+constante `CIBLE_JOURS_CPI`, non éditable) et DJI (déjà éditable via `nbDemiJourneesCible`) dans
+Paramétrer > Congés & RTT (`/parametrer/conges-rtt`) plutôt que (ou en plus de) Calendrier 2 — ce
+serait plus cohérent avec le reste du paramétrage de règles d'acquisition/quotas qui vit déjà sur cet
+écran. Pas encore développé, juste noté pour la suite.
+
+**Zones grises à trancher — système temporel et de publication du Calendrier** (10/08/2026, notées
+suite à une question de Vincent sur comment tester tout ça) :
+
+- Le flag `valide_le` (publié/brouillon) ne change actuellement **rien** pour les salariés — aucun
+  écran (Poser, Historique, Congés & RTT) ne le consulte. "Publier" est pour l'instant un état
+  purement déclaratif/visuel côté admin, pas encore une vraie porte d'accès.
+- Aucune règle ne détermine QUAND l'onglet "année N+1 - Brouillon" doit apparaître (aujourd'hui :
+  toujours visible, à côté de l'année en cours, sans condition de date).
+- Pas de mécanisme pour créer une 3e année (N+2) le moment venu — `parametrage_periode` se crée
+  implicitement au premier ajout DJI/CPI/férié pour une année donnée, jamais par une action
+  explicite "créer l'année suivante".
+- Pas de relance/notification si le paramétrage N+1 n'est pas publié à l'approche du 01/01 (le
+  bandeau de décembre est un premier pas visuel, pas une vraie relance).
+- **Tester ces comportements conditionnés par la date est aujourd'hui bricolé** (patch de `Date` en
+  console navigateur, non accessible à Delphine). Piste retenue mais pas développée : centraliser
+  tous les appels `new Date()` de ces écrans dans un point unique (`useAujourdhui()`), qui lit un
+  paramètre d'URL `?date=AAAA-MM-JJ` en environnement non-production uniquement (sinon la vraie date
+  système) — permettrait de visiter `/parametrer/calendrier2?date=2026-12-15` pour voir l'état
+  "décembre" sans rien modifier de son horloge.
+
+**Debug / dette technique** :
+
+- **`SelectPille` (`components/ui/SelectPille.tsx`) — halo de focus non résolu (10/08/2026)** :
+  au clic/focus clavier sur le `<select>`, un halo bleu/mauve apparaît autour de la pilule
+  (visible sur les sélecteurs de créneau DJI/CPI). Tentative de fix : `outline-none` +
+  `focus-visible:ring-2 focus-visible:ring-mint` posés sur le `<select>` — n'a **pas** résolu le
+  problème (confirmé par Vincent après vérification visuelle réelle, malgré une classe CSS
+  correcte à l'inspection). Cause probable non confirmée : le halo peut venir du navigateur/OS
+  lui-même (rendu natif du `<select>`, hors contrôle CSS complet — voir aussi la remarque sur le
+  style natif de la LISTE déroulante elle-même, non stylable). À reprendre avec un vrai test
+  visuel humain (l'environnement d'agent automatisé ne reproduit pas de façon fiable l'état
+  `:focus-visible` d'un `<select>` natif, donc la vérification IA seule ne suffit pas ici).
 
 **En cours / pas encore fait** :
 

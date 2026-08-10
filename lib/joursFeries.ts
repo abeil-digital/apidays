@@ -61,16 +61,19 @@ export function joursFeriesLegaux(annee: number): { date: string; libelle: strin
 
 /**
  * Toutes les dates d'un jour de la semaine donné (ISO : 1=lundi … 7=dimanche)
- * sur une année civile — utilisé pour lister les vendredis par défaut.
+ * sur une année civile — utilisé pour lister les vendredis par défaut. Les
+ * jours fériés sont exclus : personne ne travaille ce jour-là, une DJI n'y a
+ * pas de sens.
  */
 export function datesDuJourDeLaSemaine(annee: number, jourIso: number): string[] {
+  const feries = new Set(joursFeriesLegaux(annee).map((f) => f.date));
   const dates: string[] = [];
   let cursor = isoDate(annee, 0, 1);
 
   while (Number(cursor.slice(0, 4)) === annee) {
     const d = new Date(`${cursor}T00:00:00Z`);
     const jourSemaine = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
-    if (jourSemaine === jourIso) {
+    if (jourSemaine === jourIso && !feries.has(cursor)) {
       dates.push(cursor);
     }
     cursor = ajouterJours(cursor, 1);

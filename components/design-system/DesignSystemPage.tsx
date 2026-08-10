@@ -1,16 +1,20 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Eye, PlusCircle, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { JourBadge } from "@/components/ui/JourBadge";
 import { ListCard } from "@/components/ui/ListCard";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { Modal } from "@/components/ui/Modal";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
 import { SectionLabel } from "@/components/ui/SectionLabel";
+import { SelectPille } from "@/components/ui/SelectPille";
 import { SoldeCard } from "@/components/ui/SoldeCard";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 import type { StatutDemande } from "@/lib/types";
@@ -119,6 +123,9 @@ function MiniCalendrierDemo() {
 
 export function DesignSystemPage() {
   const [modalOuverte, setModalOuverte] = useState(false);
+  const [modalCentreOuverte, setModalCentreOuverte] = useState(false);
+  const [modalHauteOuverte, setModalHauteOuverte] = useState(false);
+  const [dateExemple, setDateExemple] = useState("");
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-8">
@@ -220,6 +227,11 @@ export function DesignSystemPage() {
             <TypeBadge code="RTT" variant="outline" />
           </ComponentExample>
 
+          <ComponentExample title="TypeBadge (variant pill) — motif d'un jour indisponible">
+            <TypeBadge code="FERIE" variant="pill" />
+            <TypeBadge code="CPI" variant="pill" />
+          </ComponentExample>
+
           <ComponentExample title="FieldLabel + Input">
             <div>
               <FieldLabel htmlFor="design-system-champ-exemple">Libellé de champ</FieldLabel>
@@ -287,6 +299,133 @@ export function DesignSystemPage() {
         </div>
       </Section>
 
+      <Section title="Popins référentielles (DJI / CPI / Fériés)">
+        <p className="text-ink-500 -mt-2 text-xs">
+          Composants introduits pour les popins de <code>CalendrierPage.tsx</code> (DJI, CPI,
+          Fériés) — gabarit commun : encart jour à gauche, contenu au centre, action à droite.
+        </p>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          <ComponentExample title="JourBadge — encart jour (36×36, repère court)">
+            <JourBadge>Ve</JourBadge>
+            <JourBadge>Lu</JourBadge>
+            <JourBadge muted>Ve</JourBadge>
+            <code className="text-ink-500 text-xs">muted → grisé (ex. Pentecôte travaillée)</code>
+          </ComponentExample>
+
+          <ComponentExample title="SelectPille — actif / désactivé">
+            <SelectPille defaultValue="apres_midi">
+              <option value="matin">Matin</option>
+              <option value="apres_midi">A. midi</option>
+              <option value="entiere">Journée</option>
+            </SelectPille>
+            <SelectPille defaultValue="apres_midi" disabled>
+              <option value="matin">Matin</option>
+              <option value="apres_midi">A. midi</option>
+            </SelectPille>
+          </ComponentExample>
+
+          <ComponentExample title="DatePicker — champ tapable + calendrier (jours désactivables)">
+            <DatePicker
+              value={dateExemple}
+              onChange={setDateExemple}
+              disabled={(date) => date.getDay() === 0 || date.getDay() === 6}
+            />
+          </ComponentExample>
+
+          <ComponentExample title="Icônes d'action — hover">
+            <button
+              type="button"
+              aria-label="Ajouter"
+              className="text-mint transition-transform duration-150 hover:scale-125"
+            >
+              <PlusCircle size={18} />
+            </button>
+            <button
+              type="button"
+              aria-label="Supprimer"
+              className="text-status-danger-fg transition-transform duration-150 hover:scale-125"
+            >
+              <Trash2 size={16} />
+            </button>
+            <button
+              type="button"
+              aria-label="Voir"
+              className="text-mint transition-transform duration-150 hover:scale-125"
+            >
+              <Eye size={18} />
+            </button>
+            <code className="text-ink-500 text-xs">
+              transition-transform duration-150 hover:scale-125
+            </code>
+          </ComponentExample>
+        </div>
+
+        <div>
+          <div className="text-ink-500 mb-2 text-xs font-semibold">
+            Ligne de liste — les 3 états (jour dispo / indisponible / déjà ajouté)
+          </div>
+          <ListCard>
+            <div className="border-ink-300/60 flex items-center gap-3 border-b px-4 py-2.5 text-sm">
+              <JourBadge>Ve</JourBadge>
+              <span className="text-ink-900 flex-1">23 janvier</span>
+              <button
+                type="button"
+                aria-label="Ajouter"
+                className="text-mint shrink-0 transition-transform duration-150 hover:scale-125"
+              >
+                <PlusCircle size={18} />
+              </button>
+            </div>
+            <div className="border-ink-300/60 flex items-center gap-3 border-b px-4 py-2.5 text-sm">
+              <JourBadge muted>Ve</JourBadge>
+              <span className="text-ink-500 flex-1">1 mai</span>
+              <TypeBadge code="FERIE" variant="pill" />
+            </div>
+            <div className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              <JourBadge>Ve</JourBadge>
+              <span className="text-ink-500 flex-1">30 janvier</span>
+              <SelectPille defaultValue="apres_midi" disabled>
+                <option value="apres_midi">A. midi</option>
+              </SelectPille>
+              <span className="text-mint">✓</span>
+            </div>
+          </ListCard>
+        </div>
+
+        <div>
+          <div className="text-ink-500 mb-2 text-xs font-semibold">
+            Popin — taille et position (prop <code>align</code> de Modal)
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => setModalCentreOuverte(true)} className="rounded-full px-4 py-2">
+              Modal centrée (défaut, max-w-md)
+            </Button>
+            <Button onClick={() => setModalHauteOuverte(true)} className="rounded-full px-4 py-2">
+              Modal align=&quot;top&quot; (DJI/CPI/Fériés, max-w-4xl)
+            </Button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Transitions">
+        <p className="text-ink-500 text-xs">
+          Deux durées standard, pas de 3<sup>e</sup> valeur sans raison :
+        </p>
+        <div className="flex flex-col gap-2 text-xs">
+          <div className="border-ink-300/60 flex items-center justify-between gap-4 border-b py-2">
+            <span className="text-ink-900">Icônes/selects — survol (scale, fond, opacité)</span>
+            <code className="text-ink-500 shrink-0">transition-* duration-150</code>
+          </div>
+          <div className="flex items-center justify-between gap-4 py-2">
+            <span className="text-ink-900">
+              Flash de confirmation après un ajout (ligne qui s&rsquo;estompe)
+            </span>
+            <code className="text-ink-500 shrink-0">transition-colors duration-700</code>
+          </div>
+        </div>
+      </Section>
+
       <Section title="États">
         <div className="flex flex-col gap-6">
           <div>
@@ -337,6 +476,30 @@ export function DesignSystemPage() {
           <p className="text-ink-500 text-sm">
             Contenu d&rsquo;exemple — même composant <code>Modal</code> que{" "}
             <code>ReglesCongesModal</code> et la confirmation d&rsquo;archivage.
+          </p>
+        </Modal>
+      )}
+
+      {modalCentreOuverte && (
+        <Modal title='Modal align="center"' onClose={() => setModalCentreOuverte(false)}>
+          <p className="text-ink-500 text-sm">
+            Comportement par défaut — centrée verticalement, se déplace selon la hauteur du contenu.
+            Convient aux petites confirmations.
+          </p>
+        </Modal>
+      )}
+
+      {modalHauteOuverte && (
+        <Modal
+          title='Modal align="top"'
+          onClose={() => setModalHauteOuverte(false)}
+          className="max-w-4xl"
+          align="top"
+        >
+          <p className="text-ink-500 text-sm">
+            Position stable en haut de l&rsquo;écran, indépendante de la hauteur du contenu — DJI,
+            CPI et Fériés l&rsquo;utilisent toutes les trois avec <code>max-w-4xl</code> pour
+            apparaître exactement au même endroit d&rsquo;une popin à l&rsquo;autre.
           </p>
         </Modal>
       )}

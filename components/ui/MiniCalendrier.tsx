@@ -450,6 +450,14 @@ export interface MiniCalendrierProps {
    * en dessous côté appelant.
    */
   onJourClick?: (iso: string, ancre: DOMRect) => void;
+  /**
+   * Ne rend qu'un sous-ensemble des semaines du mois (index 0-based,
+   * inclusif) — "demi-calendrier" pour un aperçu de période à cheval sur
+   * deux mois (ex. ne montrer que la fin du mois de début). L'en-tête
+   * jours de la semaine reste toujours affiché. Par défaut : tout le mois.
+   */
+  premiereSemaine?: number;
+  derniereSemaine?: number;
 }
 
 export function MiniCalendrier({
@@ -458,6 +466,8 @@ export function MiniCalendrier({
   tipoDuJour,
   estEnGroupe,
   onJourClick,
+  premiereSemaine,
+  derniereSemaine,
 }: MiniCalendrierProps) {
   const [groupeSurvole, setGroupeSurvole] = useState<string | null>(null);
   const semaines = genererSemaines(annee, moisIndex, tipoDuJour);
@@ -482,7 +492,17 @@ export function MiniCalendrier({
       estEnGroupe,
     );
   });
-  const items = calculerItemsRendu(semaines, isStarts, isEnds, groupeIds);
+  const totalSemaines = semaines.length / 5;
+  const debutSemaine = premiereSemaine ?? 0;
+  const finSemaine = derniereSemaine ?? totalSemaines - 1;
+  const debutIndex = debutSemaine * 5;
+  const finIndex = (finSemaine + 1) * 5;
+  const items = calculerItemsRendu(
+    semaines.slice(debutIndex, finIndex),
+    isStarts.slice(debutIndex, finIndex),
+    isEnds.slice(debutIndex, finIndex),
+    groupeIds.slice(debutIndex, finIndex),
+  );
 
   return (
     <div className="bg-surface-card rounded-xl p-4 shadow-sm">

@@ -3,6 +3,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import type {
+  ObjectifsCalendrier,
+  ObjectifsCalendrierInput,
   RegleAcquisition,
   RegleAcquisitionInput,
   RegleAnciennete,
@@ -10,6 +12,7 @@ import type {
   TypeDemande,
 } from "@/lib/types";
 import { formatJours } from "@/lib/format";
+import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
@@ -480,6 +483,132 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
   );
 }
 
+/**
+ * Objectifs annuels de volume CPI (congés imposés) et DJI (demi-journées
+ * imposées) — réglage global (pas par année), consommé par l'écran
+ * Calendrier pour les cibles de progression (pastilles couleur, blocage du
+ * bouton "Publier"). Même gabarit que `BlocAcquisition` (titre, formulaire,
+ * bouton "Enregistrer" désactivé tant que rien n'a changé).
+ */
+function BlocObjectifsCalendrier({
+  objectifs,
+  onEnregistrer,
+}: {
+  objectifs: ObjectifsCalendrier | null;
+  onEnregistrer: (input: ObjectifsCalendrierInput) => Promise<ObjectifsCalendrier>;
+}) {
+  const [cibleJoursCpi, setCibleJoursCpi] = useState(
+    objectifs ? String(objectifs.cibleJoursCpi) : "",
+  );
+  const [cibleDemiJourneesDji, setCibleDemiJourneesDji] = useState(
+    objectifs ? String(objectifs.cibleDemiJourneesDji) : "",
+  );
+  const [erreur, setErreur] = useState("");
+  const [envoi, setEnvoi] = useState(false);
+  const [enregistre, setEnregistre] = useState(false);
+  const [modifie, setModifie] = useState(false);
+
+  function marquerModifie() {
+    setModifie(true);
+    setEnregistre(false);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    const cpi = Number(cibleJoursCpi);
+    const dji = Number(cibleDemiJourneesDji);
+    if (!cibleJoursCpi || Number.isNaN(cpi) || cpi < 0) {
+      setErreur("Merci d'indiquer un nombre de jours CPI valide.");
+      return;
+    }
+    if (!cibleDemiJourneesDji || Number.isNaN(dji) || dji < 0) {
+      setErreur("Merci d'indiquer un nombre de demi-journées DJI valide.");
+      return;
+    }
+
+    setErreur("");
+    setEnvoi(true);
+    setEnregistre(false);
+    try {
+      await onEnregistrer({ cibleJoursCpi: cpi, cibleDemiJourneesDji: dji });
+      setEnregistre(true);
+      setModifie(false);
+    } catch {
+      setErreur("Impossible d'enregistrer ces objectifs.");
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  return (
+    <div className="bg-surface-card rounded-card flex flex-col gap-5 p-5 shadow-sm">
+      <h2 className="text-ink-900 text-lg font-semibold">Congés &amp; demi-journées imposés</h2>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel htmlFor="objectifs-cpi">CP Imposés</FieldLabel>
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                id="objectifs-cpi"
+                type="number"
+                min={0}
+                step="0.5"
+                value={cibleJoursCpi}
+                onChange={(e) => {
+                  setCibleJoursCpi(e.target.value);
+                  marquerModifie();
+                }}
+                className="w-20"
+              />
+              <span className="text-ink-500 text-sm">jours / an</span>
+            </div>
+          </div>
+
+          <div>
+            <FieldLabel htmlFor="objectifs-dji">Demi-journées imposées</FieldLabel>
+            <div className="mt-2 flex items-center gap-2">
+              <Input
+                id="objectifs-dji"
+                type="number"
+                min={0}
+                value={cibleDemiJourneesDji}
+                onChange={(e) => {
+                  setCibleDemiJourneesDji(e.target.value);
+                  marquerModifie();
+                }}
+                className="w-20"
+              />
+              <span className="text-ink-500 text-sm">demi-journées / an</span>
+            </div>
+          </div>
+        </div>
+
+        {erreur && (
+          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+            {erreur}
+          </div>
+        )}
+
+        {enregistre && !erreur && (
+          <div className="rounded-control bg-status-success-bg text-status-success-fg px-3 py-2.5 text-sm">
+            Objectifs enregistrés.
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          disabled={envoi || !modifie}
+          className="rounded-card w-fit self-start px-6 py-3"
+        >
+          {envoi ? "Enregistrement…" : "Enregistrer"}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
 export function CongesRttPage() {
   const {
     reglesAcquisition,
@@ -491,6 +620,12 @@ export function CongesRttPage() {
     modifierRegleAnciennete,
     retirerRegleAnciennete,
   } = useReglesConges();
+  const {
+    objectifs,
+    loading: loadingObjectifs,
+    error: erreurObjectifs,
+    enregistrerObjectifs,
+  } = useObjectifsCalendrier();
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const regleRtt = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
@@ -499,13 +634,13 @@ export function CongesRttPage() {
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold">Congés &amp; RTT</h1>
 
-      {error && (
+      {(error || erreurObjectifs) && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-          {error}
+          {error || erreurObjectifs}
         </div>
       )}
 
-      {loading ? (
+      {loading || loadingObjectifs ? (
         <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
       ) : (
         <>
@@ -528,6 +663,12 @@ export function CongesRttPage() {
               onSupprimer={retirerRegleAnciennete}
             />
           </BlocAcquisition>
+
+          <BlocObjectifsCalendrier
+            key={objectifs ? "objectifs-charges" : "objectifs-chargement"}
+            objectifs={objectifs}
+            onEnregistrer={enregistrerObjectifs}
+          />
 
           <BlocAcquisition
             key={regleRtt?.id ?? "rtt-nouveau"}
