@@ -8,3 +8,5 @@ derrière certains de ces points.
 | Sujet | Priorité |
 | --- | --- |
 | Gérer les effets over sur les composants du calendrier | Moyenne |
+| Améliorer l'interface/UI de la page Paramétrer > Congés & RTT | Faible |
+| Préciser les règles de paramétrage d'un nouveau calendrier — décembre : affichage du nouveau calendrier + bandeau alerte + notif Delphine | Haute |

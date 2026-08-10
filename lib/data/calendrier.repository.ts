@@ -152,51 +152,6 @@ export async function fetchDjImposees(parametragePeriodeId: string): Promise<DjI
   return (data ?? []).map(mapDjImposeeDepuisDb);
 }
 
-/**
- * Fige la liste des DJ imposées d'une période (bouton "Valider" de la vue
- * "Paramétrage année à venir") — remplace intégralement les lignes
- * existantes plutôt qu'un ajout incrémental, pour éviter tout doublon si le
- * manager reparamètre la même année plusieurs fois.
- */
-export async function remplacerDjImposees(
-  parametragePeriodeId: string,
-  djs: DjImposeeInput[],
-): Promise<DjImposee[]> {
-  const supabase = createClient();
-  const typeAbsenceId = await getTypeAbsenceId(supabase, "DJ_IMPOSEE");
-
-  const { error: erreurSuppression } = await supabase
-    .from("demi_journees_imposees")
-    .delete()
-    .eq("parametrage_periode_id", parametragePeriodeId);
-
-  if (erreurSuppression) {
-    throw new Error("Impossible de réinitialiser les demi-journées imposées.");
-  }
-
-  if (djs.length === 0) {
-    return [];
-  }
-
-  const { data, error } = await supabase
-    .from("demi_journees_imposees")
-    .insert(
-      djs.map((dj) => ({
-        parametrage_periode_id: parametragePeriodeId,
-        type_absence_id: typeAbsenceId,
-        date: dj.date,
-        demi_journee: dj.demiJournee,
-      })),
-    )
-    .select(SELECT_DJ_IMPOSEE);
-
-  if (error || !data) {
-    throw new Error("Impossible d'enregistrer les demi-journées imposées.");
-  }
-
-  return data.map(mapDjImposeeDepuisDb);
-}
-
 export async function ajouterDjImposee(
   parametragePeriodeId: string,
   input: DjImposeeInput,

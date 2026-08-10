@@ -9,7 +9,6 @@ import type {
   JourFerie,
   JourFerieInput,
   ParametragePeriode,
-  ParametragePeriodeInput,
 } from "@/lib/types";
 import {
   ajouterCongeImpose,
@@ -23,7 +22,6 @@ import {
   fetchParametragePeriode,
   preRemplirJoursFeriesLegaux,
   publierParametragePeriode,
-  remplacerDjImposees,
   supprimerCongeImpose,
   supprimerDjImposee,
   supprimerJourFerie,
@@ -37,10 +35,6 @@ interface UseCalendrierResult {
   congesImposes: CongeImpose[];
   loading: boolean;
   error: string | null;
-  validerParametrage: (
-    input: ParametragePeriodeInput,
-    djs: DjImposeeInput[],
-  ) => Promise<ParametragePeriode>;
   ajouterDj: (input: DjImposeeInput) => Promise<DjImposee>;
   supprimerDj: (id: string) => Promise<void>;
   ajouterFerie: (input: JourFerieInput) => Promise<JourFerie>;
@@ -103,17 +97,6 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     setParametrage(p);
     return p;
   }, [annee, parametrage]);
-
-  const validerParametrage = useCallback(
-    async (input: ParametragePeriodeInput, djs: DjImposeeInput[]) => {
-      const p = await enregistrerParametragePeriode(input);
-      const nouvellesDj = await remplacerDjImposees(p.id, djs);
-      setParametrage(p);
-      setDjImposees(nouvellesDj);
-      return p;
-    },
-    [],
-  );
 
   const ajouterDj = useCallback(
     async (input: DjImposeeInput) => {
@@ -183,7 +166,6 @@ export function useCalendrier(annee: number): UseCalendrierResult {
     congesImposes,
     loading,
     error,
-    validerParametrage,
     ajouterDj,
     supprimerDj,
     ajouterFerie,

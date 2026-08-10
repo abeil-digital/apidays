@@ -360,6 +360,19 @@ suite à une question de Vincent sur comment tester tout ça) :
   visuel humain (l'environnement d'agent automatisé ne reproduit pas de façon fiable l'état
   `:focus-visible` d'un `<select>` natif, donc la vérification IA seule ne suffit pas ici).
 
+**Ancien écran Calendrier supprimé (10/08/2026)** : la route `/parametrer/calendrier` et tout le
+code exclusif à cet écran ont été retirés (`app/(app)/parametrer/calendrier/page.tsx`,
+`VueAnneeEnCours`, `VueParametrageAnneeAVenir`, `FormulaireParametrageAnneeAVenir`,
+`BlocJoursFeries`, `BlocCongesImposes`, `CongeImposeRow`, `BlocDjImposees`, `DjImposeeCard`, et
+l'export `CalendrierPage` dans `CalendrierPage.tsx`), ainsi que le code devenu mort qu'il était seul
+à utiliser : `validerParametrage` (`hooks/useCalendrier.ts`) et `remplacerDjImposees`
+(`lib/data/calendrier.repository.ts`). **Calendrier 2 est désormais LE seul écran Calendrier** —
+route et nom de fichier restent `calendrier2`/`Calendrier2Page` pour l'instant (renommage pas fait,
+voir Backlog.md si on veut nettoyer ça un jour), mais le libellé nav ("Calendrier 2" → "Calendrier"
+dans `components/layout/tabs.ts`) et le titre de la page ("Calendrier 2 (scénarisation)" →
+"Calendrier") ont été mis à jour pour ne plus laisser penser qu'il s'agit d'une scénarisation
+temporaire.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
