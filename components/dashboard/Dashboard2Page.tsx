@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PlusCircle } from "lucide-react";
-import { formatJours, formatPeriodeDemande } from "@/lib/format";
+import { Eye, PlusCircle } from "lucide-react";
+import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { SoldeCard } from "@/components/ui/SoldeCard";
-import { SectionLabel } from "@/components/ui/SectionLabel";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { RequestList } from "@/components/demandes/RequestList";
 import {
@@ -19,6 +18,7 @@ import {
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
+import { Modal } from "@/components/ui/Modal";
 import { ReglesCongesModal } from "@/components/dashboard/ReglesCongesModal";
 import type { Demande } from "@/lib/types";
 
@@ -37,6 +37,52 @@ function moisAffiches(): { annee: number; moisIndex: number }[] {
 function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
+
+const LABEL_LEGENDE: Partial<Record<TypeBadgeCode, string>> = {
+  CP: "Congés payés",
+  RTT: "RTT",
+  CPA: "Congés en acquisition",
+  CSS: "Congé sans solde",
+  CE: "Congé exceptionnel",
+  RECUP: "Récupération",
+  EVT_FAM: "Événement familial",
+};
+
+/** Carte de légende cliquable — même gabarit que les cartes CPI/DJI/Fériés de
+ * Paramétrer > Calendrier, adapté en lecture seule (toujours l'icône œil,
+ * jamais de +, le collaborateur ne peut rien ajouter depuis cet écran). */
+function LegendeCard({
+  code,
+  label,
+  compteur,
+  onClick,
+}: {
+  code: TypeBadgeCode;
+  label: string;
+  compteur: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
+    >
+      <TypeBadge code={code} />
+      <div className="flex flex-1 flex-col">
+        <span className="text-ink-900 text-sm">{label}</span>
+        <span className="text-ink-500 mt-1 text-xs">{compteur}</span>
+      </div>
+      <Eye
+        size={18}
+        className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+      />
+    </button>
+  );
+}
+
+type LegendeOuverte =
+  { kind: "CPI" } | { kind: "DJI" } | { kind: "FERIE" } | { kind: "PERSO"; code: TypeBadgeCode };
 
 function SnippetDemande({
   demande,
@@ -76,15 +122,21 @@ function SnippetDemande({
  * direction validée (voir Backlog.md).
  *
  * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier
- * annuelle (12 `MiniCalendrier`, 3 colonnes) qui affiche directement les
- * demandes du collaborateur (validées en couleur pleine, en attente en
- * couleur atténuée) + une colonne latérale "En attente de validation".
+ * annuelle (12 `MiniCalendrier`, grille fluide type Paramétrer > Calendrier)
+ * qui affiche directement les demandes du collaborateur (validées en
+ * couleur pleine, en attente en couleur atténuée) fusionnées avec les jours
+ * communs (Fériés/CPI/DJI), + une colonne latérale légende (CPI/DJI/Fériés +
+ * un type par nature de demande utilisée), cliquable pour le détail en
+ * lecture seule. "En attente de validation" est un encart stabilo séparé
+ * au-dessus du calendrier (ouvre sa propre popin).
  */
 export function Dashboard2Page() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes } = useSoldes();
   const { demandes, loading: loadingDemandes } = useDemandes();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
+  const [attentesOuvertes, setAttentesOuvertes] = useState(false);
+  const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
   const [snippet, setSnippet] = useState<{ demande: Demande; ancre: DOMRect } | null>(null);
 
   const mois = moisAffiches();
@@ -109,6 +161,26 @@ export function Dashboard2Page() {
   const enCours = demandes
     .filter((d) => d.statut === "en attente")
     .sort((a, b) => a.debut.localeCompare(b.debut));
+
+  // Légende (remplace l'ancienne colonne "En attente de validation") : jours
+  // communs des deux années affichées (même règle de visibilité que le
+  // calendrier — Fériés toujours, CPI/DJI de l'année à venir seulement si
+  // publiée) + un type de demande perso par type réellement utilisé par le
+  // collaborateur.
+  const demandesVisibles = demandes.filter((d) => d.statut !== "refusé");
+  const typesPersoPresents = Array.from(new Set(demandesVisibles.map(codeBadgeDemande)));
+  const anneeBVisible = Boolean(calendrierAnneeB.parametrage?.valideLe);
+  const congesImposesTous = [
+    ...calendrierAnneeA.congesImposes,
+    ...(anneeBVisible ? calendrierAnneeB.congesImposes : []),
+  ].sort((a, b) => a.debut.localeCompare(b.debut));
+  const djImposeesTous = [
+    ...calendrierAnneeA.djImposees,
+    ...(anneeBVisible ? calendrierAnneeB.djImposees : []),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+  const joursFeriesTous = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries].sort(
+    (a, b) => a.date.localeCompare(b.date),
+  );
 
   function calendrierPourAnnee(annee: number) {
     return annee === anneeDepart ? calendrierAnneeA : calendrierAnneeB;
@@ -234,10 +306,21 @@ export function Dashboard2Page() {
             </Link>
           </div>
         </div>
-        <p className="text-ink-500 px-1 text-xs">
-          Données de démonstration — le calcul réel sera défini avec Abeil.
-        </p>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setAttentesOuvertes(true)}
+        className={`rounded-control px-4 py-3 text-left text-sm font-semibold transition-opacity duration-150 hover:opacity-80 ${
+          enCours.length > 0
+            ? "bg-status-warning-bg text-status-warning-fg"
+            : "bg-status-neutral-bg text-status-neutral-fg"
+        }`}
+      >
+        {enCours.length > 0
+          ? `En attente de validation (${enCours.length})`
+          : "Aucune demande de validation en cours"}
+      </button>
 
       <div className="flex flex-col gap-6 md:flex-row">
         <div className="grid max-w-[900px] flex-1 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4">
@@ -254,8 +337,36 @@ export function Dashboard2Page() {
         </div>
 
         <div className="flex w-full flex-col gap-3 md:w-72 md:shrink-0">
-          <SectionLabel>En attente de validation</SectionLabel>
-          <RequestList demandes={enCours} emptyText="Aucune demande en attente." />
+          <LegendeCard
+            code="CPI"
+            label="Congés imposés"
+            compteur={`${congesImposesTous.length} période${congesImposesTous.length > 1 ? "s" : ""}`}
+            onClick={() => setLegendeOuverte({ kind: "CPI" })}
+          />
+          <LegendeCard
+            code="DJI"
+            label="Demi-journées imposées"
+            compteur={`${djImposeesTous.length} demi-journée${djImposeesTous.length > 1 ? "s" : ""}`}
+            onClick={() => setLegendeOuverte({ kind: "DJI" })}
+          />
+          <LegendeCard
+            code="FERIE"
+            label="Jours fériés"
+            compteur={`${joursFeriesTous.length} jour${joursFeriesTous.length > 1 ? "s" : ""}`}
+            onClick={() => setLegendeOuverte({ kind: "FERIE" })}
+          />
+          {typesPersoPresents.map((code) => {
+            const count = demandesVisibles.filter((d) => codeBadgeDemande(d) === code).length;
+            return (
+              <LegendeCard
+                key={code}
+                code={code}
+                label={LABEL_LEGENDE[code] ?? code}
+                compteur={`${count} demande${count > 1 ? "s" : ""}`}
+                onClick={() => setLegendeOuverte({ kind: "PERSO", code })}
+              />
+            );
+          })}
         </div>
       </div>
 
@@ -269,6 +380,88 @@ export function Dashboard2Page() {
 
       {reglesOuvertes && (
         <ReglesCongesModal soldes={soldes} onClose={() => setReglesOuvertes(false)} />
+      )}
+
+      {attentesOuvertes && (
+        <Modal title="En attente de validation" onClose={() => setAttentesOuvertes(false)}>
+          <RequestList demandes={enCours} emptyText="Aucune demande en attente." />
+        </Modal>
+      )}
+
+      {legendeOuverte && (
+        <Modal
+          title={
+            legendeOuverte.kind === "CPI"
+              ? "Congés imposés"
+              : legendeOuverte.kind === "DJI"
+                ? "Demi-journées imposées"
+                : legendeOuverte.kind === "FERIE"
+                  ? "Jours fériés"
+                  : (LABEL_LEGENDE[legendeOuverte.code] ?? legendeOuverte.code)
+          }
+          onClose={() => setLegendeOuverte(null)}
+        >
+          {legendeOuverte.kind === "CPI" &&
+            (congesImposesTous.length === 0 ? (
+              <p className="text-ink-500 text-sm">Aucun congé imposé.</p>
+            ) : (
+              <div className="flex flex-col">
+                {congesImposesTous.map((c) => (
+                  <div
+                    key={c.id}
+                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
+                  >
+                    <span className="text-ink-900 font-semibold">
+                      {formatPeriodeDemande(c.debut, c.fin)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {legendeOuverte.kind === "DJI" &&
+            (djImposeesTous.length === 0 ? (
+              <p className="text-ink-500 text-sm">Aucune demi-journée imposée.</p>
+            ) : (
+              <div className="flex flex-col">
+                {djImposeesTous.map((d) => (
+                  <div
+                    key={d.id}
+                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
+                  >
+                    <span className="text-ink-900 font-semibold">{formatDate(d.date)}</span>
+                    <span className="text-ink-500 text-xs">
+                      {d.demiJournee === "matin" ? "Matin" : "Après-midi"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {legendeOuverte.kind === "FERIE" &&
+            (joursFeriesTous.length === 0 ? (
+              <p className="text-ink-500 text-sm">Aucun jour férié.</p>
+            ) : (
+              <div className="flex flex-col">
+                {joursFeriesTous.map((f) => (
+                  <div
+                    key={f.id}
+                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
+                  >
+                    <span className="text-ink-900 font-semibold">{formatDate(f.date)}</span>
+                    <span className="text-ink-500 text-xs">{f.libelle}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+          {legendeOuverte.kind === "PERSO" && (
+            <RequestList
+              demandes={demandesVisibles.filter((d) => codeBadgeDemande(d) === legendeOuverte.code)}
+              emptyText="Aucune demande."
+            />
+          )}
+        </Modal>
       )}
     </div>
   );
