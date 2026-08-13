@@ -69,18 +69,12 @@ le détail des trois couches dans le [README.md](README.md), section "Couche don
 
 ## Ce qui reste mocké aujourd'hui, et pourquoi c'est volontairement temporaire
 
-Demandes, utilisateur courant et authentification sont désormais branchés sur Supabase (voir plus
-bas) — persistance réelle, plus de redémarrage à zéro au rechargement de page. Seul le solde reste
-mocké :
-
-| Élément       | État actuel                                     | Raison                                                                                                |
-| ------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Soldes CP/RTT | Valeurs fixes (`lib/data/mock/soldes.mock.ts`) | Règles de calcul (ancienneté, demi-journées, temps partiel, report/perte...) non validées avec Abeil |
-
-**Point d'attention** : ne pas "corriger" ce mock en ajoutant du `localStorage` en attendant que
-les règles soient validées. Ce serait une couche temporaire à défaire plus tard, alors que la
-vraie solution (calcul réel côté `soldes.repository.ts`, voir BASE-DE-DONNEES.md) est déjà prévue
-dans l'architecture.
+**Mise à jour du 13/08/2026 : plus rien n'est mocké.** Cette section décrivait l'état où seul le
+solde restait à brancher — `soldes.repository.ts` calcule désormais le solde réel (voir
+CONTEXTE.md et BASE-DE-DONNEES.md pour la formule), formule actée directement avec Vincent plutôt
+que via `documentation-conges/` (toujours non dépouillé). Le raisonnement ci-dessous (ne pas
+bricoler de couche temporaire type `localStorage`) reste valable comme principe général pour toute
+future donnée pas encore branchée.
 
 ## Bascule vers Supabase — ce qui change, ce qui ne change pas
 
@@ -95,10 +89,10 @@ La bascule se fait **fichier par fichier dans `lib/data/`, rien ailleurs** :
      CP/RTT, calcul de `nb_demi_journees` en excluant weekends/jours fériés).
    - `lib/data/utilisateur.repository.ts` — `fetchUtilisateurCourant()` lit la session Supabase
      Auth réelle (jointure `utilisateurs` via `auth_id`) au lieu de renvoyer un utilisateur en dur.
-3. **Reste mocké** : `lib/data/soldes.repository.ts` — `fetchSoldes()` passera d'une valeur fixe à
-   un calcul réel une fois les règles validées avec Abeil (voir section suivante).
-   `lib/data/mock/soldes.mock.ts` reste donc utilisé ; `demandes.mock.ts`/`utilisateur.mock.ts` ne
-   sont plus lus en dehors d'éventuels tests.
+3. **Basculé aussi (13/08/2026)** : `lib/data/soldes.repository.ts` — `fetchSoldes()` calcule
+   désormais le solde réel au lieu d'une valeur fixe (voir section précédente). `soldes.mock.ts` a
+   été supprimé ; `demandes.mock.ts`/`utilisateur.mock.ts` ne sont plus lus en dehors d'éventuels
+   tests.
 4. **`reinitialiserDemandes()` a disparu** (fonction + bouton "Réinitialiser les données de démo"
    de l'historique + entrée du hook `useDemandes`), comme prévu au moment de la bascule.
 

@@ -11,9 +11,11 @@ interface UseSoldesResult {
 }
 
 /**
- * Point d'accès unique au solde de congés/RTT de l'utilisateur courant.
+ * Point d'accès unique au solde de congés/RTT. Sans argument : l'utilisateur
+ * connecté (Accueil). Avec un `utilisateurId` : le solde d'un salarié donné
+ * (Espace Suivre, manager/admin uniquement — la RLS sous-jacente l'autorise).
  */
-export function useSoldes(): UseSoldesResult {
+export function useSoldes(utilisateurId?: string): UseSoldesResult {
   const [soldes, setSoldes] = useState<Soldes | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export function useSoldes(): UseSoldesResult {
   useEffect(() => {
     let cancelled = false;
 
-    fetchSoldes()
+    fetchSoldes(utilisateurId)
       .then((data) => {
         if (!cancelled) {
           setSoldes(data);
@@ -38,7 +40,7 @@ export function useSoldes(): UseSoldesResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [utilisateurId]);
 
   return { soldes, loading, error };
 }

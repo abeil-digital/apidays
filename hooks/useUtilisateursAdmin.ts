@@ -12,8 +12,9 @@ interface UseUtilisateursAdminResult {
 
 /**
  * Liste des utilisateurs pour l'écran Paramétrer > Gestion des utilisateurs.
- * La RLS restreint déjà le contenu selon le rôle du compte connecté (admin :
- * tout le monde, manager : son équipe, salarié : lui-même seulement).
+ * La RLS restreint déjà le contenu selon le rôle du compte connecté (admin
+ * et manager — directeur, autorité globale — voient tout le monde, salarié
+ * ne voit que lui-même).
  */
 export function useUtilisateursAdmin(): UseUtilisateursAdminResult {
   const [utilisateurs, setUtilisateurs] = useState<UtilisateurAdmin[]>([]);

@@ -6,12 +6,12 @@ import { createServerClient } from "@supabase/ssr";
  * Next.js 16 : ce fichier remplace l'ancien middleware.ts (renommé "Proxy").
  * Rôle : rafraîchir la session Supabase à chaque requête (cookies), protéger
  * les routes de l'Espace Salarié tant qu'aucune session n'existe, et bloquer
- * /parametrer/* pour les salariés (Gestion des utilisateurs — manager/admin
- * uniquement, voir niveau1.ts). La RLS reste la protection de fond côté
- * données ; ceci n'est qu'une redirection optimiste côté route.
+ * /parametrer/* et /suivre/* pour les salariés (manager/admin uniquement,
+ * voir niveau1.ts). La RLS reste la protection de fond côté données ; ceci
+ * n'est qu'une redirection optimiste côté route.
  */
 const ROUTE_CONNEXION = "/connexion";
-const PREFIXE_PARAMETRER = "/parametrer";
+const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -57,7 +57,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && request.nextUrl.pathname.startsWith(PREFIXE_PARAMETRER)) {
+  if (
+    user &&
+    PREFIXES_MANAGER_ADMIN.some((prefixe) => request.nextUrl.pathname.startsWith(prefixe))
+  ) {
     const { data } = await supabase
       .from("utilisateurs")
       .select("role")

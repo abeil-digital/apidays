@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Eye, PlusCircle } from "lucide-react";
-import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
+import { ChevronDown, Eye, PlusCircle } from "lucide-react";
+import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
+import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { SoldeCard } from "@/components/ui/SoldeCard";
@@ -22,16 +23,73 @@ import { Modal } from "@/components/ui/Modal";
 import { ReglesCongesModal } from "@/components/dashboard/ReglesCongesModal";
 import type { Demande } from "@/lib/types";
 
-/** Les 12 mois de l'année, réordonnés pour commencer par le mois en cours. */
-function moisAffiches(): { annee: number; moisIndex: number }[] {
-  const maintenant = new Date();
-  const anneeDepart = maintenant.getFullYear();
-  const moisDepart = maintenant.getMonth();
-  return Array.from({ length: 12 }, (_, i) => {
-    const moisIndex = (moisDepart + i) % 12;
-    const annee = anneeDepart + Math.floor((moisDepart + i) / 12);
-    return { annee, moisIndex };
-  });
+type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
+
+function isoDate(annee: number, moisIndex: number, jour: number): string {
+  return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
+}
+
+function ajouterJoursIso(dateIso: string, n: number): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "Juin 26" — mois abrégé + année sur 2 chiffres, pour le libellé de
+ * l'onglet "Période de référence" (ex. "Juin 26 → Mai 27"). */
+function formatMoisAnneeCourt(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const texte = new Intl.DateTimeFormat("fr-FR", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(d);
+  return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
+}
+
+/** Sélecteur "Affichage : Vue complète / Mois en cours" — pas un vrai 3e
+ * comportement : pilote exactement le même booléen "vue complète" qu'avant
+ * (mois en cours = aujourd'hui → fin de la fenêtre), juste un select. Rendu
+ * en texte souligné + chevron, volontairement discret (pas la pilule
+ * `SelectPille` des popins DJI/CPI, trop visible ici). */
+function SelectAffichage({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="relative inline-flex w-fit items-center gap-1.5 self-start">
+      <span className="text-ink-500 text-xs">Affichage :</span>
+      <select
+        value={actif ? "complete" : "mois_en_cours"}
+        onChange={(e) => onChange(e.target.value === "complete")}
+        className="text-ink-900 relative appearance-none pr-4 text-xs font-semibold underline underline-offset-2 outline-none"
+      >
+        <option value="mois_en_cours">Mois en cours</option>
+        <option value="complete">Vue complète</option>
+      </select>
+      <ChevronDown size={11} className="text-ink-900 pointer-events-none absolute right-0" />
+    </div>
+  );
+}
+
+/** Tous les mois (année + index) couverts par une plage de dates ISO,
+ * bornes incluses — remplace l'ancien rolling 12 mois par une plage dont la
+ * longueur dépend de l'onglet actif (jusqu'à la fin de l'année civile ou de
+ * la période de référence CP). */
+function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex: number }[] {
+  const mois: { annee: number; moisIndex: number }[] = [];
+  let annee = Number(debutIso.slice(0, 4));
+  let moisIndex = Number(debutIso.slice(5, 7)) - 1;
+  const anneeFin = Number(finIso.slice(0, 4));
+  const moisIndexFin = Number(finIso.slice(5, 7)) - 1;
+
+  while (annee < anneeFin || (annee === anneeFin && moisIndex <= moisIndexFin)) {
+    mois.push({ annee, moisIndex });
+    moisIndex += 1;
+    if (moisIndex > 11) {
+      moisIndex = 0;
+      annee += 1;
+    }
+  }
+
+  return mois;
 }
 
 function codeBadgeDemande(demande: Demande): TypeBadgeCode {
@@ -121,36 +179,51 @@ function SnippetDemande({
  * production. Route `/accueil2`, à retravailler/retirer une fois la
  * direction validée (voir Backlog.md).
  *
- * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier
- * annuelle (12 `MiniCalendrier`, grille fluide type Paramétrer > Calendrier)
- * qui affiche directement les demandes du collaborateur (validées en
- * couleur pleine, en attente en couleur atténuée) fusionnées avec les jours
- * communs (Fériés/CPI/DJI), + une colonne latérale légende (CPI/DJI/Fériés +
- * un type par nature de demande utilisée), cliquable pour le détail en
- * lecture seule. "En attente de validation" est un encart stabilo séparé
- * au-dessus du calendrier (ouvre sa propre popin).
+ * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier en
+ * 3 onglets — Année en cours / Période de référence CP / Année suivante —
+ * plutôt qu'un rolling 12 mois : chaque onglet affiche par défaut de
+ * aujourd'hui jusqu'à la fin de sa fenêtre (bouton "vue complète" pour
+ * revoir depuis le début, sauf "Année suivante" qui reste toujours pleine).
+ * Ça évite de fusionner des jours de deux années civiles derrière un seul
+ * chiffre dans la légende (le cas qui a motivé cette refonte : "22 jours
+ * fériés" ne voulait rien dire, c'était 11+11 de deux années différentes).
+ * Le calendrier affiche les demandes du collaborateur (validées en couleur
+ * pleine, en attente en couleur atténuée) fusionnées avec les jours communs
+ * (Fériés/CPI/DJI), + une colonne latérale légende (CPI/DJI/Fériés + un type
+ * par nature de demande utilisée, tous scopés à la fenêtre affichée),
+ * cliquable pour le détail en lecture seule. "En attente de validation" est
+ * un encart stabilo séparé au-dessus du calendrier (ouvre sa propre popin).
  */
 export function Dashboard2Page() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes } = useSoldes();
   const { demandes, loading: loadingDemandes } = useDemandes();
+  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
   const [attentesOuvertes, setAttentesOuvertes] = useState(false);
   const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
   const [snippet, setSnippet] = useState<{ demande: Demande; ancre: DOMRect } | null>(null);
+  const [onglet, setOnglet] = useState<Onglet>("en_cours");
+  const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
+  const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
 
-  const mois = moisAffiches();
-  const anneeDepart = mois[0].annee;
-  const anneeSuivante = anneeDepart + 1;
-  // Jours "communs" (Fériés/CPI/DJI) — la grille de 12 mois démarre au mois en
-  // cours et peut donc chevaucher deux années civiles, jamais plus.
-  const calendrierAnneeA = useCalendrier(anneeDepart);
+  const anneeActuelle = new Date().getFullYear();
+  const anneePrecedente = anneeActuelle - 1;
+  const anneeSuivante = anneeActuelle + 1;
+  // Jours "communs" (Fériés/CPI/DJI) — 3 années possibles selon l'onglet :
+  // la période de référence CP peut chevaucher l'année précédente si elle
+  // n'a pas encore démarré cette année (ex. période "juin → mai", vue avant
+  // le 1er juin).
+  const calendrierAnneePrecedente = useCalendrier(anneePrecedente);
+  const calendrierAnneeA = useCalendrier(anneeActuelle);
   const calendrierAnneeB = useCalendrier(anneeSuivante);
 
   const loading =
     loadingUtilisateur ||
     loadingSoldes ||
     loadingDemandes ||
+    loadingRegles ||
+    calendrierAnneePrecedente.loading ||
     calendrierAnneeA.loading ||
     calendrierAnneeB.loading;
 
@@ -158,33 +231,95 @@ export function Dashboard2Page() {
     return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
   }
 
+  const todayIso = todayISO();
+  const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
+  const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
+
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  // Fenêtre de la période de référence CP contenant aujourd'hui — par
+  // exemple pour "1er juin → 31 mai", si on est en août la période va du
+  // 01/06 cette année au 31/05 l'an prochain ; si on est en mars, elle va du
+  // 01/06 l'an dernier au 31/05 cette année.
+  const debutPeriodeCp = regleCp
+    ? todayIso >= isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+      ? isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+      : isoDate(anneePrecedente, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+    : debutAnneeActuelle;
+  const finPeriodeCp = regleCp
+    ? ajouterJoursIso(
+        isoDate(
+          Number(debutPeriodeCp.slice(0, 4)) + 1,
+          regleCp.periodeDebutMois - 1,
+          regleCp.periodeDebutJour,
+        ),
+        -1,
+      )
+    : finAnneeActuelle;
+
+  const ranges: Record<Onglet, { debut: string; fin: string }> = {
+    en_cours: { debut: vueCompleteEnCours ? debutAnneeActuelle : todayIso, fin: finAnneeActuelle },
+    periode_cp: {
+      debut: vueCompletePeriodeCp ? debutPeriodeCp : todayIso,
+      fin: finPeriodeCp,
+    },
+    annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
+  };
+  const rangeActive = ranges[onglet];
+  const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
+  const anneeSuivanteParametree = Boolean(calendrierAnneeB.parametrage?.valideLe);
+
+  function calendrierPourAnnee(annee: number) {
+    if (annee === anneePrecedente) return calendrierAnneePrecedente;
+    if (annee === anneeSuivante) return calendrierAnneeB;
+    return calendrierAnneeA;
+  }
+
+  function anneeVisiblePourCommuns(annee: number): boolean {
+    return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
+  }
+
   const enCours = demandes
     .filter((d) => d.statut === "en attente")
     .sort((a, b) => a.debut.localeCompare(b.debut));
 
-  // Légende (remplace l'ancienne colonne "En attente de validation") : jours
-  // communs des deux années affichées (même règle de visibilité que le
-  // calendrier — Fériés toujours, CPI/DJI de l'année à venir seulement si
-  // publiée) + un type de demande perso par type réellement utilisé par le
-  // collaborateur.
-  const demandesVisibles = demandes.filter((d) => d.statut !== "refusé");
-  const typesPersoPresents = Array.from(new Set(demandesVisibles.map(codeBadgeDemande)));
-  const anneeBVisible = Boolean(calendrierAnneeB.parametrage?.valideLe);
-  const congesImposesTous = [
-    ...calendrierAnneeA.congesImposes,
-    ...(anneeBVisible ? calendrierAnneeB.congesImposes : []),
-  ].sort((a, b) => a.debut.localeCompare(b.debut));
-  const djImposeesTous = [
-    ...calendrierAnneeA.djImposees,
-    ...(anneeBVisible ? calendrierAnneeB.djImposees : []),
-  ].sort((a, b) => a.date.localeCompare(b.date));
-  const joursFeriesTous = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries].sort(
-    (a, b) => a.date.localeCompare(b.date),
+  // Légende (remplace l'ancienne colonne "En attente de validation") — jours
+  // communs et types de demandes perso, scopés à la fenêtre affichée par
+  // l'onglet actif (plus de fusion aveugle de deux années).
+  const demandesVisibles = demandes.filter(
+    (d) => d.statut !== "refusé" && d.debut <= rangeActive.fin && d.fin >= rangeActive.debut,
   );
-
-  function calendrierPourAnnee(annee: number) {
-    return annee === anneeDepart ? calendrierAnneeA : calendrierAnneeB;
-  }
+  const typesPersoPresents = Array.from(new Set(demandesVisibles.map(codeBadgeDemande)));
+  const congesImposesTous = [
+    ...calendrierAnneePrecedente.congesImposes,
+    ...calendrierAnneeA.congesImposes,
+    ...calendrierAnneeB.congesImposes,
+  ]
+    .filter(
+      (c) =>
+        anneeVisiblePourCommuns(Number(c.debut.slice(0, 4))) &&
+        c.debut <= rangeActive.fin &&
+        c.fin >= rangeActive.debut,
+    )
+    .sort((a, b) => a.debut.localeCompare(b.debut));
+  const djImposeesTous = [
+    ...calendrierAnneePrecedente.djImposees,
+    ...calendrierAnneeA.djImposees,
+    ...calendrierAnneeB.djImposees,
+  ]
+    .filter(
+      (d) =>
+        anneeVisiblePourCommuns(Number(d.date.slice(0, 4))) &&
+        d.date >= rangeActive.debut &&
+        d.date <= rangeActive.fin,
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const joursFeriesTous = [
+    ...calendrierAnneePrecedente.joursFeries,
+    ...calendrierAnneeA.joursFeries,
+    ...calendrierAnneeB.joursFeries,
+  ]
+    .filter((f) => f.date >= rangeActive.debut && f.date <= rangeActive.fin)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   function demandeDuJour(iso: string): Demande | undefined {
     return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
@@ -205,8 +340,7 @@ export function Dashboard2Page() {
     if (cal.joursFeries.some((f) => f.date === iso)) {
       return { classeFond: classeFondTypeBadge("FERIE") };
     }
-    const estAnneeLive = annee === new Date().getFullYear();
-    if (!estAnneeLive && !cal.parametrage?.valideLe) return null;
+    if (!anneeVisiblePourCommuns(annee)) return null;
     if (cal.congesImposes.some((c) => iso >= c.debut && iso <= c.fin)) {
       return { classeFond: classeFondTypeBadge("CPI") };
     }
@@ -322,9 +456,60 @@ export function Dashboard2Page() {
           : "Aucune demande de validation en cours"}
       </button>
 
+      <h2 className="text-ink-900 px-1 text-lg font-bold">Mes Congés</h2>
+
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setOnglet("en_cours")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "en_cours"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeActuelle}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnglet("periode_cp")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "periode_cp"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnglet("annee_suivante")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "annee_suivante"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeSuivante}
+        </button>
+      </div>
+
+      {onglet === "en_cours" && (
+        <SelectAffichage actif={vueCompleteEnCours} onChange={setVueCompleteEnCours} />
+      )}
+      {onglet === "periode_cp" && (
+        <SelectAffichage actif={vueCompletePeriodeCp} onChange={setVueCompletePeriodeCp} />
+      )}
+
+      {onglet === "annee_suivante" && !anneeSuivanteParametree && (
+        <div className="bg-status-neutral-bg text-status-neutral-fg rounded-control px-4 py-3 text-sm font-semibold">
+          {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+        </div>
+      )}
+
       <div className="flex flex-col gap-6 md:flex-row">
         <div className="grid max-w-[900px] flex-1 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4">
-          {mois.map(({ annee, moisIndex }) => (
+          {moisActifs.map(({ annee, moisIndex }) => (
             <MiniCalendrier
               key={`${annee}-${moisIndex}`}
               annee={annee}

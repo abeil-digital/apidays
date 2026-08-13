@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Demande,
+  DemandeEquipe,
   DemiJournee,
   NouvelleDemandeInput,
   StatutDemande,
@@ -35,6 +36,19 @@ interface DemandeRow {
 
 const SELECT_DEMANDE =
   "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, types_absences(code)";
+
+interface DemandeEquipeRow extends DemandeRow {
+  utilisateur_id: string;
+  utilisateurs:
+    | { id: string; prenom: string; nom: string }
+    | { id: string; prenom: string; nom: string }[]
+    | null;
+}
+
+// `demandes_conges` a 3 FK vers `utilisateurs` (utilisateur_id, validateur_id,
+// devalidee_par) — PostgREST refuse d'embarquer sans préciser laquelle
+// désambiguïser via `!utilisateur_id`.
+const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
 
 // Aucune demande créée par l'app ne passe par "annulee" (pas de flux
 // d'annulation côté salarié à ce stade) — voir projet.md.
@@ -118,12 +132,23 @@ async function calculerNbDemiJournees(
   return total;
 }
 
+/**
+ * Demandes du salarié connecté (Accueil, Historique). Filtre explicitement
+ * par `utilisateur_id` — la RLS seule ne suffit pas : la policy "manager lit
+ * toutes les demandes" (les managers sont les directeurs, autorité globale)
+ * s'ajoute en OR à celle du salarié sur ses propres demandes, donc un
+ * manager sans ce filtre récupérerait aussi les demandes de toute
+ * l'entreprise et les verrait affichées comme les siennes.
+ */
 export async function fetchDemandes(): Promise<Demande[]> {
   const supabase = createClient();
+
+  const utilisateurId = await getUtilisateurId(supabase);
 
   const { data, error } = await supabase
     .from("demandes_conges")
     .select(SELECT_DEMANDE)
+    .eq("utilisateur_id", utilisateurId)
     .neq("statut", "annulee")
     .order("date_debut", { ascending: false });
 
@@ -190,4 +215,77 @@ export async function annulerDemande(id: string): Promise<void> {
   if (error) {
     throw new Error("Impossible d'annuler la demande (déjà traitée, ou introuvable).");
   }
+}
+
+function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
+  const demandeur = Array.isArray(row.utilisateurs) ? row.utilisateurs[0] : row.utilisateurs;
+
+  return {
+    ...mapDemandeDepuisDb(row),
+    demandeur: demandeur ?? { id: row.utilisateur_id, prenom: "", nom: "" },
+  };
+}
+
+/**
+ * Toutes les demandes de l'entreprise pour l'Espace Suivre — "manager"
+ * désigne les directeurs, autorité globale, pas une équipe rattachée. La
+ * policy RLS "manager lit toutes les demandes" coexiste avec celle du
+ * salarié sur ses propres demandes — un manager qui a aussi ses propres
+ * congés verrait donc les deux mélangées via `fetchDemandes()`. On exclut
+ * ici les demandes du manager lui-même : cet écran ne sert qu'à traiter
+ * celles des autres.
+ */
+export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
+  const supabase = createClient();
+
+  const [utilisateurId, { data, error }] = await Promise.all([
+    getUtilisateurId(supabase),
+    supabase
+      .from("demandes_conges")
+      .select(SELECT_DEMANDE_EQUIPE)
+      .neq("statut", "annulee")
+      .order("date_debut", { ascending: false }),
+  ]);
+
+  if (error) {
+    throw new Error("Impossible de charger les demandes de l'équipe.");
+  }
+
+  return (data ?? [])
+    .map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow))
+    .filter((d) => d.demandeur.id !== utilisateurId);
+}
+
+async function deciderDemande(
+  id: string,
+  statut: "validee" | "refusee",
+  commentaire: string,
+): Promise<void> {
+  const supabase = createClient();
+
+  const utilisateurId = await getUtilisateurId(supabase);
+
+  const { error } = await supabase
+    .from("demandes_conges")
+    .update({
+      statut,
+      validateur_id: utilisateurId,
+      commentaire_decision: commentaire || null,
+      date_decision: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error("Impossible d'enregistrer la décision (demande déjà traitée, ou introuvable).");
+  }
+}
+
+export async function validerDemande(id: string, commentaire = ""): Promise<void> {
+  await deciderDemande(id, "validee", commentaire);
+}
+
+export async function refuserDemande(id: string, commentaire = ""): Promise<void> {
+  await deciderDemande(id, "refusee", commentaire);
 }

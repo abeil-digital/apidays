@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase/client";
  * Repository d'administration des utilisateurs (écran Paramétrer > Gestion
  * des utilisateurs) — à ne pas confondre avec utilisateur.repository.ts
  * (l'utilisateur de la session courante). La RLS fait déjà tout le travail
- * de restriction par rôle : un admin voit/gère tout le monde, un manager ne
- * voit que son équipe et ne peut ni créer ni modifier (policies "admin
- * uniquement" sur insert/update), un salarié ne verrait que sa propre ligne
- * — voir BASE-DE-DONNEES.md.
+ * de restriction par rôle : un admin voit/gère tout le monde, un manager
+ * (= directeur, autorité globale) voit tout le monde mais ne peut ni créer
+ * ni modifier (policies "admin uniquement" sur insert/update), un salarié ne
+ * verrait que sa propre ligne — voir BASE-DE-DONNEES.md.
  */
 
 interface UtilisateurRow {

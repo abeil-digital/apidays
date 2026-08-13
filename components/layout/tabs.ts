@@ -1,6 +1,7 @@
 import {
   CalendarClock,
   CalendarDays,
+  ClipboardCheck,
   History,
   Home,
   LayoutDashboard,
@@ -28,10 +29,16 @@ const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/calendrier2", label: "Calendrier", Icon: CalendarDays },
 ];
 
+const SUIVRE_TABS: NavTab[] = [
+  { href: "/suivre", label: "Demandes à traiter", Icon: ClipboardCheck },
+];
+
 /**
  * Sous-navigation (SideNav/BottomNav) dépendante de la section niveau 1
  * active — déduite du chemin courant, pas d'un état séparé à synchroniser.
  */
 export function getNavTabs(pathname: string): NavTab[] {
-  return pathname.startsWith("/parametrer") ? PARAMETRER_TABS : POSER_TABS;
+  if (pathname.startsWith("/parametrer")) return PARAMETRER_TABS;
+  if (pathname.startsWith("/suivre")) return SUIVRE_TABS;
+  return POSER_TABS;
 }

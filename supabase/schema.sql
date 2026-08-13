@@ -31,9 +31,6 @@ create table utilisateurs (
   nom text not null,
   email text unique not null,
   role user_role not null default 'salarie',
-  -- un salarié peut être rattaché à un ou plusieurs managers via table de jointure
-  -- (voir manager_salaries) plutôt qu'un simple manager_id, car plusieurs
-  -- associés peuvent avoir le droit de validation
   date_entree date not null,
   -- type_contrat / taux_temps_partiel : dépréciés au profit de nature_contrat /
   -- taux_activite ci-dessous (24/07/2026). Gardés en base pour l'instant, migration
@@ -50,8 +47,11 @@ create table utilisateurs (
   updated_at timestamptz not null default now()
 );
 
--- Rattachement salarié <-> manager(s) habilité(s) à valider ses demandes
--- (plusieurs associés peuvent avoir le rôle de validation)
+-- "Manager" = directeur de l'entreprise, autorité globale sur toute
+-- l'entreprise (pas une équipe rattachée) — cette table n'est donc plus
+-- utilisée par les policies RLS. Conservée en base, sans donnée exploitée,
+-- au cas où une notion de délégation plus fine (habilitation ponctuelle
+-- d'un manager sur un sous-ensemble de salariés) reviendrait un jour.
 create table manager_salaries (
   id uuid primary key default gen_random_uuid(),
   salarie_id uuid not null references utilisateurs(id) on delete cascade,
@@ -334,6 +334,9 @@ as $$
   select role from utilisateurs where auth_id = auth.uid();
 $$;
 
+-- Plus utilisée par les policies (manager = directeur, autorité globale,
+-- pas une équipe rattachée) — conservée au cas où une délégation plus fine
+-- reviendrait un jour, voir manager_salaries.
 create or replace function is_manager_of(p_salarie_id uuid)
 returns boolean
 language sql
@@ -355,9 +358,12 @@ create policy "utilisateurs: lecture de son propre profil"
   on utilisateurs for select
   using (auth_id = auth.uid());
 
-create policy "utilisateurs: manager lit les profils de son équipe"
+-- "Manager" désigne ici les directeurs de l'entreprise : autorité globale,
+-- pas une équipe rattachée (voir manager_salaries, devenue sans objet pour
+-- ce scope mais conservée en base).
+create policy "utilisateurs: manager lit tous les profils"
   on utilisateurs for select
-  using (my_role() = 'manager' and is_manager_of(id));
+  using (my_role() = 'manager');
 
 create policy "utilisateurs: admin lit tout"
   on utilisateurs for select
@@ -436,9 +442,9 @@ create policy "soldes: salarié lit son propre solde"
   on soldes for select
   using (utilisateur_id = my_utilisateur_id());
 
-create policy "soldes: manager lit les soldes de son équipe"
+create policy "soldes: manager lit tous les soldes"
   on soldes for select
-  using (my_role() = 'manager' and is_manager_of(utilisateur_id));
+  using (my_role() = 'manager');
 
 create policy "soldes: admin gère tout"
   on soldes for all
@@ -469,13 +475,13 @@ create policy "demandes: salarié modifie une demande en attente"
   using (utilisateur_id = my_utilisateur_id() and statut = 'en_attente')
   with check (utilisateur_id = my_utilisateur_id());
 
-create policy "demandes: manager lit les demandes de son équipe"
+create policy "demandes: manager lit toutes les demandes"
   on demandes_conges for select
-  using (my_role() = 'manager' and is_manager_of(utilisateur_id));
+  using (my_role() = 'manager');
 
-create policy "demandes: manager valide/refuse les demandes de son équipe"
+create policy "demandes: manager valide/refuse toutes les demandes"
   on demandes_conges for update
-  using (my_role() = 'manager' and is_manager_of(utilisateur_id));
+  using (my_role() = 'manager');
 
 create policy "demandes: admin gère tout (dont dévalidation)"
   on demandes_conges for all

@@ -80,9 +80,6 @@ export function DashboardPage() {
             </Link>
           </div>
         </div>
-        <p className="text-ink-500 px-1 text-xs">
-          Données de démonstration — le calcul réel sera défini avec Abeil.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

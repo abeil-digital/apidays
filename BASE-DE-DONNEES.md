@@ -2,38 +2,43 @@
 
 Schéma cible pour la persistance réelle, conçu en parallèle du front (Espace Salarié). Le SQL
 versionné dans [`supabase/schema.sql`](supabase/schema.sql) est appliqué au projet Supabase
-`abeil-digital/Apidays`, et les repositories `demandes` et `utilisateur` y sont branchés (voir
-[README.md](README.md), section "Couche données") ; seul `soldes.repository.ts` reste mocké, les
-règles de calcul CP/RTT n'étant pas encore validées avec Abeil. Ce document explique le schéma ;
-le fichier `.sql` fait foi pour le détail exact.
+`abeil-digital/Apidays`, et les repositories `demandes`, `utilisateur` et `soldes` y sont branchés
+(voir [README.md](README.md), section "Couche données"). `soldes.repository.ts` calcule le solde à
+la volée (pas de lecture/écriture de la table `soldes` elle-même) à partir de
+`regles_acquisition`/`regles_anciennete` et des demandes décidées — formule actée avec Vincent
+(pas via `documentation-conges/`, toujours non dépouillé), détaillée dans CONTEXTE.md
+(13/08/2026). Ce document explique le schéma ; le fichier `.sql` fait foi pour le détail exact.
 
 Basé sur le cadrage fonctionnel (WIP, 20/07/2026) — certains points restent à confirmer avec
 Abeil, signalés plus bas.
 
 ## Vue d'ensemble
 
-| Table                    | Rôle                                                                                                                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `utilisateurs`           | Salarié·es, managers, admin (Delphine) — un seul compte peut porter plusieurs rôles au sens large de l'app, mais `role` est unique par ligne |
-| `manager_salaries`       | Rattachement salarié ↔ manager(s) habilité(s) à valider (plusieurs managers possibles)                                                       |
-| `delegations_validation` | Délégation temporaire du droit de validation (absence d'un manager)                                                                          |
-| `copies_notifications`   | Destinataires en copie des mails de validation/refus d'un manager                                                                            |
-| `types_absences`         | Référentiel des types d'absence — CP, RTT, 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM), DJ_IMPOSEE et CP_IMPOSE                 |
-| `soldes`                 | Solde réel + théorique, par utilisateur, par type d'absence, par période                                                                     |
-| `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine                                                                                    |
-| `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                             |
-| `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte, et écran Paramétrer > Calendrier)                                            |
-| `parametrage_periode`    | Paramétrage annuel porté par le Manager — semaine du 15 août imposée, nombre cible et jour de semaine par défaut des DJ imposées             |
-| `demi_journees_imposees` | Demi-journées imposées (DJ imposées) pour une période donnée — indépendant du solde RTT calculé dans Congés & RTT                            |
-| `conges_imposes`         | Périodes de congés imposés (ex. semaine du 15 août) pour une période donnée — indépendant du solde CP calculé dans Congés & RTT              |
-| `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)       |
-| `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)        |
+| Table                    | Rôle                                                                                                                                                                                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `utilisateurs`           | Salarié·es, managers (= directeurs, autorité globale), admin (Delphine) — un seul compte peut porter plusieurs rôles au sens large de l'app, mais `role` est unique par ligne                                                                             |
+| `manager_salaries`       | Rattachement salarié ↔ manager — **non exploitée par les policies RLS actuelles** (les managers sont les directeurs, autorité globale sur toute l'entreprise, pas une équipe rattachée), conservée au cas où une délégation plus fine reviendrait un jour |
+| `delegations_validation` | Délégation temporaire du droit de validation (absence d'un manager)                                                                                                                                                                                       |
+| `copies_notifications`   | Destinataires en copie des mails de validation/refus d'un manager                                                                                                                                                                                         |
+| `types_absences`         | Référentiel des types d'absence — CP, RTT, 4 types sans compteur de solde (CSS, CE, RECUP, EVT_FAM), DJ_IMPOSEE et CP_IMPOSE                                                                                                                              |
+| `soldes`                 | Solde réel + théorique, par utilisateur, par type d'absence, par période                                                                                                                                                                                  |
+| `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine                                                                                                                                                                                                 |
+| `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                                                                                                                                          |
+| `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte, et écran Paramétrer > Calendrier)                                                                                                                                                         |
+| `parametrage_periode`    | Paramétrage annuel porté par le Manager — semaine du 15 août imposée, nombre cible et jour de semaine par défaut des DJ imposées                                                                                                                          |
+| `demi_journees_imposees` | Demi-journées imposées (DJ imposées) pour une période donnée — indépendant du solde RTT calculé dans Congés & RTT                                                                                                                                         |
+| `conges_imposes`         | Périodes de congés imposés (ex. semaine du 15 août) pour une période donnée — indépendant du solde CP calculé dans Congés & RTT                                                                                                                           |
+| `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)                                                                                                                    |
+| `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)                                                                                                                     |
 
 ## Points de modélisation notables
 
-- **Plusieurs managers par salarié** : `manager_salaries` est une table de jointure, pas un
-  `manager_id` unique sur `utilisateurs` — plusieurs associés peuvent valider les demandes d'un
-  même salarié.
+- **"Manager" = directeur de l'entreprise** (08/2026) : les managers ont une autorité globale sur
+  toute l'entreprise, pas une équipe rattachée. `manager_salaries` (rattachement salarié ↔ manager)
+  n'est donc plus exploitée par les policies RLS — un manager lit/valide les demandes, soldes et
+  profils de tout le monde, à l'instar de l'admin en lecture (l'écriture sur les profils reste
+  admin-only). La table et la fonction `is_manager_of()` restent en base, inutilisées, au cas où
+  une délégation plus fine reviendrait un jour.
 - **Deux compteurs par solde** (`solde_reel` / `solde_theorique`) : le réel est utilisable tout de
   suite, le théorique est le cumul en cours pour l'année suivante — une demande peut être posée en
   anticipation dessus (`demandes_conges.is_anticipation`).
@@ -99,8 +104,9 @@ d'autorisation :
 - `my_role()` — le rôle de l'utilisateur courant
 - `is_manager_of(salarie_id)` — vrai si l'utilisateur courant est manager du salarié donné
 
-Logique générale des policies : chacun lit ses propres données ; un manager lit/valide celles de
-son équipe (via `is_manager_of`) ; l'admin (Delphine) a un accès large sur tout. Les tables
+Logique générale des policies : chacun lit ses propres données ; un manager (= directeur, autorité
+globale) lit/valide celles de toute l'entreprise ; l'admin (Delphine) a un accès large sur tout, y
+compris l'écriture sur les profils. Les tables
 référentielles (`types_absences`, `jours_feries`, `parametrage_periode`, `rtt_imposes`,
 `regles_acquisition`, `regles_anciennete`) sont en lecture ouverte à tout utilisateur authentifié,
 modification réservée à manager/admin selon la table.
@@ -121,7 +127,7 @@ Le schéma précise/tranche plusieurs points listés dans [projet.md](projet.md#
 | CP reportables en fin de période ?       | **Oui** (période juin → mai) — d'après le commentaire du schéma                                                                                         |
 | RTT reportables en fin de période ?      | **Non**, perdus en fin d'année civile — d'après le commentaire du schéma                                                                                |
 | Ancienneté : date de référence           | **Toujours ouvert** — `anciennete_date_reference` existe mais le commentaire dit explicitement "à préciser avec Abeil"                                  |
-| Temps partiel : calcul de solde          | **Toujours ouvert** — `taux_activite` modélisé (pourcentage, toute nature de contrat), mais aucune formule de calcul encore posée                       |
+| Temps partiel : calcul de solde          | **Tranché (13/08/2026)** — `taux_activite` proratise le taux d'acquisition mensuel CP/RTT                                                               |
 | Chevauchement d'une demande sur 2 années | **Pas explicitement traité** — `soldes` a une période par type/année ; le cas d'une demande à cheval sur deux périodes n'est pas visible dans le schéma |
 
 À noter : ce cadrage est encore **WIP** (20/07/2026) — les réponses ci-dessus reflètent l'état du
@@ -141,13 +147,14 @@ validation une fois les policies en place.
    fait (`.env.local` + Vercel Production/Preview/Development).
 3. `lib/data/utilisateur.repository.ts` et `lib/data/demandes.repository.ts` parlent à Supabase
    (voir [projet.md](projet.md#bascule-vers-supabase--ce-qui-change-ce-qui-ne-change-pas)) — les
-   composants et hooks n'ont pas changé. `soldes.repository.ts` reste mocké.
+   composants et hooks n'ont pas changé. `soldes.repository.ts` calcule désormais le solde réel à
+   la volée (13/08/2026, voir CONTEXTE.md pour la formule).
 4. Les `id` (uuid) réels remplacent les identifiants mockés type `"d1"` pour les demandes issues de
    Supabase.
 5. Authentification réelle via Supabase Auth (`proxy.ts`, page `/connexion`) — voir projet.md.
 6. Premier écran de l'Espace Delphine — Paramétrer > Gestion des utilisateurs
    (`lib/data/utilisateurs.repository.ts`, `/parametrer/utilisateurs`) — exerce pour la première
    fois les policies `manager`/`admin` sur `utilisateurs` en conditions réelles : admin voit/gère
-   tout, manager voit son équipe en lecture seule (les policies `insert`/`update` sont
+   tout, manager voit tout le monde en lecture seule (les policies `insert`/`update` sont
    admin-only — une tentative de création/modification par un manager échoue proprement côté UI).
    Accès route bloqué pour `salarie` dans `proxy.ts`.

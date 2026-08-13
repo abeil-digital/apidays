@@ -22,6 +22,17 @@ export interface Demande {
   commentaireManager: string;
 }
 
+// Demande vue côté manager (Espace Suivre) — mêmes champs qu'une `Demande`,
+// avec l'identité du demandeur en plus (nécessaire dès qu'on mélange les
+// demandes de plusieurs salariés dans une même liste).
+export interface DemandeEquipe extends Demande {
+  demandeur: {
+    id: string;
+    prenom: string;
+    nom: string;
+  };
+}
+
 export interface NouvelleDemandeInput {
   type: TypeDemande;
   isAnticipation: boolean;
@@ -33,7 +44,8 @@ export interface NouvelleDemandeInput {
 }
 
 export interface SoldeCategorie {
-  valeur: number;
+  valeur: number; // solde à date : jours acquis moins jours déjà validés (retrait définitif)
+  valeurApresAttente: number; // valeur ci-dessus moins les jours en attente de validation (non définitif)
   conditionPrefixe: string;
   conditionAccent: string;
 }

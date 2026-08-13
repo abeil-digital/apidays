@@ -1,0 +1,141 @@
+"use client";
+
+import { useState } from "react";
+import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
+import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
+import { Button } from "@/components/ui/Button";
+import { EmptyRow } from "@/components/ui/EmptyRow";
+import { ListCard } from "@/components/ui/ListCard";
+import { Modal } from "@/components/ui/Modal";
+import { Textarea } from "@/components/ui/Textarea";
+import { DemandeEquipeRow } from "@/components/suivre/DemandeEquipeRow";
+import { SalarieRow } from "@/components/suivre/SalarieRow";
+
+export function SuivrePage() {
+  const { demandes, loading, error, valider, refuser } = useDemandesEquipe();
+  const { utilisateurs, loading: loadingEquipe } = useUtilisateursAdmin();
+
+  const [enCoursId, setEnCoursId] = useState<string | null>(null);
+  const [refusOuvert, setRefusOuvert] = useState<{ id: string } | null>(null);
+  const [commentaireRefus, setCommentaireRefus] = useState("");
+
+  const aTraiter = demandes.filter((d) => d.statut === "en attente");
+
+  async function handleApprouver(id: string) {
+    setEnCoursId(id);
+    try {
+      await valider(id);
+    } finally {
+      setEnCoursId(null);
+    }
+  }
+
+  function ouvrirRefus(id: string) {
+    setCommentaireRefus("");
+    setRefusOuvert({ id });
+  }
+
+  async function confirmerRefus() {
+    if (!refusOuvert) return;
+    setEnCoursId(refusOuvert.id);
+    try {
+      await refuser(refusOuvert.id, commentaireRefus.trim());
+      setRefusOuvert(null);
+    } finally {
+      setEnCoursId(null);
+    }
+  }
+
+  return (
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
+      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Suivre</h1>
+
+      <div className="flex flex-col gap-6 md:flex-row">
+        <div className="flex max-w-[900px] flex-1 flex-col gap-2">
+          <h2 className="text-ink-900 px-1 text-lg font-bold">Salariés</h2>
+
+          {loadingEquipe ? (
+            <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
+          ) : utilisateurs.length === 0 ? (
+            <EmptyRow text="Aucun salarié." />
+          ) : (
+            <ListCard>
+              {utilisateurs.map((u, i) => (
+                <SalarieRow key={u.id} utilisateur={u} isLast={i === utilisateurs.length - 1} />
+              ))}
+            </ListCard>
+          )}
+        </div>
+
+        <div className="flex w-full flex-col gap-2 md:w-64 md:shrink-0">
+          <h2 className="text-ink-900 px-1 text-lg font-bold">
+            {`Demandes à traiter${aTraiter.length > 0 ? ` (${aTraiter.length})` : ""}`}
+          </h2>
+
+          {error && (
+            <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
+          ) : aTraiter.length === 0 ? (
+            <EmptyRow text="Aucune demande en attente de validation." />
+          ) : (
+            <div className="flex flex-col gap-3">
+              {aTraiter.map((demande) => (
+                <div key={demande.id} className="bg-surface-card rounded-xl shadow-sm">
+                  <DemandeEquipeRow
+                    demande={demande}
+                    isLast
+                    enCours={enCoursId === demande.id}
+                    onApprouver={() => handleApprouver(demande.id)}
+                    onRefuser={() => ouvrirRefus(demande.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {refusOuvert && (
+        <Modal title="Refuser la demande" onClose={() => setRefusOuvert(null)}>
+          <div className="flex flex-col gap-4">
+            <div>
+              <label htmlFor="commentaire-refus" className="text-ink-500 mb-1.5 block text-xs">
+                Commentaire pour le salarié (facultatif)
+              </label>
+              <Textarea
+                id="commentaire-refus"
+                value={commentaireRefus}
+                onChange={(e) => setCommentaireRefus(e.target.value)}
+                rows={3}
+                placeholder="Ex. période déjà couverte par un congé imposé…"
+                className="w-full"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setRefusOuvert(null)}
+                className="rounded-full px-4 py-2"
+              >
+                Annuler
+              </Button>
+              <Button
+                variant="primary"
+                disabled={enCoursId === refusOuvert.id}
+                onClick={confirmerRefus}
+                className="rounded-full px-4 py-2"
+              >
+                Confirmer le refus
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

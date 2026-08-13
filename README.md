@@ -20,8 +20,8 @@ bascule vers Supabase, voir [projet.md](projet.md). Pour un résumé rapide de l
 - **lucide-react** pour les icônes
 - **ESLint** (config Next + `eslint-config-prettier`) et **Prettier** (+ `prettier-plugin-tailwindcss`
   pour trier automatiquement les classes)
-- **Supabase** (Postgres + Auth) — demandes, utilisateur et authentification branchés ; le solde
-  reste mocké en attendant les règles de calcul (voir "Couche données")
+- **Supabase** (Postgres + Auth) — demandes, utilisateur, authentification et soldes CP/RTT/CPA
+  branchés (voir "Couche données")
 
 ## Démarrer
 
@@ -43,8 +43,8 @@ couches, dans cet ordre :
 ```
 components/*        → appellent uniquement les hooks (useDemandes, useSoldes, useUtilisateur)
 hooks/*.ts           → état React (loading/error/data) + appellent un repository
-lib/data/*.repository.ts → fonctions async — parlent à Supabase (demandes, utilisateur) ou
-                           lisent encore lib/data/mock/*.mock.ts (soldes, en attendant les règles)
+lib/data/*.repository.ts → fonctions async — parlent toutes à Supabase (demandes, utilisateur,
+                           soldes calculé à la volée depuis regles_acquisition/regles_anciennete)
 ```
 
 Exemple concret avec les demandes de congés :
@@ -58,10 +58,11 @@ Exemple concret avec les demandes de congés :
 - [`components/dashboard/DashboardPage.tsx`](components/dashboard/DashboardPage.tsx) et les
   autres écrans n'importent **que** le hook, jamais `lib/data/*`.
 
-`lib/data/soldes.repository.ts` suit le même patron mais lit encore
-[`lib/data/mock/soldes.mock.ts`](lib/data/mock/soldes.mock.ts) : les règles de calcul (ancienneté,
-demi-journées, temps partiel, report/perte...) ne sont pas encore validées avec Abeil — voir
-[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md).
+[`lib/data/soldes.repository.ts`](lib/data/soldes.repository.ts) suit le même patron — calcul du
+solde CP/RTT/CPA à la volée (ancienneté, temps partiel, report CP simple niveau, granularité
+mensuelle) à partir de `regles_acquisition`/`regles_anciennete` et des demandes décidées, formule
+actée avec Vincent (13/08/2026) — voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) et CONTEXTE.md pour
+le détail.
 
 Pour toute nouvelle fonctionnalité (Espace Manager, Espace Delphine...), suivre le même patron :
 un repository dans `lib/data/`, un hook dans `hooks/`, jamais d'accès direct à Supabase ou aux
@@ -189,7 +190,7 @@ hooks/                useDemandes, useSoldes, useUtilisateur, useUtilisateursAdm
 lib/
   types.ts             types partagés (Demande, Soldes, Utilisateur, UtilisateurAdmin...)
   format.ts             formatage de dates (fr-FR)
-  data/                 repositories (+ mock pour soldes), voir "Couche données"
+  data/                 repositories, voir "Couche données"
   supabase/             client.ts (navigateur), server.ts (Server Actions/cookies)
 ```
 
@@ -202,18 +203,19 @@ lib/
   "Apidays" (texte seul, pas de logo pour l'instant), navigation niveau 1 (`Poser` / `Suivre` /
   `Paramétrer`). `Poser` fonctionnel pour tous, `Paramétrer` cliquable pour manager/admin
   uniquement (`getNiveau1Items(role)` dans
-  [`components/layout/niveau1.ts`](components/layout/niveau1.ts)), `Suivre` reste un emplacement
-  réservé pour le futur Espace Manager. Profil + déconnexion à droite. La sous-navigation
-  (Accueil/Nouvelle demande/Historique vs Utilisateurs) dépend de la section active
-  (`getNavTabs(pathname)` dans [`components/layout/tabs.ts`](components/layout/tabs.ts)).
+  [`components/layout/niveau1.ts`](components/layout/niveau1.ts)), `Suivre` (Espace Manager,
+  `/suivre`) cliquable pour manager/admin également — validation des demandes de toute
+  l'entreprise. Profil + déconnexion à droite. La sous-navigation
+  (Accueil/Nouvelle demande/Historique vs Utilisateurs vs Demandes à traiter) dépend de la section
+  active (`getNavTabs(pathname)` dans [`components/layout/tabs.ts`](components/layout/tabs.ts)).
 - **Gestion des utilisateurs** (Paramétrer, `/parametrer/utilisateurs`) : tableau (recherche
   nom/email, filtres rôle/statut/contrat, tri Nom/Date d'entrée, "Actif" par défaut), lignes
   cliquables vers une fiche création/édition partagée
   ([`components/parametrer/UtilisateurFichePage.tsx`](components/parametrer/UtilisateurFichePage.tsx)),
   archivage avec confirmation (`Modal`). Aucune logique d'autorisation dupliquée côté UI : la RLS
-  Supabase déjà en place fait foi (admin voit/gère tout, manager voit son équipe en lecture seule
-  côté création/modification — une tentative de création par un manager échoue proprement, message
-  d'erreur affiché).
+  Supabase déjà en place fait foi (admin voit/gère tout ; manager — un directeur, autorité globale,
+  pas une équipe rattachée — voit tout le monde en lecture seule côté création/modification, une
+  tentative de création par un manager échoue proprement, message d'erreur affiché).
 - **Bloc "Soldes" du Dashboard** : les 3 cartes de solde (CP/RTT/CPT) et une 4ᵉ tuile CTA "Poser un
   congé" (qui mène au formulaire `/nouvelle-demande`) partagent une grille `grid-cols-4` dans un
   même panneau teinté. Le lien "découvrir" ouvre `ReglesCongesModal` — RTT imposés et échéances
@@ -225,19 +227,21 @@ lib/
   rafraîchit la session et protège les autres routes, déconnexion depuis `HeaderBar`.
   `useUtilisateur()` lit désormais la session réelle. Testé avec le rôle `salarie` ; les policies
   manager/admin restent à exercer une fois ces espaces construits.
-- **Soldes CP/RTT à valeurs fixes** : les règles métier (ancienneté, demi-journées, jours fériés,
-  temps partiel, report/perte...) ne sont pas encore validées avec Abeil. `useSoldes()` renvoie
-  des valeurs mockées ; le calcul réel remplacera uniquement `lib/data/soldes.repository.ts`. Le
-  formulaire de nouvelle demande affiche un aperçu du solde avant/après (informatif, non bloquant
-  même si négatif — les règles de dépassement ne sont pas tranchées).
+- **Soldes CP/RTT/CPA calculés en réel** (13/08/2026) : `useSoldes(utilisateurId?)` calcule le
+  solde à la volée depuis `regles_acquisition`/`regles_anciennete` et les demandes décidées — voir
+  BASE-DE-DONNEES.md/CONTEXTE.md pour la formule. Le formulaire de nouvelle demande affiche un
+  aperçu du solde avant/après (informatif, non bloquant même si négatif — les règles de
+  dépassement ne sont pas tranchées).
 - **Export historique = impression navigateur** (`window.print()` + classes `print:*`), en
   attendant un vrai export PDF/CSV côté Delphine plus tard.
 
 ## Prochaines étapes (hors périmètre ici)
 
-- Espace Manager (validation/refus, vue d'équipe)
+- Espace Manager (`/suivre`) : première version posée (demandes à traiter, liste des salariés) —
+  notifications email, relance J+nn, sync agenda Proton restent à faire
 - Suite de l'Espace Delphine : paramétrage RTT imposés, export paie, correction de solde
-- Règles de calcul réelles des soldes CP/RTT, puis branchement de `lib/data/soldes.repository.ts`
+- Affichage de `valeurApresAttente` (solde compte tenu des demandes en attente), déjà calculé mais
+  pas encore montré dans l'UI
 - Consolidation design system identifiée par audit (24/07/2026) : `Badge`, `Button`,
   `Input`/`Select`/`Textarea` faits. Reste à traiter — mapping couleur CP/RTT/CPT dupliqué entre
   `SoldeCard`/`TypeBadge`, pas de composant "pill toggle" partagé (toggle CP/RTT dans

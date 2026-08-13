@@ -10,10 +10,11 @@ de Citizen D.
 - Frontend : **Next.js 16 (App Router)** + TypeScript strict + Tailwind CSS v4
 - Backend : **Supabase** (Postgres + Data API) — schéma appliqué (voir
   [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) et [`supabase/schema.sql`](supabase/schema.sql)) et
-  branché pour l'authentification, les demandes et l'utilisateur courant (`lib/data/*.repository.ts`
-  parle à Supabase via `lib/supabase/client.ts` / `server.ts`) ; seul `soldes.repository.ts` reste
-  mocké (`lib/data/mock/soldes.mock.ts`), les règles de calcul CP/RTT n'étant pas encore validées
-  avec Abeil (voir [README.md](README.md), section "Couche données")
+  branché pour l'authentification, les demandes, l'utilisateur courant et les soldes
+  (`lib/data/*.repository.ts` parle à Supabase via `lib/supabase/client.ts` / `server.ts`) ;
+  `soldes.repository.ts` calcule le solde CP/RTT/CPA à la volée depuis
+  `regles_acquisition`/`regles_anciennete` (13/08/2026, voir "État actuel" plus bas et
+  [README.md](README.md), section "Couche données")
 - Déploiement : Vercel, équipe `abeil-digital` (compte `abeil-it@proton.me`), projet `apidays`
   importé depuis GitHub (`abeil-digital/apidays`), déploiement auto sur push vers `main` — URL
   `https://apidays-seven.vercel.app`. **Un second projet Vercel existe** sur le compte personnel de
@@ -33,8 +34,8 @@ de Citizen D.
 **Fait** :
 
 - Espace Salarié (Next.js) : Dashboard, Nouvelle demande, Historique — 3 routes fonctionnelles
-- Couche données isolée (demandes, soldes, utilisateur) — demandes et utilisateur branchés sur
-  Supabase, soldes reste mocké (règles de calcul non validées)
+- Couche données isolée (demandes, soldes, utilisateur) — toutes branchées sur Supabase, soldes
+  calculé en réel depuis les règles d'acquisition/ancienneté (13/08/2026)
 - Authentification réelle (Supabase Auth) : page `/connexion`, `proxy.ts` protège les routes de
   l'Espace Salarié et rafraîchit la session, déconnexion depuis le header. Routes salarié
   déplacées dans `app/(app)/` (groupe de routes avec l'AppShell), `/connexion` en dehors. Comptes
@@ -305,7 +306,7 @@ shadow-sm`, style `SoldeCard`) remplaçant la liste `ListCard` initiale — jour
   - **Mêmes pastilles reprises dans les 3 popins** (`ModalCongesImposes`/`ModalDjImposees`/
     `ModalJoursFeries`) : titre du haut de la popin CPI remplacé par la pastille `X/5 jours` ;
     en-tête de liste DJI ("Demi-journées imposées (N/16)") remplacé par la pastille `X/16
-    demi-journées` ; popin Fériés — pastille simple `X jours` (pas de fraction/cible, "remplis par
+demi-journées` ; popin Fériés — pastille simple `X jours` (pas de fraction/cible, "remplis par
     défaut") posée sur la même ligne que le sélecteur Lundi de Pentecôte, poussé à droite.
   - **Onglet "Vendredis" de la popin DJI** : survoler une ligne déjà cochée (coche verte) la
     transforme en poubelle rouge (`supprimerDate` — supprime toutes les demi-journées DJI de cette
@@ -424,13 +425,66 @@ exclu de l'auto-seed : c'est la seule vraie décision annuelle (Travaillé/Féri
 fix, sans toucher au choix Pentecôte existant. La popin Fériés (référentiel affiché vs données
 réelles) reste elle-même potentiellement trompeuse pour Delphine — voir item Backlog dédié.
 
+**Espace Manager — `/suivre` (13/08/2026)** : première version posée. "Demandes à traiter" (liste
+équipe des demandes en attente, Approuver en un clic / Refuser via popin avec commentaire
+facultatif — `demandes.repository.ts` : `fetchDemandesEquipe`, `validerDemande`, `refuserDemande`)
+
+- "Salariés" (avatar, nom, soldes CP/RTT/CPA réels par salarié — voir entrée "Soldes CP/RTT/CPA
+  calculés en réel" plus bas, ajoutée après coup dans la même session). Nav "Suivre" activée dans
+  `niveau1.ts`/`tabs.ts`,
+  protégée dans `proxy.ts` comme `/parametrer`. Notifications email, relance J+nn, sync agenda Proton
+  : hors scope, à reprendre une fois le service email choisi (voir Backlog.md).
+
+Bug trouvé et corrigé en construisant cet écran : `fetchDemandes()` (Accueil/Historique) ne
+filtrait pas explicitement par `utilisateur_id`, comptant sur la RLS seule — un manager récupérait
+donc ses propres demandes ET celles de toute l'entreprise mélangées, affichées comme si elles
+étaient siennes sur son propre Accueil. Fix : filtre explicite `.eq("utilisateur_id", ...)`.
+
+**"Manager" = directeur, autorité globale (13/08/2026)** : décision produit clarifiée en
+construisant `/suivre` — les comptes `manager` sont les directeurs de l'entreprise, hiérarchiquement
+au-dessus de tout, sans équipe spécifique : ils ont autorité sur **tous** les salariés, pas un
+sous-ensemble rattaché. Les policies RLS scopées via `manager_salaries`/`is_manager_of()` (sur
+`utilisateurs`, `soldes`, `demandes_conges`) ont donc été remplacées par un accès manager = tout le
+monde en lecture (+ validation des demandes), à l'instar de l'admin. `manager_salaries` et
+`is_manager_of()` restent en base, inutilisées, au cas où une délégation plus fine reviendrait un
+jour — voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md). Migration SQL fournie à faire tourner par
+l'utilisateur dans l'éditeur SQL Supabase (comme d'habitude, pas d'exécution automatique par
+l'agent).
+
+**Soldes CP/RTT/CPA calculés en réel (13/08/2026)** : `soldes.repository.ts` n'est plus mocké.
+Calcul à la volée (pas de job planifié, pas de lecture/écriture de la table `soldes` elle-même) à
+partir de `regles_acquisition`/`regles_anciennete` (déjà réels, Paramétrer > Congés & RTT) et des
+demandes déjà décidées — formule et arbitrages actés en discussion avec Vincent (pas via
+`documentation-conges/`, toujours non dépouillé) :
+
+- **CP** : capital fixe pour la période en cours = accrual complet de la période **précédente**
+  (12 mois × taux mensuel × prorata temps partiel) + bonus ancienneté (le plus favorable, non
+  cumulable) + **report** du CP non consommé de la période précédente (**un seul niveau de
+  report, pas de cascade** — le collaborateur consomme toujours son solde avant qu'un report à
+  deux niveaux n'ait de sens, cas jugé inexistant en pratique) − CP déjà **validés** consommés sur
+  la période en cours.
+- **CPA** ("Congés Payés en Acquisition") : accrual mensuel **en cours** pour la période CP
+  **suivante** (pas encore commencée, grossit chaque mois) − CP anticipés déjà validés dessus
+  (`is_anticipation = true`).
+- **RTT** : accrual mensuel depuis le début de sa période − RTT validés sur cette période. Pas
+  d'ancienneté, pas de report (perdus en fin de période, confirmé).
+- **Temps partiel** : `taux_activite` proratise le taux d'acquisition mensuel (CP et RTT).
+- **Granularité mensuelle uniquement** : mois calendaires entiers écoulés, jamais de dixième de
+  mois — décision explicite pour rester simple.
+- Chaque catégorie expose aussi `valeurApresAttente` (solde ci-dessus moins les jours **en
+  attente** de validation, retrait non définitif) — calculé mais **pas encore affiché dans l'UI**,
+  à faire si besoin.
+
+`useSoldes(utilisateurId?)` accepte désormais un id optionnel (Accueil : soi-même ; `/suivre` :
+n'importe quel salarié, la RLS élargie manager/admin du 13/08/2026 le permet). Le disclaimer
+"Données de démonstration" retiré de `DashboardPage.tsx`. `soldes.mock.ts` supprimé. La table
+`soldes`/`historique_soldes` reste en base pour un futur usage (correction manuelle par Delphine)
+mais n'est pas lue par ce moteur.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
-- Exploitation de `documentation-conges/` (état préparatoire des salaires, modèles de demande
-  CP/RTT) pour définir les vraies règles de calcul de solde — **non commité**, contient
-  potentiellement des données de paie — bloque le branchement de `soldes.repository.ts`
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
   solde), accès Comptable — **le récapitulatif mensuel n'existe pas encore en code** (aucune
   route/composant), donc son extension aux 4 nouveaux types sans compteur (CSS/CE/RECUP/EVT_FAM,
