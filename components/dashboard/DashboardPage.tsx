@@ -52,27 +52,24 @@ export function DashboardPage() {
             </button>
           </div>
 
-          <div className="grid flex-1 grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid max-w-2xl flex-1 grid-cols-2 gap-3 md:grid-cols-4">
             <SoldeCard
-              label="CP"
               valeur={soldes.cp.valeur}
               conditionPrefixe={soldes.cp.conditionPrefixe}
               conditionAccent={soldes.cp.conditionAccent}
               tone="cp"
             />
             <SoldeCard
-              label="RTT"
               valeur={soldes.rtt.valeur}
               conditionPrefixe={soldes.rtt.conditionPrefixe}
               conditionAccent={soldes.rtt.conditionAccent}
               tone="rtt"
             />
             <SoldeCard
-              label="CPT"
-              valeur={soldes.cpt.valeur}
-              conditionPrefixe={soldes.cpt.conditionPrefixe}
-              conditionAccent={soldes.cpt.conditionAccent}
-              tone="cpt"
+              valeur={soldes.cpa.valeur}
+              conditionPrefixe={soldes.cpa.conditionPrefixe}
+              conditionAccent={soldes.cpa.conditionAccent}
+              tone="cpa"
             />
             <Link
               href="/nouvelle-demande"

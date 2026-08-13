@@ -38,7 +38,7 @@ const PALETTE: { token: string; className: string }[] = [
   { token: "ink-300", className: "bg-ink-300" },
   { token: "cp", className: "bg-cp" },
   { token: "rtt", className: "bg-rtt" },
-  { token: "cpt", className: "bg-cpt" },
+  { token: "cpa", className: "bg-cpa" },
   { token: "css", className: "bg-css" },
   { token: "ce", className: "bg-ce" },
   { token: "recup", className: "bg-recup" },
@@ -210,7 +210,7 @@ export function DesignSystemPage() {
           <ComponentExample title="TypeBadge">
             <TypeBadge code="CP" />
             <TypeBadge code="RTT" />
-            <TypeBadge code="CPT" />
+            <TypeBadge code="CPA" />
             <TypeBadge code="CSS" />
             <TypeBadge code="CE" />
             <TypeBadge code="RECUP" />
@@ -257,25 +257,22 @@ export function DesignSystemPage() {
           <ComponentExample title="SoldeCard">
             <div className="grid w-full grid-cols-3 gap-3">
               <SoldeCard
-                label="CP"
                 valeur={18}
                 conditionPrefixe="À poser avant le"
                 conditionAccent="31/05/2026"
                 tone="cp"
               />
               <SoldeCard
-                label="RTT"
                 valeur={3}
                 conditionPrefixe="À poser avant le"
                 conditionAccent="31/12/2026"
                 tone="rtt"
               />
               <SoldeCard
-                label="CPT"
                 valeur={2.25}
                 conditionPrefixe="En cours d'acquisition"
                 conditionAccent="juin 2026"
-                tone="cpt"
+                tone="cpa"
               />
             </div>
           </ComponentExample>

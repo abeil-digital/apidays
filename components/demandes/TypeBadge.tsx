@@ -1,10 +1,10 @@
 export type TypeBadgeCode =
-  "CP" | "RTT" | "CPT" | "CSS" | "CE" | "RECUP" | "EVT_FAM" | "DJI" | "CPI" | "FERIE";
+  "CP" | "RTT" | "CPA" | "CSS" | "CE" | "RECUP" | "EVT_FAM" | "DJI" | "CPI" | "FERIE";
 
 const CODE_STYLES: Record<TypeBadgeCode, string> = {
   CP: "bg-cp",
   RTT: "bg-rtt",
-  CPT: "bg-cpt",
+  CPA: "bg-cpa",
   CSS: "bg-css",
   CE: "bg-ce",
   RECUP: "bg-recup",
@@ -19,7 +19,7 @@ const CODE_STYLES: Record<TypeBadgeCode, string> = {
 const CODE_STYLES_OUTLINE: Record<TypeBadgeCode, string> = {
   CP: "border-cp text-cp",
   RTT: "border-rtt text-rtt",
-  CPT: "border-cpt text-cpt",
+  CPA: "border-cpa text-cpa",
   CSS: "border-css text-css",
   CE: "border-ce text-ce",
   RECUP: "border-recup text-recup",
@@ -34,7 +34,7 @@ const CODE_STYLES_OUTLINE: Record<TypeBadgeCode, string> = {
 const LABEL_COURT: Record<TypeBadgeCode, string> = {
   CP: "CP",
   RTT: "RTT",
-  CPT: "CPT",
+  CPA: "CPA",
   CSS: "CSS",
   CE: "CE",
   RECUP: "RÉC",
@@ -43,6 +43,35 @@ const LABEL_COURT: Record<TypeBadgeCode, string> = {
   CPI: "CPI",
   FERIE: "FE",
 };
+
+/** Classe Tailwind de fond plein d'un code — pour réutiliser la même couleur
+ * hors du badge (ex. pastille de calendrier). */
+export function classeFondTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES[code];
+}
+
+// Variante atténuée (opacité 50%, ex. demande "en attente") — classes écrites
+// en toutes lettres plutôt que construites dynamiquement (`${classe}/50`) :
+// Tailwind ne génère que les classes qu'il peut voir littéralement dans le
+// code source, une concaténation à l'exécution ne produit aucun style.
+const CODE_STYLES_ATTENUE: Record<TypeBadgeCode, string> = {
+  CP: "bg-cp/50",
+  RTT: "bg-rtt/50",
+  CPA: "bg-cpa/50",
+  CSS: "bg-css/50",
+  CE: "bg-ce/50",
+  RECUP: "bg-recup/50",
+  EVT_FAM: "bg-evtfam/50",
+  DJI: "bg-dji/50",
+  CPI: "bg-cp/50",
+  FERIE: "bg-ferie/50",
+};
+
+/** Classe Tailwind de fond atténué (opacité 50%) d'un code — voir
+ * `classeFondTypeBadge` pour la variante pleine. */
+export function classeFondAttenueTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES_ATTENUE[code];
+}
 
 interface TypeBadgeProps {
   code: TypeBadgeCode;

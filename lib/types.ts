@@ -46,7 +46,7 @@ export interface RttImpose {
 export interface Soldes {
   cp: SoldeCategorie;
   rtt: SoldeCategorie;
-  cpt: SoldeCategorie;
+  cpa: SoldeCategorie;
   rttImposes: RttImpose[];
 }
 

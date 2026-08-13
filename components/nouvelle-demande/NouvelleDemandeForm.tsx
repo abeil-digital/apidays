@@ -89,7 +89,7 @@ export function NouvelleDemandeForm() {
       : optionKey === "RTT"
         ? soldes.rtt.valeur
         : optionKey === "CP_ANTICIPE"
-          ? soldes.cpt.valeur
+          ? soldes.cpa.valeur
           : null
     : null;
 

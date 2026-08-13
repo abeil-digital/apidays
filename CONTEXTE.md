@@ -373,6 +373,57 @@ dans `components/layout/tabs.ts`) et le titre de la page ("Calendrier 2 (scénar
 "Calendrier") ont été mis à jour pour ne plus laisser penser qu'il s'agit d'une scénarisation
 temporaire.
 
+**Accueil 2 (scénarisation, 11/08/2026)** — duplicata de l'accueil collaborateur
+(`components/dashboard/Dashboard2Page.tsx`, route `/accueil2`) pour itérer sur l'évolution de la
+page "Poser" sans toucher à l'écran en prod (même logique que Calendrier 2 en son temps) :
+
+- Cartes solde (`SoldeCard`) réutilisent maintenant le vrai `TypeBadge` (variant cercle) au lieu
+  d'un simple point coloré ; libellé texte redondant sous le badge retiré. Nouvel export
+  `classeFondTypeBadge`/`classeFondAttenueTypeBadge` dans `TypeBadge.tsx` pour réutiliser la
+  palette couleur hors du badge (pastilles de calendrier) — les classes d'opacité atténuée
+  (`bg-cp/50`, etc.) sont écrites en toutes lettres exprès : une classe Tailwind construite par
+  concaténation à l'exécution (`` `${classe}/50` ``) n'est jamais générée par le compilateur, qui ne
+  scanne que les chaînes littérales du code source (bug rencontré et corrigé : pastilles
+  invisibles).
+- Renommage CPT → **CPA** (Congés Payés en Acquisition) sur toute l'app — plus fidèle à ce que
+  représente ce solde ("En cours d'acquisition, à poser à partir de..."). Touche
+  `TypeBadge.tsx`, `SoldeCard.tsx`, `app/globals.css` (`--color-cpa`), `lib/types.ts`
+  (`Soldes.cpa`), le mock, `RequestRow`/`NouvelleDemandeForm`/`DesignSystemPage`.
+- Bloc "Demandes en cours"/"Prochains congés" remplacé par une grille de 12 `MiniCalendrier`
+  (même gabarit fluide que Paramétrer > Calendrier —
+  `max-w-[900px] [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]`, 4×3 sur desktop),
+  réordonnée pour commencer par le mois en cours, + colonne latérale "En attente de validation"
+  (réutilise `RequestList`/`RequestRow`, juste réduite en largeur). Pas de légende pour l'instant.
+- Le calendrier affiche deux sources fusionnées avec une priorité d'affichage : **demande
+  personnelle du collaborateur** (couleur pleine si validée, atténuée à 50% si en attente) >
+  **jours communs** (Fériés > CPI > DJI, DJI en variante `moitie` matin/après-midi comme sur
+  Calendrier admin). Un chevauchement demande perso / CPI-DJI reste un cas marginal, non géré
+  finement ici (voir item Backlog "scan de chevauchement CPI/DJI"). Clic sur un jour avec demande
+  perso → popover détail (`SnippetDemande`, nouveau composant local, pas encore promu DS).
+- Règle de visibilité des jours communs par année : **Fériés toujours visibles**, même sur une
+  année pas encore publiée (fixes, connus à l'avance). **CPI/DJI de l'année EN COURS toujours
+  visibles** (déjà réels/en vigueur) ; ceux de l'**année À VENIR** seulement si publiée
+  (`parametrage_periode.valide_le`). Bug trouvé et corrigé en cours de route : l'année en cours n'a
+  jamais de bouton "Publier" (n'apparaît que pour `!estAnneeLive`), donc son `valide_le` ne
+  serait jamais renseigné — la condition de visibilité CPI/DJI doit donc explicitement
+  court-circuiter la vérification de publication quand `annee === new Date().getFullYear()`.
+
+**Fériés auto-seedés en base (11/08/2026)** — le concept "il faut cliquer Pré-remplir puis espérer
+que ce soit fait pour chaque année" s'est révélé fragile : en testant Accueil 2, le 1er janvier
+2027 n'apparaissait pas comme férié — la popin Fériés de Calendrier 2 affiche TOUJOURS les 11
+fériés légaux de référence (`joursFeriesLegaux(annee)`) qu'ils soient réellement en base ou non
+(seul le cas Pentecôte est vérifié contre la vraie donnée), ce qui masquait le fait que la ligne
+"1er janvier" n'avait en réalité jamais été insérée pour 2027 (résidu des tests de publication
+plus tôt dans la session). Décision : les 10 fériés à date fixe (tout sauf le lundi de Pentecôte)
+sont désormais **auto-seedés à chaque chargement d'une année** dans `useCalendrier`
+(`hooks/useCalendrier.ts`, fonction `feriesFixes` + `preRemplirJoursFeriesLegaux` appelé au lieu
+d'un simple `fetchJoursFeries` dans l'effet de chargement) — idempotent (n'insère que ce qui
+manque), plus besoin de l'action manuelle "Pré-remplir". Le lundi de Pentecôte reste volontairement
+exclu de l'auto-seed : c'est la seule vraie décision annuelle (Travaillé/Férié), on ne veut jamais
+écraser un choix déjà fait ni le présumer. Vérifié : 2027 passe de 10 à 11 fériés en base après le
+fix, sans toucher au choix Pentecôte existant. La popin Fériés (référentiel affiché vs données
+réelles) reste elle-même potentiellement trompeuse pour Delphine — voir item Backlog dédié.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

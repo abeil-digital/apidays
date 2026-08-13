@@ -17,7 +17,6 @@ import {
   enregistrerParametragePeriode,
   fetchCongesImposes,
   fetchDjImposees,
-  fetchJoursFeries,
   depublierParametragePeriode,
   fetchParametragePeriode,
   preRemplirJoursFeriesLegaux,
@@ -27,6 +26,17 @@ import {
   supprimerJourFerie,
 } from "@/lib/data/calendrier.repository";
 import { joursFeriesLegaux, lundiSemaineDu15Aout } from "@/lib/joursFeries";
+
+/** Les 10 fériés à date fixe (Pâques mobile inclus) — tout sauf le lundi de
+ * Pentecôte, seule vraie décision annuelle (travaillé/férié). Auto-seedés à
+ * chaque chargement d'année : ce sont des faits légaux, pas une action
+ * manuelle à penser à déclencher (voir Backlog.md — 1er janvier manquant sur
+ * 2027, trouvé lors des tests du 11/08/2026 : la popin affichait toujours le
+ * référentiel complet même quand la ligne n'existait pas vraiment en base).
+ */
+function feriesFixes(annee: number) {
+  return joursFeriesLegaux(annee).filter((f) => f.libelle !== "Lundi de Pentecôte");
+}
 
 interface UseCalendrierResult {
   parametrage: ParametragePeriode | null;
@@ -62,7 +72,7 @@ export function useCalendrier(annee: number): UseCalendrierResult {
       try {
         const [p, feries] = await Promise.all([
           fetchParametragePeriode(annee),
-          fetchJoursFeries(annee),
+          preRemplirJoursFeriesLegaux(annee, feriesFixes(annee)),
         ]);
         const [djs, conges] = p
           ? await Promise.all([fetchDjImposees(p.id), fetchCongesImposes(p.id)])

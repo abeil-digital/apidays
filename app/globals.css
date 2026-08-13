@@ -7,7 +7,7 @@
  * du thème. Voir README.md > "Thème & design tokens" pour la convention.
  *
  * Palette de travail (pas encore la charte Abeil officielle) : header/accents en
- * slate, couleurs de catégorie franches (cp/rtt/cpt) — seul code visuel de
+ * slate, couleurs de catégorie franches (cp/rtt/cpa) — seul code visuel de
  * typologie dans l'app (cartes, listes, badges) —, texte neutre ink/muted.
  * Aucun composant ne référence de couleur en dur — seules ces valeurs changent
  * le jour où la vraie charte graphique arrive.
@@ -45,9 +45,9 @@
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
   --color-cp: #5b8def; /* bleu — CP */
   --color-rtt: #7fbf8f; /* vert — RTT */
-  --color-cpt: #9db4c4; /* bleu gris — CPT (congés anticipés, solde théorique) */
+  --color-cpa: #9db4c4; /* bleu gris — CPA, congés payés en acquisition (solde théorique) */
   /* Types sans compteur de solde (CSS, CE, RECUP, EVT_FAM) — tons neutres/pastel,
-     délibérément moins saturés que CP/RTT/CPT pour signaler visuellement
+     délibérément moins saturés que CP/RTT/CPA pour signaler visuellement
      l'absence d'impact sur un solde */
   --color-css: #a89f96; /* taupe — congé sans solde */
   --color-ce: #d9a35c; /* ambre — congé exceptionnel */
