@@ -323,6 +323,21 @@ export function DesignSystemPage() {
             <TypeBadgePillEnhanced code="CP" label="48 j" />
           </ComponentExample>
 
+          {/* Suivre les soldes : la pill CP du tableau s'inverse (fond blanc, texte/contour
+              couleur du type) tant que le panneau de détail est ouvert pour ce salarié — même
+              `TypeBadge`, juste `variant="outline"` au lieu de `variant="pill"`, piloté par un
+              simple booléen `active` côté appelant (pas de nouvel état ni de composant dédié). */}
+          <ComponentExample title="Pill de solde cliquable — état normal vs état déclenché (Suivre les soldes)">
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="CP" variant="pill" label="39 j" />
+              <span className="text-ink-500 text-[11px]">Normal</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="CP" variant="outline" label="39 j" />
+              <span className="text-ink-500 text-[11px]">Déclenché (panneau de détail ouvert)</span>
+            </div>
+          </ComponentExample>
+
           <ComponentExample title="SoldeMoisBloc — bloc mois du feed d'historique de solde (Espace Suivre)">
             <div className="flex w-full max-w-sm flex-col gap-2">
               <SoldeMoisBloc

@@ -402,6 +402,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
   const [
     { data: demandesRows, error: erreurDemandes },
     { data: ajustementsRows, error: erreurAjustements },
+    { data: enAttenteRows, error: erreurEnAttente },
   ] = await Promise.all([
     supabase
       .from("demandes_conges")
@@ -419,9 +420,18 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
       .eq("type_absence_id", typeAbsenceId)
       .gte("created_at", periodeEnCours.debut.toISOString())
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
+      .eq("statut", "en_attente")
+      .gte("date_debut", dateIso(periodeEnCours.debut))
+      .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
 
-  if (erreurDemandes || erreurAjustements) {
+  if (erreurDemandes || erreurAjustements || erreurEnAttente) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
 
@@ -487,12 +497,29 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
     };
   });
 
+  let cumulTheorique = cumul;
+  const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
+    .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
+    .map((d) => {
+      cumulTheorique -= Number(d.nb_demi_journees) / 2;
+      return {
+        id: d.id,
+        type: "demande",
+        date: d.date_debut,
+        libelle: `CP : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        jours: -(Number(d.nb_demi_journees) / 2),
+        soldeApres: cumulTheorique,
+      };
+    });
+
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
     soldeDepart,
     mois: moisListe,
     soldeActuel: cumul,
+    enAttente,
+    soldeTheorique: cumulTheorique,
   };
 }
 

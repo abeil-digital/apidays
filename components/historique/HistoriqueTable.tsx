@@ -9,13 +9,6 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
-const CLASSE_POINT_STATUT: Record<string, string> = {
-  validé: "bg-status-success-fg",
-  "en attente": "bg-status-warning-fg",
-  refusé: "bg-status-danger-fg",
-  annulé: "bg-status-danger-fg",
-};
-
 type HistoriqueTableProps =
   | { demandes: Demande[]; emptyText?: string; avecCollaborateur?: false }
   | { demandes: DemandeEquipe[]; emptyText?: string; avecCollaborateur: true };
@@ -34,9 +27,10 @@ function periodeCourte(debut: string, fin: string): string {
  * de l'app plutôt que d'inventer un nouveau style : pastille de couleur +
  * libellé complet du type (`classeFondTypeBadge`/`LABEL_LONG`, pattern repris
  * de `SuiviDemandeRow`), `StatusBadge` pour le statut. Colonne Dates : pill
- * contour couleur du type + point couleur du statut (repris du tableau
- * Export paie), période via `formatPeriodeDemande` avec "au" remplacé par
- * "-" pour rester compact dans la pill (`periodeCourte`, local à ce fichier —
+ * contour couleur du type (repris du tableau Export paie, sans le point de
+ * statut de ce dernier — redondant ici avec la colonne Statut juste à côté),
+ * période via `formatPeriodeDemande` avec "au" remplacé par "-" pour rester
+ * compact dans la pill (`periodeCourte`, local à ce fichier —
  * `formatPeriodeDemande` elle-même n'est pas touchée, son "au" reste voulu
  * ailleurs).
  *
@@ -67,11 +61,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         </td>
         <td className="px-4 py-3">
           <span
-            className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
+            className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
           >
-            <span
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${CLASSE_POINT_STATUT[demande.statut]}`}
-            />
             {periodeCourte(demande.debut, demande.fin)}
           </span>
         </td>

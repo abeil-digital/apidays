@@ -670,6 +670,53 @@ Points 1 et 2 faits ; points 3 à 6 restent à traiter — voir Backlog.md.
   filtres statut/période, dupliquée plutôt que factorisée pour l'instant — à revoir si un 3e écran du
   même genre apparaît).
 
+**"Suivre les soldes" + détail du solde CP (14/08/2026)** — nouvelle sous-rubrique
+`/suivre/soldes`, 4e onglet de `/suivre` (même protection que le reste de la section) :
+
+- **`SuivreSoldesPage.tsx`** : tableau Collaborateur/CP/RTT/CPA de tous les salariés actifs, mêmes
+  conventions de card/en-têtes que le reste de `/suivre` (pas d'arrondi ni d'ombre, en-têtes
+  majuscules, filtres dans la même card que le tableau). Filtre Collaborateur en `SelectFiltrePill`
+  (même construction dérivée des données chargées que sur `SuivreDemandesPage`). Une ligne =
+  un `useSoldes(utilisateur.id)` séparé (composant `LigneSolde`, pas de batch) — pas de route soldes
+  groupée, et les Rules of Hooks interdisent d'appeler le hook en boucle dans un seul composant.
+  Table plafonnée à `md:max-w-[900px]` (colonne de droite vide) tant qu'aucun panneau n'est ouvert,
+  passe à `xl:flex-1` sinon — même pattern de docking que Export paie (seuil `xl:`, pas `md:`, pour
+  la même raison de layout cassé sur un écran laptop 1024–1279px, voir "Export paie" ci-dessus).
+- **Pill CP cliquable → `SoldeCpDetailPanel.tsx`** (nouveau, panneau latéral droit `xl:sticky`,
+  ouvert au clic sur la pill CP d'un salarié — seul CP a un historique détaillé pour l'instant,
+  comme la popin `HistoriqueSoldeModal` existante ailleurs dans l'app). Header : avatar + nom du
+  salarié en gras (style titre), "Détail du solde CP" en sous-titre gris juste dessous (ordre
+  volontaire : le nom est l'information principale du panneau, pas le libellé de la fonctionnalité).
+  Table "Événements" à 3 colonnes (Événement/Jours/Solde, ces deux dernières centrées avec leur
+  contenu) — **à plat**, pas de repli par mois comme `HistoriqueSoldeModal` (ici on veut tout voir
+  d'un coup, du solde N-1 jusqu'à aujourd'hui) :
+  - Ligne "Solde N-1 - {date de début de la période de référence}" en pill contour bleu (couleur
+    CP) — solde de départ de la période.
+  - Un événement par CP validé, pill identique à la colonne Dates d'Export paie (contour couleur du
+    type + point de statut, pas de mention "CP" dans le libellé puisque la colonne est déjà 100%
+    CP) — point **vert**. Jours négatifs affichés en **bleu (couleur CP)**, pas en rouge (décision
+    explicite : le rouge est réservé aux statuts refusé/annulé ailleurs dans l'app, un jour posé
+    validé n'est pas une erreur).
+  - Pied de table "Solde actuel" avec `TypeBadgePillEnhanced`.
+- **État "déclenché" — lien visuel entre l'indicateur et le panneau ouvert** : tant que le panneau
+  est ouvert pour un salarié, sa pill CP dans le tableau **s'inverse** (fond blanc/transparent,
+  texte + contour couleur CP — `TypeBadge variant="outline"` au lieu de `variant="pill"`) au lieu du
+  fond plein blanc-sur-bleu habituel. Piloté par un simple `active={u.id === selectionId}` passé à
+  `LigneSolde`, pas de nouvel état — même esprit que le surlignage `ring-mint` déjà utilisé sur les
+  pills sélectionnées d'Export paie, mais ici la couleur de la pill elle-même change plutôt qu'un
+  anneau superposé (retenu après essai de la variante anneau, jugée moins lisible que l'inversion).
+- **Solde Réel/Théorique** : à côté de "Solde actuel", le mot "Réel"/"Théorique" est un `<select>`
+  minimal (pas de bordure/pill, juste souligné en pointillé pour signaler l'interaction) qui bascule
+  entre les deux modes. **Réel** = solde actuel habituel (CP validés uniquement). **Théorique** =
+  ajoute à la table les CP **non validés** (`statut = "en_attente"`) posés depuis le début de la
+  période de référence, affichés avec un point **orange** (au lieu de vert, cohérent avec le code
+  couleur statut du reste de l'app) et un solde qui continue de décroître à leur suite ; le pied de
+  table affiche alors `soldeTheorique` au lieu de `soldeActuel`. Nouveaux champs `enAttente`/
+  `soldeTheorique` sur `HistoriqueSolde` (`lib/types.ts`) et calculés dans
+  `fetchHistoriqueCp` (`soldes.repository.ts`) — même fenêtre de période que le reste de la
+  fonction, une requête `demandes_conges` de plus (`statut = "en_attente"`), pas de recalcul côté
+  client.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

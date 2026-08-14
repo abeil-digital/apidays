@@ -76,6 +76,10 @@ export interface HistoriqueSolde {
   soldeDepart: number;
   mois: MoisHistoriqueSolde[]; // du 1er mois de la période jusqu'au mois en cours
   soldeActuel: number;
+  // Congés CP non validés sur la période de référence — solde "théorique" =
+  // solde actuel une fois ces demandes décomptées (indicatif, réversible).
+  enAttente: MouvementSolde[];
+  soldeTheorique: number;
 }
 
 export interface AjustementSoldeInput {
