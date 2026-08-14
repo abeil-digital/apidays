@@ -1,4 +1,4 @@
-import { CheckCircle2, Hourglass, XCircle, type LucideIcon } from "lucide-react";
+import { Ban, CheckCircle2, Hourglass, XCircle, type LucideIcon } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 
@@ -8,10 +8,13 @@ interface StatusConfig {
   Icon: LucideIcon;
 }
 
-const STATUT_CONFIG: Record<StatutDemande, StatusConfig> = {
+/** Exportée pour les variantes qui remplacent le libellé par défaut (ex.
+ * `SuiviDemandeRow`, qui affiche le nombre de jours à la place du statut). */
+export const STATUT_CONFIG: Record<StatutDemande, StatusConfig> = {
   validé: { tone: "success", label: "Validé", Icon: CheckCircle2 },
   "en attente": { tone: "warning", label: "En attente", Icon: Hourglass },
   refusé: { tone: "danger", label: "Refusé", Icon: XCircle },
+  annulé: { tone: "danger", label: "Annulé", Icon: Ban },
 };
 
 interface StatusBadgeProps {

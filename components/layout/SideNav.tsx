@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getNavTabs } from "@/components/layout/tabs";
+import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
 
 export function SideNav() {
   const pathname = usePathname();
   const navTabs = getNavTabs(pathname);
+  const activeHref = getActiveHref(pathname, navTabs);
 
   return (
     <div className="bg-surface-card hidden w-56 shrink-0 flex-col px-4 py-6 md:flex print:hidden">
       <div className="flex flex-col gap-1">
         {navTabs.map(({ href, label, Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const active = href === activeHref;
           return (
             <Link
               key={href}

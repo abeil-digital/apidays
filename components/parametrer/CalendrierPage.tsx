@@ -10,7 +10,7 @@ import type {
   DjImposeeInput,
   JourFerie,
 } from "@/lib/types";
-import { formatDate, formatJourMois, formatJours, nombreJours } from "@/lib/format";
+import { formatDateAction, formatJourMois, formatJours, nombreJours } from "@/lib/format";
 import { datesDuJourDeLaSemaine, joursFeriesLegaux } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
@@ -142,7 +142,6 @@ function dureeCongeImpose(c: CongeImpose, joursFeries: JourFerie[]): number {
   const ajustFin = c.demiFin === "matin" ? 0.5 : 0;
   return base - ajustDebut - ajustFin;
 }
-
 
 /** Couleur de la pastille de volume selon l'avancement vers une cible —
  * gris = rien posé, orange = entamé, vert = cible atteinte ou dépassée. */
@@ -1056,7 +1055,9 @@ function ModalDjImposees({
                     onMouseEnter={(e) =>
                       setSurvolDj({
                         dj,
-                        ancre: (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect(),
+                        ancre: (
+                          e.currentTarget.parentElement as HTMLElement
+                        ).getBoundingClientRect(),
                       })
                     }
                     onMouseLeave={() => setSurvolDj(null)}
@@ -1626,8 +1627,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
           (calendrier.parametrage?.valideLe ? (
             <div className="flex flex-col gap-1 px-1">
               <p className="text-ink-500 text-sm">
-                Publié le {formatDate(calendrier.parametrage.valideLe.slice(0, 10))} — visible par
-                les collaborateurs
+                {`Publié le ${formatDateAction(calendrier.parametrage.valideLe.slice(0, 10))} — visible par les collaborateurs`}
               </p>
               <button
                 type="button"

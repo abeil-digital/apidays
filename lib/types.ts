@@ -5,7 +5,7 @@ export type TypeDemande = "CP" | "RTT" | "CSS" | "CE" | "RECUP" | "EVT_FAM";
 // catégoriser les demi-journées et périodes imposées (Paramétrer > Calendrier).
 export type TypeAbsenceCode = TypeDemande | "DJ_IMPOSEE" | "CP_IMPOSE";
 
-export type StatutDemande = "en attente" | "validé" | "refusé";
+export type StatutDemande = "en attente" | "validé" | "refusé" | "annulé";
 
 export interface Demande {
   id: string;

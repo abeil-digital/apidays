@@ -151,8 +151,9 @@ create table demandes_conges (
   validateur_id uuid references utilisateurs(id),
   commentaire_decision text,
   date_decision timestamptz,
-  -- dévalidation par Delphine d'une demande déjà validée (distincte de l'annulation
-  -- par le salarié d'une demande en attente, qui passe par statut='annulee')
+  -- prévues pour la dévalidation par Delphine d'une demande déjà validée, finalement pas
+  -- utilisées : la régularisation Export paie réutilise statut='annulee' (mêmes colonnes de
+  -- décision que valider/refuser) — voir BASE-DE-DONNEES.md
   devalidee_par uuid references utilisateurs(id),
   date_devalidation timestamptz,
   created_at timestamptz not null default now(),

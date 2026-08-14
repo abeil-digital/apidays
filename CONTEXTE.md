@@ -518,14 +518,84 @@ mais n'est pas lue par ce moteur.
   `is_anticipation` dans le calcul du capital consommé de la période en cours) mais **pas encore
   appliqué** — Vincent n'était "certain de rien" sur ce point, à retrancher avant de corriger.
 
+**Export paie (14/08/2026)** — sous-rubrique `/suivre/paie` (`CongesPaiePage.tsx`), visible
+manager + admin comme le reste de `/suivre` :
+
+- **Encart "Congés consommés"** au-dessus de "Suivi des demandes" (`CongesConsommesCard.tsx`) —
+  récap CP/RTT/CPA/CSS de la période, clique vers le détail. Période par défaut **25→24**
+  (`periodePaieParDefaut`, `lib/periodePaie.ts` — cycle de transmission à la comptable), modifiable
+  via deux champs date sur la page détail.
+- **Table par collaborateur** (`fetchCongesConsommesPeriode`, `demandes.repository.ts`) — CP, RTT,
+  Congés anticipés, Congé sans solde. Chaque cellule : total en jours (aligné sur le "j", largeur
+  fixe `w-10 text-right`) + une pill par période (contour couleur du type, point de statut en tête).
+- **Jours non validés comptés dans le total dès maintenant** (décision explicite, cas à la marge de
+  régularisation, pas encore de logique fine de report) — distingués uniquement par la couleur du
+  point : **vert** validé, **orange** en attente, **rouge** annulé (voir plus bas). Le CSV exporté
+  exclut les dates annulées de la liste entre parenthèses mais garde le total cohérent.
+- **Pills cliquables → panneau de détail** (card `md:sticky md:top-4`, le tableau passe en
+  `md:flex-1` pour lui laisser la place plutôt que de se décaler façon overlay — testé et écarté un
+  positionnement `fixed`/`absolute` qui débordait ou flottait n'importe où) :
+  - Congé **en attente** : commentaire (motif/traçabilité) + deux CTA **Valider**/**Refuser**
+    (réutilisent `validerDemande`/`refuserDemande` existants — même action réelle que "Demandes à
+    traiter", pas un mécanisme parallèle).
+  - Congé **validé ou annulé** : CTA masqués derrière un lien discret **"Régularisation"**
+    (chevron, replié par défaut — la régularisation est exceptionnelle, ne doit pas être la
+    première chose visible). Une fois déplié : commentaire + un seul bouton, qui dépend du statut —
+    **Supprimer** (validé → annulé, nouvelle fonction `regulariserDemande`) ou **Restaurer**
+    (annulé → validé, réutilise `validerDemande`).
+- **Statut "annulé" exposé côté app** (`StatutDemande` gagne une 4e valeur, `STATUT_DEPUIS_DB`
+  mappe `annulee`→`annulé`, `StatusBadge` gagne une entrée `Ban`/rouge) — jusqu'ici `annulee`
+  n'était qu'un statut DB théorique (aucune demande n'y passait en pratique). Décision de traçabilité
+  prise en cours de route (l'utilisateur a testé "Supprimer" une fois, remarqué que la demande
+  disparaissait purement et simplement du tableau, puis demandé à la garder visible) : les congés
+  annulés **depuis cette page** restent affichés dans le tableau (pill avec point rouge **avant** la
+  date, même format que vert/orange — un essai avec barré + point en fin de pill a été fait puis
+  écarté), exclus du total, cliquables pour repasser en mode Régularisation → Restaurer.
+  `fetchCongesConsommesPeriode` inclut donc désormais `validee`/`en_attente`/`annulee` (pas
+  `refusee`, jamais pertinent ici).
+- **Case "Validés uniquement"** dans la barre de filtres — masque les collaborateurs/lignes qui
+  n'ont que du non-validé ou de l'annulé sur la période, sans changer le calcul.
+- **`devalidee_par`/`date_devalidation` finalement pas utilisées** pour ce flux — voir
+  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md), point de modélisation dédié.
+- Colonne du tableau resserrée (`px-3`, avatar `Avatar` + nom, en-têtes centrés `text-ink-500`,
+  cellule vide sans "0" — juste rien) plutôt que la première version plus large ; bouton
+  "Exporter (CSV)" en `variant="primary"` (pas secondary, décision finale après itération).
+- **Nettoyage en route** : un panneau latéral "Relecture avant transmission" (liste de toutes les
+  demandes non validées de la période avec case à cocher inclure/exclure du calcul) a été construit
+  puis entièrement retiré — jugé peu utile après coup, le cas réel étant rare et déjà couvert par la
+  régularisation du mois suivant. Gardé en tête si le besoin revient sous une autre forme : ne pas
+  reproduire tel quel (mécanisme de coche jamais branché à une vraie action, juste un filtre
+  d'affichage local).
+- **Trois bugs de stabilité trouvés et corrigés en repassant sur la fonctionnalité** (14/08/2026,
+  suite à une relecture demandée explicitement par Vincent — "certains composants me semblent pas
+  stables") :
+  - **Totaux incohérents entre l'encart et le détail** : `CongesConsommesCard.calculerTotaux`
+    (encart `/suivre`) sommait toutes les demandes de la période sans exclure les annulées, alors
+    que `CongesPaiePage.grouperParCollaborateur` (détail `/suivre/paie`) les exclut — les deux
+    écrans affichaient des totaux différents pour la même période dès qu'une régularisation avait eu
+    lieu. Même exclusion (`statut !== "annulé"`) ajoutée aux deux endroits.
+  - **Course entre actions concurrentes** : rien n'empêchait de cliquer sur une autre pill (ou de
+    changer Du/Au/le filtre) pendant qu'une action Valider/Refuser/Supprimer/Restaurer était encore
+    en vol — la résolution tardive de la première action (`setSelectionId(null)` dans son `finally`)
+    pouvait fermer le panneau d'un item différent de celui réellement concerné. Corrigé en
+    verrouillant (`disabled={enCours}`) les pills, les champs Du/Au, la case "Validés uniquement" et
+    le bouton fermer du panneau pendant qu'une action est en cours.
+  - **Panneau qui écrase le tableau en dessous de `xl` (1280px)** : le layout côte à côte
+    (`flex-row`) s'activait dès `md` (768px), mais le panneau fixe (`w-80` = 320px) et le
+    `min-w-[640px]` du tableau ne tiennent pas ensemble dans l'espace disponible sur un écran de
+    laptop courant (1024–1279px) — le tableau se retrouvait compressé sous son propre minimum,
+    deux colonnes entières sortant du cadre visible sans indication claire de scroll horizontal.
+    Le seuil du layout côte à côte (conteneur, largeur du tableau, position/largeur du panneau) est
+    passé de `md:` à `xl:` — en dessous, panneau et tableau s'empilent proprement au lieu de se
+    disputer la largeur.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
-- Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de
-  solde), accès Comptable — **le récapitulatif mensuel n'existe pas encore en code** (aucune
-  route/composant), donc son extension aux 4 nouveaux types sans compteur (CSS/CE/RECUP/EVT_FAM,
-  04/08/2026) reste à faire quand cet écran sera construit, pas avant
+- Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, correction de solde), accès
+  Comptable — voir "Export paie (14/08/2026)" ci-dessous pour ce qui est fait côté récapitulatif
+  mensuel
 - Consolidation design system identifiée par audit (24/07/2026) : `Badge`, `Button`,
   `Input`/`Select`/`Textarea` faits. Reste : mapping couleur CP/RTT/CPT dupliqué entre
   `SoldeCard.tsx` et `TypeBadge.tsx` (deux `Record` séparés pour la même correspondance) ; pas de

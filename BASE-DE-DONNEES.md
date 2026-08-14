@@ -45,9 +45,15 @@ Abeil, signalés plus bas.
   anticipation dessus (`demandes_conges.is_anticipation`).
 - **Demi-journées** : `demi_debut` / `demi_fin` (matin/après-midi) sur les demandes — les congés ne
   se posent donc pas uniquement en jours pleins.
-- **Dévalidation ≠ annulation** : une demande déjà validée que Delphine invalide passe par
-  `devalidee_par` / `date_devalidation`, distincts du `statut = 'annulee'` qui couvre le retrait
-  d'une demande encore en attente par le salarié lui-même.
+- **`devalidee_par` / `date_devalidation` : colonnes prévues mais finalement pas utilisées**
+  (14/08/2026) — l'intention initiale était de distinguer "dévalidation d'une demande validée" de
+  "annulation d'une demande en attente" via deux mécanismes séparés. En construisant la
+  régularisation d'Export paie (voir CONTEXTE.md), le choix final a été de réutiliser
+  `statut = 'annulee'` pour les deux cas (mêmes colonnes de décision que valider/refuser :
+  `validateur_id`, `commentaire_decision`, `date_decision`) plutôt que d'ajouter un chemin dédié
+  pour un cas rare — plus simple à tracer (un seul jeu de colonnes de décision) au prix de perdre la
+  distinction sémantique fine. Les colonnes `devalidee_par`/`date_devalidation` restent en base,
+  inutilisées.
 - **`nb_demi_journees` est calculé côté application**, pas en base — le commentaire du schéma
   précise "jours fériés/weekends exclus".
 - **Contrat en deux dimensions indépendantes** : `nature_contrat` (CDI/CDD/Alternance/Stage) et

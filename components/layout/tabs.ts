@@ -6,6 +6,7 @@ import {
   Home,
   LayoutDashboard,
   PlusCircle,
+  Receipt,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -31,6 +32,7 @@ const PARAMETRER_TABS: NavTab[] = [
 
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre", label: "Demandes à traiter", Icon: ClipboardCheck },
+  { href: "/suivre/paie", label: "Export paie", Icon: Receipt },
 ];
 
 /**
@@ -41,4 +43,17 @@ export function getNavTabs(pathname: string): NavTab[] {
   if (pathname.startsWith("/parametrer")) return PARAMETRER_TABS;
   if (pathname.startsWith("/suivre")) return SUIVRE_TABS;
   return POSER_TABS;
+}
+
+/**
+ * Onglet actif parmi `tabs` pour `pathname` — le href le plus long/spécifique
+ * gagne (ex. sur `/suivre/paie`, l'onglet `/suivre/paie` l'emporte sur
+ * `/suivre`, qui serait sinon aussi "actif" par préfixe).
+ */
+export function getActiveHref(pathname: string, tabs: NavTab[]): string | null {
+  const correspondances = tabs.filter(
+    (t) => pathname === t.href || pathname.startsWith(`${t.href}/`),
+  );
+  if (correspondances.length === 0) return null;
+  return correspondances.reduce((a, b) => (b.href.length > a.href.length ? b : a)).href;
 }

@@ -18,7 +18,8 @@ import { SelectPille } from "@/components/ui/SelectPille";
 import { SoldeCard } from "@/components/ui/SoldeCard";
 import { SoldeMoisBloc } from "@/components/ui/SoldeMoisBloc";
 import { TypeBadge, TypeBadgePillEnhanced } from "@/components/demandes/TypeBadge";
-import type { MouvementSolde, StatutDemande } from "@/lib/types";
+import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
+import type { DemandeEquipe, MouvementSolde, StatutDemande } from "@/lib/types";
 
 /**
  * Page de référence du design system — importe et rend les VRAIS composants
@@ -78,6 +79,39 @@ const SOLDE_MOIS_EXEMPLE: MouvementSolde[] = [
     libelle: "Régul",
     jours: -8,
     soldeApres: 37,
+  },
+];
+
+const SUIVI_DEMANDES_EXEMPLE: DemandeEquipe[] = [
+  {
+    id: "exemple-suivi-1",
+    type: "CP",
+    isAnticipation: false,
+    debut: "2026-08-21",
+    fin: "2026-08-21",
+    demiDebut: "matin",
+    demiFin: "apres_midi",
+    nbDemiJournees: 2,
+    datePose: "2026-08-13",
+    statut: "en attente",
+    note: "",
+    commentaireManager: "",
+    demandeur: { id: "exemple-collab-1", prenom: "Salarie", nom: "Test" },
+  },
+  {
+    id: "exemple-suivi-2",
+    type: "CP",
+    isAnticipation: false,
+    debut: "2026-08-03",
+    fin: "2026-08-28",
+    demiDebut: "matin",
+    demiFin: "apres_midi",
+    nbDemiJournees: 40,
+    datePose: "2026-08-13",
+    statut: "validé",
+    note: "",
+    commentaireManager: "",
+    demandeur: { id: "exemple-collab-2", prenom: "Olivier", nom: "Test" },
   },
 ];
 
@@ -192,9 +226,38 @@ export function DesignSystemPage() {
             <span className="text-ink-500 text-sm">3 jours - posé le 24 juil. 2026</span>
             <code className="text-ink-500 shrink-0 text-xs">text-sm text-ink-500</code>
           </div>
-          <div className="flex items-baseline justify-between gap-4 py-3">
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
             <span className="text-ink-500 text-xs">HISTORIQUE</span>
             <code className="text-ink-500 shrink-0 text-xs">text-xs text-ink-500</code>
+          </div>
+          <p className="text-ink-500 pt-3 text-xs font-semibold">
+            Suivi des demandes (SuiviDemandeRow) — échelle resserrée pour une carte dense sans
+            action
+          </p>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-500 text-[11px] font-semibold">Congés Payés</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-[11px] font-semibold text-ink-500 — libellé du type (point de couleur + texte)
+            </code>
+          </div>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-900 text-xs font-semibold">21 août 2026</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-xs font-semibold text-ink-900 — période (pas text-sm, densité de carte)
+            </code>
+          </div>
+          <div className="border-ink-300/60 flex items-baseline justify-between gap-4 border-b py-3">
+            <span className="text-ink-500 text-[10px]">Posé le 13/08/2026</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-[10px] text-ink-500 — le plus petit gabarit du DS, réservé à cette carte
+            </code>
+          </div>
+          <div className="flex items-baseline justify-between gap-4 py-3">
+            <span className="text-[14.4px]">1 j</span>
+            <code className="text-ink-500 shrink-0 text-xs">
+              text-[14.4px] — contenu de la pastille durée, +20% vs text-xs pour compenser le
+              scale-90 appliqué à la pastille
+            </code>
           </div>
         </div>
       </Section>
@@ -268,6 +331,21 @@ export function DesignSystemPage() {
                 ouvert={soldeMoisOuvert}
                 onToggle={() => setSoldeMoisOuvert((v) => !v)}
               />
+            </div>
+          </ComponentExample>
+
+          <ComponentExample title="SuiviDemandeRow — carte compacte de suivi (Espace Suivre, vue admin)">
+            <div className="flex w-full max-w-sm flex-col gap-3">
+              {SUIVI_DEMANDES_EXEMPLE.map((demande) => (
+                <div key={demande.id} className="flex flex-col gap-1">
+                  <span className="text-ink-500 px-1 text-xs font-semibold">
+                    {demande.demandeur.prenom} {demande.demandeur.nom}
+                  </span>
+                  <div className="bg-surface-card shadow-sm">
+                    <SuiviDemandeRow demande={demande} isLast />
+                  </div>
+                </div>
+              ))}
             </div>
           </ComponentExample>
 

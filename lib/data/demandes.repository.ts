@@ -50,12 +50,11 @@ interface DemandeEquipeRow extends DemandeRow {
 // désambiguïser via `!utilisateur_id`.
 const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
 
-// Aucune demande créée par l'app ne passe par "annulee" (pas de flux
-// d'annulation côté salarié à ce stade) — voir projet.md.
 const STATUT_DEPUIS_DB: Record<string, StatutDemande> = {
   en_attente: "en attente",
   validee: "validé",
   refusee: "refusé",
+  annulee: "annulé",
 };
 
 function mapDemandeDepuisDb(row: DemandeRow): Demande {
@@ -249,9 +248,42 @@ export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
   return (data ?? []).map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow));
 }
 
+/**
+ * Congés (validés, en attente, ou annulés depuis cette page — régularisation)
+ * dont `date_debut` tombe dans la période donnée (Espace Suivre > récap paie)
+ * — CP, RTT, CSS. Les "en attente" comptent dans le total (cas à la marge de
+ * régularisation), les "annulés" restent visibles/traçables dans le tableau
+ * mais sont exclus du total (voir `grouperParCollaborateur` dans
+ * `CongesPaiePage`). Filtre sur `date_debut` uniquement, comme le reste de
+ * l'app (voir `soldes.repository.ts`) — une demande à cheval sur deux
+ * périodes n'est pas traitée finement.
+ */
+export async function fetchCongesConsommesPeriode(
+  debut: string,
+  fin: string,
+): Promise<DemandeEquipe[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("demandes_conges")
+    .select(SELECT_DEMANDE_EQUIPE)
+    .in("statut", ["validee", "en_attente", "annulee"])
+    .gte("date_debut", debut)
+    .lte("date_debut", fin)
+    .order("date_debut", { ascending: true });
+
+  if (error) {
+    throw new Error("Impossible de charger les congés de la période.");
+  }
+
+  return (data ?? [])
+    .map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow))
+    .filter((d) => d.type === "CP" || d.type === "RTT" || d.type === "CSS");
+}
+
 async function deciderDemande(
   id: string,
-  statut: "validee" | "refusee",
+  statut: "validee" | "refusee" | "annulee",
   commentaire: string,
 ): Promise<void> {
   const supabase = createClient();
@@ -281,4 +313,14 @@ export async function validerDemande(id: string, commentaire = ""): Promise<void
 
 export async function refuserDemande(id: string, commentaire = ""): Promise<void> {
   await deciderDemande(id, "refusee", commentaire);
+}
+
+/**
+ * Supprime (annule) une demande déjà validée — régularisation exceptionnelle
+ * depuis "Export paie" (ex. congé finalement non pris, erreur de saisie).
+ * Trace l'auteur/motif via les mêmes colonnes de décision que valider/refuser
+ * plutôt que d'ajouter des colonnes dédiées à ce cas rare.
+ */
+export async function regulariserDemande(id: string, commentaire = ""): Promise<void> {
+  await deciderDemande(id, "annulee", commentaire);
 }

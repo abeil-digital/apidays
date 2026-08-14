@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { getNavTabs } from "@/components/layout/tabs";
+import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
 
 export function BottomNav() {
   const pathname = usePathname();
   const navTabs = getNavTabs(pathname);
+  const activeHref = getActiveHref(pathname, navTabs);
 
   return (
     <div className="border-ink-300 bg-surface-card fixed right-0 bottom-0 left-0 border-t md:hidden print:hidden">
@@ -15,7 +16,7 @@ export function BottomNav() {
         style={{ gridTemplateColumns: `repeat(${navTabs.length}, minmax(0, 1fr))` }}
       >
         {navTabs.map(({ href, label, Icon }) => {
-          const active = pathname === href || pathname.startsWith(`${href}/`);
+          const active = href === activeHref;
           return (
             <Link
               key={href}

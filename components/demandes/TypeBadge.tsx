@@ -44,10 +44,44 @@ const LABEL_COURT: Record<TypeBadgeCode, string> = {
   FERIE: "FE",
 };
 
+/** Libellé complet — variante "point de couleur + texte" (ex. `SuiviDemandeRow`),
+ * reprend le mapping déjà utilisé par la légende d'Accueil 2. */
+export const LABEL_LONG: Record<TypeBadgeCode, string> = {
+  CP: "Congés Payés",
+  RTT: "RTT",
+  CPA: "Congés en acquisition",
+  CSS: "Congé sans solde",
+  CE: "Congé exceptionnel",
+  RECUP: "Récupération",
+  EVT_FAM: "Événement familial",
+  DJI: "Demi-journée imposée",
+  CPI: "Congé imposé",
+  FERIE: "Jour férié",
+};
+
 /** Classe Tailwind de fond plein d'un code — pour réutiliser la même couleur
  * hors du badge (ex. pastille de calendrier). */
 export function classeFondTypeBadge(code: TypeBadgeCode): string {
   return CODE_STYLES[code];
+}
+
+const CODE_STYLES_BORDURE: Record<TypeBadgeCode, string> = {
+  CP: "border-cp",
+  RTT: "border-rtt",
+  CPA: "border-cpa",
+  CSS: "border-css",
+  CE: "border-ce",
+  RECUP: "border-recup",
+  EVT_FAM: "border-evtfam",
+  DJI: "border-dji",
+  CPI: "border-cp",
+  FERIE: "border-ferie",
+};
+
+/** Classe Tailwind de bordure seule (couleur du type, fond inchangé) — ex.
+ * liséré coloré sur une pastille déjà stylée autrement. */
+export function classeBordureTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES_BORDURE[code];
 }
 
 // Variante atténuée (opacité 50%, ex. demande "en attente") — classes écrites

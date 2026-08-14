@@ -7,6 +7,21 @@ export function formatDate(iso: string): string {
   }).format(d);
 }
 
+/**
+ * Format jj/mm/aaaa — règle : toute date de demande ou d'action (posé le,
+ * publié le, décidé le...) s'affiche ainsi, jamais en "13 août 2026". Les
+ * dates de période de congé (début/fin d'une demande) restent sur
+ * `formatDate`/`formatPeriodeDemande`.
+ */
+export function formatDateAction(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+}
+
 export function formatJourMois(iso: string, avecAnnee: boolean): string {
   const d = new Date(`${iso}T00:00:00`);
   const jour = d.getDate();

@@ -1,5 +1,5 @@
 import type { Demande } from "@/lib/types";
-import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
+import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 
@@ -26,7 +26,7 @@ export function RequestRow({ demande, isLast }: RequestRowProps) {
         </div>
         <div className="text-ink-500 text-xs">
           {formatJours(jours)} jour{jours > 1 ? "s" : ""} - posé le{" "}
-          <span className="font-bold">{formatDate(demande.datePose)}</span>
+          <span className="font-bold">{formatDateAction(demande.datePose)}</span>
         </div>
         {demande.commentaireManager && (
           <div className="text-status-danger-fg mt-0.5 text-xs">
