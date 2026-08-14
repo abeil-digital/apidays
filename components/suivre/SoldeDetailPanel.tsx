@@ -1,15 +1,31 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, Plus, X } from "lucide-react";
 import { formatJours } from "@/lib/format";
-import { useHistoriqueSoldeCp } from "@/hooks/useHistoriqueSoldeCp";
-import { classeBordureTypeBadge, TypeBadgePillEnhanced } from "@/components/demandes/TypeBadge";
+import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
+import {
+  classeBordureTypeBadge,
+  classeFondTypeBadge,
+  classeTexteTypeBadge,
+  TypeBadgePillEnhanced,
+} from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 
 type ModeSolde = "reel" | "theorique";
+type CodeSoldeDetail = "CP" | "RTT" | "CPA";
 
-interface SoldeCpDetailPanelProps {
+// Nom de la variable CSS du token couleur du type — pour foncer une couleur
+// déjà pâle (RTT/CPA en particulier) via `color-mix`, plutôt qu'une classe
+// Tailwind figée par code (voir `MiniCalendrier.tsx` pour le même procédé).
+const VAR_COULEUR: Record<CodeSoldeDetail, string> = {
+  CP: "--color-cp",
+  RTT: "--color-rtt",
+  CPA: "--color-cpa",
+};
+
+interface SoldeDetailPanelProps {
+  code: CodeSoldeDetail;
   utilisateurId: string;
   nomComplet: string;
   onClose: () => void;
@@ -29,30 +45,50 @@ function formatJjMmAa(iso: string): string {
   }).format(new Date(`${iso}T00:00:00`));
 }
 
-// Le libellé d'une demande arrive préfixé "CP : ..." (utile dans un contexte
-// mélangé) — inutile ici, la colonne Événement est déjà 100% CP.
-function libelleEvenement(m: { type: "demande" | "ajustement"; date: string; libelle: string }) {
+// Le préfixe "CP : "/"RTT : " du libellé d'une demande est gardé (revenu en
+// arrière sur le choix initial de le retirer) : utile pour distinguer un
+// événement de consommation d'un événement d'acquisition RTT dans le même
+// feed, plutôt qu'une redondance avec l'en-tête du panneau.
+function libelleEvenement(m: {
+  type: "demande" | "ajustement" | "acquisition";
+  date: string;
+  libelle: string;
+}) {
   if (m.type === "ajustement") return `Régul (${formatJjMm(m.date)})`;
-  return m.libelle.replace(/^CP\s*:\s*/, "");
+  return m.libelle;
 }
 
 /**
- * Détail du solde CP sur la période de référence — panneau latéral droit de
- * "Suivre les soldes" (même docking `xl:sticky` que le panneau "Détail du
- * congé" d'Export paie), ouvert au clic sur la pill CP d'un collaborateur.
- * Table "Événements" à plat, pas de repli par mois comme `HistoriqueSoldeModal`
- * (ici on veut tout voir d'un coup, du solde N-1 jusqu'à aujourd'hui) :
+ * Détail du solde CP/RTT/CPA sur la période de référence — panneau latéral
+ * droit de "Suivre les soldes" (même docking `xl:sticky` que le panneau
+ * "Détail du congé" d'Export paie), ouvert au clic sur la pill CP, RTT ou
+ * CPA d'un collaborateur. Table "Événements" à plat, pas de repli par mois
+ * comme `HistoriqueSoldeModal` (ici on veut tout voir d'un coup) :
  * Événement (pill contour + point de statut identique à celle de la colonne
- * Dates d'Export paie — pas de mention "CP" dans le libellé, la colonne est
- * déjà 100% CP) / Jours (signé, couleur selon le sens) / Solde (`soldeApres`,
- * déjà calculé par `fetchHistoriqueCp`, pas recalculé ici).
+ * Dates d'Export paie) / Jours (signé, couleur du TYPE plutôt qu'un rouge
+ * générique — `classeTexteTypeBadge`) / Solde (`soldeApres`, déjà calculé par
+ * `fetchHistoriqueCp`/`fetchHistoriqueRtt`/`fetchHistoriqueCpa`, pas
+ * recalculé ici).
+ *
+ * Les 3 types partagent ce composant malgré des formules de solde
+ * différentes : CP a un capital connu dès le 1er jour de la période
+ * (+ report), donc seule la consommation apparaît en événement ; RTT et CPA
+ * n'ont ni report ni capital de départ, le solde se construit mois après
+ * mois — chaque accrual mensuel est donc lui-même un événement (`type:
+ * "acquisition"`), positif, en plus de la consommation. D'où la ligne
+ * "Solde N-1"/"Solde initial" toujours à 0 j pour RTT/CPA (pas de report), et
+ * un libellé de tête différencié (RTT/CPA n'ont pas de notion de "N-1").
+ * Subtilité CPA propre à `fetchHistoriqueCpa` : l'acquisition se déroule sur
+ * la période CP en cours, mais finance des congés dont les dates tombent
+ * dans la période SUIVANTE — voir le commentaire de cette fonction.
  */
-export function SoldeCpDetailPanel({
+export function SoldeDetailPanel({
+  code,
   utilisateurId,
   nomComplet,
   onClose,
-}: SoldeCpDetailPanelProps) {
-  const { historique, loading, error } = useHistoriqueSoldeCp(utilisateurId);
+}: SoldeDetailPanelProps) {
+  const { historique, loading, error } = useHistoriqueSolde(utilisateurId, code);
   const [mode, setMode] = useState<ModeSolde>("reel");
   const evenements = historique?.mois.flatMap((m) => m.mouvements) ?? [];
   const enAttente = mode === "theorique" ? (historique?.enAttente ?? []) : [];
@@ -61,21 +97,24 @@ export function SoldeCpDetailPanel({
     .map((mot) => mot.charAt(0))
     .join("")
     .toUpperCase();
+  const classeTexte = classeTexteTypeBadge(code);
+  const classeBordure = classeBordureTypeBadge(code);
+  const libelleDepart = code === "CP" ? "Solde N-1" : "Solde initial";
 
   return (
     <div className="bg-surface-card w-full xl:sticky xl:top-4 xl:w-96 xl:shrink-0">
-      <div className="flex items-center justify-between px-4 py-3">
+      <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
         <div className="flex items-center gap-2.5">
           <Avatar initiales={initiales} />
           <div>
-            <div className="text-ink-900 text-sm font-bold">{nomComplet}</div>
-            <div className="text-ink-500 text-xs">Détail du solde CP</div>
+            <div className="text-sm font-bold text-white">{nomComplet}</div>
+            <div className="text-xs font-semibold text-white/80">Détail du solde {code}</div>
           </div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="text-ink-500 shrink-0"
+          className="shrink-0 text-white/70 hover:text-white"
           aria-label="Fermer"
         >
           <X size={18} />
@@ -102,8 +141,11 @@ export function SoldeCpDetailPanel({
               <tbody>
                 <tr>
                   <td className="px-4 py-3">
-                    <span className="bg-surface-app text-cp border-cp rounded-full border px-2.5 py-0.5 text-xs font-semibold">
-                      {`Solde N-1 - ${formatJjMmAa(historique.periodeDebut)}`}
+                    <span
+                      className={`bg-surface-app rounded-full border px-2.5 py-0.5 text-xs font-semibold ${classeBordure}`}
+                      style={{ color: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 65%, black)` }}
+                    >
+                      {`${libelleDepart} - ${formatJjMmAa(historique.periodeDebut)}`}
                     </span>
                   </td>
                   <td className="text-ink-500 px-4 py-3 text-center">—</td>
@@ -115,15 +157,21 @@ export function SoldeCpDetailPanel({
                   <tr key={m.id}>
                     <td className="px-4 py-3">
                       <span
-                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordureTypeBadge("CP")}`}
+                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordure}`}
                       >
-                        <span className="bg-status-success-fg h-1.5 w-1.5 shrink-0 rounded-full" />
+                        {m.type === "acquisition" ? (
+                          <Plus size={10} className={`${classeTexte} shrink-0`} />
+                        ) : (
+                          <span className="bg-status-success-fg h-1.5 w-1.5 shrink-0 rounded-full" />
+                        )}
                         {libelleEvenement(m)}
                       </span>
                     </td>
                     <td
                       className={`px-4 py-3 text-center font-semibold ${
-                        m.jours < 0 ? "text-cp" : "text-status-success-fg"
+                        m.jours < 0 || m.type === "acquisition"
+                          ? classeTexte
+                          : "text-status-success-fg"
                       }`}
                     >
                       {m.jours > 0 ? "+" : ""}
@@ -138,13 +186,13 @@ export function SoldeCpDetailPanel({
                   <tr key={m.id}>
                     <td className="px-4 py-3">
                       <span
-                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordureTypeBadge("CP")}`}
+                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordure}`}
                       >
                         <span className="bg-status-warning-fg h-1.5 w-1.5 shrink-0 rounded-full" />
                         {libelleEvenement(m)}
                       </span>
                     </td>
-                    <td className="text-cp px-4 py-3 text-center font-semibold">
+                    <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
                       {formatJours(m.jours)} j
                     </td>
                     <td className="text-ink-900 px-4 py-3 text-center font-semibold">
@@ -177,7 +225,7 @@ export function SoldeCpDetailPanel({
               </span>
             </span>
             <TypeBadgePillEnhanced
-              code="CP"
+              code={code}
               label={`${formatJours(mode === "reel" ? historique.soldeActuel : historique.soldeTheorique)} j`}
             />
           </div>

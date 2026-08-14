@@ -84,6 +84,25 @@ export function classeBordureTypeBadge(code: TypeBadgeCode): string {
   return CODE_STYLES_BORDURE[code];
 }
 
+const CODE_STYLES_TEXTE: Record<TypeBadgeCode, string> = {
+  CP: "text-cp",
+  RTT: "text-rtt",
+  CPA: "text-cpa",
+  CSS: "text-css",
+  CE: "text-ce",
+  RECUP: "text-recup",
+  EVT_FAM: "text-evtfam",
+  DJI: "text-dji",
+  CPI: "text-cp",
+  FERIE: "text-ferie",
+};
+
+/** Classe Tailwind de texte seul (couleur du type) — ex. valeur signée d'un
+ * mouvement de solde, colorée par le type plutôt qu'en rouge générique. */
+export function classeTexteTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES_TEXTE[code];
+}
+
 // Variante atténuée (opacité 50%, ex. demande "en attente") — classes écrites
 // en toutes lettres plutôt que construites dynamiquement (`${classe}/50`) :
 // Tailwind ne génère que les classes qu'il peut voir littéralement dans le

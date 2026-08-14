@@ -717,6 +717,84 @@ Points 1 et 2 faits ; points 3 à 6 restent à traiter — voir Backlog.md.
   fonction, une requête `demandes_conges` de plus (`statut = "en_attente"`), pas de recalcul côté
   client.
 
+**Détail du solde RTT + panneau généralisé CP/RTT (14/08/2026)** — la pill RTT de
+"Suivre les soldes" devient cliquable sur le même modèle que CP, avec une formule adaptée à sa
+propre règle de gestion (période de référence RTT = **l'année civile**, acquisition **mensuelle**,
+**pas de report** d'une période à l'autre) :
+
+- **`SoldeCpDetailPanel.tsx` généralisé en `SoldeDetailPanel.tsx`** (prop `code: "CP" | "RTT"`),
+  réutilisé par les deux pills plutôt que dupliqué — seules les couleurs (`classeTexteTypeBadge`/
+  `classeBordureTypeBadge`, nouveau helper texte symétrique du helper bordure existant dans
+  `TypeBadge.tsx`) et le libellé de la ligne de départ (`"Solde N-1"` pour CP, `"Solde initial"` pour
+  RTT — RTT n'a pas de notion de report/N-1) changent avec `code`.
+- **`fetchHistoriqueRtt`** (nouveau, `soldes.repository.ts`, même gabarit que `fetchHistoriqueCp`)
+  reflète la vraie mécanique RTT plutôt que de forcer le moule CP : pas de capital connu d'avance,
+  le solde se construit mois après mois — chaque mois entier écoulé depuis le 1er jour de la période
+  devient donc lui-même un **événement positif** dans le feed (`type: "acquisition"`, libellé
+  "Acquisition {mois}"), en plus des RTT validés consommés (négatif). D'où `soldeDepart: 0` toujours
+  pour RTT (jamais de report). `MouvementSolde.type` gagne cette 3e valeur (`lib/types.ts`).
+- **Couleur des jours consommés = couleur du TYPE, pas un rouge générique** (règle déjà actée pour
+  CP le 14/08/2026, reconduite ici à l'identique pour RTT) : `-1 j` s'affiche en `text-rtt` (vert),
+  les crédits (accrual RTT ou ajustement) restent en `text-status-success-fg` (vert "succès",
+  différent du vert RTT — les deux se ressemblent par coïncidence de palette, pas une confusion
+  volontaire).
+- **`useHistoriqueSolde(utilisateurId, code)`** (nouveau hook générique, `hooks/`) : distinct de
+  `useHistoriqueSoldeCp` qui reste tel quel (expose en plus `ajouterAjustement`, utilisé par la
+  popin de régulation admin `HistoriqueSoldeModal`, non touchée). Point d'attention : `loading` ne se
+  réinitialise qu'au montage (pas de `setLoading(true)` synchrone dans l'effet — interdit par la
+  règle de lint `set-state-in-effect`) ; `SuivreSoldesPage` force donc un remontage du panneau via
+  `key={`${utilisateurId}-${code}`}` quand on clique directement CP→RTT (ou l'inverse) pour le même
+  salarié sans fermer d'abord, pour éviter un flash de l'ancien solde sous le nouveau libellé.
+- **État "déclenché"** étendu aux deux pills indépendamment (`Selection { utilisateurId; code }`
+  plutôt qu'un simple id) : cliquer RTT après avoir ouvert CP sur le même salarié fait bien basculer
+  l'inversion visuelle de la pill CP vers la pill RTT, jamais les deux en même temps.
+- DS : nouvel exemple `/design-system` à ajouter si RTT devient un cas de référence récurrent — pas
+  fait pour l'instant, l'exemple existant ("Pill de solde cliquable") reste illustré uniquement en
+  CP, le principe (variant pill/outline piloté par `active`) étant identique pour RTT.
+
+**Détail du solde CPA + raffinements visuels du panneau (14/08/2026)** — la pill CPA de
+"Suivre les soldes" devient cliquable à son tour (3 types sur 3 désormais), et le panneau reçoit
+plusieurs ajustements de lisibilité demandés après coup sur les 3 types :
+
+- **`fetchHistoriqueCpa`** (nouveau, `soldes.repository.ts`) : même principe d'accrual mensuel que
+  RTT (`type: "acquisition"`, `soldeDepart: 0`), mais sur une **fenêtre temporelle décalée** propre à
+  CPA — l'acquisition se déroule sur la période CP **en cours** (même horloge que `regleCP`,
+  `periodeEnCours`), alors qu'elle finance des congés anticipés dont les dates tombent dans la
+  période **suivante** (`periodeSuivante`, `is_anticipation = true`, même logique que le calcul de
+  `fetchSoldes`). Piège identifié en écrivant la fonction : un parcours calendaire de "mois entiers
+  écoulés" borné à aujourd'hui (le pattern repris tel quel de RTT) aurait silencieusement perdu tout
+  événement de consommation, puisque ces dates tombent dans une période future hors de cette
+  fenêtre. Fix : les clés de mois du feed (`cles`) sont dérivées de l'union des dates réelles de
+  tous les mouvements (accrual + consommation) plutôt que d'un parcours calendaire fixe — vérifié en
+  base réelle (Salarie Test : 2 accruals "juin 2026"/"juillet 2026" + 1 événement "CPA : du 08/06 au
+  08/06" daté 2027, correctement inclus et sommé, solde final 4 j identique entre le panneau et la
+  colonne CPA du tableau — même moteur de calcul que `fetchSoldes`, pas de recalcul divergent).
+- **`useHistoriqueSolde`/`SoldeDetailPanel`/`SuivreSoldesPage`** étendus de `"CP" | "RTT"` à
+  `"CP" | "RTT" | "CPA"` — aucune bifurcation supplémentaire nécessaire, tout le reste (couleurs via
+  `classeTexteTypeBadge`/`classeBordureTypeBadge`, libellé "Solde initial", pill CPA qui s'inverse en
+  `variant="outline"` pendant que son panneau est ouvert) était déjà générique par construction.
+- **Icône "+" au lieu du point vert pour les événements d'acquisition** (`Plus` de `lucide-react`,
+  `size={10}`) — un point de couleur signale normalement un STATUT (validé/en attente), ce qu'une
+  acquisition automatique n'est pas ; le "+" évite de laisser croire à un statut alors qu'il s'agit
+  d'un mécanisme différent. Couleur du "+" et du montant "+X j" associé : **couleur du type**
+  (`classeTexteTypeBadge`), pas le vert "succès" générique (qui reste réservé à un crédit ponctuel,
+  ex. ajustement positif) — distinction demandée explicitement après une première passe où tout
+  positif était en vert succès.
+- **Préfixe `"CP : "`/`"RTT : "`/`"CPA : "` réintroduit** dans le libellé des pills d'événement
+  (`libelleEvenement` simplifié, ne prend plus le paramètre `code`) — retour en arrière assumé sur le
+  choix initial de le retirer (motivé à l'époque par "on est déjà 100% CP dans ce panneau", un
+  raisonnement qui ne tient plus maintenant que le même panneau mélange parfois acquisition et
+  consommation dans un seul feed, ex. RTT/CPA).
+- **En-tête du panneau recoloré au fond du type** (`classeFondTypeBadge(code)` sur le bandeau, au
+  lieu de `bg-surface-card`) — nom du salarié et sous-titre "Détail du solde {code}" passés en
+  `text-white`, sous-titre renforcé en `font-semibold` (était trop fin pour rester lisible sur fond
+  coloré), croix de fermeture en `text-white/70` (`hover:text-white`).
+- **Pill "Solde N-1"/"Solde initial" foncée pour l'accessibilité** — sa couleur de texte n'est plus
+  la classe Tailwind figée du type (`text-rtt` en particulier, trop pâle sur fond clair pour un texte
+  `text-xs`) mais un `color-mix(in srgb, var(--color-{code}) 65%, black)` en style inline (même
+  procédé que `MiniCalendrier.tsx` pour une variante de couleur non pré-générée par Tailwind) — la
+  bordure de la pill garde la couleur pleine du type, seul le texte est foncé.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

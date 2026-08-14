@@ -323,18 +323,41 @@ export function DesignSystemPage() {
             <TypeBadgePillEnhanced code="CP" label="48 j" />
           </ComponentExample>
 
-          {/* Suivre les soldes : la pill CP du tableau s'inverse (fond blanc, texte/contour
-              couleur du type) tant que le panneau de détail est ouvert pour ce salarié — même
-              `TypeBadge`, juste `variant="outline"` au lieu de `variant="pill"`, piloté par un
-              simple booléen `active` côté appelant (pas de nouvel état ni de composant dédié). */}
+          {/* Suivre les soldes : les 3 pills du tableau (CP/RTT/CPA) s'inversent chacune
+              indépendamment (fond blanc, texte/contour couleur du type) tant que le panneau
+              `SoldeDetailPanel` est ouvert pour ce salarié SUR CE TYPE précis — même `TypeBadge`,
+              juste `variant="outline"` au lieu de `variant="pill"`, piloté par un simple booléen
+              `active` côté appelant (`Selection { utilisateurId; code }`, pas de nouvel état ni de
+              composant dédié). Le panneau lui-même n'est pas rendu ici : il fetch ses données via
+              `useHistoriqueSolde(utilisateurId, code)`, pas de props représentatives possibles sans
+              un vrai salarié — voir `components/suivre/SoldeDetailPanel.tsx` pour le détail complet
+              (en-tête coloré au fond du type + texte blanc, ligne "Solde N-1"/"Solde initial"
+              foncée via `color-mix` pour l'accessibilité, icône `+` — pas de point — colorée au
+              type pour un événement d'acquisition mensuelle RTT/CPA). */}
           <ComponentExample title="Pill de solde cliquable — état normal vs état déclenché (Suivre les soldes)">
             <div className="flex flex-col items-center gap-1.5">
               <TypeBadge code="CP" variant="pill" label="39 j" />
-              <span className="text-ink-500 text-[11px]">Normal</span>
+              <span className="text-ink-500 text-[11px]">CP normal</span>
             </div>
             <div className="flex flex-col items-center gap-1.5">
               <TypeBadge code="CP" variant="outline" label="39 j" />
-              <span className="text-ink-500 text-[11px]">Déclenché (panneau de détail ouvert)</span>
+              <span className="text-ink-500 text-[11px]">CP déclenché</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="RTT" variant="pill" label="0,75 j" />
+              <span className="text-ink-500 text-[11px]">RTT normal</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="RTT" variant="outline" label="0,75 j" />
+              <span className="text-ink-500 text-[11px]">RTT déclenché</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="CPA" variant="pill" label="4 j" />
+              <span className="text-ink-500 text-[11px]">CPA normal</span>
+            </div>
+            <div className="flex flex-col items-center gap-1.5">
+              <TypeBadge code="CPA" variant="outline" label="4 j" />
+              <span className="text-ink-500 text-[11px]">CPA déclenché</span>
             </div>
           </ComponentExample>
 

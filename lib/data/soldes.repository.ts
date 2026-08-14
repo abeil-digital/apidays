@@ -523,6 +523,325 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
   };
 }
 
+/**
+ * Feed d'historique du solde RTT d'un salarié (Espace Suivre, popin ouverte
+ * au clic sur le solde RTT) — même gabarit que `fetchHistoriqueCp`, mais
+ * formule différente : période de référence = **l'année** (pas de report
+ * d'une période à l'autre, perdu en fin de période), et le solde ne part pas
+ * d'un capital connu à l'avance : il se **construit mois après mois**
+ * (accrual mensuel, `regleRTT.tauxAcquisitionMensuel`). Le feed reflète donc
+ * ces accruals comme des événements positifs à part entière (type
+ * `"acquisition"`), un par mois entier écoulé depuis le début de la période —
+ * contrairement à CP où seule la consommation apparaît (le capital est déjà
+ * tout acquis au 1er jour de la période).
+ */
+export async function fetchHistoriqueRtt(utilisateurId: string): Promise<HistoriqueSolde> {
+  const supabase = createClient();
+
+  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
+    [
+      supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
+      fetchReglesAcquisition(),
+    ],
+  );
+
+  if (erreurUtilisateur || !utilisateurRow) {
+    throw new Error("Impossible de charger le profil pour l'historique du solde.");
+  }
+
+  const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
+  if (!regleRTT) {
+    throw new Error("Aucune règle d'acquisition RTT paramétrée.");
+  }
+
+  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
+  const periodeRtt = periodeContenant(
+    aujourdhui,
+    regleRTT.periodeDebutMois,
+    regleRTT.periodeDebutJour,
+  );
+  const moisEcoules = moisEntiersEcoules(periodeRtt.debut, aujourdhui);
+
+  const typeAbsenceId = await getTypeAbsenceId(supabase, "RTT");
+
+  const [
+    { data: demandesRows, error: erreurDemandes },
+    { data: enAttenteRows, error: erreurEnAttente },
+  ] = await Promise.all([
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("statut", "validee")
+      .gte("date_debut", dateIso(periodeRtt.debut))
+      .lte("date_debut", dateIso(periodeRtt.fin)),
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("statut", "en_attente")
+      .gte("date_debut", dateIso(periodeRtt.debut))
+      .lte("date_debut", dateIso(periodeRtt.fin)),
+  ]);
+
+  if (erreurDemandes || erreurEnAttente) {
+    throw new Error("Impossible de charger l'historique du solde.");
+  }
+
+  interface MouvementBrut {
+    id: string;
+    type: "demande" | "acquisition";
+    date: string;
+    libelle: string;
+    jours: number;
+  }
+
+  const accrualMensuel = regleRTT.tauxAcquisitionMensuel * prorata;
+  const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
+    const dateMois = new Date(
+      Date.UTC(
+        periodeRtt.debut.getUTCFullYear(),
+        periodeRtt.debut.getUTCMonth() + i,
+        periodeRtt.debut.getUTCDate(),
+      ),
+    );
+    return {
+      id: `acquisition-${dateIso(dateMois)}`,
+      type: "acquisition",
+      date: dateIso(dateMois),
+      libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
+      jours: accrualMensuel,
+    };
+  });
+
+  const mouvementsBruts: MouvementBrut[] = [
+    ...accrualsBruts,
+    ...(demandesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: `RTT : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      jours: -(Number(d.nb_demi_journees) / 2),
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  const cles: string[] = [];
+  {
+    let annee = periodeRtt.debut.getUTCFullYear();
+    let mois = periodeRtt.debut.getUTCMonth();
+    const anneeFin = aujourdhui.getUTCFullYear();
+    const moisFin = aujourdhui.getUTCMonth();
+    while (annee < anneeFin || (annee === anneeFin && mois <= moisFin)) {
+      cles.push(`${annee}-${String(mois + 1).padStart(2, "0")}`);
+      mois += 1;
+      if (mois > 11) {
+        mois = 0;
+        annee += 1;
+      }
+    }
+  }
+
+  let cumul = 0;
+  const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
+    const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
+      .filter((m) => m.date.slice(0, 7) === cle)
+      .map((m) => {
+        cumul += m.jours;
+        return { ...m, soldeApres: cumul };
+      });
+
+    return {
+      mois: cle,
+      libelle: formatMoisAnnee(new Date(`${cle}-01T00:00:00Z`)),
+      mouvements: mouvementsDuMois,
+      soldeFinMois: cumul,
+    };
+  });
+
+  let cumulTheorique = cumul;
+  const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
+    .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
+    .map((d) => {
+      cumulTheorique -= Number(d.nb_demi_journees) / 2;
+      return {
+        id: d.id,
+        type: "demande",
+        date: d.date_debut,
+        libelle: `RTT : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        jours: -(Number(d.nb_demi_journees) / 2),
+        soldeApres: cumulTheorique,
+      };
+    });
+
+  return {
+    periodeDebut: dateIso(periodeRtt.debut),
+    periodeFin: dateIso(periodeRtt.fin),
+    soldeDepart: 0,
+    mois: moisListe,
+    soldeActuel: Math.max(0, cumul),
+    enAttente,
+    soldeTheorique: Math.max(0, cumulTheorique),
+  };
+}
+
+/**
+ * Feed d'historique du solde CPA d'un salarié (Espace Suivre, popin ouverte
+ * au clic sur le solde CPA) — même principe d'accrual mensuel que RTT (pas de
+ * capital connu d'avance, `type: "acquisition"` un événement par mois entier
+ * écoulé), mais sur une fenêtre temporelle **décalée** : l'acquisition se
+ * déroule sur la période CP **en cours** (`periodeEnCours`, même horloge que
+ * `regleCP`), pendant qu'elle finance des congés anticipés dont les dates
+ * tombent, elles, dans la période **suivante** (`periodeSuivante`,
+ * `is_anticipation = true` — même logique que `fetchSoldes`). Les clés de
+ * mois du feed sont donc dérivées des dates réelles des mouvements plutôt
+ * que d'un simple parcours calendaire borné à aujourd'hui : un événement de
+ * consommation tombant dans la période suivante (donc hors de la fenêtre
+ * d'acquisition) ne doit pas être silencieusement perdu.
+ */
+export async function fetchHistoriqueCpa(utilisateurId: string): Promise<HistoriqueSolde> {
+  const supabase = createClient();
+
+  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
+    [
+      supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
+      fetchReglesAcquisition(),
+    ],
+  );
+
+  if (erreurUtilisateur || !utilisateurRow) {
+    throw new Error("Impossible de charger le profil pour l'historique du solde.");
+  }
+
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  if (!regleCP) {
+    throw new Error("Aucune règle d'acquisition CP paramétrée.");
+  }
+
+  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
+  const periodeEnCours = periodeContenant(
+    aujourdhui,
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+  const periodeSuivante = decalerPeriode(periodeEnCours, 1);
+  const moisEcoules = moisEntiersEcoules(periodeEnCours.debut, aujourdhui);
+
+  const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
+
+  const [
+    { data: demandesRows, error: erreurDemandes },
+    { data: enAttenteRows, error: erreurEnAttente },
+  ] = await Promise.all([
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", true)
+      .eq("statut", "validee")
+      .gte("date_debut", dateIso(periodeSuivante.debut))
+      .lte("date_debut", dateIso(periodeSuivante.fin)),
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", true)
+      .eq("statut", "en_attente")
+      .gte("date_debut", dateIso(periodeSuivante.debut))
+      .lte("date_debut", dateIso(periodeSuivante.fin)),
+  ]);
+
+  if (erreurDemandes || erreurEnAttente) {
+    throw new Error("Impossible de charger l'historique du solde.");
+  }
+
+  interface MouvementBrut {
+    id: string;
+    type: "demande" | "acquisition";
+    date: string;
+    libelle: string;
+    jours: number;
+  }
+
+  const accrualMensuel = regleCP.tauxAcquisitionMensuel * prorata;
+  const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
+    const dateMois = new Date(
+      Date.UTC(
+        periodeEnCours.debut.getUTCFullYear(),
+        periodeEnCours.debut.getUTCMonth() + i,
+        periodeEnCours.debut.getUTCDate(),
+      ),
+    );
+    return {
+      id: `acquisition-${dateIso(dateMois)}`,
+      type: "acquisition",
+      date: dateIso(dateMois),
+      libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
+      jours: accrualMensuel,
+    };
+  });
+
+  const mouvementsBruts: MouvementBrut[] = [
+    ...accrualsBruts,
+    ...(demandesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: `CPA : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      jours: -(Number(d.nb_demi_journees) / 2),
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
+
+  let cumul = 0;
+  const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
+    const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
+      .filter((m) => m.date.slice(0, 7) === cle)
+      .map((m) => {
+        cumul += m.jours;
+        return { ...m, soldeApres: cumul };
+      });
+
+    return {
+      mois: cle,
+      libelle: formatMoisAnnee(new Date(`${cle}-01T00:00:00Z`)),
+      mouvements: mouvementsDuMois,
+      soldeFinMois: cumul,
+    };
+  });
+
+  let cumulTheorique = cumul;
+  const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
+    .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
+    .map((d) => {
+      cumulTheorique -= Number(d.nb_demi_journees) / 2;
+      return {
+        id: d.id,
+        type: "demande",
+        date: d.date_debut,
+        libelle: `CPA : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        jours: -(Number(d.nb_demi_journees) / 2),
+        soldeApres: cumulTheorique,
+      };
+    });
+
+  return {
+    periodeDebut: dateIso(periodeEnCours.debut),
+    periodeFin: dateIso(periodeEnCours.fin),
+    soldeDepart: 0,
+    mois: moisListe,
+    soldeActuel: Math.max(0, cumul),
+    enAttente,
+    soldeTheorique: Math.max(0, cumulTheorique),
+  };
+}
+
 /** Régulation manuelle du solde CP par Delphine — RLS réservée à l'admin. */
 export async function ajouterAjustementSolde(
   utilisateurId: string,

@@ -55,10 +55,12 @@ export interface SoldeCategorie {
 
 export interface MouvementSolde {
   id: string;
-  type: "demande" | "ajustement";
-  date: string; // date ISO — date de la demande (début) ou de l'ajustement
+  // "acquisition" : accrual mensuel automatique (RTT — pas de capital de
+  // début de période comme CP, le solde se construit mois après mois).
+  type: "demande" | "ajustement" | "acquisition";
+  date: string; // date ISO — date de la demande, de l'ajustement ou du mois acquis
   libelle: string;
-  jours: number; // signé : négatif = consommation, positif = recrédit
+  jours: number; // signé : négatif = consommation, positif = recrédit/acquisition
   soldeApres: number;
   motif?: string; // demande refusée par le salarié (note) ou motif de l'ajustement
 }

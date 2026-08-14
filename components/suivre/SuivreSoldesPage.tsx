@@ -9,25 +9,32 @@ import { TypeBadge } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { SelectFiltrePill } from "@/components/ui/FiltrePill";
-import { SoldeCpDetailPanel } from "@/components/suivre/SoldeCpDetailPanel";
+import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
+
+type CodeSoldeDetail = "CP" | "RTT" | "CPA";
+
+interface Selection {
+  utilisateurId: string;
+  code: CodeSoldeDetail;
+}
 
 /** Une ligne = un `useSoldes` — le calcul est par utilisateur (pas de route
  * batch), donc chaque ligne fait son propre appel plutôt que d'essayer de
  * paralléliser dans le composant parent (même pattern que `SalarieRow`).
- * Pill CP cliquable : ouvre `SoldeCpDetailPanel` dans la colonne de droite
- * (seul CP a un historique détaillé pour l'instant, comme `HistoriqueSoldeModal`
- * ailleurs dans l'app). */
+ * Les 3 pills sont cliquables : ouvrent `SoldeDetailPanel` dans la colonne de
+ * droite. */
 function LigneSolde({
   utilisateur,
-  active,
-  onClickCp,
+  selection,
+  onClickSolde,
 }: {
   utilisateur: UtilisateurAdmin;
-  active: boolean;
-  onClickCp: () => void;
+  selection: Selection | null;
+  onClickSolde: (code: CodeSoldeDetail) => void;
 }) {
   const { soldes, loading } = useSoldes(utilisateur.id);
   const initiales = `${utilisateur.prenom.charAt(0)}${utilisateur.nom.charAt(0)}`.toUpperCase();
+  const actif = selection?.utilisateurId === utilisateur.id;
 
   return (
     <tr>
@@ -48,21 +55,41 @@ function LigneSolde({
           <td className="px-4 py-3">
             <button
               type="button"
-              onClick={onClickCp}
+              onClick={() => onClickSolde("CP")}
               className="rounded-full transition-opacity duration-150 hover:opacity-70"
             >
               <TypeBadge
                 code="CP"
-                variant={active ? "outline" : "pill"}
+                variant={actif && selection?.code === "CP" ? "outline" : "pill"}
                 label={`${formatJours(soldes.cp.valeur)} j`}
               />
             </button>
           </td>
           <td className="px-4 py-3">
-            <TypeBadge code="RTT" variant="pill" label={`${formatJours(soldes.rtt.valeur)} j`} />
+            <button
+              type="button"
+              onClick={() => onClickSolde("RTT")}
+              className="rounded-full transition-opacity duration-150 hover:opacity-70"
+            >
+              <TypeBadge
+                code="RTT"
+                variant={actif && selection?.code === "RTT" ? "outline" : "pill"}
+                label={`${formatJours(soldes.rtt.valeur)} j`}
+              />
+            </button>
           </td>
           <td className="px-4 py-3">
-            <TypeBadge code="CPA" variant="pill" label={`${formatJours(soldes.cpa.valeur)} j`} />
+            <button
+              type="button"
+              onClick={() => onClickSolde("CPA")}
+              className="rounded-full transition-opacity duration-150 hover:opacity-70"
+            >
+              <TypeBadge
+                code="CPA"
+                variant={actif && selection?.code === "CPA" ? "outline" : "pill"}
+                label={`${formatJours(soldes.cpa.valeur)} j`}
+              />
+            </button>
           </td>
         </>
       )}
@@ -88,7 +115,7 @@ function LigneSolde({
 export function SuivreSoldesPage() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
-  const [selectionId, setSelectionId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
 
   const actifs = utilisateurs.filter((u) => u.statut === "actif");
   const collaborateurs = [...actifs]
@@ -97,7 +124,7 @@ export function SuivreSoldesPage() {
   const filtres = actifs.filter(
     (u) => collaborateurFiltre === "tous" || u.id === collaborateurFiltre,
   );
-  const selection = actifs.find((u) => u.id === selectionId) ?? null;
+  const utilisateurSelectionne = actifs.find((u) => u.id === selection?.utilisateurId) ?? null;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
@@ -148,8 +175,8 @@ export function SuivreSoldesPage() {
                       <LigneSolde
                         key={u.id}
                         utilisateur={u}
-                        active={u.id === selectionId}
-                        onClickCp={() => setSelectionId(u.id)}
+                        selection={selection}
+                        onClickSolde={(code) => setSelection({ utilisateurId: u.id, code })}
                       />
                     ))}
                   </tbody>
@@ -159,11 +186,13 @@ export function SuivreSoldesPage() {
           </div>
         </div>
 
-        {selection && (
-          <SoldeCpDetailPanel
-            utilisateurId={selection.id}
-            nomComplet={`${selection.prenom} ${selection.nom}`}
-            onClose={() => setSelectionId(null)}
+        {selection && utilisateurSelectionne && (
+          <SoldeDetailPanel
+            key={`${selection.utilisateurId}-${selection.code}`}
+            code={selection.code}
+            utilisateurId={utilisateurSelectionne.id}
+            nomComplet={`${utilisateurSelectionne.prenom} ${utilisateurSelectionne.nom}`}
+            onClose={() => setSelection(null)}
           />
         )}
       </div>
