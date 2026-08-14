@@ -54,7 +54,7 @@ function ThTriable({ label, champ, triActif, direction, onClick }: ThTriableProp
       <button
         type="button"
         onClick={() => onClick(champ)}
-        className={`flex items-center gap-1 text-xs font-semibold ${actif ? "text-ink-900" : "text-ink-500"}`}
+        className={`flex items-center gap-1 text-xs font-semibold tracking-wide uppercase ${actif ? "text-ink-900" : "text-ink-500"}`}
       >
         {label}
         {actif && <Icon size={13} />}
@@ -169,14 +169,8 @@ export function UtilisateursListPage() {
         <div className="bg-surface-card overflow-x-auto shadow-sm">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold">
-                <ThTriable
-                  label="Nom"
-                  champ="nom"
-                  triActif={tri}
-                  direction={direction}
-                  onClick={trierPar}
-                />
+              <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+                <th className="px-4 py-3">Nom</th>
                 <th className="px-4 py-3">Prénom</th>
                 <th className="px-4 py-3">Email</th>
                 <ThTriable

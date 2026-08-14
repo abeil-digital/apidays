@@ -254,7 +254,7 @@ export function CongesPaiePage() {
             <div className="border-ink-300/60 w-full overflow-x-auto border-t">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
-                  <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold">
+                  <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
                     <th className="px-3 py-3 text-center">Collaborateur</th>
                     {TYPES.map((t) => (
                       <th key={t} className="px-3 py-3 text-center">
