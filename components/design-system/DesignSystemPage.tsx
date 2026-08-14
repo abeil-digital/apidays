@@ -12,6 +12,7 @@ import { ListCard } from "@/components/ui/ListCard";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { Modal } from "@/components/ui/Modal";
 import { FieldLabel } from "@/components/ui/FieldLabel";
+import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { Input } from "@/components/ui/Input";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SelectPille } from "@/components/ui/SelectPille";
@@ -93,6 +94,7 @@ const SUIVI_DEMANDES_EXEMPLE: DemandeEquipe[] = [
     demiFin: "apres_midi",
     nbDemiJournees: 2,
     datePose: "2026-08-13",
+    dateDecision: null,
     statut: "en attente",
     note: "",
     commentaireManager: "",
@@ -108,6 +110,7 @@ const SUIVI_DEMANDES_EXEMPLE: DemandeEquipe[] = [
     demiFin: "apres_midi",
     nbDemiJournees: 40,
     datePose: "2026-08-13",
+    dateDecision: "2026-08-13",
     statut: "validé",
     note: "",
     commentaireManager: "",
@@ -437,6 +440,20 @@ export function DesignSystemPage() {
               <option value="matin">Matin</option>
               <option value="apres_midi">A. midi</option>
             </SelectPille>
+          </ComponentExample>
+
+          <ComponentExample title="FiltrePill (SelectFiltrePill / InputFiltrePill) — filtres de tableau">
+            <SelectFiltrePill defaultValue="Toutes">
+              <option value="Toutes">Toutes</option>
+              <option value="Validées">Validées</option>
+              <option value="Refusées">Refusées</option>
+            </SelectFiltrePill>
+            <InputFiltrePill type="date" aria-label="Du" />
+            <code className="text-ink-500 text-xs">
+              standard pour tout filtre de tableau (statut, période, recherche…) — voir /historique.
+              text-xs / px-2.5 py-1, contour mint, chevron mint superposé. Distinct de SelectPille
+              par l&apos;usage (filtre de page vs créneau en popin DJI/CPI), pas par la taille.
+            </code>
           </ComponentExample>
 
           <ComponentExample title="DatePicker — champ tapable + calendrier (jours désactivables)">

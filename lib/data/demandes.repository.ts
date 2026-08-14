@@ -31,11 +31,12 @@ interface DemandeRow {
   is_anticipation: boolean;
   commentaire_salarie: string | null;
   commentaire_decision: string | null;
+  date_decision: string | null;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
 }
 
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, types_absences(code)";
+  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, types_absences(code)";
 
 interface DemandeEquipeRow extends DemandeRow {
   utilisateur_id: string;
@@ -72,6 +73,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     demiFin: row.demi_fin,
     nbDemiJournees: Number(row.nb_demi_journees),
     datePose: row.created_at.slice(0, 10),
+    dateDecision: row.date_decision ? row.date_decision.slice(0, 10) : null,
     statut: STATUT_DEPUIS_DB[row.statut] ?? "en attente",
     note: row.commentaire_salarie ?? "",
     commentaireManager: row.commentaire_decision ?? "",

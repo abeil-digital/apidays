@@ -17,6 +17,7 @@ export interface Demande {
   demiFin: DemiJournee; // 'matin' = demi-journée de fin seulement
   nbDemiJournees: number; // peut valoir .5 en jours (ex. 3 demi-journées = 1.5 jour)
   datePose: string; // date ISO (YYYY-MM-DD) — date de soumission de la demande
+  dateDecision: string | null; // date ISO (YYYY-MM-DD) — date de validation/refus, null si en attente
   statut: StatutDemande;
   note: string;
   commentaireManager: string;
