@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
-import { useDemandes } from "@/hooks/useDemandes";
+import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
-import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
+import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 
@@ -27,14 +27,27 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
   personnalisee: "Sélectionner une période",
 };
 
-export function HistoriquePage() {
-  const { demandes } = useDemandes();
-  const { utilisateur } = useUtilisateur();
+// Types de congés sélectionnables — mêmes codes que la colonne Type du
+// tableau (CPA dérivé de CP + isAnticipation, voir HistoriqueTable).
+const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
+
+/**
+ * "Suivre les demandes" (`/suivre/demandes`) — reprend exactement
+ * `HistoriquePage` (mêmes filtres statut/période, même `HistoriqueTable`)
+ * mais sur `fetchDemandesEquipe` (toute l'entreprise) au lieu de
+ * `fetchDemandes` (soi-même), avec `avecCollaborateur` pour ajouter la
+ * colonne Collaborateur en tête de ligne. Visible admin + manager comme le
+ * reste de `/suivre` (bloqué pour les salarié·es dans `proxy.ts`).
+ */
+export function SuivreDemandesPage() {
+  const { demandes } = useDemandesEquipe();
   const { reglesAcquisition } = useReglesConges();
   const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
   const [debutPerso, setDebutPerso] = useState("");
   const [finPerso, setFinPerso] = useState("");
+  const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
+  const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
 
   const anneeActuelle = new Date().getFullYear();
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
@@ -47,33 +60,68 @@ export function HistoriquePage() {
         ? periodeReference
         : { debut: debutPerso, fin: finPerso };
 
+  // Collaborateurs réellement présents dans les demandes chargées, triés par
+  // nom — pas une liste figée en dur (nouveaux profils, départs...).
+  const collaborateurs = [
+    ...new Map(
+      demandes.map((d) => [d.demandeur.id, `${d.demandeur.prenom} ${d.demandeur.nom}`]),
+    ).entries(),
+  ].sort((a, b) => a[1].localeCompare(b[1]));
+
   const filtered = demandes
     .filter((d) => {
       const statutAttendu = STATUT_PAR_FILTRE[filtre];
       if (statutAttendu && d.statut !== statutAttendu) return false;
       if (debut && d.debut < debut) return false;
       if (fin && d.debut > fin) return false;
+      if (collaborateurFiltre !== "tous" && d.demandeur.id !== collaborateurFiltre) return false;
+      if (typeFiltre !== "tous") {
+        const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
+        if (code !== typeFiltre) return false;
+      }
       return true;
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-4xl md:pt-0 print:pb-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Historique</h1>
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0 print:pb-0">
+      <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Suivre les demandes</h1>
 
       <div className="hidden px-1 print:block">
         <h1 className="text-ink-900 text-2xl font-semibold">
-          Historique des congés — {utilisateur ? `${utilisateur.prenom} ${utilisateur.nom}` : ""}
+          Suivi des demandes — toute l&apos;entreprise
         </h1>
       </div>
 
       <div className="bg-surface-card w-full">
         <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
           <div className="flex flex-wrap items-end gap-2">
+            <SelectFiltrePill
+              value={typeFiltre}
+              onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+            >
+              <option value="tous">Tous les types</option>
+              {TYPES_FILTRABLES.map((code) => (
+                <option key={code} value={code}>
+                  {LABEL_LONG[code]}
+                </option>
+              ))}
+            </SelectFiltrePill>
             <SelectFiltrePill value={filtre} onChange={(e) => setFiltre(e.target.value as Filtre)}>
               {FILTRES.map((f) => (
                 <option key={f} value={f}>
                   {f}
+                </option>
+              ))}
+            </SelectFiltrePill>
+            <SelectFiltrePill
+              value={collaborateurFiltre}
+              onChange={(e) => setCollaborateurFiltre(e.target.value)}
+            >
+              <option value="tous">Tous les collaborateurs</option>
+              {collaborateurs.map(([id, nom]) => (
+                <option key={id} value={id}>
+                  {nom}
                 </option>
               ))}
             </SelectFiltrePill>
@@ -114,7 +162,11 @@ export function HistoriquePage() {
         </div>
 
         <div className="border-ink-300/60 border-t">
-          <HistoriqueTable demandes={filtered} emptyText="Aucune demande sur cette période." />
+          <HistoriqueTable
+            demandes={filtered}
+            emptyText="Aucune demande sur cette période."
+            avecCollaborateur
+          />
         </div>
       </div>
     </div>

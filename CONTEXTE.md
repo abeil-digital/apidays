@@ -635,8 +635,11 @@ Incohérences relevées, traitées dans l'ordre où elles seront reprises :
    (`components/ui/EmptyRow.tsx`) avait lui aussi `rounded-card` — retiré également (il s'affiche à
    l'intérieur de ces mêmes tableaux, incohérence directe sinon), impact sur tous ses appelants
    (Historique, Export paie, Utilisateurs, Suivre, Calendrier — un seul composant partagé).
-2. **En-têtes de colonnes** — Historique en majuscules espacées (`uppercase tracking-wide`), Export
-   paie et Utilisateurs en casse normale. Pas encore harmonisé.
+2. **En-têtes de colonnes — fait.** Export paie et Utilisateurs alignés sur Historique (majuscules
+   espacées, `uppercase tracking-wide`) ; sur Utilisateurs, `ThTriable` (colonnes triables) avait sa
+   propre classe de bouton qui ne l'héritait pas de la ligne parente, corrigé au passage. Au
+   passage : le tri sur la colonne Nom retiré (jugé inutile, données déjà triées alphabétiquement
+   par défaut), seule "Date d'entrée" reste triable.
 3. **Position des filtres** — Historique/Export paie : filtres dans la même card que le tableau.
    Utilisateurs : filtres au-dessus, hors card. Pas encore harmonisé.
 4. **Format des dates** — deux langages coexistent : texte ("12 juin au 16 juin",
@@ -648,7 +651,24 @@ Incohérences relevées, traitées dans l'ordre où elles seront reprises :
    Utilisateur), d'autres un `<h1>` simple sans retour (Historique, Export paie, Utilisateurs). Pas
    de règle explicite sur quand utiliser lequel, pas encore tranché.
 
-Point 1 fait ; points 2 à 6 restent à traiter — voir Backlog.md.
+Points 1 et 2 faits ; points 3 à 6 restent à traiter — voir Backlog.md.
+
+**"Suivre les demandes" (14/08/2026)** — nouvelle sous-rubrique `/suivre/demandes`, 3e onglet de
+`/suivre` (visible admin + manager, comme le reste de la section) :
+
+- Reprend `HistoriqueTable` telle quelle (même composant que `/historique`) sur
+  `fetchDemandesEquipe()` (toute l'entreprise) au lieu de `fetchDemandes()` (soi-même) — nouvelle
+  prop `avecCollaborateur` sur `HistoriqueTable` (type discriminant `Demande[]`/`DemandeEquipe[]`
+  selon la prop) qui ajoute une colonne Collaborateur (avatar + nom) en tête de ligne, factorisée
+  via une fonction interne `cellulesCommunes()` réutilisée dans les deux branches de rendu.
+- Filtres, dans l'ordre : **Type** (Tous les types + les 7 codes de `TypeBadgeCode` posables par un
+  salarié, CPA compris) → **Statut** (Tous les statuts/En validation/Validés/Refusés, libellés au
+  masculin) → **Collaborateur** (liste dérivée des demandes chargées, pas figée en dur) → **Période**
+  (Année en cours/Période de référence CP/plage personnalisée — même logique que `/historique`).
+  Même standard `FiltrePill` que partout ailleurs.
+- `SuivreDemandesPage.tsx` est volontairement très proche de `HistoriquePage.tsx` (même structure de
+  filtres statut/période, dupliquée plutôt que factorisée pour l'instant — à revoir si un 3e écran du
+  même genre apparaît).
 
 **En cours / pas encore fait** :
 

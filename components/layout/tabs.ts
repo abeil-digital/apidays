@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   History,
   Home,
+  ListChecks,
   PlusCircle,
   Receipt,
   Users,
@@ -30,6 +31,7 @@ const PARAMETRER_TABS: NavTab[] = [
 
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre", label: "Demandes à traiter", Icon: ClipboardCheck },
+  { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   { href: "/suivre/paie", label: "Export paie", Icon: Receipt },
 ];
 

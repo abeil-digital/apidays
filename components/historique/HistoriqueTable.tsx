@@ -1,10 +1,11 @@
-import type { Demande } from "@/lib/types";
+import type { Demande, DemandeEquipe } from "@/lib/types";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
   LABEL_LONG,
 } from "@/components/demandes/TypeBadge";
+import { Avatar } from "@/components/ui/Avatar";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
@@ -15,10 +16,9 @@ const CLASSE_POINT_STATUT: Record<string, string> = {
   annulé: "bg-status-danger-fg",
 };
 
-interface HistoriqueTableProps {
-  demandes: Demande[];
-  emptyText?: string;
-}
+type HistoriqueTableProps =
+  | { demandes: Demande[]; emptyText?: string; avecCollaborateur?: false }
+  | { demandes: DemandeEquipe[]; emptyText?: string; avecCollaborateur: true };
 
 // "12 juin au 16 juin" → "12 juin - 16 juin" pour la pill de la colonne
 // Dates (plus compact) — ne touche pas `formatPeriodeDemande` elle-même,
@@ -41,20 +41,60 @@ function periodeCourte(debut: string, fin: string): string {
  * ailleurs).
  *
  * Composant présentationnel pur (prend `demandes` en props, pas de fetch) —
- * pensé pour être réutilisé tel quel avec un sous-ensemble de demandes (ex.
- * les dernières entrées sur l'Accueil, à venir). Ne porte pas sa propre card
- * (pas de `bg-surface-card`/ombre) : l'appelant l'intègre dans son propre
- * conteneur, ex. `HistoriquePage` qui regroupe filtres + tableau dans une
- * seule card (même principe que `CongesPaiePage`).
+ * réutilisé tel quel avec un sous-ensemble de demandes ou, avec
+ * `avecCollaborateur`, pour une vue toute-l'entreprise (`SuivreDemandesPage`,
+ * `demandes: DemandeEquipe[]`) qui ajoute une colonne Collaborateur
+ * (avatar + nom, même pattern que le tableau Export paie) en tête de ligne.
+ * Ne porte pas sa propre card (pas de `bg-surface-card`/ombre) : l'appelant
+ * l'intègre dans son propre conteneur, ex. `HistoriquePage` qui regroupe
+ * filtres + tableau dans une seule card (même principe que `CongesPaiePage`).
  */
-export function HistoriqueTable({ demandes, emptyText = "Aucune demande." }: HistoriqueTableProps) {
-  if (demandes.length === 0) return <EmptyRow text={emptyText} />;
+export function HistoriqueTable(props: HistoriqueTableProps) {
+  const { emptyText = "Aucune demande." } = props;
+  if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
+
+  function cellulesCommunes(demande: Demande) {
+    const code = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
+    const jours = demande.nbDemiJournees / 2;
+
+    return (
+      <>
+        <td className="px-4 py-3">
+          <span className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+            <span className="text-ink-900 font-semibold">{LABEL_LONG[code]}</span>
+          </span>
+        </td>
+        <td className="px-4 py-3">
+          <span
+            className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
+          >
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${CLASSE_POINT_STATUT[demande.statut]}`}
+            />
+            {periodeCourte(demande.debut, demande.fin)}
+          </span>
+        </td>
+        <td className="text-ink-500 px-4 py-3">{formatJours(jours)} j</td>
+        <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
+          {formatDateAction(demande.datePose)}
+        </td>
+        <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
+          {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
+        </td>
+        <td className="px-4 py-3">
+          <StatusBadge statut={demande.statut} />
+        </td>
+      </>
+    );
+  }
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm md:min-w-[760px]">
         <thead>
           <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+            {props.avecCollaborateur && <th className="px-4 py-3">Collaborateur</th>}
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Dates</th>
             <th className="px-4 py-3">Nbre jours</th>
@@ -64,43 +104,25 @@ export function HistoriqueTable({ demandes, emptyText = "Aucune demande." }: His
           </tr>
         </thead>
         <tbody>
-          {demandes.map((demande) => {
-            const code = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
-            const jours = demande.nbDemiJournees / 2;
-
-            return (
-              <tr key={demande.id}>
-                <td className="px-4 py-3">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
-                    />
-                    <span className="text-ink-900 font-semibold">{LABEL_LONG[code]}</span>
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${CLASSE_POINT_STATUT[demande.statut]}`}
-                    />
-                    {periodeCourte(demande.debut, demande.fin)}
-                  </span>
-                </td>
-                <td className="text-ink-500 px-4 py-3">{formatJours(jours)} j</td>
-                <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
-                  {formatDateAction(demande.datePose)}
-                </td>
-                <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
-                  {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge statut={demande.statut} />
-                </td>
-              </tr>
-            );
-          })}
+          {props.avecCollaborateur
+            ? props.demandes.map((demande) => (
+                <tr key={demande.id}>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-1.5">
+                      <Avatar
+                        initiales={`${demande.demandeur.prenom[0]}${demande.demandeur.nom[0]}`.toUpperCase()}
+                      />
+                      <span className="text-ink-900 font-semibold">
+                        {demande.demandeur.prenom} {demande.demandeur.nom}
+                      </span>
+                    </span>
+                  </td>
+                  {cellulesCommunes(demande)}
+                </tr>
+              ))
+            : props.demandes.map((demande) => (
+                <tr key={demande.id}>{cellulesCommunes(demande)}</tr>
+              ))}
         </tbody>
       </table>
     </div>
