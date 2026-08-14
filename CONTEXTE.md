@@ -589,6 +589,15 @@ manager + admin comme le reste de `/suivre` :
     passé de `md:` à `xl:` — en dessous, panneau et tableau s'empilent proprement au lieu de se
     disputer la largeur.
 
+**Accueil 2 devient l'unique écran Accueil (14/08/2026)** : direction validée après scénarisation
+(voir entrée du 11/08/2026 ci-dessus) — l'ancien `DashboardPage.tsx` (calendrier/prochains congés en
+listes) est supprimé, `app/(app)/page.tsx` rend désormais `Dashboard2Page` sur la route `/`. La route
+`/accueil2`, devenue redondante, est supprimée (404 volontaire). Nav : l'entrée "Accueil 2" retirée
+de `POSER_TABS` (`components/layout/tabs.ts`), il ne reste qu'une seule entrée "Accueil" → `/`.
+Composant/fichier **pas renommés** (`Dashboard2Page`/`Dashboard2Page.tsx` gardent leur nom "2"
+historique) — même situation que `Calendrier2Page` en son temps, item ajouté au Backlog pour
+regrouper ce nettoyage cosmétique le jour où il sera fait.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

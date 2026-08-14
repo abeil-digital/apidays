@@ -174,10 +174,11 @@ function SnippetDemande({
 }
 
 /**
- * Accueil 2 (scénarisation) — duplicata de `DashboardPage` pour itérer sur
- * l'évolution de l'accueil collaborateur sans toucher à l'écran en
- * production. Route `/accueil2`, à retravailler/retirer une fois la
- * direction validée (voir Backlog.md).
+ * Accueil collaborateur — écran unique, route `/` (14/08/2026 : remplace
+ * l'ancien `DashboardPage`, supprimé ; le nom de fichier/composant
+ * `Dashboard2Page` reste tel quel pour l'instant, pas de renommage fait —
+ * voir Backlog.md si on veut nettoyer ça un jour, même logique que
+ * `Calendrier2Page`).
  *
  * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier en
  * 3 onglets — Année en cours / Période de référence CP / Année suivante —

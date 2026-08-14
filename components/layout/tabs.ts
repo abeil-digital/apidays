@@ -4,7 +4,6 @@ import {
   ClipboardCheck,
   History,
   Home,
-  LayoutDashboard,
   PlusCircle,
   Receipt,
   Users,
@@ -19,7 +18,6 @@ export interface NavTab {
 
 const POSER_TABS: NavTab[] = [
   { href: "/", label: "Accueil", Icon: Home },
-  { href: "/accueil2", label: "Accueil 2", Icon: LayoutDashboard },
   { href: "/nouvelle-demande", label: "Nouvelle demande", Icon: PlusCircle },
   { href: "/historique", label: "Historique", Icon: History },
 ];

@@ -55,7 +55,7 @@ Exemple concret avec les demandes de congés :
   demandes).
 - [`hooks/useDemandes.ts`](hooks/useDemandes.ts) — appelle le repository, expose
   `{ demandes, loading, error, ajouterDemande }` aux composants.
-- [`components/dashboard/DashboardPage.tsx`](components/dashboard/DashboardPage.tsx) et les
+- [`components/dashboard/Dashboard2Page.tsx`](components/dashboard/Dashboard2Page.tsx) et les
   autres écrans n'importent **que** le hook, jamais `lib/data/*`.
 
 [`lib/data/soldes.repository.ts`](lib/data/soldes.repository.ts) suit le même patron — calcul du
@@ -170,8 +170,8 @@ proxy.ts                 rafraîchit la session Supabase, protège les routes ho
                          bloque /parametrer/* pour le rôle salarié
 
 components/
-  dashboard/         DashboardPage, ReglesCongesModal (RTT imposés + échéances, ouverte via
-                     "découvrir" dans le bloc Soldes)
+  dashboard/         Dashboard2Page (écran Accueil, route "/"), ReglesCongesModal (RTT imposés +
+                     échéances, ouverte via "découvrir" dans le bloc Soldes)
   nouvelle-demande/, historique/   écrans (client components, appellent les hooks)
   demandes/         RequestRow, RequestList, TypeBadge — réutilisables entre Dashboard/Historique
                      (et plus tard Espace Manager pour la vue équipe)
