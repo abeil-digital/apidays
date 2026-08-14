@@ -481,6 +481,43 @@ n'importe quel salarié, la RLS élargie manager/admin du 13/08/2026 le permet).
 `soldes`/`historique_soldes` reste en base pour un futur usage (correction manuelle par Delphine)
 mais n'est pas lue par ce moteur.
 
+**Auto-validation manager + feed d'historique de solde CP + régulation Delphine (13/08/2026)** :
+
+- `fetchDemandesEquipe()` inclut désormais les propres demandes du manager connecté (plus de
+  filtre d'exclusion) — un manager (directeur, personne au-dessus pour valider à sa place) peut
+  s'auto-valider ses congés depuis `/suivre`, testé de bout en bout (Olivier a approuvé sa propre
+  demande, solde recalculé correctement).
+- **Table `ajustements_solde`** (nouvelle, migration fournie et appliquée par l'utilisateur) :
+  régulation manuelle du solde par Delphine — `utilisateur_id`, `type_absence_id`, `delta_jours`
+  (signé), `motif`, `auteur_id`. Volontairement **indépendante** de `soldes`/`historique_soldes`
+  (non exploitées, le solde est calculé à la volée) pour ne pas réintroduire de risque de
+  désynchronisation. RLS : lecture manager/admin, écriture admin uniquement. Intégrée au calcul du
+  solde CP de la période en cours dans `soldes.repository.ts` (`sommeAjustements`).
+- **Popin "Historique CP"** (`components/suivre/HistoriqueSoldeModal.tsx`, ouverte au clic sur le
+  solde CP d'un salarié dans `/suivre`) : feed groupé par mois, du 1er mois de la période jusqu'au
+  mois en cours (même sans mouvement, "Pas d'événement"). Chaque mois replié par défaut ; un
+  stabilo (`bg-status-warning-bg`) + chevron affiche "N événements" et déroule au clic. Congés
+  validés en vert (`CP : du JJ/MM au JJ/MM`), régulations en rouge/vert selon le signe
+  (`Régul (JJ/MM)`). Formulaire de régulation (delta + motif obligatoire) réservé à l'admin
+  (`peutReguler`), visible sous "Solde actuel".
+- `fetchHistoriqueCp(utilisateurId)` (nouveau, `soldes.repository.ts`) et
+  `useHistoriqueSoldeCp(utilisateurId)` (nouveau hook) — même moteur de calcul que `fetchSoldes`
+  (capital + report), mais expose le détail mois par mois plutôt qu'un seul total.
+- **`SoldeMoisBloc`** (`components/ui/SoldeMoisBloc.tsx`) — le bloc "mois" (pill + stabilo
+  événements + mouvements dépliables + ligne de solde de clôture) extrait en composant du design
+  system, documenté sur `/design-system` aux côtés de `TypeBadgePillEnhanced`
+  (`components/demandes/TypeBadge.tsx`, pill agrandie pour les soldes de premier plan). Réutilisable
+  pour un futur feed RTT sans dupliquer le rendu.
+- Vocabulaire : "mouvement" renommé "événement" dans l'UI (mais le type `MouvementSolde` et le
+  champ `mouvements` gardent leur nom en code, changement cosmétique seulement).
+- **Zone grise identifiée, pas encore tranchée** : les CP posés en anticipation
+  (`is_anticipation = true`) pendant une période P-1 pour des dates tombant dans la période P
+  suivante ne sont déduits nulle part une fois P devenue la période en cours (exclus du calcul CP
+  car `is_anticipation = false` filtré, et sortis de la fenêtre CPA qui ne regarde plus que
+  P+1). Diagnostiqué en discussion avec Vincent, correctif proposé (ne plus filtrer
+  `is_anticipation` dans le calcul du capital consommé de la période en cours) mais **pas encore
+  appliqué** — Vincent n'était "certain de rien" sur ce point, à retrancher avant de corriger.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

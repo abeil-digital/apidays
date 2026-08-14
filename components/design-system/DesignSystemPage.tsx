@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/Input";
 import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { SoldeCard } from "@/components/ui/SoldeCard";
-import { TypeBadge } from "@/components/demandes/TypeBadge";
-import type { StatutDemande } from "@/lib/types";
+import { SoldeMoisBloc } from "@/components/ui/SoldeMoisBloc";
+import { TypeBadge, TypeBadgePillEnhanced } from "@/components/demandes/TypeBadge";
+import type { MouvementSolde, StatutDemande } from "@/lib/types";
 
 /**
  * Page de référence du design system — importe et rend les VRAIS composants
@@ -60,6 +61,25 @@ const PALETTE: { token: string; className: string }[] = [
 const BADGE_TONES: BadgeTone[] = ["success", "warning", "danger", "neutral"];
 const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost"];
 const STATUTS_DEMANDE: StatutDemande[] = ["validé", "en attente", "refusé"];
+
+const SOLDE_MOIS_EXEMPLE: MouvementSolde[] = [
+  {
+    id: "exemple-demande",
+    type: "demande",
+    date: "2026-08-10",
+    libelle: "CP : du 10/08 au 12/08",
+    jours: -3,
+    soldeApres: 45,
+  },
+  {
+    id: "exemple-ajustement",
+    type: "ajustement",
+    date: "2026-08-13",
+    libelle: "Régul",
+    jours: -8,
+    soldeApres: 37,
+  },
+];
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -126,6 +146,7 @@ export function DesignSystemPage() {
   const [modalCentreOuverte, setModalCentreOuverte] = useState(false);
   const [modalHauteOuverte, setModalHauteOuverte] = useState(false);
   const [dateExemple, setDateExemple] = useState("");
+  const [soldeMoisOuvert, setSoldeMoisOuvert] = useState(true);
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-8">
@@ -230,6 +251,24 @@ export function DesignSystemPage() {
           <ComponentExample title="TypeBadge (variant pill) — motif d'un jour indisponible">
             <TypeBadge code="FERIE" variant="pill" />
             <TypeBadge code="CPI" variant="pill" />
+          </ComponentExample>
+
+          <ComponentExample title="TypeBadgePillEnhanced — solde de premier plan (Espace Suivre)">
+            <TypeBadgePillEnhanced code="CP" label="48 j" />
+          </ComponentExample>
+
+          <ComponentExample title="SoldeMoisBloc — bloc mois du feed d'historique de solde (Espace Suivre)">
+            <div className="flex w-full max-w-sm flex-col gap-2">
+              <SoldeMoisBloc
+                code="CP"
+                libelleMois="Août"
+                mouvements={SOLDE_MOIS_EXEMPLE}
+                soldeLibelle="Solde paie août"
+                soldeValeur={37}
+                ouvert={soldeMoisOuvert}
+                onToggle={() => setSoldeMoisOuvert((v) => !v)}
+              />
+            </div>
           </ComponentExample>
 
           <ComponentExample title="FieldLabel + Input">

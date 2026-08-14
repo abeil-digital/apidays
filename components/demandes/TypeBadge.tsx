@@ -109,3 +109,21 @@ export function TypeBadge({ code, variant = "circle", label }: TypeBadgeProps) {
     </div>
   );
 }
+
+interface TypeBadgePillEnhancedProps {
+  code: TypeBadgeCode;
+  label: string;
+}
+
+/** Variante pill agrandie de `TypeBadge` — soldes de premier plan (ex. solde
+ * de référence / solde actuel), à distinguer visuellement des pastilles de
+ * mouvement courantes. */
+export function TypeBadgePillEnhanced({ code, label }: TypeBadgePillEnhancedProps) {
+  return (
+    <span
+      className={`rounded-full px-4 py-1.5 text-base font-bold whitespace-nowrap text-white ${CODE_STYLES[code]}`}
+    >
+      {label}
+    </span>
+  );
+}

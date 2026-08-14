@@ -50,6 +50,38 @@ export interface SoldeCategorie {
   conditionAccent: string;
 }
 
+// --- Espace Suivre > feed d'historique de solde (Delphine) ---
+
+export interface MouvementSolde {
+  id: string;
+  type: "demande" | "ajustement";
+  date: string; // date ISO — date de la demande (début) ou de l'ajustement
+  libelle: string;
+  jours: number; // signé : négatif = consommation, positif = recrédit
+  soldeApres: number;
+  motif?: string; // demande refusée par le salarié (note) ou motif de l'ajustement
+}
+
+export interface MoisHistoriqueSolde {
+  mois: string; // "YYYY-MM"
+  libelle: string; // "Juin 2026"
+  mouvements: MouvementSolde[]; // congés posés ce mois-ci, vide si aucun
+  soldeFinMois: number;
+}
+
+export interface HistoriqueSolde {
+  periodeDebut: string; // date ISO
+  periodeFin: string; // date ISO
+  soldeDepart: number;
+  mois: MoisHistoriqueSolde[]; // du 1er mois de la période jusqu'au mois en cours
+  soldeActuel: number;
+}
+
+export interface AjustementSoldeInput {
+  deltaJours: number; // positif = recrédit, négatif = correction à la baisse
+  motif: string;
+}
+
 export interface RttImpose {
   date: string; // date ISO (YYYY-MM-DD)
   motif: string;

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
@@ -9,15 +10,20 @@ import { ListCard } from "@/components/ui/ListCard";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { DemandeEquipeRow } from "@/components/suivre/DemandeEquipeRow";
+import { HistoriqueSoldeModal } from "@/components/suivre/HistoriqueSoldeModal";
 import { SalarieRow } from "@/components/suivre/SalarieRow";
 
 export function SuivrePage() {
   const { demandes, loading, error, valider, refuser } = useDemandesEquipe();
   const { utilisateurs, loading: loadingEquipe } = useUtilisateursAdmin();
+  const { utilisateur } = useUtilisateur();
 
   const [enCoursId, setEnCoursId] = useState<string | null>(null);
   const [refusOuvert, setRefusOuvert] = useState<{ id: string } | null>(null);
   const [commentaireRefus, setCommentaireRefus] = useState("");
+  const [historiqueOuvert, setHistoriqueOuvert] = useState<{ id: string; nom: string } | null>(
+    null,
+  );
 
   const aTraiter = demandes.filter((d) => d.statut === "en attente");
 
@@ -59,11 +65,27 @@ export function SuivrePage() {
           ) : utilisateurs.length === 0 ? (
             <EmptyRow text="Aucun salarié." />
           ) : (
-            <ListCard>
-              {utilisateurs.map((u, i) => (
-                <SalarieRow key={u.id} utilisateur={u} isLast={i === utilisateurs.length - 1} />
-              ))}
-            </ListCard>
+            <>
+              <div className="flex items-center gap-3 px-4">
+                <div className="w-8 shrink-0" />
+                <div className="flex-1" />
+                <div className="flex shrink-0 items-center gap-4">
+                  <span className="text-ink-500 w-14 text-center text-sm font-bold">CP</span>
+                  <span className="text-ink-500 w-14 text-center text-sm font-bold">RTT</span>
+                  <span className="text-ink-500 w-14 text-center text-sm font-bold">CPA</span>
+                </div>
+              </div>
+              <ListCard>
+                {utilisateurs.map((u, i) => (
+                  <SalarieRow
+                    key={u.id}
+                    utilisateur={u}
+                    isLast={i === utilisateurs.length - 1}
+                    onClickCp={() => setHistoriqueOuvert({ id: u.id, nom: `${u.prenom} ${u.nom}` })}
+                  />
+                ))}
+              </ListCard>
+            </>
           )}
         </div>
 
@@ -135,6 +157,15 @@ export function SuivrePage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {historiqueOuvert && (
+        <HistoriqueSoldeModal
+          utilisateurId={historiqueOuvert.id}
+          nomComplet={historiqueOuvert.nom}
+          peutReguler={utilisateur?.role === "admin"}
+          onClose={() => setHistoriqueOuvert(null)}
+        />
       )}
     </div>
   );

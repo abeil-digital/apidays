@@ -2,13 +2,15 @@ import type { UtilisateurAdmin } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { useSoldes } from "@/hooks/useSoldes";
 import { Avatar } from "@/components/ui/Avatar";
+import { TypeBadge } from "@/components/demandes/TypeBadge";
 
 interface SalarieRowProps {
   utilisateur: UtilisateurAdmin;
   isLast: boolean;
+  onClickCp: () => void;
 }
 
-export function SalarieRow({ utilisateur, isLast }: SalarieRowProps) {
+export function SalarieRow({ utilisateur, isLast, onClickCp }: SalarieRowProps) {
   const { soldes, loading } = useSoldes(utilisateur.id);
   const initiales = `${utilisateur.prenom.charAt(0)}${utilisateur.nom.charAt(0)}`.toUpperCase();
 
@@ -23,18 +25,19 @@ export function SalarieRow({ utilisateur, isLast }: SalarieRowProps) {
       {loading || !soldes ? (
         <span className="text-ink-500 text-xs">…</span>
       ) : (
-        <div className="flex shrink-0 items-center gap-4 text-right text-sm">
-          <span className="w-14">
-            <span className="text-ink-900 font-bold">{formatJours(soldes.cp.valeur)}</span>{" "}
-            <span className="text-ink-500 text-xs">CP</span>
+        <div className="flex shrink-0 items-center gap-4">
+          <button
+            type="button"
+            onClick={onClickCp}
+            className="flex w-14 justify-center transition-opacity duration-150 hover:opacity-70"
+          >
+            <TypeBadge code="CP" variant="pill" label={`${formatJours(soldes.cp.valeur)} j`} />
+          </button>
+          <span className="flex w-14 justify-center">
+            <TypeBadge code="RTT" variant="pill" label={`${formatJours(soldes.rtt.valeur)} j`} />
           </span>
-          <span className="w-14">
-            <span className="text-ink-900 font-bold">{formatJours(soldes.rtt.valeur)}</span>{" "}
-            <span className="text-ink-500 text-xs">RTT</span>
-          </span>
-          <span className="w-14">
-            <span className="text-ink-900 font-bold">{formatJours(soldes.cpa.valeur)}</span>{" "}
-            <span className="text-ink-500 text-xs">CPA</span>
+          <span className="flex w-14 justify-center">
+            <TypeBadge code="CPA" variant="pill" label={`${formatJours(soldes.cpa.valeur)} j`} />
           </span>
         </div>
       )}

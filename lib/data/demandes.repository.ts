@@ -228,32 +228,25 @@ function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
 
 /**
  * Toutes les demandes de l'entreprise pour l'Espace Suivre — "manager"
- * désigne les directeurs, autorité globale, pas une équipe rattachée. La
- * policy RLS "manager lit toutes les demandes" coexiste avec celle du
- * salarié sur ses propres demandes — un manager qui a aussi ses propres
- * congés verrait donc les deux mélangées via `fetchDemandes()`. On exclut
- * ici les demandes du manager lui-même : cet écran ne sert qu'à traiter
- * celles des autres.
+ * désigne les directeurs, autorité globale, pas une équipe rattachée.
+ * Inclut aussi les propres demandes du manager connecté : personne d'autre
+ * n'est au-dessus pour les valider, donc un manager doit pouvoir
+ * s'auto-valider ses propres congés depuis cet écran.
  */
 export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
   const supabase = createClient();
 
-  const [utilisateurId, { data, error }] = await Promise.all([
-    getUtilisateurId(supabase),
-    supabase
-      .from("demandes_conges")
-      .select(SELECT_DEMANDE_EQUIPE)
-      .neq("statut", "annulee")
-      .order("date_debut", { ascending: false }),
-  ]);
+  const { data, error } = await supabase
+    .from("demandes_conges")
+    .select(SELECT_DEMANDE_EQUIPE)
+    .neq("statut", "annulee")
+    .order("date_debut", { ascending: false });
 
   if (error) {
     throw new Error("Impossible de charger les demandes de l'équipe.");
   }
 
-  return (data ?? [])
-    .map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow))
-    .filter((d) => d.demandeur.id !== utilisateurId);
+  return (data ?? []).map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow));
 }
 
 async function deciderDemande(

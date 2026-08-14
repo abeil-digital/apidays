@@ -257,6 +257,23 @@ create table regles_anciennete (
   created_at timestamptz not null default now()
 );
 
+-- Régulation manuelle du solde par Delphine (Espace Suivre, feed d'historique
+-- CP) — table indépendante de `soldes`/`historique_soldes` (non exploitées :
+-- le solde est calculé à la volée par `soldes.repository.ts`, pas
+-- matérialisé, voir CONTEXTE.md 13/08/2026). Un ajustement est un mouvement
+-- de plus dans le feed, intégré au calcul du solde au même titre qu'une
+-- demande validée. `delta_jours` peut être positif (recrédit) ou négatif
+-- (correction à la baisse).
+create table ajustements_solde (
+  id uuid primary key default gen_random_uuid(),
+  utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
+  type_absence_id uuid not null references types_absences(id),
+  delta_jours numeric(5,2) not null,
+  motif text not null,
+  auteur_id uuid not null references utilisateurs(id),
+  created_at timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- INDEX UTILES
 -- ------------------------------------------------------------
@@ -266,6 +283,7 @@ create index idx_demandes_dates on demandes_conges(date_debut, date_fin);
 create index idx_soldes_utilisateur on soldes(utilisateur_id);
 create index idx_manager_salaries_salarie on manager_salaries(salarie_id);
 create index idx_manager_salaries_manager on manager_salaries(manager_id);
+create index idx_ajustements_solde_utilisateur on ajustements_solde(utilisateur_id);
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -288,6 +306,7 @@ alter table parametrage_periode enable row level security;
 alter table demi_journees_imposees enable row level security;
 alter table conges_imposes enable row level security;
 alter table regles_acquisition enable row level security;
+alter table ajustements_solde enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table regles_anciennete enable row level security;
 
@@ -562,6 +581,18 @@ create policy "regles_anciennete: manager et admin modifient"
   with check (my_role() in ('manager', 'admin'));
 
 -- ------------------------------------------------------------
+-- POLICIES — ajustements_solde (régulation manuelle, Delphine uniquement)
+-- ------------------------------------------------------------
+create policy "ajustements_solde: lecture manager et admin"
+  on ajustements_solde for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "ajustements_solde: admin gère tout"
+  on ajustements_solde for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+-- ------------------------------------------------------------
 -- GRANTS — nécessaires en complément de RLS : RLS filtre les
 -- LIGNES visibles, mais Postgres exige aussi les droits de base
 -- sur la table pour le rôle. Sans ce GRANT, la requête est
@@ -584,5 +615,6 @@ grant select, insert, update, delete on
   conges_imposes,
   regles_acquisition,
   regles_anciennete,
-  objectifs_calendrier
+  objectifs_calendrier,
+  ajustements_solde
 to authenticated;

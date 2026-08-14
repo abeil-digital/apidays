@@ -1,5 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { RegleAnciennete, Soldes, SoldeCategorie, TypeDemande } from "@/lib/types";
+import type {
+  AjustementSoldeInput,
+  HistoriqueSolde,
+  MoisHistoriqueSolde,
+  MouvementSolde,
+  RegleAnciennete,
+  Soldes,
+  SoldeCategorie,
+  TypeDemande,
+} from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
@@ -25,6 +34,11 @@ import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/regles
  * Chaque catégorie expose aussi `valeurApresAttente` (le solde ci-dessus
  * moins les jours encore en attente de validation) — indicatif, pas un
  * retrait définitif tant que la demande n'est pas décidée.
+ *
+ * `ajustements_solde` (régulation manuelle par Delphine, Espace Suivre) est
+ * intégrée au calcul CP comme un mouvement de plus sur la période en cours —
+ * table indépendante de `soldes`/`historique_soldes` (non exploitées, voir
+ * plus haut), pas de risque de désynchronisation.
  */
 
 interface Periode {
@@ -137,6 +151,35 @@ async function sommeJours(
   return (data ?? []).reduce((somme, row) => somme + Number(row.nb_demi_journees) / 2, 0);
 }
 
+/** Somme des ajustements manuels (régulation Delphine) d'un type sur une période. */
+async function sommeAjustements(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  type: TypeDemande,
+  periode: Periode,
+): Promise<number> {
+  const typeAbsenceId = await getTypeAbsenceId(supabase, type);
+
+  const { data, error } = await supabase
+    .from("ajustements_solde")
+    .select("delta_jours")
+    .eq("utilisateur_id", utilisateurId)
+    .eq("type_absence_id", typeAbsenceId)
+    .gte("created_at", periode.debut.toISOString())
+    .lte("created_at", `${dateIso(periode.fin)}T23:59:59.999Z`);
+
+  if (error) {
+    throw new Error("Impossible de charger les ajustements.");
+  }
+
+  return (data ?? []).reduce((somme, row) => somme + Number(row.delta_jours), 0);
+}
+
+function formatJjMm(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(d);
+}
+
 function formatDateCourte(d: Date): string {
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
@@ -235,7 +278,8 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       false,
       periodeEnCours,
     );
-    const soldeCp = capitalBase + report - consommeEnCours;
+    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeEnCours);
+    const soldeCp = capitalBase + report - consommeEnCours + ajustementsEnCours;
 
     cp = {
       valeur: soldeCp,
@@ -293,4 +337,186 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
   }
 
   return { cp, rtt, cpa, rttImposes: [] };
+}
+
+/**
+ * Feed d'historique du solde CP d'un salarié (Espace Suivre, popin ouverte
+ * au clic sur un solde) — solde de départ (capital + report au début de la
+ * période en cours), puis chaque CP validé et chaque ajustement manuel,
+ * triés chronologiquement avec le solde courant après chaque mouvement.
+ * CP uniquement pour l'instant.
+ */
+export async function fetchHistoriqueCp(utilisateurId: string): Promise<HistoriqueSolde> {
+  const supabase = createClient();
+
+  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition, reglesAnciennete] =
+    await Promise.all([
+      supabase
+        .from("utilisateurs")
+        .select("date_entree, anciennete_date_reference, taux_activite")
+        .eq("id", utilisateurId)
+        .single(),
+      fetchReglesAcquisition(),
+      fetchReglesAnciennete(),
+    ]);
+
+  if (erreurUtilisateur || !utilisateurRow) {
+    throw new Error("Impossible de charger le profil pour l'historique du solde.");
+  }
+
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  if (!regleCP) {
+    throw new Error("Aucune règle d'acquisition CP paramétrée.");
+  }
+
+  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const dateReferenceAnciennete: string =
+    utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
+  const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
+  const bonus = bonusAnciennete(
+    reglesAnciennete,
+    ansAnciennete(dateReferenceAnciennete, aujourdhui),
+  );
+
+  const periodeEnCours = periodeContenant(
+    aujourdhui,
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+  const periodePrecedente = decalerPeriode(periodeEnCours, -1);
+
+  const capitalBase = 12 * regleCP.tauxAcquisitionMensuel * prorata + bonus;
+  const consommePeriodePrecedente = await sommeJours(
+    supabase,
+    utilisateurId,
+    "CP",
+    ["validee"],
+    false,
+    periodePrecedente,
+  );
+  const report = regleCP.reportAutorise ? Math.max(0, capitalBase - consommePeriodePrecedente) : 0;
+  const soldeDepart = capitalBase + report;
+
+  const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
+
+  const [
+    { data: demandesRows, error: erreurDemandes },
+    { data: ajustementsRows, error: erreurAjustements },
+  ] = await Promise.all([
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
+      .eq("statut", "validee")
+      .gte("date_debut", dateIso(periodeEnCours.debut))
+      .lte("date_debut", dateIso(periodeEnCours.fin)),
+    supabase
+      .from("ajustements_solde")
+      .select("id, delta_jours, motif, created_at")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .gte("created_at", periodeEnCours.debut.toISOString())
+      .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
+  ]);
+
+  if (erreurDemandes || erreurAjustements) {
+    throw new Error("Impossible de charger l'historique du solde.");
+  }
+
+  interface MouvementBrut {
+    id: string;
+    type: "demande" | "ajustement";
+    date: string;
+    libelle: string;
+    jours: number;
+    motif?: string;
+  }
+
+  const mouvementsBruts: MouvementBrut[] = [
+    ...(demandesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: `CP : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      jours: -(Number(d.nb_demi_journees) / 2),
+    })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
+      id: a.id,
+      type: "ajustement",
+      date: a.created_at.slice(0, 10),
+      libelle: a.motif,
+      jours: Number(a.delta_jours),
+      motif: a.motif,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Un bloc par mois, du 1er mois de la période jusqu'au mois en cours —
+  // même sans mouvement, pour garder la continuité visuelle mois par mois.
+  const cles: string[] = [];
+  {
+    let annee = periodeEnCours.debut.getUTCFullYear();
+    let mois = periodeEnCours.debut.getUTCMonth();
+    const anneeFin = aujourdhui.getUTCFullYear();
+    const moisFin = aujourdhui.getUTCMonth();
+    while (annee < anneeFin || (annee === anneeFin && mois <= moisFin)) {
+      cles.push(`${annee}-${String(mois + 1).padStart(2, "0")}`);
+      mois += 1;
+      if (mois > 11) {
+        mois = 0;
+        annee += 1;
+      }
+    }
+  }
+
+  let cumul = soldeDepart;
+  const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
+    const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
+      .filter((m) => m.date.slice(0, 7) === cle)
+      .map((m) => {
+        cumul += m.jours;
+        return { ...m, soldeApres: cumul };
+      });
+
+    return {
+      mois: cle,
+      libelle: formatMoisAnnee(new Date(`${cle}-01T00:00:00Z`)),
+      mouvements: mouvementsDuMois,
+      soldeFinMois: cumul,
+    };
+  });
+
+  return {
+    periodeDebut: dateIso(periodeEnCours.debut),
+    periodeFin: dateIso(periodeEnCours.fin),
+    soldeDepart,
+    mois: moisListe,
+    soldeActuel: cumul,
+  };
+}
+
+/** Régulation manuelle du solde CP par Delphine — RLS réservée à l'admin. */
+export async function ajouterAjustementSolde(
+  utilisateurId: string,
+  input: AjustementSoldeInput,
+): Promise<void> {
+  const supabase = createClient();
+
+  const [typeAbsenceId, auteurId] = await Promise.all([
+    getTypeAbsenceId(supabase, "CP"),
+    getUtilisateurIdCourant(supabase),
+  ]);
+
+  const { error } = await supabase.from("ajustements_solde").insert({
+    utilisateur_id: utilisateurId,
+    type_absence_id: typeAbsenceId,
+    delta_jours: input.deltaJours,
+    motif: input.motif,
+    auteur_id: auteurId,
+  });
+
+  if (error) {
+    throw new Error("Impossible d'enregistrer l'ajustement.");
+  }
 }
