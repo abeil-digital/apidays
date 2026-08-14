@@ -14,8 +14,7 @@ import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
-import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
+import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 
 const ROLE_LABEL: Record<RoleUtilisateur, string> = {
   salarie: "Salarié·e",
@@ -120,28 +119,31 @@ export function UtilisateursListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-1">
-        <Input
+        <InputFiltrePill
           type="search"
           value={recherche}
           onChange={(e) => setRecherche(e.target.value)}
           placeholder="Rechercher un nom ou un email…"
           className="min-w-48 flex-1"
         />
-        <Select value={role} onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}>
+        <SelectFiltrePill
+          value={role}
+          onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}
+        >
           <option value="tous">Tous les rôles</option>
           <option value="salarie">Salarié·e</option>
           <option value="manager">Manager</option>
           <option value="admin">Admin</option>
-        </Select>
-        <Select
+        </SelectFiltrePill>
+        <SelectFiltrePill
           value={statut}
           onChange={(e) => setStatut(e.target.value as StatutUtilisateur | "tous")}
         >
           <option value="actif">Actifs</option>
           <option value="archive">Archivés</option>
           <option value="tous">Tous les statuts</option>
-        </Select>
-        <Select
+        </SelectFiltrePill>
+        <SelectFiltrePill
           value={natureFiltre}
           onChange={(e) => setNatureFiltre(e.target.value as NatureContrat | "tous")}
         >
@@ -150,7 +152,7 @@ export function UtilisateursListPage() {
           <option value="cdd">CDD</option>
           <option value="alternance">Alternance</option>
           <option value="stage">Stage</option>
-        </Select>
+        </SelectFiltrePill>
       </div>
 
       {error && (
@@ -164,7 +166,7 @@ export function UtilisateursListPage() {
       ) : filtres.length === 0 ? (
         <EmptyRow text="Aucun utilisateur ne correspond à ces filtres." />
       ) : (
-        <div className="rounded-card bg-surface-card overflow-x-auto shadow-sm">
+        <div className="bg-surface-card overflow-x-auto shadow-sm">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
               <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold">

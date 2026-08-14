@@ -52,14 +52,14 @@ export function HistoriqueTable({ demandes, emptyText = "Aucune demande." }: His
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left text-sm">
+      <table className="w-full text-left text-sm md:min-w-[760px]">
         <thead>
           <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Dates</th>
             <th className="px-4 py-3">Nbre jours</th>
-            <th className="px-4 py-3">Posé le</th>
-            <th className="px-4 py-3">Validé le</th>
+            <th className="hidden px-4 py-3 md:table-cell">Posé le</th>
+            <th className="hidden px-4 py-3 md:table-cell">Validé le</th>
             <th className="px-4 py-3">Statut</th>
           </tr>
         </thead>
@@ -89,8 +89,10 @@ export function HistoriqueTable({ demandes, emptyText = "Aucune demande." }: His
                   </span>
                 </td>
                 <td className="text-ink-500 px-4 py-3">{formatJours(jours)} j</td>
-                <td className="text-ink-500 px-4 py-3">{formatDateAction(demande.datePose)}</td>
-                <td className="text-ink-500 px-4 py-3">
+                <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
+                  {formatDateAction(demande.datePose)}
+                </td>
+                <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
                   {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
                 </td>
                 <td className="px-4 py-3">

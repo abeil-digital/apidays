@@ -10,12 +10,13 @@ import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 
-type Filtre = "Toutes" | "Validées" | "Refusées";
+type Filtre = "Toutes" | "En validation" | "Validées" | "Refusées";
 type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
 
-const FILTRES: Filtre[] = ["Toutes", "Validées", "Refusées"];
+const FILTRES: Filtre[] = ["Toutes", "En validation", "Validées", "Refusées"];
 
 const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
+  "En validation": "en attente",
   Validées: "validé",
   Refusées: "refusé",
 };

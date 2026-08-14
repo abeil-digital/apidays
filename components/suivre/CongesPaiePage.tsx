@@ -11,8 +11,7 @@ import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
-import { FieldLabel } from "@/components/ui/FieldLabel";
-import { Input } from "@/components/ui/Input";
+import { InputFiltrePill } from "@/components/ui/FiltrePill";
 import { Textarea } from "@/components/ui/Textarea";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
 
@@ -204,32 +203,24 @@ export function CongesPaiePage() {
 
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div
-          className={`rounded-card bg-surface-card w-full shadow-sm xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
+          className={`bg-surface-card w-full shadow-sm xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
         >
-          <div className="flex flex-wrap items-end gap-3 px-4 py-3">
-            <div>
-              <FieldLabel htmlFor="periode-debut">Du</FieldLabel>
-              <Input
-                id="periode-debut"
-                type="date"
-                value={debut}
-                onChange={(e) => setDebut(e.target.value)}
-                disabled={enCours}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <FieldLabel htmlFor="periode-fin">Au</FieldLabel>
-              <Input
-                id="periode-fin"
-                type="date"
-                value={fin}
-                onChange={(e) => setFin(e.target.value)}
-                disabled={enCours}
-                className="mt-1"
-              />
-            </div>
-            <label className="text-ink-500 flex items-center gap-1.5 pb-2.5 text-xs font-semibold">
+          <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+            <InputFiltrePill
+              type="date"
+              aria-label="Du"
+              value={debut}
+              onChange={(e) => setDebut(e.target.value)}
+              disabled={enCours}
+            />
+            <InputFiltrePill
+              type="date"
+              aria-label="Au"
+              value={fin}
+              onChange={(e) => setFin(e.target.value)}
+              disabled={enCours}
+            />
+            <label className="text-ink-500 flex items-center gap-1.5 text-xs font-semibold">
               <input
                 type="checkbox"
                 checked={validesUniquement}

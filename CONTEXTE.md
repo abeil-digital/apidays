@@ -598,6 +598,58 @@ Composant/fichier **pas renommés** (`Dashboard2Page`/`Dashboard2Page.tsx` garde
 historique) — même situation que `Calendrier2Page` en son temps, item ajouté au Backlog pour
 regrouper ce nettoyage cosmétique le jour où il sera fait.
 
+**Historique refondu en tableau + filtre pill standardisé (14/08/2026)** :
+
+- `/historique` passe d'une liste de cartes (`RequestList`) à un vrai tableau
+  (`components/historique/HistoriqueTable.tsx` : Type/Dates/Nbre jours/Posé le/Validé le/Statut,
+  colonnes "Posé le"/"Validé le" masquées sous `md`). Composant présentationnel pur (prend
+  `demandes` en props), pensé dès le départ pour être réutilisé ailleurs avec un sous-ensemble de
+  demandes.
+- Filtres : statut (Toutes/**En validation**/Validées/Refusées) + période (Année en cours / Période
+  de référence CP / plage personnalisée Du-Au), regroupés avec le tableau dans une seule card.
+  `periodeReferenceCp()` (`lib/periodeReferenceCp.ts`) extrait en utilitaire partagé — même calcul
+  que l'onglet "Période de référence" de `Dashboard2Page`, plus de duplication entre les deux.
+- **Nouveau standard DS `FiltrePill`** (`components/ui/FiltrePill.tsx`, `SelectFiltrePill`/
+  `InputFiltrePill`) — pill contour mint, `text-xs`/`px-2.5 py-1` (une première version plus
+  spacieuse s'est avérée trop massive). C'est désormais LE composant à utiliser pour tout filtre de
+  tableau ; distinct de `SelectPille` par l'usage (filtre de page vs créneau en popin DJI/CPI), pas
+  par la taille. Documenté sur `/design-system`. Appliqué à Export paie (`CongesPaiePage.tsx`) et
+  Utilisateurs (`UtilisateursListPage.tsx`) en plus d'Historique.
+- `Demande.dateDecision` exposé côté app (`date_decision` n'était sélectionné nulle part côté
+  repository jusqu'ici) pour la colonne "Validé le".
+- Essai puis retour en arrière : intégrer `HistoriqueTable` (4 dernières entrées, sans filtres) sur
+  l'Accueil à la place du bouton "En attente de validation", avec un lien "Tout voir" vers
+  `/historique`. Jugé "moche" après coup — **revert complet sur `Dashboard2Page.tsx`**, le bouton
+  "En attente de validation" (+ sa popin) est resté en place. Le composant `HistoriqueTable` et le
+  reste d'Historique restent inchangés ; seule l'intégration sur l'Accueil a été annulée. Si l'idée
+  revient, retenir que le style du bloc lui-même posait problème, pas le principe.
+
+**Audit d'incohérences UI + harmonisation des cards de tableau (14/08/2026)** — Vincent a demandé un
+état des lieux ("beaucoup d'incohérence, c'est pas très clair") après la refonte d'Historique.
+Incohérences relevées, traitées dans l'ordre où elles seront reprises :
+
+1. **Cards de tableau sans arrondi ni ombre — fait.** Historique n'avait ni l'un ni l'autre
+   (demandé explicitement plus tôt), Export paie et Utilisateurs avaient les deux. Les deux
+   `rounded-card` retirés des wrappers de tableau (`CongesPaiePage.tsx`, `UtilisateursListPage.tsx`)
+   — l'ombre (`shadow-sm`) reste pour l'instant, pas encore retirée sur ces deux écrans. `EmptyRow`
+   (`components/ui/EmptyRow.tsx`) avait lui aussi `rounded-card` — retiré également (il s'affiche à
+   l'intérieur de ces mêmes tableaux, incohérence directe sinon), impact sur tous ses appelants
+   (Historique, Export paie, Utilisateurs, Suivre, Calendrier — un seul composant partagé).
+2. **En-têtes de colonnes** — Historique en majuscules espacées (`uppercase tracking-wide`), Export
+   paie et Utilisateurs en casse normale. Pas encore harmonisé.
+3. **Position des filtres** — Historique/Export paie : filtres dans la même card que le tableau.
+   Utilisateurs : filtres au-dessus, hors card. Pas encore harmonisé.
+4. **Format des dates** — deux langages coexistent : texte ("12 juin au 16 juin",
+   `formatPeriodeDemande`) et pill numérique ("12/08 - 14/08", Export paie/Historique). Pas de règle
+   explicite sur lequel utiliser quand. Pas encore tranché.
+5. **Représentation du statut** — `StatusBadge` (pill + icône) sur Historique vs point de couleur
+   "fait main" dans les pills de date d'Export paie pour le même concept. Pas encore harmonisé.
+6. **En-têtes de page** — certaines pages ont `BackHeader` (flèche retour : Nouvelle demande, fiche
+   Utilisateur), d'autres un `<h1>` simple sans retour (Historique, Export paie, Utilisateurs). Pas
+   de règle explicite sur quand utiliser lequel, pas encore tranché.
+
+Point 1 fait ; points 2 à 6 restent à traiter — voir Backlog.md.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
