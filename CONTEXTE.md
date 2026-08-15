@@ -108,7 +108,8 @@ de Citizen D.
 - Vue "Année en cours" du Calendrier restructurée en dashboard (05/08/2026), inspirée de l'Accueil
   "Poser" : layout 2/3 (DJ imposées) — 1/3 (congés imposés + jours fériés en sidebar, chaque entrée
   en carte indépendante à coins carrés avec espacement). Badges `TypeBadge` "DJI" (`--color-dji`,
-  violet) et "CPI" (même couleur que CP)
+  violet) et "CPI" (à l'origine même couleur que CP — voir entrée "Échange de couleurs CPI/RECUP"
+  du 15/08/2026, CPI a depuis son propre token)
 - DJ imposées en cartes (05/08/2026) : grille 5 cartes/ligne (`bg-surface-card rounded-xl
 shadow-sm`, style `SoldeCard`) remplaçant la liste `ListCard` initiale — jour de la semaine en
   toutes lettres + date en mois complet (`text-base`), durée "0,5j" (`text-ink-500 text-sm`),
@@ -859,6 +860,105 @@ les laisser diverger. Fait dans l'ordre DJI → CPI → Fériés → PERSO (CPA,
   ligne (comme les `<td>` de la table `SoldeDetailPanel`, soit 24px effectifs entre deux lignes) —
   demandé explicitement pour que la densité visuelle des deux familles de popins se ressemble,
   au-delà de la seule couleur/forme des pills.
+
+**Échange de couleurs CPI/RECUP (15/08/2026)** — CPI (Congé imposé) n'avait jusqu'ici pas de token
+couleur propre : il réutilisait `--color-cp` (bleu, `bg-cp`/`border-cp`/`text-cp` en dur dans
+`TypeBadge.tsx`, commentaire "même couleur que CP"). Décision explicite : CPI récupère le bleu slate
+foncé jusqu'ici utilisé par RECUP (`#496580`), et RECUP récupère à son tour le rose jusqu'ici utilisé
+par EVT_FAM (`#d98ca6`) — **EVT_FAM garde volontairement son rose actuel pour l'instant** (RECUP et
+EVT_FAM partagent donc temporairement la même couleur, tranché explicitement comme acceptable en
+attendant qu'une 3e couleur soit choisie pour l'un des deux — voir Backlog.md).
+
+- **Nouveau token `--color-cpi: #496580`** (`app/globals.css`) — CPI a désormais sa propre entrée
+  `CODE_STYLES`/`CODE_STYLES_OUTLINE`/`CODE_STYLES_BORDURE`/`CODE_STYLES_TEXTE`/`CODE_STYLES_ATTENUE`
+  dans `TypeBadge.tsx` (`bg-cpi`/`border-cpi`/`text-cpi`/`bg-cpi/50`), plus de dépendance à CP.
+  `--color-recup` passe à `#d98ca6` (`--color-evtfam` inchangé, toujours `#d98ca6`).
+- **Audit fait avant l'échange** (agent dédié, recherche sur tout le repo) : aucune autre occurrence
+  en dur des hex `#496580`/`#d98ca6` en dehors de `globals.css` (le `#496580` de `--color-slate`
+  mentionné dans README.md est un token différent, sans rapport), aucune classe `bg-recup`/`bg-evtfam`
+  utilisée hors des helpers `classeFondTypeBadge`/`classeBordureTypeBadge`/`classeTexteTypeBadge` de
+  `TypeBadge.tsx` (donc rien à modifier ailleurs, la couleur se propage automatiquement partout où
+  ces helpers sont appelés — DS, popins Accueil, Calendrier, Suivre les soldes...).
+- Note "CPI (même couleur que CP)" dans l'entrée du 05/08/2026 ci-dessus corrigée (devenue fausse
+  après cet échange). Ligne `cpi` ajoutée à la table de swatches `PALETTE` du DS (`/design-system`),
+  absente jusqu'ici alors que le token `cp`/`rtt`/etc. l'était déjà — gap indépendant de l'échange,
+  corrigé au passage.
+
+**Popins récapitulatives de l'Accueil ancrées en surimpression du calendrier (15/08/2026)** —
+expérimentation ("on va tenter un truc") sur les 4 popins CPI/DJI/Fériés/PERSO de
+`Dashboard2Page.tsx` : au lieu du `Modal` plein écran à fond assombri (garde ses coins carrés déjà
+appliqués globalement, voir entrée précédente), elles s'ouvrent maintenant en surimpression du
+calendrier, sans jamais le masquer complètement :
+
+- **Position fixe en haut de la colonne légende** (`ouvrirLegende`, un seul point d'entrée pour les
+  4 kinds) — quelle que soit la carte cliquée (même la dernière de la liste), la popin s'ouvre
+  toujours à la même position, alignée sur le haut de la 1re rangée du calendrier (les deux colonnes
+  sont côte à côte dans le même flex row, même départ vertical par défaut). Mesurée une fois via
+  `calendrierGridRef.current.getBoundingClientRect()` au clic, pas suivie en continu.
+- **`position: absolute` dans un conteneur `relative`, pas `fixed`** — premier essai en `fixed`
+  (ancré au viewport, `DOMRect` de la carte cliquée) abandonné : la popin ne suivait pas le scroll de
+  la page, elle restait plaquée à l'écran pendant que le calendrier défilait dessous. `absolute`
+  dans la colonne légende (devenue `relative`) la fait scroller avec le contenu, comme demandé
+  explicitement ("qu'elle reste fixe par rapport au calendrier").
+- **Hauteur calée sur celle du calendrier affiché**, pas sur le nombre de lignes de la popin (bug
+  remonté : une popin courte laissait entrevoir les cartes de légende suivantes en dessous) — hauteur
+  du calendrier mesurée au clic (`calendrierHauteur`, même ref) et appliquée en `style={{ height }}`
+  sur le panneau, avec `overflow-y-auto` en secours si le contenu dépasse malgré tout.
+- **`MiniCalendrier` gagne une prop `estMisEnAvant?: (iso: string) => boolean`** — met un jour en
+  surbrillance (`brightness-110`, même effet visuel que le survol) indépendamment de la souris.
+  Nécessite un léger complément au modèle interne : le type `ItemRendu` (variante "fusion", jours
+  consécutifs regroupés en un seul élément DOM) gagne un champ `isos: string[]` en plus de `jours:
+number[]`, pour pouvoir tester CHAQUE jour du segment contre le prédicat (pas seulement le premier).
+  Combiné en `OR` avec le survol existant (`groupeId === groupeSurvole`), jamais en remplacement.
+  `Dashboard2Page.tsx` fournit `estJourDuPopinOuverte` (branché sur `legendeOuverte.kind`) à chaque
+  `MiniCalendrier` — répond "oui" pour tout jour couvert par les données de la popin actuellement
+  ouverte (dates DJI, période CPI, dates Fériés, ou plage de dates des demandes PERSO du type
+  affiché), "non" sinon.
+- **Ordre d'affichage des cartes de légende fixé** (`ORDRE_LEGENDE`, tableau de `TypeBadgeCode`,
+  `Dashboard2Page.tsx`) : CP, RTT, CPA, DJI, CPI, FE, CSS — demandé explicitement, CPI oubliée dans la
+  première formulation puis repositionnée juste après DJI ("les deux imposés par l'admin") sur
+  clarification. `renderLegendeCard(code)` centralise le mapping code → libellé/compteur/onClick
+  (avant : 3 blocs JSX dupliqués pour CPI/DJI/Fériés + un `.map` pour PERSO) ; les codes perso hors de
+  cette liste (CE, RECUP, EVT_FAM...) restent affichés, ajoutés après dans leur ordre naturel
+  d'apparition dans les demandes.
+- **Popin PERSO généralisée à tous les types** (CP, RTT, CPA, CSS...), plus seulement CP — reprend
+  le même style pill (contour couleur du type + point de statut vert/orange/rouge validé/en
+  attente/annulé) que CPI/DJI/Fériés, via `demandesDuType(code)`/`labelDemandes(n)`.
+- Libellé du sélecteur d'affichage renommé "Affichage : Vue complète / Mois en cours" → "Débute :
+  Mois en cours / Début période" (`SelectAffichage`, texte seul, comportement inchangé).
+
+**Bug corrigé — demande refusée disparaissait du tableau Export paie (15/08/2026)** — trouvé en
+répondant à un signalement de Vincent ("j'ai refusé un CSS à Delphine, je ne le retrouve pas dans
+Suivre les demandes"). Deux choses distinctes étaient en jeu, clarifiées en discussion :
+
+- **Le cas signalé au départ n'était pas un bug** : `fetchDemandesEquipe()` (Suivre les demandes)
+  exclut volontairement le statut `annulée` (`.neq("statut", "annulee")`) — une demande validée puis
+  supprimée via Régularisation dans Export paie n'est traçable que dans Export paie, jamais dans
+  Suivre les demandes. Comportement voulu, pas modifié.
+- **Le vrai bug, trouvé en creusant plus loin** (agent dédié) : `fetchCongesConsommesPeriode`
+  (`lib/data/demandes.repository.ts`, alimente `CongesPaiePage`/Export paie) filtrait sur
+  `.in("statut", ["validee", "en_attente", "annulee"])` — **`"refusee"` manquait de cette liste**.
+  Conséquence : refuser une demande encore en attente depuis Export paie la faisait disparaître
+  intégralement du tableau au `refetch()`, alors que la pastille de statut (vert/orange/rouge) avait
+  déjà un chemin de code prévu pour l'afficher — jamais atteint faute de données. `"refusee"` ajouté
+  à la liste.
+- **Refusé traité comme annulé pour le calcul du total et l'export CSV** — ni l'un ni l'autre n'a
+  jamais été (ou n'est plus) un congé réellement accordé, aucune raison de compter différemment
+  (`grouperParCollaborateur` : `d.statut !== "annulé" && d.statut !== "refusé"` avant d'ajouter aux
+  jours ; même exclusion sur la liste de dates de l'export CSV).
+- **Pastille refusée : point rouge** (comme annulé), plutôt que l'orange "en attente" qu'elle aurait
+  hérité par défaut du `else` de la ternaire — sinon indiscernable visuellement d'une demande encore
+  en attente de décision une fois le fetch corrigé.
+- **Panneau de détail — bug latent découvert au passage, jamais atteignable avant** (les demandes
+  refusées n'étaient jamais chargées, donc jamais cliquables) : sélectionner une demande refusée
+  tombait dans la branche `else` du code (prévue pour "en attente") et affichait à tort les boutons
+  Refuser/Valider sur une demande déjà décidée. Nouvelle branche dédiée, lecture seule ("Demande déjà
+  refusée — non comptée, aucune action possible depuis cet écran") — pas de Régularisation non plus
+  sur un refus (ce mécanisme corrige un congé qui avait été accordé, un refus ne l'a jamais été).
+- **Distinction annulé/refusé rediscutée** : gardée pour l'instant (refusé = jamais accordé, annulé =
+  accordé puis corrigé après coup — utile pour l'audit paie), mais les deux se comportent maintenant
+  de façon quasi identique dans Export paie (visibles, non comptés, lecture seule) — voir Backlog.md,
+  point ajouté pour revenir sur l'ensemble des règles de gestion Export paie/suivi des congés.
 
 **En cours / pas encore fait** :
 

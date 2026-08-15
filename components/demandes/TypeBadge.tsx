@@ -10,7 +10,7 @@ const CODE_STYLES: Record<TypeBadgeCode, string> = {
   RECUP: "bg-recup",
   EVT_FAM: "bg-evtfam",
   DJI: "bg-dji",
-  CPI: "bg-cp", // même couleur que CP — congé payé imposé
+  CPI: "bg-cpi",
   FERIE: "bg-ferie",
 };
 
@@ -25,7 +25,7 @@ const CODE_STYLES_OUTLINE: Record<TypeBadgeCode, string> = {
   RECUP: "border-recup text-recup",
   EVT_FAM: "border-evtfam text-evtfam",
   DJI: "border-dji text-dji",
-  CPI: "border-cp text-cp",
+  CPI: "border-cpi text-cpi",
   FERIE: "border-ferie text-ferie",
 };
 
@@ -74,7 +74,7 @@ const CODE_STYLES_BORDURE: Record<TypeBadgeCode, string> = {
   RECUP: "border-recup",
   EVT_FAM: "border-evtfam",
   DJI: "border-dji",
-  CPI: "border-cp",
+  CPI: "border-cpi",
   FERIE: "border-ferie",
 };
 
@@ -93,7 +93,7 @@ const CODE_STYLES_TEXTE: Record<TypeBadgeCode, string> = {
   RECUP: "text-recup",
   EVT_FAM: "text-evtfam",
   DJI: "text-dji",
-  CPI: "text-cp",
+  CPI: "text-cpi",
   FERIE: "text-ferie",
 };
 
@@ -116,7 +116,7 @@ const CODE_STYLES_ATTENUE: Record<TypeBadgeCode, string> = {
   RECUP: "bg-recup/50",
   EVT_FAM: "bg-evtfam/50",
   DJI: "bg-dji/50",
-  CPI: "bg-cp/50",
+  CPI: "bg-cpi/50",
   FERIE: "bg-ferie/50",
 };
 

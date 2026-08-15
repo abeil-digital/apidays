@@ -251,14 +251,19 @@ export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
 }
 
 /**
- * Congés (validés, en attente, ou annulés depuis cette page — régularisation)
- * dont `date_debut` tombe dans la période donnée (Espace Suivre > récap paie)
- * — CP, RTT, CSS. Les "en attente" comptent dans le total (cas à la marge de
- * régularisation), les "annulés" restent visibles/traçables dans le tableau
- * mais sont exclus du total (voir `grouperParCollaborateur` dans
- * `CongesPaiePage`). Filtre sur `date_debut` uniquement, comme le reste de
- * l'app (voir `soldes.repository.ts`) — une demande à cheval sur deux
- * périodes n'est pas traitée finement.
+ * Congés (validés, en attente, refusés, ou annulés depuis cette page —
+ * régularisation) dont `date_debut` tombe dans la période donnée (Espace
+ * Suivre > récap paie) — CP, RTT, CSS. Les "en attente" comptent dans le
+ * total (cas à la marge de régularisation), les "refusés" et les "annulés"
+ * restent visibles/traçables dans le tableau mais sont exclus du total (voir
+ * `grouperParCollaborateur` dans `CongesPaiePage`) — un refus n'a jamais été
+ * accordé, une annulation corrige un congé qui l'avait été, mais ni l'un ni
+ * l'autre ne doit compter dans les jours consommés transmis à la comptable
+ * (bug corrigé le 15/08/2026 : "refusee" manquait de ce filtre, une demande
+ * refusée depuis cet écran disparaissait entièrement du tableau au lieu d'y
+ * rester visible avec 0 jour compté). Filtre sur `date_debut` uniquement,
+ * comme le reste de l'app (voir `soldes.repository.ts`) — une demande à
+ * cheval sur deux périodes n'est pas traitée finement.
  */
 export async function fetchCongesConsommesPeriode(
   debut: string,
@@ -269,7 +274,7 @@ export async function fetchCongesConsommesPeriode(
   const { data, error } = await supabase
     .from("demandes_conges")
     .select(SELECT_DEMANDE_EQUIPE)
-    .in("statut", ["validee", "en_attente", "annulee"])
+    .in("statut", ["validee", "en_attente", "annulee", "refusee"])
     .gte("date_debut", debut)
     .lte("date_debut", fin)
     .order("date_debut", { ascending: true });

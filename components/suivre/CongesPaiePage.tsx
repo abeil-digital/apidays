@@ -59,8 +59,9 @@ function ligneVide(): LigneCollab["parType"] {
 
 // Cas à la marge (regularisation) : les jours non validés comptent dans le
 // total dès maintenant (voir pastille orange/verte pour les distinguer). Les
-// jours annulés (régularisation depuis cette page) restent visibles pour la
-// traçabilité, mais ne comptent pas.
+// jours annulés (régularisation depuis cette page) ou refusés restent
+// visibles pour la traçabilité, mais ne comptent pas — ni l'un ni l'autre
+// n'a jamais été (ou n'est plus) un congé réellement accordé.
 function grouperParCollaborateur(demandes: DemandeEquipe[]): LigneCollab[] {
   const parId = new Map<string, LigneCollab>();
 
@@ -79,7 +80,9 @@ function grouperParCollaborateur(demandes: DemandeEquipe[]): LigneCollab[] {
     }
 
     const ligne = parId.get(id)!;
-    if (d.statut !== "annulé") ligne.parType[bucket].jours += d.nbDemiJournees / 2;
+    if (d.statut !== "annulé" && d.statut !== "refusé") {
+      ligne.parType[bucket].jours += d.nbDemiJournees / 2;
+    }
     ligne.parType[bucket].dates.push({
       id: d.id,
       label: libellePeriodeDemande(d),
@@ -96,7 +99,7 @@ function genererCsv(lignes: LigneCollab[]): string {
     ligne.nom,
     ...TYPES.map((t) => {
       const c = ligne.parType[t];
-      const dates = c.dates.filter((d) => d.statut !== "annulé");
+      const dates = c.dates.filter((d) => d.statut !== "annulé" && d.statut !== "refusé");
       return c.jours > 0
         ? `${formatJours(c.jours)} j (${dates.map((d) => d.label).join(", ")})`
         : "0";
@@ -292,7 +295,7 @@ export function CongesPaiePage() {
                                     >
                                       <span
                                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                          date.statut === "annulé"
+                                          date.statut === "annulé" || date.statut === "refusé"
                                             ? "bg-status-danger-fg"
                                             : date.statut === "validé"
                                               ? "bg-status-success-fg"
@@ -401,6 +404,15 @@ export function CongesPaiePage() {
                     </div>
                   </div>
                 )}
+              </div>
+            ) : selection.statut === "refusé" ? (
+              // Une demande refusée est un état terminal ici — pas de bouton
+              // Refuser/Valider (elle n'est plus "en attente") ni de
+              // Régularisation (ce mécanisme corrige un congé qui avait été
+              // accordé, une demande refusée ne l'a jamais été). Lecture
+              // seule, uniquement pour la traçabilité dans le tableau.
+              <div className="text-ink-500 px-4 pt-3 pb-4 text-xs">
+                Demande déjà refusée — non comptée, aucune action possible depuis cet écran.
               </div>
             ) : (
               <>

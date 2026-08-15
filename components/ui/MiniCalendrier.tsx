@@ -179,9 +179,7 @@ function JourPastille({
 }) {
   if (!pastille) {
     return (
-      <span className="text-ink-500 flex h-7 w-7 items-center justify-center text-xs">
-        {jour}
-      </span>
+      <span className="text-ink-500 flex h-7 w-7 items-center justify-center text-xs">{jour}</span>
     );
   }
 
@@ -202,7 +200,8 @@ function JourPastille({
     onMouseEnter: () => onSurvol(true),
     onMouseLeave: () => onSurvol(false),
     onClick: onJourClick
-      ? (e: MouseEvent<HTMLSpanElement>) => onJourClick(iso, e.currentTarget.getBoundingClientRect())
+      ? (e: MouseEvent<HTMLSpanElement>) =>
+          onJourClick(iso, e.currentTarget.getBoundingClientRect())
       : undefined,
   };
 
@@ -271,7 +270,10 @@ function PeriodeSegment({
   return (
     <div
       className={`grid h-7 items-center ${forme} ${classeFond} text-xs font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
-      style={{ gridColumn: `span ${jours.length}`, gridTemplateColumns: `repeat(${jours.length}, 1fr)` }}
+      style={{
+        gridColumn: `span ${jours.length}`,
+        gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
+      }}
       onMouseEnter={() => onSurvol(true)}
       onMouseLeave={() => onSurvol(false)}
       onClick={
@@ -322,7 +324,13 @@ function calculerGroupeIds(
       continue;
     }
     const veille = jourAdjacent(cellule.iso, -1);
-    const estSuite = sontContinus(veille, tipoDuJour(veille), cellule.iso, cellule.pastille, estEnGroupe);
+    const estSuite = sontContinus(
+      veille,
+      tipoDuJour(veille),
+      cellule.iso,
+      cellule.pastille,
+      estEnGroupe,
+    );
     if (!estSuite || !courant) {
       courant = cellule.iso;
     }
@@ -346,6 +354,7 @@ type ItemRendu =
   | {
       type: "fusion";
       jours: number[];
+      isos: string[];
       isoPremierJour: string;
       classeFond: string;
       isStart: boolean;
@@ -369,7 +378,7 @@ function calculerItemsRendu(
 ): ItemRendu[] {
   const items: ItemRendu[] = [];
 
-  for (let i = 0; i < semaines.length; ) {
+  for (let i = 0; i < semaines.length;) {
     const finLigne = i - (i % 5) + 5;
     const cellule = semaines[i];
 
@@ -416,6 +425,7 @@ function calculerItemsRendu(
       items.push({
         type: "fusion",
         jours: semaines.slice(i, j).map((c) => c.jour as number),
+        isos: semaines.slice(i, j).map((c) => c.iso as string),
         isoPremierJour: cellule.iso,
         classeFond: cellule.pastille.classeFond ?? "",
         isStart: isStarts[i],
@@ -458,6 +468,14 @@ export interface MiniCalendrierProps {
    */
   premiereSemaine?: number;
   derniereSemaine?: number;
+  /**
+   * Met un jour en surbrillance (`brightness-110`, même effet que le survol)
+   * indépendamment de la souris — ex. mettre en avant les jours couverts par
+   * une popin ouverte côté appelant. Un jour "vrai" reste en surbrillance
+   * tant que le prédicat renvoie `true`, se cumule avec le survol normal
+   * (l'un ou l'autre suffit).
+   */
+  estMisEnAvant?: (iso: string) => boolean;
 }
 
 export function MiniCalendrier({
@@ -468,6 +486,7 @@ export function MiniCalendrier({
   onJourClick,
   premiereSemaine,
   derniereSemaine,
+  estMisEnAvant,
 }: MiniCalendrierProps) {
   const [groupeSurvole, setGroupeSurvole] = useState<string | null>(null);
   const semaines = genererSemaines(annee, moisIndex, tipoDuJour);
@@ -531,7 +550,10 @@ export function MiniCalendrier({
                   pastille={item.pastille}
                   isStart={item.isStart}
                   isEnd={item.isEnd}
-                  isHovered={item.groupeId !== null && item.groupeId === groupeSurvole}
+                  isHovered={
+                    (item.groupeId !== null && item.groupeId === groupeSurvole) ||
+                    (estMisEnAvant?.(item.iso) ?? false)
+                  }
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
                   onJourClick={item.pastille ? onJourClick : undefined}
                 />
@@ -547,7 +569,9 @@ export function MiniCalendrier({
               classeFond={item.classeFond}
               isStart={item.isStart}
               isEnd={item.isEnd}
-              isHovered={item.groupeId === groupeSurvole}
+              isHovered={
+                item.groupeId === groupeSurvole || item.isos.some((iso) => estMisEnAvant?.(iso))
+              }
               onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
               onJourClick={onJourClick}
             />

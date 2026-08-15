@@ -49,6 +49,7 @@ const PALETTE: { token: string; className: string }[] = [
   { token: "cpa", className: "bg-cpa" },
   { token: "css", className: "bg-css" },
   { token: "ce", className: "bg-ce" },
+  { token: "cpi", className: "bg-cpi" },
   { token: "recup", className: "bg-recup" },
   { token: "evtfam", className: "bg-evtfam" },
   { token: "dji", className: "bg-dji" },
