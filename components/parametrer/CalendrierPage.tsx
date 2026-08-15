@@ -11,7 +11,13 @@ import type {
   JourFerie,
 } from "@/lib/types";
 import { formatDateAction, formatJourMois, formatJours, nombreJours } from "@/lib/format";
-import { datesDuJourDeLaSemaine, joursFeriesLegaux } from "@/lib/joursFeries";
+import {
+  datesDuJourDeLaSemaine,
+  dureeCongeImpose,
+  estJourOuvre,
+  joursFeriesLegaux,
+  joursOuvres,
+} from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { Badge } from "@/components/ui/Badge";
@@ -88,12 +94,6 @@ function semaineIndexDeJour(iso: string): number {
   return Math.floor(index / 5);
 }
 
-function estJourOuvre(iso: string, joursFeries: JourFerie[]): boolean {
-  const jourSemaine = new Date(`${iso}T00:00:00Z`).getUTCDay(); // 0=dimanche..6=samedi
-  if (jourSemaine === 0 || jourSemaine === 6) return false;
-  return !joursFeries.some((f) => f.date === iso);
-}
-
 /** Variante pour `DayPicker` (`disabled`), qui fournit un `Date` en fuseau
  * local du navigateur plutôt qu'une chaîne ISO — comparaison en local pour
  * ne jamais décaler d'un jour par rapport à ce que l'utilisateur clique. */
@@ -106,41 +106,8 @@ function estJourDesactiveCalendrier(date: Date, joursFeries: JourFerie[]): boole
   return joursFeries.some((f) => f.date === iso);
 }
 
-/**
- * Jours ouvrés (L-V, jours fériés exclus) entre deux dates, bornes incluses —
- * une demi-journée déjà imposée (DJI) sur un jour ouvré de la période ne
- * compte que pour 0,5 (déjà "prise", pas disponible en entier).
- */
-function joursOuvres(
-  debut: string,
-  fin: string,
-  joursFeries: JourFerie[],
-  djImposees: DjImposee[] = [],
-): number {
-  let compte = 0;
-  const curseur = new Date(`${debut}T00:00:00Z`);
-  const finDate = new Date(`${fin}T00:00:00Z`);
-  while (curseur <= finDate) {
-    const iso = curseur.toISOString().slice(0, 10);
-    if (estJourOuvre(iso, joursFeries)) {
-      compte += djImposees.some((dj) => dj.date === iso) ? 0.5 : 1;
-    }
-    curseur.setUTCDate(curseur.getUTCDate() + 1);
-  }
-  return compte;
-}
-
 function congesImposesInclut(congesImposes: CongeImpose[], iso: string): boolean {
   return congesImposes.some((c) => iso >= c.debut && iso <= c.fin);
-}
-
-/** Durée en jours (ouvrés, demi-journées de début/fin comprises) d'une
- * période de congé imposé déjà posée — pour le compteur de volume. */
-function dureeCongeImpose(c: CongeImpose, joursFeries: JourFerie[]): number {
-  const base = joursOuvres(c.debut, c.fin, joursFeries);
-  const ajustDebut = c.demiDebut === "apres_midi" ? 0.5 : 0;
-  const ajustFin = c.demiFin === "matin" ? 0.5 : 0;
-  return base - ajustDebut - ajustFin;
 }
 
 /** Couleur de la pastille de volume selon l'avancement vers une cible —

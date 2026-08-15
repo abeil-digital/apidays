@@ -142,7 +142,7 @@ export function SoldeDetailPanel({
                 <tr>
                   <td className="px-4 py-3">
                     <span
-                      className={`bg-surface-app rounded-full border px-2.5 py-0.5 text-xs font-semibold ${classeBordure}`}
+                      className={`bg-surface-app flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordure}`}
                       style={{ color: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 65%, black)` }}
                     >
                       {`${libelleDepart} - ${formatJjMmAa(historique.periodeDebut)}`}
@@ -157,7 +157,7 @@ export function SoldeDetailPanel({
                   <tr key={m.id}>
                     <td className="px-4 py-3">
                       <span
-                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordure}`}
+                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordure}`}
                       >
                         {m.type === "acquisition" ? (
                           <Plus size={10} className={`${classeTexte} shrink-0`} />
@@ -186,7 +186,7 @@ export function SoldeDetailPanel({
                   <tr key={m.id}>
                     <td className="px-4 py-3">
                       <span
-                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${classeBordure}`}
+                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordure}`}
                       >
                         <span className="bg-status-warning-fg h-1.5 w-1.5 shrink-0 rounded-full" />
                         {libelleEvenement(m)}

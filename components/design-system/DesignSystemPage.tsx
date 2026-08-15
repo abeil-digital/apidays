@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Eye, PlusCircle, Trash2 } from "lucide-react";
+import { Eye, PlusCircle, Trash2, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, type ButtonVariant } from "@/components/ui/Button";
@@ -18,7 +18,12 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { SoldeCard } from "@/components/ui/SoldeCard";
 import { SoldeMoisBloc } from "@/components/ui/SoldeMoisBloc";
-import { TypeBadge, TypeBadgePillEnhanced } from "@/components/demandes/TypeBadge";
+import {
+  TypeBadge,
+  TypeBadgePillEnhanced,
+  classeBordureTypeBadge,
+  classeFondTypeBadge,
+} from "@/components/demandes/TypeBadge";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
 import type { DemandeEquipe, MouvementSolde, StatutDemande } from "@/lib/types";
 
@@ -182,6 +187,7 @@ export function DesignSystemPage() {
   const [modalOuverte, setModalOuverte] = useState(false);
   const [modalCentreOuverte, setModalCentreOuverte] = useState(false);
   const [modalHauteOuverte, setModalHauteOuverte] = useState(false);
+  const [modalHeaderOuverte, setModalHeaderOuverte] = useState(false);
   const [dateExemple, setDateExemple] = useState("");
   const [soldeMoisOuvert, setSoldeMoisOuvert] = useState(true);
 
@@ -573,6 +579,34 @@ export function DesignSystemPage() {
             <Button onClick={() => setModalHauteOuverte(true)} className="rounded-full px-4 py-2">
               Modal align=&quot;top&quot; (DJI/CPI/Fériés, max-w-4xl)
             </Button>
+            <Button onClick={() => setModalHeaderOuverte(true)} className="rounded-full px-4 py-2">
+              Modal prop &quot;header&quot; (popins Accueil)
+            </Button>
+          </div>
+        </div>
+
+        {/* Convention de pill "date" — même classes littérales (pas un composant
+            dédié, chaque écran les reconstruit) sur HistoriqueTable, Export paie,
+            SoldeDetailPanel et les 4 popins de Dashboard2Page (CPI/DJI/Fériés/PERSO) :
+            bg-surface-app + rounded-full border px-2.5 py-1 text-xs font-semibold +
+            classeBordureTypeBadge(code) pour la couleur du contour. Unifié le
+            14/08/2026 (deux variantes avaient dérivé : px-2 py-0.5 et px-2.5 py-0.5). */}
+        <div>
+          <div className="text-ink-500 mb-2 text-xs font-semibold">
+            Pill Date (contour couleur du type) — Historique / Export paie / Suivre les soldes /
+            popins Accueil
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <span
+              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("CP")}`}
+            >
+              12 août - 14 août
+            </span>
+            <span
+              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("DJI")}`}
+            >
+              11 sept. 2026
+            </span>
           </div>
         </div>
       </Section>
@@ -669,6 +703,46 @@ export function DesignSystemPage() {
             Position stable en haut de l&rsquo;écran, indépendante de la hauteur du contenu — DJI,
             CPI et Fériés l&rsquo;utilisent toutes les trois avec <code>max-w-4xl</code> pour
             apparaître exactement au même endroit d&rsquo;une popin à l&rsquo;autre.
+          </p>
+        </Modal>
+      )}
+
+      {modalHeaderOuverte && (
+        <Modal
+          onClose={() => setModalHeaderOuverte(false)}
+          className="max-w-sm"
+          header={
+            <div
+              className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge("DJI")}`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-full ring-2 ring-white">
+                  <TypeBadge code="DJI" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-white">7 demi-journées</div>
+                  <div className="text-xs font-semibold text-white/80">
+                    15 août 2026 - 31 déc. 2026
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalHeaderOuverte(false)}
+                className="shrink-0 text-white/70 hover:text-white"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          }
+        >
+          <p className="text-ink-500 text-sm">
+            Prop <code>header</code> — en-tête plein-cadre custom qui remplace entièrement la barre
+            titre/croix par défaut (croix à la charge de l&rsquo;appelant). Utilisée par les popins
+            récapitulatives de l&rsquo;Accueil (CPI/DJI/Fériés/PERSO) : fond{" "}
+            <code>classeFondTypeBadge(code)</code>, <code>TypeBadge</code> cerclé de blanc (sinon
+            invisible sur un fond de la même couleur — ex. DJI violet sur DJI violet).
           </p>
         </Modal>
       )}

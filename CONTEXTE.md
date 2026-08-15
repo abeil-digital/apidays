@@ -795,6 +795,71 @@ plusieurs ajustements de lisibilité demandés après coup sur les 3 types :
   procédé que `MiniCalendrier.tsx` pour une variante de couleur non pré-générée par Tailwind) — la
   bordure de la pill garde la couleur pleine du type, seul le texte est foncé.
 
+**Popins récapitulatives de l'Accueil alignées sur le style `SoldeDetailPanel` (14/08/2026)** — les
+popins CPI/DJI/Fériés/PERSO (types de congé perso — CP, CPA, CSS, etc.) de `Dashboard2Page.tsx`,
+jusqu'ici sur le gabarit `Modal` générique (titre centré neutre, liste de lignes texte séparées par
+un filet), reprennent le système visuel construit pour `SoldeDetailPanel` (panneau de solde,
+Suivre les soldes) — décision explicite de faire converger les deux familles de popins plutôt que
+les laisser diverger. Fait dans l'ordre DJI → CPI → Fériés → PERSO (CPA, CSS, etc. — voir
+"Généralisation PERSO" plus bas) :
+
+- **`Modal` gagne une prop `header?: ReactNode`** (`components/ui/Modal.tsx`) — en-tête plein-cadre
+  custom qui remplace entièrement la barre titre/croix par défaut (croix de fermeture à la charge de
+  l'appelant). Branche strictement additive : tous les appels existants (confirmations,
+  `ReglesCongesModal`, popins DJI/CPI/Fériés de `CalendrierPage.tsx`, exemples DS) qui ne passent pas
+  `header` gardent EXACTEMENT le rendu/padding d'avant, aucune régression possible par construction
+  (le JSX du chemin `title` n'a pas été touché, seulement encapsulé dans un `??`).
+- **Coins carrés appliqués globalement** — `rounded-xl` retiré du wrapper `Modal` sans condition
+  (contrairement à `header`, ce changement-ci s'applique à TOUTES les popins de l'app d'un coup,
+  demandé explicitement "on applique partout" après validation sur DJI). `shadow-lg` conservé
+  (seul l'arrondi était visé, pas l'ombre — distinct de la harmonisation des cards de tableau du
+  14/08/2026 plus haut, qui avait retiré les deux).
+- **En-tête coloré générique** (`headerLegende(code, compteur)`, fonction locale à
+  `Dashboard2Page.tsx`, réutilisée par CPI/DJI/Fériés/PERSO) — même structure que `SoldeDetailPanel` :
+  fond `classeFondTypeBadge(code)`, typographie blanche, croix `text-white/70`. Substitutions
+  demandées explicitement par rapport au panneau de solde (qui montre un salarié) : `TypeBadge`
+  cerclé de blanc (`ring-2 ring-white`) à la place de l'avatar — sans ce cerclage le badge (fond plein
+  de la couleur du type) devient invisible sur un en-tête de la MÊME couleur, ex. DJI violet sur DJI
+  violet ; compteur ("7 demi-journées", "1 période", "4 jours", "1 demande") à la place du nom ;
+  période active affichée (`rangeActive`, l'onglet Année en cours/Période CP/Année suivante) à la
+  place du sous-titre "Détail du solde".
+- **Lignes en pill contour couleur du type** (`classeBordureTypeBadge(code)`), une info
+  complémentaire à droite selon le type : Matin/Après-midi (DJI), nombre de jours calculé (CPI, voir
+  point suivant), libellé du jour férié (Fériés), nombre de jours + point de statut (PERSO, voir plus
+  bas). Remplace les anciennes lignes texte brut séparées par un filet horizontal — même principe
+  déjà acté sur `HistoriqueTable` (filets retirés, jugés redondants avec la pill).
+- **`joursOuvres`/`estJourOuvre`/`dureeCongeImpose` extraits de `CalendrierPage.tsx` vers
+  `lib/joursFeries.ts`** (exportés, réutilisés tels quels par `CalendrierPage.tsx` — aucune
+  duplication de la formule) : nécessaire pour afficher le nombre de jours de chaque période CPI dans
+  la popin Accueil, avec le même calcul que le compteur de volume admin (jours ouvrés, fériés
+  exclus, demi-journées de début/fin d'après `demiDebut`/`demiFin`). Le calcul utilise la liste des
+  fériés des 3 années chargées (précédente/actuelle/suivante) **non filtrée** par la fenêtre active
+  (contrairement à `joursFeriesTous`, lui filtré) — une période CPI affichée peut déborder de la
+  fenêtre active (chevauchement partiel), il faut TOUS les fériés qui la couvrent réellement pour un
+  décompte juste.
+- **Généralisation PERSO (CP → tous les types)** — la popin PERSO (CP, RTT, CPA, CSS, etc.) a d'abord
+  été refaite pour CP seul (`demandesCp`/`demandesCpLabel`, code en dur), puis généralisée sur demande
+  ("CPA et congés sans solde", reformulé en "tous les autres" en cours de route) via
+  `demandesDuType(code)`/`labelDemandes(n)` — deux fonctions locales paramétrées par `code`, plus
+  aucune branche spécifique à CP. `RequestList` (l'ancien rendu de cette popin) n'est plus utilisé
+  que par la popin "En attente de validation", laissée inchangée.
+  - **Point vert/orange selon le statut** de la demande (validé/en attente — `annulé` en rouge par
+    cohérence avec le reste de l'app, bien que non explicitement demandé, ce statut étant rare ici
+    car `demandesVisibles` exclut déjà `refusé`).
+  - **Nombre de jours sans signe** ("1 j", pas "-1 j" — demandé explicitement, une popin de
+    consultation n'est pas un solde qui décompte, contrairement à `SoldeDetailPanel`), coloré
+    `classeTexteTypeBadge(code)` si validé, **grisé `text-ink-500`** si en attente (la couleur du
+    type est réservée à ce qui est acquis/certain).
+- **Pills date harmonisées à `px-2.5 py-1`** (partout — Historique, Export paie, Suivre les soldes,
+  ces 4 popins Accueil) : deux variantes légèrement différentes avaient dérivé (`px-2 py-0.5` sur les
+  pills d'événement de `SoldeDetailPanel`, `px-2.5 py-0.5` sur les premières versions des pills
+  Accueil) — remises au gabarit `HistoriqueTable`, la référence historique de ce pattern.
+- **Espacement entre lignes calé sur `SoldeDetailPanel`** — les 4 listes de la popin Accueil sont
+  passées d'un `flex flex-col gap-2` (8px entre lignes) à un `flex flex-col` avec `py-3` sur chaque
+  ligne (comme les `<td>` de la table `SoldeDetailPanel`, soit 24px effectifs entre deux lignes) —
+  demandé explicitement pour que la densité visuelle des deux familles de popins se ressemble,
+  au-delà de la seule couleur/forme des pills.
+
 **En cours / pas encore fait** :
 
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +

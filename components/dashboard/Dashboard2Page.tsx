@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Eye, PlusCircle } from "lucide-react";
+import { ChevronDown, Eye, PlusCircle, X } from "lucide-react";
 import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
+import { dureeCongeImpose } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
@@ -14,8 +15,10 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { RequestList } from "@/components/demandes/RequestList";
 import {
   TypeBadge,
+  classeBordureTypeBadge,
   classeFondAttenueTypeBadge,
   classeFondTypeBadge,
+  classeTexteTypeBadge,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
@@ -302,6 +305,7 @@ export function Dashboard2Page() {
         c.fin >= rangeActive.debut,
     )
     .sort((a, b) => a.debut.localeCompare(b.debut));
+  const congesImposesLabel = `${congesImposesTous.length} période${congesImposesTous.length > 1 ? "s" : ""}`;
   const djImposeesTous = [
     ...calendrierAnneePrecedente.djImposees,
     ...calendrierAnneeA.djImposees,
@@ -314,16 +318,64 @@ export function Dashboard2Page() {
         d.date <= rangeActive.fin,
     )
     .sort((a, b) => a.date.localeCompare(b.date));
-  const joursFeriesTous = [
+  const djImposeesLabel = `${djImposeesTous.length} demi-journée${djImposeesTous.length > 1 ? "s" : ""}`;
+  const periodeActiveLabel = `${formatDate(rangeActive.debut)} - ${formatDate(rangeActive.fin)}`;
+  // Non filtré par `rangeActive` (contrairement à `joursFeriesTous` juste en
+  // dessous) : une période de congé imposé affichée peut déborder de la
+  // fenêtre active (chevauchement partiel), `dureeCongeImpose` a besoin de
+  // TOUS les fériés qui la couvrent réellement pour un décompte juste.
+  const joursFeriesToutesAnnees = [
     ...calendrierAnneePrecedente.joursFeries,
     ...calendrierAnneeA.joursFeries,
     ...calendrierAnneeB.joursFeries,
-  ]
+  ];
+  const joursFeriesTous = joursFeriesToutesAnnees
     .filter((f) => f.date >= rangeActive.debut && f.date <= rangeActive.fin)
     .sort((a, b) => a.date.localeCompare(b.date));
+  const joursFeriesLabel = `${joursFeriesTous.length} jour${joursFeriesTous.length > 1 ? "s" : ""}`;
+
+  // Demandes perso (CP/RTT/CPA/CSS/...) de la fenêtre active pour un code
+  // donné — même filtre que `typesPersoPresents`/`LegendeCard`, factorisé
+  // pour être réutilisé à la fois par l'en-tête et le corps de la popin.
+  function demandesDuType(code: TypeBadgeCode): Demande[] {
+    return demandesVisibles.filter((d) => codeBadgeDemande(d) === code);
+  }
+
+  function labelDemandes(n: number): string {
+    return `${n} demande${n > 1 ? "s" : ""}`;
+  }
 
   function demandeDuJour(iso: string): Demande | undefined {
     return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
+  }
+
+  // En-tête plein-cadre coloré des popins récapitulatives CPI/DJI (même
+  // gabarit que `SoldeDetailPanel`) : `TypeBadge` cerclé de blanc à la place
+  // de l'avatar (sinon invisible sur un fond de la même couleur), compteur à
+  // la place du nom, période active affichée (`rangeActive`) à la place du
+  // sous-titre "Détail du solde".
+  function headerLegende(code: TypeBadgeCode, compteur: string) {
+    return (
+      <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
+        <div className="flex items-center gap-2.5">
+          <div className="rounded-full ring-2 ring-white">
+            <TypeBadge code={code} />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">{compteur}</div>
+            <div className="text-xs font-semibold text-white/80">{periodeActiveLabel}</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setLegendeOuverte(null)}
+          className="shrink-0 text-white/70 hover:text-white"
+          aria-label="Fermer"
+        >
+          <X size={18} />
+        </button>
+      </div>
+    );
   }
 
   // Jours communs, tous types confondus : les Fériés sont montrés même sur
@@ -526,19 +578,19 @@ export function Dashboard2Page() {
           <LegendeCard
             code="CPI"
             label="Congés imposés"
-            compteur={`${congesImposesTous.length} période${congesImposesTous.length > 1 ? "s" : ""}`}
+            compteur={congesImposesLabel}
             onClick={() => setLegendeOuverte({ kind: "CPI" })}
           />
           <LegendeCard
             code="DJI"
             label="Demi-journées imposées"
-            compteur={`${djImposeesTous.length} demi-journée${djImposeesTous.length > 1 ? "s" : ""}`}
+            compteur={djImposeesLabel}
             onClick={() => setLegendeOuverte({ kind: "DJI" })}
           />
           <LegendeCard
             code="FERIE"
             label="Jours fériés"
-            compteur={`${joursFeriesTous.length} jour${joursFeriesTous.length > 1 ? "s" : ""}`}
+            compteur={joursFeriesLabel}
             onClick={() => setLegendeOuverte({ kind: "FERIE" })}
           />
           {typesPersoPresents.map((code) => {
@@ -586,6 +638,28 @@ export function Dashboard2Page() {
                   : (LABEL_LEGENDE[legendeOuverte.code] ?? legendeOuverte.code)
           }
           onClose={() => setLegendeOuverte(null)}
+          className={
+            legendeOuverte.kind === "DJI" ||
+            legendeOuverte.kind === "CPI" ||
+            legendeOuverte.kind === "FERIE" ||
+            legendeOuverte.kind === "PERSO"
+              ? "max-w-sm"
+              : undefined
+          }
+          header={
+            legendeOuverte.kind === "DJI"
+              ? headerLegende("DJI", djImposeesLabel)
+              : legendeOuverte.kind === "CPI"
+                ? headerLegende("CPI", congesImposesLabel)
+                : legendeOuverte.kind === "FERIE"
+                  ? headerLegende("FERIE", joursFeriesLabel)
+                  : legendeOuverte.kind === "PERSO"
+                    ? headerLegende(
+                        legendeOuverte.code,
+                        labelDemandes(demandesDuType(legendeOuverte.code).length),
+                      )
+                    : undefined
+          }
         >
           {legendeOuverte.kind === "CPI" &&
             (congesImposesTous.length === 0 ? (
@@ -593,12 +667,14 @@ export function Dashboard2Page() {
             ) : (
               <div className="flex flex-col">
                 {congesImposesTous.map((c) => (
-                  <div
-                    key={c.id}
-                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
-                  >
-                    <span className="text-ink-900 font-semibold">
+                  <div key={c.id} className="flex items-center justify-between py-3 text-sm">
+                    <span
+                      className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("CPI")}`}
+                    >
                       {formatPeriodeDemande(c.debut, c.fin)}
+                    </span>
+                    <span className="text-ink-500 text-xs">
+                      {formatJours(dureeCongeImpose(c, joursFeriesToutesAnnees))} j
                     </span>
                   </div>
                 ))}
@@ -611,11 +687,12 @@ export function Dashboard2Page() {
             ) : (
               <div className="flex flex-col">
                 {djImposeesTous.map((d) => (
-                  <div
-                    key={d.id}
-                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
-                  >
-                    <span className="text-ink-900 font-semibold">{formatDate(d.date)}</span>
+                  <div key={d.id} className="flex items-center justify-between py-3 text-sm">
+                    <span
+                      className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("DJI")}`}
+                    >
+                      {formatDate(d.date)}
+                    </span>
                     <span className="text-ink-500 text-xs">
                       {d.demiJournee === "matin" ? "Matin" : "Après-midi"}
                     </span>
@@ -630,23 +707,54 @@ export function Dashboard2Page() {
             ) : (
               <div className="flex flex-col">
                 {joursFeriesTous.map((f) => (
-                  <div
-                    key={f.id}
-                    className="border-ink-300/60 flex items-center justify-between border-b py-2.5 text-sm last:border-0"
-                  >
-                    <span className="text-ink-900 font-semibold">{formatDate(f.date)}</span>
+                  <div key={f.id} className="flex items-center justify-between py-3 text-sm">
+                    <span
+                      className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("FERIE")}`}
+                    >
+                      {formatDate(f.date)}
+                    </span>
                     <span className="text-ink-500 text-xs">{f.libelle}</span>
                   </div>
                 ))}
               </div>
             ))}
 
-          {legendeOuverte.kind === "PERSO" && (
-            <RequestList
-              demandes={demandesVisibles.filter((d) => codeBadgeDemande(d) === legendeOuverte.code)}
-              emptyText="Aucune demande."
-            />
-          )}
+          {legendeOuverte.kind === "PERSO" &&
+            (() => {
+              const code = legendeOuverte.code;
+              const demandes = demandesDuType(code);
+              return demandes.length === 0 ? (
+                <p className="text-ink-500 text-sm">Aucune demande.</p>
+              ) : (
+                <div className="flex flex-col">
+                  {demandes.map((d) => (
+                    <div key={d.id} className="flex items-center justify-between py-3 text-sm">
+                      <span
+                        className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                            d.statut === "validé"
+                              ? "bg-status-success-fg"
+                              : d.statut === "en attente"
+                                ? "bg-status-warning-fg"
+                                : "bg-status-danger-fg"
+                          }`}
+                        />
+                        {formatPeriodeDemande(d.debut, d.fin)}
+                      </span>
+                      <span
+                        className={`text-xs font-semibold ${
+                          d.statut === "en attente" ? "text-ink-500" : classeTexteTypeBadge(code)
+                        }`}
+                      >
+                        {formatJours(d.nbDemiJournees / 2)} j
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
         </Modal>
       )}
     </div>

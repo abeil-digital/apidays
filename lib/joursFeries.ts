@@ -1,3 +1,5 @@
+import type { CongeImpose, DjImposee, JourFerie } from "@/lib/types";
+
 /**
  * Calcul des jours fériés légaux français et des dates utilitaires pour
  * l'écran Paramétrer > Calendrier. Toutes les dates sont manipulées en UTC
@@ -90,4 +92,45 @@ export function lundiSemaineDu15Aout(annee: number): string {
   const d = new Date(`${quinzeAout}T00:00:00Z`);
   const jourSemaine = d.getUTCDay() === 0 ? 7 : d.getUTCDay();
   return ajouterJours(quinzeAout, -(jourSemaine - 1));
+}
+
+/** Jour ouvré (L-V, hors jour férié) — brique de base des calculs de durée. */
+export function estJourOuvre(iso: string, joursFeries: JourFerie[]): boolean {
+  const jourSemaine = new Date(`${iso}T00:00:00Z`).getUTCDay(); // 0=dimanche..6=samedi
+  if (jourSemaine === 0 || jourSemaine === 6) return false;
+  return !joursFeries.some((f) => f.date === iso);
+}
+
+/**
+ * Jours ouvrés (L-V, jours fériés exclus) entre deux dates, bornes incluses —
+ * une demi-journée déjà imposée (DJI) sur un jour ouvré de la période ne
+ * compte que pour 0,5 (déjà "prise", pas disponible en entier).
+ */
+export function joursOuvres(
+  debut: string,
+  fin: string,
+  joursFeries: JourFerie[],
+  djImposees: DjImposee[] = [],
+): number {
+  let compte = 0;
+  const curseur = new Date(`${debut}T00:00:00Z`);
+  const finDate = new Date(`${fin}T00:00:00Z`);
+  while (curseur <= finDate) {
+    const iso = curseur.toISOString().slice(0, 10);
+    if (estJourOuvre(iso, joursFeries)) {
+      compte += djImposees.some((dj) => dj.date === iso) ? 0.5 : 1;
+    }
+    curseur.setUTCDate(curseur.getUTCDate() + 1);
+  }
+  return compte;
+}
+
+/** Durée en jours (ouvrés, demi-journées de début/fin comprises) d'une
+ * période de congé imposé — pour le compteur de volume (Paramétrer >
+ * Calendrier) et le récapitulatif salarié (Accueil). */
+export function dureeCongeImpose(c: CongeImpose, joursFeries: JourFerie[]): number {
+  const base = joursOuvres(c.debut, c.fin, joursFeries);
+  const ajustDebut = c.demiDebut === "apres_midi" ? 0.5 : 0;
+  const ajustFin = c.demiFin === "matin" ? 0.5 : 0;
+  return base - ajustDebut - ajustFin;
 }
