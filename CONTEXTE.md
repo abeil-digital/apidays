@@ -960,8 +960,71 @@ Suivre les demandes"). Deux choses distinctes étaient en jeu, clarifiées en di
   de façon quasi identique dans Export paie (visibles, non comptés, lecture seule) — voir Backlog.md,
   point ajouté pour revenir sur l'ensemble des règles de gestion Export paie/suivi des congés.
 
+**Panneau "Détail du congé" — début de refonte en feed d'actions, non terminé (15/08/2026)** —
+`DetailCongePanel.tsx` (panneau partagé Export paie / Suivre les demandes, ouvert au clic sur la
+pill Dates) retravaillé par itérations successives. **Chantier explicitement laissé en pause pour
+reprise ultérieure**, voir "En cours" ci-dessous pour ce qui reste.
+
+- **Largeur réduite** `xl:w-80` → `xl:w-64` : la colonne Collaborateur du tableau Export paie était
+  trop compressée (jusqu'à ~653px, tout juste au-dessus du plancher `min-w-[640px]` de la
+  `<table>`) quand le panneau était ouvert — gain de ~64px rendus au tableau. Palliatif, pas une
+  solution : la vraie piste pour gagner de la largeur reste le menu latéral rétractable (voir
+  Backlog.md, entrée "refonte de la nav").
+- **Coins carrés** : `rounded-card` retiré (harmonisation "coins carrés" du 14/08/2026 qui n'avait
+  pas touché ce panneau).
+- **Header repensé plusieurs fois avant de se stabiliser** sur : fond plein coloré selon le type de
+  congé (`classeFondTypeBadge`, même pattern que `SoldeDetailPanel`/popins Accueil), `TypeBadge`
+  cerclé de blanc (`ring-2 ring-white`) à la place de l'avatar du collaborateur — repris tel quel du
+  `headerLegende` de `Dashboard2Page.tsx` (sinon invisible sur un fond de la même couleur), nom du
+  collaborateur + libellé du type en dessous.
+- **Corps transformé en feed chronologique** : `SuiviDemandeRow` (période + jours) suivi d'une liste
+  d'événements — "Posé le", puis "Validé le"/"Refusé le" si `dateDecision` existe. Deux nouvelles
+  props opt-in sur `SuiviDemandeRow` (`masquerType`, `masquerPoseLe`, défaut `false` — comportement
+  de `SuivrePage` inchangé) pour ne pas dupliquer ces infos, déjà portées par le header/le feed dans
+  ce panneau.
+  - Puces reliées par un connecteur vertical plein (pas pointillé, testé puis rejeté) coloré selon le
+    type (`classeFondTypeBadge`) — signifie la continuité entre les deux événements. Centrage
+    puce/connecteur/texte volontairement vérifié en DOM (`getBoundingClientRect`) à chaque itération
+    : une première version (bordure `border-dashed` sur un élément 0-width centré au flex) créait un
+    décalage sub-pixel visible, remplacée par un petit bloc plein `w-px` (centrage fiable).
+  - Ligne de décision : couleur du texte selon le tone du statut (`text-status-success-fg` validé,
+    `-danger-fg` refusé/annulé, `-warning-fg` en attente — nouveau `Record` local `TEXTE_DECISION`,
+    même mapping que `STATUT_CONFIG`), date au format court `jj/mm/aa` (`formatJjMmAa`, nouvelle
+    fonction locale au fichier, même logique que celle de `SoldeDetailPanel`).
+- **Auteur de la décision affiché** ("Validé/Refusé le jj/mm/aa **par** Prénom) : la donnée
+  existait déjà en base (`demandes_conges.validateur_id`, jamais exploitée côté app avant). Ajouts :
+  - `DemandeEquipe.validateur: { id, prenom, nom } | null` (nouveau champ, `lib/types.ts`)
+  - `SELECT_DEMANDE_EQUIPE` (`demandes.repository.ts`) embarque désormais
+    `validateur:utilisateurs!validateur_id(id, prenom, nom)` en plus du join `demandeur` existant —
+    alias obligatoire (`validateur:`) car PostgREST refuse d'embarquer deux fois la table
+    `utilisateurs` sans désambiguïser
+  - couvre les deux call sites qui construisent des `DemandeEquipe` (`fetchDemandesEquipe`,
+    `fetchCongesConsommesPeriode`), donc Export paie et Suivre les demandes gratuitement
+  - fixtures `DesignSystemPage.tsx` mises à jour (`validateur: null` / `validateur: {...}`) pour
+    rester compilables
+- **Commentaire de décision affiché après l'action** (`commentaireManager`) : d'abord tenté en
+  petite ligne italique dans le feed, déplacé sur demande vers un bloc dédié juste en dessous du
+  feed — **reprend le style et l'emplacement exacts d'un texte statique supprimé au passage**
+  ("Demande déjà refusée — non comptée, aucune action possible depuis cet écran", codé en dur dans
+  la branche `refusé`, sans lien avec un vrai commentaire — supprimé car trompeur une fois le feed en
+  place, remplacé par `null` dans la branche, le commentaire réel prenant sa place visuelle).
+
 **En cours / pas encore fait** :
 
+- **Suite du chantier "Détail du congé" ci-dessus, explicitement interrompue pour reprise plus
+  tard** : le feed ne montre que Posé le/Validé le/Refusé le — pas encore de traitement pour un
+  événement de Régularisation (validé→annulé ou annulé→validé, voir `onRegulariser`), qui devrait
+  logiquement devenir un item de feed lui aussi plutôt que de rester la mécanique à part actuelle.
+  Statut "en attente" (formulaire commentaire + Refuser/Valider) pas encore retouché pour matcher
+  le nouveau style.
+- **Bug trouvé en testant ce chantier, pas corrigé** : les mises à jour optimistes de
+  `useDemandesEquipe.ts` (`valider`/`refuser`/`regulariser`) mettent à jour `statut` et
+  `commentaireManager` en local mais **oublient `dateDecision` et `validateur`** — juste après avoir
+  cliqué Valider/Refuser, la ligne "Validé le/Refusé le" n'apparaît pas dans le feed tant que la
+  page n'est pas rechargée (les données sont bien en base, seul l'état local React est incomplet).
+- Données de test polluées pendant la vérification de ce chantier : la demande RTT de Delphine
+  (17 août 2026, posée le 15/08) a été refusée avec le commentaire "Test commentaire de
+  vérification" pour valider l'affichage — à renvoyer "en attente" ou nettoyer si besoin.
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, correction de solde), accès

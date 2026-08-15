@@ -9,15 +9,37 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
+interface HistoriqueTablePropsCommunes {
+  emptyText?: string;
+  compact?: boolean;
+  /** Pill Dates cliquable — ouvre le détail de cette demande côté appelant
+   * (ex. `DetailCongePanel` dans `SuivreDemandesPage`). Pas de handler = pill
+   * non cliquable, comportement par défaut inchangé. */
+  onDateClick?: (id: string) => void;
+  /** Id de la demande dont le détail est actuellement ouvert — inverse la
+   * pill (même convention que les pills de solde de `SuivreSoldesPage`) pour
+   * la relier visuellement au panneau ouvert. */
+  selectedId?: string | null;
+}
+
 type HistoriqueTableProps =
-  | { demandes: Demande[]; emptyText?: string; avecCollaborateur?: false }
-  | { demandes: DemandeEquipe[]; emptyText?: string; avecCollaborateur: true };
+  | ({ demandes: Demande[]; avecCollaborateur?: false } & HistoriqueTablePropsCommunes)
+  | ({ demandes: DemandeEquipe[]; avecCollaborateur: true } & HistoriqueTablePropsCommunes);
 
 // "12 juin au 16 juin" → "12 juin - 16 juin" pour la pill de la colonne
 // Dates (plus compact) — ne touche pas `formatPeriodeDemande` elle-même,
 // gardée telle quelle pour ses autres usages ("au" voulu ailleurs).
 function periodeCourte(debut: string, fin: string): string {
   return formatPeriodeDemande(debut, fin).replace(" au ", " - ");
+}
+
+// "Congés Payés" → "C. Payés", "Congé sans solde" → "C. sans solde", "Congés
+// en acquisition" → "C. acquisition" — gagner en largeur sur la colonne Type
+// quand `compact` (Suivre les demandes, qui a déjà une colonne Collaborateur
+// en plus par rapport à Historique). Types sans "Congé(s)" dans leur libellé
+// (RTT, Récupération...) inchangés.
+function libelleTypeCompact(libelle: string): string {
+  return libelle.replace(/^Congés?\s+(en\s+)?/, "C. ");
 }
 
 /**
@@ -42,37 +64,60 @@ function periodeCourte(debut: string, fin: string): string {
  * Ne porte pas sa propre card (pas de `bg-surface-card`/ombre) : l'appelant
  * l'intègre dans son propre conteneur, ex. `HistoriquePage` qui regroupe
  * filtres + tableau dans une seule card (même principe que `CongesPaiePage`).
+ *
+ * `compact` (utilisé par `SuivreDemandesPage`, qui a déjà une colonne
+ * Collaborateur en plus par rapport à `HistoriquePage`) : gagne en largeur —
+ * libellé de type abrégé ("C. Payés" au lieu de "Congés Payés"), en-tête
+ * "Durée" au lieu de "Nbre jours", colonne "Validé le" masquée.
  */
 export function HistoriqueTable(props: HistoriqueTableProps) {
-  const { emptyText = "Aucune demande." } = props;
+  const { emptyText = "Aucune demande.", compact = false, onDateClick, selectedId } = props;
   if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
 
   function cellulesCommunes(demande: Demande) {
     const code = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
     const jours = demande.nbDemiJournees / 2;
+    const libelleType = compact ? libelleTypeCompact(LABEL_LONG[code]) : LABEL_LONG[code];
+    const pillDates = (
+      <span
+        className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)} ${
+          demande.id === selectedId ? "ring-mint ring-2" : ""
+        }`}
+      >
+        {periodeCourte(demande.debut, demande.fin)}
+      </span>
+    );
 
     return (
       <>
         <td className="px-4 py-3">
           <span className="flex items-center gap-1.5">
             <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-            <span className="text-ink-900 font-semibold">{LABEL_LONG[code]}</span>
+            <span className="text-ink-900 font-semibold">{libelleType}</span>
           </span>
         </td>
         <td className="px-4 py-3">
-          <span
-            className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
-          >
-            {periodeCourte(demande.debut, demande.fin)}
-          </span>
+          {onDateClick ? (
+            <button
+              type="button"
+              onClick={() => onDateClick(demande.id)}
+              className="transition-opacity duration-150 hover:opacity-70"
+            >
+              {pillDates}
+            </button>
+          ) : (
+            pillDates
+          )}
         </td>
         <td className="text-ink-500 px-4 py-3">{formatJours(jours)} j</td>
         <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
           {formatDateAction(demande.datePose)}
         </td>
-        <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
-          {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
-        </td>
+        {!compact && (
+          <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
+            {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
+          </td>
+        )}
         <td className="px-4 py-3">
           <StatusBadge statut={demande.statut} />
         </td>
@@ -88,9 +133,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             {props.avecCollaborateur && <th className="px-4 py-3">Collaborateur</th>}
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Dates</th>
-            <th className="px-4 py-3">Nbre jours</th>
+            <th className="px-4 py-3">{compact ? "Durée" : "Nbre jours"}</th>
             <th className="hidden px-4 py-3 md:table-cell">Posé le</th>
-            <th className="hidden px-4 py-3 md:table-cell">Validé le</th>
+            {!compact && <th className="hidden px-4 py-3 md:table-cell">Validé le</th>}
             <th className="px-4 py-3">Statut</th>
           </tr>
         </thead>

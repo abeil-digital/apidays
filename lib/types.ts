@@ -32,6 +32,13 @@ export interface DemandeEquipe extends Demande {
     prenom: string;
     nom: string;
   };
+  // Auteur de la décision (validation/refus) — null tant que "en attente",
+  // et pour une régularisation (`annulé`) qui réutilise les mêmes colonnes.
+  validateur: {
+    id: string;
+    prenom: string;
+    nom: string;
+  } | null;
 }
 
 export interface NouvelleDemandeInput {

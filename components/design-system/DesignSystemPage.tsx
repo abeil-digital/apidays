@@ -105,6 +105,7 @@ const SUIVI_DEMANDES_EXEMPLE: DemandeEquipe[] = [
     note: "",
     commentaireManager: "",
     demandeur: { id: "exemple-collab-1", prenom: "Salarie", nom: "Test" },
+    validateur: null,
   },
   {
     id: "exemple-suivi-2",
@@ -121,6 +122,7 @@ const SUIVI_DEMANDES_EXEMPLE: DemandeEquipe[] = [
     note: "",
     commentaireManager: "",
     demandeur: { id: "exemple-collab-2", prenom: "Olivier", nom: "Test" },
+    validateur: { id: "exemple-manager", prenom: "Delphine", nom: "Admin-test" },
   },
 ];
 

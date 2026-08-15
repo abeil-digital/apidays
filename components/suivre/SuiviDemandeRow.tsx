@@ -7,6 +7,14 @@ import { classeFondTypeBadge, LABEL_LONG } from "@/components/demandes/TypeBadge
 interface SuiviDemandeRowProps {
   demande: DemandeEquipe;
   isLast: boolean;
+  /** Masque la ligne point de couleur + libellé du type — utile quand
+   * l'appelant affiche déjà le type ailleurs (ex. `DetailCongePanel`, dont le
+   * header coloré porte déjà cette information). */
+  masquerType?: boolean;
+  /** Masque la ligne "Posé le" — utile quand l'appelant l'affiche autrement
+   * (ex. `DetailCongePanel`, qui la place en premier item de son feed
+   * d'actions). */
+  masquerPoseLe?: boolean;
 }
 
 /**
@@ -48,7 +56,12 @@ interface SuiviDemandeRowProps {
  *   règle du projet : toute date de demande ou d'action (posé le, publié
  *   le...) s'affiche en numérique, jamais en "13 août 2026".
  */
-export function SuiviDemandeRow({ demande, isLast }: SuiviDemandeRowProps) {
+export function SuiviDemandeRow({
+  demande,
+  isLast,
+  masquerType = false,
+  masquerPoseLe = false,
+}: SuiviDemandeRowProps) {
   const jours = demande.nbDemiJournees / 2;
   const codeBadge = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
   const { tone, Icon } = STATUT_CONFIG[demande.statut];
@@ -58,16 +71,20 @@ export function SuiviDemandeRow({ demande, isLast }: SuiviDemandeRowProps) {
       className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-ink-300/60 border-b"}`}
     >
       <div className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(codeBadge)}`} />
-          <span className="text-ink-500 text-[11px] font-semibold">{LABEL_LONG[codeBadge]}</span>
-        </span>
+        {!masquerType && (
+          <span className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(codeBadge)}`} />
+            <span className="text-ink-500 text-[11px] font-semibold">{LABEL_LONG[codeBadge]}</span>
+          </span>
+        )}
         <div className="text-ink-900 text-xs font-semibold">
           {formatPeriodeDemande(demande.debut, demande.fin)}
         </div>
-        <div className="text-ink-500 text-[10px]">
-          {`Posé le ${formatDateAction(demande.datePose)}`}
-        </div>
+        {!masquerPoseLe && (
+          <div className="text-ink-500 text-[10px]">
+            {`Posé le ${formatDateAction(demande.datePose)}`}
+          </div>
+        )}
       </div>
       <span className="origin-right scale-90">
         <Badge tone={tone}>

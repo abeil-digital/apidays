@@ -44,12 +44,17 @@ interface DemandeEquipeRow extends DemandeRow {
     | { id: string; prenom: string; nom: string }
     | { id: string; prenom: string; nom: string }[]
     | null;
+  validateur:
+    | { id: string; prenom: string; nom: string }
+    | { id: string; prenom: string; nom: string }[]
+    | null;
 }
 
 // `demandes_conges` a 3 FK vers `utilisateurs` (utilisateur_id, validateur_id,
 // devalidee_par) — PostgREST refuse d'embarquer sans préciser laquelle
-// désambiguïser via `!utilisateur_id`.
-const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
+// désambiguïser via `!utilisateur_id`/`!validateur_id`. `validateur:` alias
+// le second embed (sinon collision de nom avec `utilisateurs` du premier).
+const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom), validateur:utilisateurs!validateur_id(id, prenom, nom)`;
 
 const STATUT_DEPUIS_DB: Record<string, StatutDemande> = {
   en_attente: "en attente",
@@ -220,10 +225,12 @@ export async function annulerDemande(id: string): Promise<void> {
 
 function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
   const demandeur = Array.isArray(row.utilisateurs) ? row.utilisateurs[0] : row.utilisateurs;
+  const validateur = Array.isArray(row.validateur) ? row.validateur[0] : row.validateur;
 
   return {
     ...mapDemandeDepuisDb(row),
     demandeur: demandeur ?? { id: row.utilisateur_id, prenom: "", nom: "" },
+    validateur: validateur ?? null,
   };
 }
 

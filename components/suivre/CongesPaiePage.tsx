@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ChevronUp, Download, X } from "lucide-react";
+import { Download } from "lucide-react";
 import type { DemandeEquipe, StatutDemande } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
@@ -12,8 +12,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { InputFiltrePill } from "@/components/ui/FiltrePill";
-import { Textarea } from "@/components/ui/Textarea";
-import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
+import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type TypeConsomme = "CP" | "RTT" | "CPA" | "CSS";
 
@@ -125,10 +124,7 @@ export function CongesPaiePage() {
   const [fin, setFin] = useState(defaut.fin);
   const { demandes, loading, error, refetch } = useCongesConsommes(debut, fin);
   const [selectionId, setSelectionId] = useState<string | null>(null);
-  const [commentaire, setCommentaire] = useState("");
-  const [regularisationOuverte, setRegularisationOuverte] = useState(false);
   const [enCours, setEnCours] = useState(false);
-  const [erreurAction, setErreurAction] = useState<string | null>(null);
   const [validesUniquement, setValidesUniquement] = useState(false);
 
   const demandesAffichees = validesUniquement
@@ -136,13 +132,6 @@ export function CongesPaiePage() {
     : demandes;
   const lignes = grouperParCollaborateur(demandesAffichees);
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
-
-  function selectionner(id: string) {
-    setErreurAction(null);
-    setCommentaire("");
-    setRegularisationOuverte(false);
-    setSelectionId(id);
-  }
 
   function exporter() {
     const csv = genererCsv(lignes);
@@ -155,49 +144,22 @@ export function CongesPaiePage() {
     URL.revokeObjectURL(url);
   }
 
-  async function valider() {
+  async function valider(commentaire: string) {
     if (!selection) return;
-    setEnCours(true);
-    setErreurAction(null);
-    try {
-      await validerDemande(selection.id, commentaire.trim());
-      refetch();
-      setSelectionId(null);
-    } catch {
-      setErreurAction("Impossible de valider cette demande.");
-    } finally {
-      setEnCours(false);
-    }
+    await validerDemande(selection.id, commentaire);
+    refetch();
   }
 
-  async function refuser() {
+  async function refuser(commentaire: string) {
     if (!selection) return;
-    setEnCours(true);
-    setErreurAction(null);
-    try {
-      await refuserDemande(selection.id, commentaire.trim());
-      refetch();
-      setSelectionId(null);
-    } catch {
-      setErreurAction("Impossible de refuser cette demande.");
-    } finally {
-      setEnCours(false);
-    }
+    await refuserDemande(selection.id, commentaire);
+    refetch();
   }
 
-  async function supprimer() {
+  async function regulariser(commentaire: string) {
     if (!selection) return;
-    setEnCours(true);
-    setErreurAction(null);
-    try {
-      await regulariserDemande(selection.id, commentaire.trim());
-      refetch();
-      setSelectionId(null);
-    } catch {
-      setErreurAction("Impossible de supprimer cette demande.");
-    } finally {
-      setEnCours(false);
-    }
+    await regulariserDemande(selection.id, commentaire);
+    refetch();
   }
 
   return (
@@ -289,7 +251,7 @@ export function CongesPaiePage() {
                                     <button
                                       key={i}
                                       type="button"
-                                      onClick={() => selectionner(date.id)}
+                                      onClick={() => setSelectionId(date.id)}
                                       disabled={enCours}
                                       className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-opacity duration-150 hover:opacity-70 disabled:pointer-events-none disabled:opacity-40 ${classeBordureTypeBadge(t)} ${date.id === selectionId ? "ring-mint ring-2" : ""}`}
                                     >
@@ -320,146 +282,15 @@ export function CongesPaiePage() {
         </div>
 
         {selection && (
-          <div className="rounded-card bg-surface-card w-full shadow-sm xl:sticky xl:top-4 xl:w-80 xl:shrink-0">
-            <div className="flex items-center justify-between px-4 py-3">
-              <div className="text-ink-900 text-sm font-bold">Détail du congé</div>
-              <button
-                type="button"
-                onClick={() => setSelectionId(null)}
-                disabled={enCours}
-                className="text-ink-500 shrink-0 disabled:opacity-40"
-                aria-label="Fermer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="border-ink-300/60 border-t">
-              <div className="text-ink-500 px-4 pt-3 text-xs font-semibold">
-                {selection.demandeur.prenom} {selection.demandeur.nom}
-              </div>
-              <SuiviDemandeRow demande={selection} isLast />
-            </div>
-
-            {selection.statut === "validé" || selection.statut === "annulé" ? (
-              <div className="pb-4">
-                <button
-                  type="button"
-                  onClick={() => setRegularisationOuverte((v) => !v)}
-                  className="text-ink-500 flex items-center gap-1 px-4 pt-3 text-xs font-semibold"
-                >
-                  Régularisation
-                  {regularisationOuverte ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-
-                {regularisationOuverte && (
-                  <div className="pt-2">
-                    <div className="px-4 pb-2">
-                      <label
-                        htmlFor="commentaire-decision"
-                        className="text-ink-500 mb-1.5 block text-[11px]"
-                      >
-                        Commentaire (motif, traçabilité)
-                      </label>
-                      <Textarea
-                        id="commentaire-decision"
-                        value={commentaire}
-                        onChange={(e) => setCommentaire(e.target.value)}
-                        rows={2}
-                        placeholder={
-                          selection.statut === "validé"
-                            ? "Ex. congé finalement non pris…"
-                            : "Ex. annulation faite par erreur…"
-                        }
-                        className="w-full rounded-none text-xs placeholder:text-xs"
-                      />
-                    </div>
-
-                    {erreurAction && (
-                      <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
-                        {erreurAction}
-                      </div>
-                    )}
-
-                    <div className="px-4">
-                      {selection.statut === "validé" ? (
-                        <Button
-                          variant="secondary"
-                          onClick={supprimer}
-                          disabled={enCours}
-                          className="text-status-danger-fg border-status-danger-fg w-full justify-center rounded-full px-4 py-2 text-xs"
-                        >
-                          Supprimer
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={valider}
-                          disabled={enCours}
-                          className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                        >
-                          <Check size={16} />
-                          Restaurer
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : selection.statut === "refusé" ? (
-              // Une demande refusée est un état terminal ici — pas de bouton
-              // Refuser/Valider (elle n'est plus "en attente") ni de
-              // Régularisation (ce mécanisme corrige un congé qui avait été
-              // accordé, une demande refusée ne l'a jamais été). Lecture
-              // seule, uniquement pour la traçabilité dans le tableau.
-              <div className="text-ink-500 px-4 pt-3 pb-4 text-xs">
-                Demande déjà refusée — non comptée, aucune action possible depuis cet écran.
-              </div>
-            ) : (
-              <>
-                <div className="px-4 pt-3 pb-2">
-                  <label
-                    htmlFor="commentaire-decision"
-                    className="text-ink-500 mb-1.5 block text-[11px]"
-                  >
-                    Commentaire (motif, traçabilité)
-                  </label>
-                  <Textarea
-                    id="commentaire-decision"
-                    value={commentaire}
-                    onChange={(e) => setCommentaire(e.target.value)}
-                    rows={2}
-                    placeholder="Ex. régularisation confirmée par le salarié…"
-                    className="w-full rounded-none text-xs placeholder:text-xs"
-                  />
-                </div>
-
-                {erreurAction && (
-                  <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
-                    {erreurAction}
-                  </div>
-                )}
-
-                <div className="flex gap-2 px-4 pb-4">
-                  <Button
-                    variant="secondary"
-                    onClick={refuser}
-                    disabled={enCours}
-                    className="text-status-danger-fg border-status-danger-fg flex-1 justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    Refuser
-                  </Button>
-                  <Button
-                    onClick={valider}
-                    disabled={enCours}
-                    className="flex-1 justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    <Check size={16} />
-                    Valider
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
+          <DetailCongePanel
+            key={selection.id}
+            selection={selection}
+            onClose={() => setSelectionId(null)}
+            onValider={valider}
+            onRefuser={refuser}
+            onRegulariser={regulariser}
+            onEnCoursChange={setEnCours}
+          />
         )}
       </div>
     </div>

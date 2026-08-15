@@ -5,6 +5,7 @@ import type { DemandeEquipe } from "@/lib/types";
 import {
   fetchDemandesEquipe,
   refuserDemande,
+  regulariserDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
 
@@ -14,6 +15,7 @@ interface UseDemandesEquipeResult {
   error: string | null;
   valider: (id: string, commentaire?: string) => Promise<void>;
   refuser: (id: string, commentaire?: string) => Promise<void>;
+  regulariser: (id: string, commentaire?: string) => Promise<void>;
 }
 
 /**
@@ -66,5 +68,14 @@ export function useDemandesEquipe(): UseDemandesEquipeResult {
     );
   }, []);
 
-  return { demandes, loading, error, valider, refuser };
+  const regulariser = useCallback(async (id: string, commentaire = "") => {
+    await regulariserDemande(id, commentaire);
+    setDemandes((prev) =>
+      prev.map((d) =>
+        d.id === id ? { ...d, statut: "annulé", commentaireManager: commentaire } : d,
+      ),
+    );
+  }, []);
+
+  return { demandes, loading, error, valider, refuser, regulariser };
 }

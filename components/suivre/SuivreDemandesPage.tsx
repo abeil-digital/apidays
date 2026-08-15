@@ -9,6 +9,7 @@ import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
+import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
 type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
@@ -40,7 +41,7 @@ const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "REC
  * reste de `/suivre` (bloqué pour les salarié·es dans `proxy.ts`).
  */
 export function SuivreDemandesPage() {
-  const { demandes } = useDemandesEquipe();
+  const { demandes, valider, refuser, regulariser } = useDemandesEquipe();
   const { reglesAcquisition } = useReglesConges();
   const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
@@ -48,6 +49,7 @@ export function SuivreDemandesPage() {
   const [finPerso, setFinPerso] = useState("");
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
+  const [selectionId, setSelectionId] = useState<string | null>(null);
 
   const anneeActuelle = new Date().getFullYear();
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
@@ -83,6 +85,8 @@ export function SuivreDemandesPage() {
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
+  const selection = demandes.find((d) => d.id === selectionId) ?? null;
+
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0 print:pb-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Suivre les demandes</h1>
@@ -93,81 +97,102 @@ export function SuivreDemandesPage() {
         </h1>
       </div>
 
-      <div className="bg-surface-card w-full">
-        <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
-          <div className="flex flex-wrap items-end gap-2">
-            <SelectFiltrePill
-              value={typeFiltre}
-              onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start print:block">
+        <div
+          className={`bg-surface-card w-full xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
+        >
+          <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
+            <div className="flex flex-wrap items-end gap-2">
+              <SelectFiltrePill
+                value={typeFiltre}
+                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+              >
+                <option value="tous">Tous les types</option>
+                {TYPES_FILTRABLES.map((code) => (
+                  <option key={code} value={code}>
+                    {LABEL_LONG[code]}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              <SelectFiltrePill
+                value={filtre}
+                onChange={(e) => setFiltre(e.target.value as Filtre)}
+              >
+                {FILTRES.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              <SelectFiltrePill
+                value={collaborateurFiltre}
+                onChange={(e) => setCollaborateurFiltre(e.target.value)}
+              >
+                <option value="tous">Tous les collaborateurs</option>
+                {collaborateurs.map(([id, nom]) => (
+                  <option key={id} value={id}>
+                    {nom}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              <SelectFiltrePill
+                value={periodeFiltre}
+                onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+              >
+                {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              {periodeFiltre === "personnalisee" && (
+                <>
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Du"
+                    value={debutPerso}
+                    onChange={(e) => setDebutPerso(e.target.value)}
+                  />
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Au"
+                    value={finPerso}
+                    onChange={(e) => setFinPerso(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => window.print()}
+              className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
             >
-              <option value="tous">Tous les types</option>
-              {TYPES_FILTRABLES.map((code) => (
-                <option key={code} value={code}>
-                  {LABEL_LONG[code]}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            <SelectFiltrePill value={filtre} onChange={(e) => setFiltre(e.target.value as Filtre)}>
-              {FILTRES.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            <SelectFiltrePill
-              value={collaborateurFiltre}
-              onChange={(e) => setCollaborateurFiltre(e.target.value)}
-            >
-              <option value="tous">Tous les collaborateurs</option>
-              {collaborateurs.map(([id, nom]) => (
-                <option key={id} value={id}>
-                  {nom}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            <SelectFiltrePill
-              value={periodeFiltre}
-              onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
-            >
-              {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            {periodeFiltre === "personnalisee" && (
-              <>
-                <InputFiltrePill
-                  type="date"
-                  aria-label="Du"
-                  value={debutPerso}
-                  onChange={(e) => setDebutPerso(e.target.value)}
-                />
-                <InputFiltrePill
-                  type="date"
-                  aria-label="Au"
-                  value={finPerso}
-                  onChange={(e) => setFinPerso(e.target.value)}
-                />
-              </>
-            )}
+              <Printer size={13} />
+              Exporter
+            </button>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
-          >
-            <Printer size={13} />
-            Exporter
-          </button>
+
+          <div className="border-ink-300/60 border-t">
+            <HistoriqueTable
+              demandes={filtered}
+              emptyText="Aucune demande sur cette période."
+              avecCollaborateur
+              compact
+              onDateClick={setSelectionId}
+              selectedId={selectionId}
+            />
+          </div>
         </div>
 
-        <div className="border-ink-300/60 border-t">
-          <HistoriqueTable
-            demandes={filtered}
-            emptyText="Aucune demande sur cette période."
-            avecCollaborateur
+        {selection && (
+          <DetailCongePanel
+            key={selection.id}
+            selection={selection}
+            onClose={() => setSelectionId(null)}
+            onValider={(commentaire) => valider(selection.id, commentaire)}
+            onRefuser={(commentaire) => refuser(selection.id, commentaire)}
+            onRegulariser={(commentaire) => regulariser(selection.id, commentaire)}
           />
-        </div>
+        )}
       </div>
     </div>
   );
