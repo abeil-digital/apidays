@@ -6,12 +6,18 @@ import type { DemandeEquipe, StatutDemande } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
 import { useCongesConsommes } from "@/hooks/useCongesConsommes";
-import { refuserDemande, regulariserDemande, validerDemande } from "@/lib/data/demandes.repository";
+import {
+  refuserDemande,
+  regulariserDemande,
+  remettreEnAttenteDemande,
+  validerDemande,
+} from "@/lib/data/demandes.repository";
 import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { InputFiltrePill } from "@/components/ui/FiltrePill";
+import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type TypeConsomme = "CP" | "RTT" | "CPA" | "CSS";
@@ -126,6 +132,7 @@ export function CongesPaiePage() {
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [validesUniquement, setValidesUniquement] = useState(false);
+  const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
 
   const demandesAffichees = validesUniquement
     ? demandes.filter((d) => d.statut === "validé")
@@ -159,6 +166,11 @@ export function CongesPaiePage() {
   async function regulariser(commentaire: string) {
     if (!selection) return;
     await regulariserDemande(selection.id, commentaire);
+    refetch();
+  }
+
+  async function annulerValidation(id: string) {
+    await remettreEnAttenteDemande(id);
     refetch();
   }
 
@@ -290,9 +302,22 @@ export function CongesPaiePage() {
             onRefuser={refuser}
             onRegulariser={regulariser}
             onEnCoursChange={setEnCours}
+            onValiderSucces={(id, message) => setToast({ id, message })}
           />
         )}
       </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          actionLabel="Annuler"
+          onAction={() => {
+            annulerValidation(toast.id);
+            setToast(null);
+          }}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
+import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
@@ -41,7 +42,8 @@ const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "REC
  * reste de `/suivre` (bloqué pour les salarié·es dans `proxy.ts`).
  */
 export function SuivreDemandesPage() {
-  const { demandes, valider, refuser, regulariser } = useDemandesEquipe();
+  const { demandes, valider, refuser, regulariser, remettreEnAttente } = useDemandesEquipe();
+  const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const { reglesAcquisition } = useReglesConges();
   const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
@@ -191,9 +193,22 @@ export function SuivreDemandesPage() {
             onValider={(commentaire) => valider(selection.id, commentaire)}
             onRefuser={(commentaire) => refuser(selection.id, commentaire)}
             onRegulariser={(commentaire) => regulariser(selection.id, commentaire)}
+            onValiderSucces={(id, message) => setToast({ id, message })}
           />
         )}
       </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          actionLabel="Annuler"
+          onAction={() => {
+            remettreEnAttente(toast.id);
+            setToast(null);
+          }}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1116,6 +1116,99 @@ que d'ajouter `cursor-pointer` fichier par fichier — plus robuste (couvre auss
 et évite d'en oublier un sur ~20 fichiers concernés. Un essai initial (ajouter `cursor-pointer` dans
 `BASE_STYLES` de `Button.tsx`) a été reverté une fois la règle globale posée, devenu redondant.
 
+**Encart "Régularisation" sorti du panneau congé (statut validé/annulé), `DetailCongePanel`
+(16/08/2026)** — même principe que l'encart "Décision" du statut "en attente" (15-16/08/2026
+ci-dessus). Plusieurs allers-retours de structure avant de se stabiliser (carte unique colorée façon
+Décision → lien+carte séparés → titre coloré fusionné dans le lien → configuration finale ci-dessous)
+— cette entrée documente directement l'état final, pas l'historique des essais intermédiaires.
+
+Structure finale :
+
+- Le lien **"Régularisation"** (repli par défaut, `regularisationOuverte`) flotte **directement sur
+  le fond de page** (pas de `bg-surface-card`) — garde son style d'origine, un simple lien cliquable
+  (`text-ink-500 text-xs font-semibold` + chevron `ChevronUp`/`ChevronDown`), pas un titre de carte.
+- Une fois déployé, le formulaire apparaît dans sa **propre carte**, avec le même traitement visuel
+  que l'encart "Décision" : fond teinté `color-mix(in srgb, var(--color-{type}) 5%, white)`, titre
+  **"Régularisation de congés"** en `text-sm font-bold` coloré par le type (`classeTexteTypeBadge`),
+  `Textarea` en `rounded-md`.
+- **Commentaire obligatoire pour une régularisation** : label "Commentaire (obligatoire)", bouton
+  d'action désactivé tant que `commentaire.trim()` est vide (`disabled={enCours || !commentaire.trim()}`).
+- **Bouton d'action côté "validé"** renommé **"Signaler comme non pris"** (au lieu de "Supprimer") et
+  son style suit l'état du commentaire plutôt que d'être fixe : `variant="secondary"` (idle, blanc)
+  tant que vide, `variant="primary"` (mint) dès qu'un commentaire est saisi — abandon du style rouge
+  danger (`text-status-danger-fg`/`bg-white/50`) qui ne correspondait plus au sens de l'action une
+  fois renommée (moins "destructif", plus "signalement"). Le bouton côté "annulé" ("Restaurer",
+  `onValider`) garde son style et son libellé, seule sa désactivation suit la même règle.
+
+Panneau "en attente" : 2 cartes (congé + Décision). "validé"/"annulé" : 1 carte congé + un lien sans
+carte + (si déployé) 1 carte "Régularisation de congés". "refusé" : 1 seule carte (rien en dessous).
+
+**Espacement bas de la carte congé (feed) — 25px fixe (16/08/2026)** — motif esthétique : la carte
+congé (header + `SuiviDemandeRow` + feed Posé le/Validé le + commentaire éventuel) doit toujours
+laisser 25px entre la fin de son contenu et son bord bas, quel que soit le contenu affiché (feed
+seul, ou feed + commentaire). Centralisé sur le conteneur de la carte (`pb-[25px]`) plutôt que sur
+le dernier enfant affiché (qui varie selon le cas) — les `pb-*` locaux du bloc feed et du bloc
+commentaire ont été retirés pour ne pas cumuler les espacements. Vérifié en DOM
+(`getBoundingClientRect`) : exactement 25px dans les deux cas testés (avec et sans commentaire).
+
+**Confirmations pour les actions de décision, `DetailCongePanel` (16/08/2026)** — deux patterns
+distincts selon l'action, tranchés par questions posées à Vincent avant implémentation :
+
+- **Valider** (carte Décision, statut en attente) : agit **immédiatement**, sans confirmation
+  préalable, puis affiche un **bandeau "a posteriori"** — nouveau composant `components/ui/Toast.tsx`,
+  ancré en haut de la page (`fixed inset-x-0 top-4`), auto-fermeture après 5s. Message : "Vous avez
+  validé le congé de {Prénom} {Nom} - {Dates} - {Durée}" + lien "Annuler". Le bandeau doit survivre à
+  la fermeture du panneau (qui se démonte au clic sur Valider comme les autres actions) — **porté par
+  la page appelante** (`CongesPaiePage`/`SuivreDemandesPage`, chacune son propre état `toast`), pas
+  par `DetailCongePanel` lui-même, via le nouveau prop `onValiderSucces?: (id, message) => void`.
+  - "Annuler" appelle une **nouvelle action** `remettreEnAttenteDemande` (`demandes.repository.ts`) —
+    repasse `statut = en_attente` et efface `validateur_id`/`commentaire_decision`/`date_decision`,
+    un vrai "undo" plutôt qu'une régularisation (qui marque "annulé", pas "en attente"). Exposée par
+    `useDemandesEquipe` (`remettreEnAttente`) et directement dans `CongesPaiePage`
+    (`annulerValidation`, même pattern que `valider`/`refuser`/`regulariser` de cette page qui
+    appellent le repository directement plutôt que par un hook).
+- **Refuser et Régularisation** (Signaler comme non pris / Restaurer) : confirmation **a priori**, en
+  **modale** (réutilise `components/ui/Modal.tsx` existant, pas de nouveau composant) — "Êtes-vous
+  certain de {verbe} ce congé :" + résumé "{Prénom} {Nom} - {Dates} - {Durée}", Annuler
+  (`variant="secondary"`) / Confirmer (`variant="primary"`). Un seul état `confirmation` générique
+  dans `DetailCongePanel` (`{ question, action }`), le verbe et l'action réelle (`executer(onRefuser,
+...)` etc.) injectés au moment du clic sur le bouton d'origine via `demanderConfirmation(verbe,
+action)` — la modale ne connaît pas le détail de chaque cas, juste "afficher la question, exécuter
+  l'action au clic Confirmer".
+- Résumé "{Prénom} {Nom} - {Dates} - {Durée}" factorisé une fois (`resumeConge`, calculé en haut du
+  composant à partir de `selection`), réutilisé tel quel par le message du toast et par la modale.
+
+**Feed mis à jour immédiatement après confirmation, correction du bug optimiste connu (16/08/2026)**
+— demandé par Vincent : voir le changement de statut dans le feed juste après avoir confirmé une
+action, sans recharger la page.
+
+- **`DetailCongePanel` ne se ferme plus après Refuser/Signaler comme non pris/Restaurer** (`executer`
+  n'appelle plus `onClose()`, seulement `executerValidation` — pour Valider — le fait encore, geste
+  volontaire différent de celui-ci). L'utilisateur voit directement la nouvelle ligne "Refusé le"/
+  "Validé le" apparaître dans le feed du panneau resté ouvert, plutôt que devoir le rouvrir.
+- Ça a exposé pour de bon le **bug déjà documenté le 16/08/2026** (mises à jour optimistes de
+  `useDemandesEquipe` incomplètes, `dateDecision`/`validateur` jamais renseignés) — jusqu'ici masqué
+  par la fermeture automatique du panneau. **Corrigé** : `useDemandesEquipe` re-fetch désormais la
+  liste entière après chaque action (`version`/`refetch`, même pattern que `useCongesConsommes`) au
+  lieu de patcher l'état localement — abandonne le commentaire "pas de re-fetch, la liste peut être
+  longue" qui motivait l'ancienne approche, la donnée à jour prime sur l'économie d'un appel réseau
+  ici. `CongesPaiePage` faisait déjà ainsi (`refetch()`), non concerné par ce bug.
+
+**Commentaire du salarié à la pose affiché dans le feed (16/08/2026)** — `selection.note` (le message
+optionnel saisi dans "Nouvelle demande", jusqu'ici jamais affiché nulle part dans ce panneau, à ne
+pas confondre avec `commentaireManager`, le commentaire du manager à la décision, déjà affiché)
+apparaît maintenant sous la ligne "Posé le", même conteneur que le reste du feed. Aligné exactement
+sur le texte "Posé le" (vérifié par mesure DOM avec `Range.getBoundingClientRect`, pas la position de
+la boîte du `<div>` qui aurait inclus le padding du parent) — premier essai décalé de 16px (pensé en
+"padding absolu depuis le bord de la carte" comme `commentaireManager`, qui lui est un sibling direct
+de la carte sans padding, alors que ce nouveau bloc est imbriqué dans le conteneur du feed qui a déjà
+son propre `px-4` : correction en `pl-[0.875rem]` — le complément, pas le total). Les **deux**
+commentaires du feed (`selection.note` et `selection.commentaireManager`) passés en **italique**
+(`italic`) sur demande, pour les distinguer visuellement du reste des lignes du feed — et
+**alignés sur la même taille** (`text-[10px]`, celle du commentaire employé) : celui du manager
+traînait encore en `text-xs` (12px) d'avant l'introduction du commentaire employé, tailles
+désormais iso entre les deux.
+
 **En cours / pas encore fait** :
 
 - **Suite du chantier "Détail du congé" ci-dessus, explicitement interrompue pour reprise plus

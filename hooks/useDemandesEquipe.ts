@@ -6,6 +6,7 @@ import {
   fetchDemandesEquipe,
   refuserDemande,
   regulariserDemande,
+  remettreEnAttenteDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
 
@@ -16,17 +17,25 @@ interface UseDemandesEquipeResult {
   valider: (id: string, commentaire?: string) => Promise<void>;
   refuser: (id: string, commentaire?: string) => Promise<void>;
   regulariser: (id: string, commentaire?: string) => Promise<void>;
+  remettreEnAttente: (id: string) => Promise<void>;
 }
 
 /**
- * Demandes de l'équipe pour l'Espace Suivre (manager) — approuver/refuser
- * met à jour l'état local optimiste après succès de l'appel, plutôt que de
- * tout re-fetcher (la liste peut être longue).
+ * Demandes de l'équipe pour l'Espace Suivre (manager).
+ *
+ * Valider/refuser/régulariser/remettre en attente re-fetchent la liste
+ * entière après succès (`version`, même pattern que `useCongesConsommes`)
+ * plutôt que de patcher l'état local en optimiste — l'ancienne version
+ * optimiste oubliait `dateDecision`/`validateur` (pas connus côté client
+ * sans dupliquer la logique de `useUtilisateur`), ce qui laissait le feed du
+ * panneau ("Validé le/Refusé le") vide tant que la page n'était pas
+ * rechargée.
  */
 export function useDemandesEquipe(): UseDemandesEquipeResult {
   const [demandes, setDemandes] = useState<DemandeEquipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,34 +57,41 @@ export function useDemandesEquipe(): UseDemandesEquipeResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [version]);
 
-  const valider = useCallback(async (id: string, commentaire = "") => {
-    await validerDemande(id, commentaire);
-    setDemandes((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, statut: "validé", commentaireManager: commentaire } : d,
-      ),
-    );
-  }, []);
+  const refetch = useCallback(() => setVersion((v) => v + 1), []);
 
-  const refuser = useCallback(async (id: string, commentaire = "") => {
-    await refuserDemande(id, commentaire);
-    setDemandes((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, statut: "refusé", commentaireManager: commentaire } : d,
-      ),
-    );
-  }, []);
+  const valider = useCallback(
+    async (id: string, commentaire = "") => {
+      await validerDemande(id, commentaire);
+      refetch();
+    },
+    [refetch],
+  );
 
-  const regulariser = useCallback(async (id: string, commentaire = "") => {
-    await regulariserDemande(id, commentaire);
-    setDemandes((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, statut: "annulé", commentaireManager: commentaire } : d,
-      ),
-    );
-  }, []);
+  const refuser = useCallback(
+    async (id: string, commentaire = "") => {
+      await refuserDemande(id, commentaire);
+      refetch();
+    },
+    [refetch],
+  );
 
-  return { demandes, loading, error, valider, refuser, regulariser };
+  const regulariser = useCallback(
+    async (id: string, commentaire = "") => {
+      await regulariserDemande(id, commentaire);
+      refetch();
+    },
+    [refetch],
+  );
+
+  const remettreEnAttente = useCallback(
+    async (id: string) => {
+      await remettreEnAttenteDemande(id);
+      refetch();
+    },
+    [refetch],
+  );
+
+  return { demandes, loading, error, valider, refuser, regulariser, remettreEnAttente };
 }

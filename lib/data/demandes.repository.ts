@@ -338,3 +338,30 @@ export async function refuserDemande(id: string, commentaire = ""): Promise<void
 export async function regulariserDemande(id: string, commentaire = ""): Promise<void> {
   await deciderDemande(id, "annulee", commentaire);
 }
+
+/**
+ * Annule une validation qui vient d'être faite par erreur — bouton "Annuler"
+ * du bandeau de confirmation post-validation. Repasse la demande "en
+ * attente" et efface la décision (contrairement à `regulariserDemande`, qui
+ * marque "annulé" : ici on veut vraiment revenir à l'état d'avant l'action,
+ * pas ajouter une nouvelle décision).
+ */
+export async function remettreEnAttenteDemande(id: string): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase
+    .from("demandes_conges")
+    .update({
+      statut: "en_attente",
+      validateur_id: null,
+      commentaire_decision: null,
+      date_decision: null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error("Impossible d'annuler cette validation.");
+  }
+}
