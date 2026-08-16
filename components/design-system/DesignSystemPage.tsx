@@ -18,6 +18,7 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { SoldeCard } from "@/components/ui/SoldeCard";
 import { SoldeMoisBloc } from "@/components/ui/SoldeMoisBloc";
+import { Textarea } from "@/components/ui/Textarea";
 import {
   TypeBadge,
   TypeBadgePillEnhanced,
@@ -407,6 +408,32 @@ export function DesignSystemPage() {
                 readOnly
                 value="Valeur d'exemple"
                 className="mt-2 w-full"
+              />
+            </div>
+          </ComponentExample>
+
+          <ComponentExample title="FieldLabel + Textarea (rounded-control, défaut)">
+            <div>
+              <FieldLabel htmlFor="design-system-textarea-defaut">Commentaire</FieldLabel>
+              <Textarea
+                id="design-system-textarea-defaut"
+                readOnly
+                value="Texte d'exemple"
+                rows={2}
+                className="mt-2 w-full"
+              />
+            </div>
+          </ComponentExample>
+
+          <ComponentExample title="Textarea — variante rounded-md (encarts compacts, ex. panneau Décision de Suivre les demandes)">
+            <div>
+              <FieldLabel htmlFor="design-system-textarea-compact">Commentaire</FieldLabel>
+              <Textarea
+                id="design-system-textarea-compact"
+                readOnly
+                value="Texte d'exemple"
+                rows={2}
+                className="mt-2 w-full rounded-md text-xs"
               />
             </div>
           </ComponentExample>

@@ -1,6 +1,13 @@
 import type { DemandeEquipe } from "@/lib/types";
-import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
+import {
+  formatDate,
+  formatDateAction,
+  formatJours,
+  formatPeriodeDemande,
+  nomJourSemaine,
+} from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
+import { JourBadge } from "@/components/ui/JourBadge";
 import { STATUT_CONFIG } from "@/components/ui/StatusBadge";
 import { classeFondTypeBadge, LABEL_LONG } from "@/components/demandes/TypeBadge";
 
@@ -65,6 +72,14 @@ export function SuiviDemandeRow({
   const jours = demande.nbDemiJournees / 2;
   const codeBadge = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
   const { tone, Icon } = STATUT_CONFIG[demande.statut];
+  const estPeriode = demande.debut !== demande.fin;
+  const labelDemiJournee = estPeriode
+    ? null
+    : demande.demiDebut === "apres_midi"
+      ? "Apm"
+      : demande.demiFin === "matin"
+        ? "Ma"
+        : null;
 
   return (
     <div
@@ -77,9 +92,32 @@ export function SuiviDemandeRow({
             <span className="text-ink-500 text-[11px] font-semibold">{LABEL_LONG[codeBadge]}</span>
           </span>
         )}
-        <div className="text-ink-900 text-xs font-semibold">
-          {formatPeriodeDemande(demande.debut, demande.fin)}
-        </div>
+        {estPeriode ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+                {nomJourSemaine(demande.debut).slice(0, 2)}
+              </JourBadge>
+              <div className="text-ink-900 text-xs font-semibold">{formatDate(demande.debut)}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+                {nomJourSemaine(demande.fin).slice(0, 2)}
+              </JourBadge>
+              <div className="text-ink-900 text-xs font-semibold">{formatDate(demande.fin)}</div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+              {nomJourSemaine(demande.debut).slice(0, 2)}
+            </JourBadge>
+            <div className="text-ink-900 text-xs font-semibold">
+              {formatPeriodeDemande(demande.debut, demande.fin)}
+              {labelDemiJournee && ` - ${labelDemiJournee}`}
+            </div>
+          </div>
+        )}
         {!masquerPoseLe && (
           <div className="text-ink-500 text-[10px]">
             {`Posé le ${formatDateAction(demande.datePose)}`}

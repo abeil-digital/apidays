@@ -48,6 +48,16 @@ export function formatPeriodeDemande(debut: string, fin: string): string {
   return `${formatJourMois(debut, true)} au ${formatJourMois(fin, true)}`;
 }
 
+const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
+/** Nom du jour de semaine (ex. "Vendredi") — pour la pastille `JourBadge`
+ * (abréviation via `.slice(0, 2)`) accolée à une date dans les listes/popins
+ * référentielles (CPI/DJI/Fériés, `SuiviDemandeRow`). */
+export function nomJourSemaine(iso: string): string {
+  const jourSemaine = new Date(`${iso}T00:00:00Z`).getUTCDay();
+  return JOURS_SEMAINE[(jourSemaine + 6) % 7];
+}
+
 export function nombreJours(debut: string, fin: string): number {
   const d1 = new Date(`${debut}T00:00:00`);
   const d2 = new Date(`${fin}T00:00:00`);

@@ -10,7 +10,13 @@ import type {
   DjImposeeInput,
   JourFerie,
 } from "@/lib/types";
-import { formatDateAction, formatJourMois, formatJours, nombreJours } from "@/lib/format";
+import {
+  formatDateAction,
+  formatJourMois,
+  formatJours,
+  nombreJours,
+  nomJourSemaine,
+} from "@/lib/format";
 import {
   datesDuJourDeLaSemaine,
   dureeCongeImpose,
@@ -32,17 +38,10 @@ import { SectionLabel } from "@/components/ui/SectionLabel";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 
-const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
-
 const LABEL_TAG_DEMI_JOURNEE: Record<DemiJournee, string> = {
   matin: "Matin",
   apres_midi: "A. Midi",
 };
-
-function nomJourSemaine(iso: string): string {
-  const jourSemaine = new Date(`${iso}T00:00:00Z`).getUTCDay();
-  return JOURS_SEMAINE[(jourSemaine + 6) % 7];
-}
 
 function formatJourMoisComplet(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);

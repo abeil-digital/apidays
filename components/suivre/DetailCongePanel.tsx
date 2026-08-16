@@ -4,7 +4,12 @@ import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import type { DemandeEquipe, StatutDemande } from "@/lib/types";
 import { formatDateAction } from "@/lib/format";
-import { classeFondTypeBadge, LABEL_LONG, TypeBadge } from "@/components/demandes/TypeBadge";
+import {
+  classeFondTypeBadge,
+  classeTexteTypeBadge,
+  LABEL_LONG,
+  TypeBadge,
+} from "@/components/demandes/TypeBadge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
@@ -44,6 +49,18 @@ const TEXTE_DECISION: Record<StatutDemande, string> = {
   validé: "text-status-success-fg",
   refusé: "text-status-danger-fg",
   annulé: "text-status-danger-fg",
+};
+
+// Nom de la variable CSS du token couleur du type — pour teinter un fond via
+// `color-mix` (même procédé que `SoldeDetailPanel`/`MiniCalendrier`).
+const VAR_COULEUR_TYPE: Record<string, string> = {
+  CP: "--color-cp",
+  RTT: "--color-rtt",
+  CPA: "--color-cpa",
+  CSS: "--color-css",
+  CE: "--color-ce",
+  RECUP: "--color-recup",
+  EVT_FAM: "--color-evtfam",
 };
 
 /**
@@ -100,148 +117,162 @@ export function DetailCongePanel({
   }
 
   return (
-    <div className="bg-surface-card w-full shadow-sm xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
-      <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
-        <div className="flex items-center gap-2.5">
-          <div className="rounded-full ring-2 ring-white">
-            <TypeBadge code={code} />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-white">
-              {selection.demandeur.prenom} {selection.demandeur.nom}
+    <div className="flex w-full flex-col gap-[3px] xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
+      <div className="bg-surface-card w-full shadow-sm">
+        <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
+          <div className="flex items-center gap-2.5">
+            <div className="rounded-full ring-2 ring-white">
+              <TypeBadge code={code} />
             </div>
-            <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={enCours}
-          className="shrink-0 text-white/70 hover:text-white disabled:opacity-40"
-          aria-label="Fermer"
-        >
-          <X size={18} />
-        </button>
-      </div>
-
-      <div className="border-ink-300/60 border-t">
-        <SuiviDemandeRow demande={selection} isLast masquerType masquerPoseLe />
-      </div>
-
-      <div className="border-ink-300/60 flex flex-col border-t px-4 pt-3 pb-1">
-        <div className="flex items-center gap-2">
-          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-          <span className="text-ink-500 text-[10px]">
-            Posé le {formatDateAction(selection.datePose)}
-          </span>
-        </div>
-        {selection.dateDecision && (
-          <div className="flex gap-2">
-            <div className="flex w-1.5 shrink-0 justify-center">
-              <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+            <div>
+              <div className="text-sm font-bold text-white">
+                {selection.demandeur.prenom} {selection.demandeur.nom}
+              </div>
+              <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
             </div>
           </div>
-        )}
-        {selection.dateDecision && (
-          <div className="flex items-center gap-2">
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-            <span className="text-[10px]">
-              <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
-                {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
-              </span>
-              {selection.validateur && (
-                <span className="text-ink-500"> par {selection.validateur.prenom}</span>
-              )}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {selection.commentaireManager && (
-        <div className="text-ink-500 pr-4 pb-4 pl-[1.875rem] text-xs">
-          {selection.commentaireManager}
-        </div>
-      )}
-
-      {selection.statut === "validé" || selection.statut === "annulé" ? (
-        <div className="pb-4">
           <button
             type="button"
-            onClick={() => setRegularisationOuverte((v) => !v)}
-            className="text-ink-500 flex items-center gap-1 px-4 pt-3 text-xs font-semibold"
+            onClick={onClose}
+            disabled={enCours}
+            className="shrink-0 text-white/70 hover:text-white disabled:opacity-40"
+            aria-label="Fermer"
           >
-            Régularisation
-            {regularisationOuverte ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            <X size={18} />
           </button>
+        </div>
 
-          {regularisationOuverte && (
-            <div className="pt-2">
-              <div className="px-4 pb-2">
-                <label
-                  htmlFor="commentaire-decision"
-                  className="text-ink-500 mb-1.5 block text-[11px]"
-                >
-                  Commentaire (motif, traçabilité)
-                </label>
-                <Textarea
-                  id="commentaire-decision"
-                  value={commentaire}
-                  onChange={(e) => setCommentaire(e.target.value)}
-                  rows={2}
-                  placeholder={
-                    selection.statut === "validé"
-                      ? "Ex. congé finalement non pris…"
-                      : "Ex. annulation faite par erreur…"
-                  }
-                  className="w-full rounded-none text-xs placeholder:text-xs"
-                />
-              </div>
+        <div className="border-ink-300/60 border-t">
+          <SuiviDemandeRow demande={selection} isLast masquerType masquerPoseLe />
+        </div>
 
-              {erreurAction && (
-                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
-                  {erreurAction}
-                </div>
-              )}
-
-              <div className="px-4">
-                {selection.statut === "validé" ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      executer(onRegulariser, "Impossible de supprimer cette demande.")
-                    }
-                    disabled={enCours}
-                    className="text-status-danger-fg border-status-danger-fg w-full justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    Supprimer
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => executer(onValider, "Impossible de restaurer cette demande.")}
-                    disabled={enCours}
-                    className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    <Check size={16} />
-                    Restaurer
-                  </Button>
-                )}
+        <div className="border-ink-300/60 flex flex-col border-t px-4 pt-3 pb-1">
+          <div className="flex items-center gap-2">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+            <span className="text-ink-500 text-[10px]">
+              Posé le {formatDateAction(selection.datePose)}
+            </span>
+          </div>
+          {selection.dateDecision && (
+            <div className="flex gap-2">
+              <div className="flex w-1.5 shrink-0 justify-center">
+                <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
               </div>
             </div>
           )}
+          {selection.dateDecision && (
+            <div className="flex items-center gap-2">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+              <span className="text-[10px]">
+                <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
+                  {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
+                </span>
+                {selection.validateur && (
+                  <span className="text-ink-500"> par {selection.validateur.prenom}</span>
+                )}
+              </span>
+            </div>
+          )}
         </div>
-      ) : selection.statut === "refusé" ? (
-        // Une demande refusée est un état terminal ici — pas de bouton
-        // Refuser/Valider (elle n'est plus "en attente") ni de
-        // Régularisation (ce mécanisme corrige un congé qui avait été
-        // accordé, une demande refusée ne l'a jamais été). Le commentaire de
-        // refus (s'il existe) est déjà affiché juste au-dessus, rien d'autre
-        // à montrer ici.
-        null
-      ) : (
-        <>
-          <div className="px-4 pt-3 pb-2">
-            <label htmlFor="commentaire-decision" className="text-ink-500 mb-1.5 block text-[11px]">
-              Commentaire (motif, traçabilité)
+
+        {selection.commentaireManager && (
+          <div className="text-ink-500 pr-4 pb-4 pl-[1.875rem] text-xs">
+            {selection.commentaireManager}
+          </div>
+        )}
+
+        {selection.statut === "validé" || selection.statut === "annulé" ? (
+          <div className="pb-4">
+            <button
+              type="button"
+              onClick={() => setRegularisationOuverte((v) => !v)}
+              className="text-ink-500 flex items-center gap-1 px-4 pt-3 text-xs font-semibold"
+            >
+              Régularisation
+              {regularisationOuverte ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {regularisationOuverte && (
+              <div className="pt-2">
+                <div className="px-4 pb-2">
+                  <label
+                    htmlFor="commentaire-decision"
+                    className="text-ink-500 mb-1.5 block text-[11px]"
+                  >
+                    Commentaire (motif, traçabilité)
+                  </label>
+                  <Textarea
+                    id="commentaire-decision"
+                    value={commentaire}
+                    onChange={(e) => setCommentaire(e.target.value)}
+                    rows={2}
+                    placeholder={
+                      selection.statut === "validé"
+                        ? "Ex. congé finalement non pris…"
+                        : "Ex. annulation faite par erreur…"
+                    }
+                    className="w-full rounded-none text-xs placeholder:text-xs"
+                  />
+                </div>
+
+                {erreurAction && (
+                  <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
+                    {erreurAction}
+                  </div>
+                )}
+
+                <div className="px-4">
+                  {selection.statut === "validé" ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        executer(onRegulariser, "Impossible de supprimer cette demande.")
+                      }
+                      disabled={enCours}
+                      className="text-status-danger-fg border-status-danger-fg w-full justify-center rounded-full px-4 py-2 text-xs"
+                    >
+                      Supprimer
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => executer(onValider, "Impossible de restaurer cette demande.")}
+                      disabled={enCours}
+                      className="w-full justify-center rounded-full px-4 py-2 text-xs"
+                    >
+                      <Check size={16} />
+                      Restaurer
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : // "refusé" est un état terminal ici — pas de bouton Refuser/Valider
+        // (elle n'est plus "en attente") ni de Régularisation (ce mécanisme
+        // corrige un congé qui avait été accordé, une demande refusée ne l'a
+        // jamais été). Le commentaire de refus (s'il existe) est déjà
+        // affiché juste au-dessus, rien d'autre à montrer ici. "en attente"
+        // a son propre encart Action juste en dessous.
+        null}
+      </div>
+
+      {selection.statut === "en attente" && (
+        <div
+          className="w-full shadow-sm"
+          style={{
+            backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[code]}) 5%, white)`,
+          }}
+        >
+          <div className={`px-4 pt-3 pb-1 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+            Décision
+          </div>
+
+          <div className="px-4 pt-1.5 pb-2">
+            <label
+              htmlFor="commentaire-decision"
+              className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+            >
+              Commentaire
             </label>
             <Textarea
               id="commentaire-decision"
@@ -249,7 +280,7 @@ export function DetailCongePanel({
               onChange={(e) => setCommentaire(e.target.value)}
               rows={2}
               placeholder="Ex. régularisation confirmée par le salarié…"
-              className="w-full rounded-none text-xs placeholder:text-xs"
+              className="w-full rounded-md text-xs placeholder:text-xs"
             />
           </div>
 
@@ -264,7 +295,7 @@ export function DetailCongePanel({
               variant="secondary"
               onClick={() => executer(onRefuser, "Impossible de refuser cette demande.")}
               disabled={enCours}
-              className="text-status-danger-fg border-status-danger-fg flex-1 justify-center rounded-full px-4 py-2 text-xs"
+              className="text-status-danger-fg border-status-danger-fg justify-center rounded-full bg-white/50 px-4 py-2 text-xs"
             >
               Refuser
             </Button>
@@ -275,9 +306,10 @@ export function DetailCongePanel({
             >
               <Check size={16} />
               Valider
+              <Check size={16} className="invisible" aria-hidden />
             </Button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

@@ -1009,14 +1009,69 @@ reprise ultérieure**, voir "En cours" ci-dessous pour ce qui reste.
   la branche `refusé`, sans lien avec un vrai commentaire — supprimé car trompeur une fois le feed en
   place, remplacé par `null` dans la branche, le commentaire réel prenant sa place visuelle).
 
+**Panneau "Détail du congé" — encart "Décision" séparé pour le statut en attente (16/08/2026)** —
+reprise du chantier du 15/08/2026, toujours **non terminé**. Le bloc commentaire + Refuser/Valider
+(jusqu'ici collé au reste du panneau) devient son propre encart carte, sur le même modèle que
+l'idée "un événement = une carte" du reste du panneau.
+
+- Panneau désormais composé de **deux cartes empilées** (`bg-surface-card` chacune) dans un wrapper
+  commun qui porte le `xl:sticky`/`w-64` : carte 1 = header + feed + commentaire de décision déjà
+  affiché ; carte 2 = "Décision", seulement quand `statut === "en attente"`, séparées par
+  **3px** (`gap-[3px]` sur le wrapper) plutôt qu'un simple `border-t` interne comme avant.
+- Titre de la carte 2 essayé "Action" puis renommé **"Décision"**.
+- **Longue série d'essais de fond/couleur "en mode réflexion"**, plusieurs revert : `bg-mint-tint`
+  (vert pâle du bloc "Soldes" Accueil, non concluant) → `bg-status-warning-bg` (orange pâle, couleur
+  du tone "en attente", non concluant) → blanc uni testé deux fois entre les essais → `#F6F7FB` puis
+  `#F1F5FF` (bleu-gris solides) → `#F4F6FA` (gris légèrement bleuté, solide) → **état final retenu** :
+  fond dynamique `color-mix(in srgb, var(--color-{type}) 5%, white)` (même procédé que
+  `SoldeDetailPanel`), teinté selon le type du congé plutôt qu'une couleur fixe — nouvelle table
+  `VAR_COULEUR_TYPE` locale à `DetailCongePanel.tsx`. Titre "Décision" suit la même logique
+  (`classeTexteTypeBadge(code)` plutôt qu'une couleur fixe testée un temps `#4562E1`).
+- Bouton Refuser : `flex-1` retiré (largeur naturelle au contenu, Valider récupère l'espace restant
+  en `flex-1`) ; fond `bg-status-danger-bg` testé sur demande explicite pour trancher visuellement,
+  jugé "affreux", reverté — convention confirmée : aucun bouton de l'app n'a de fond coloré danger
+  (uniquement les bandeaux de message d'erreur), `Refuser` reste texte+bordure rouge comme le reste
+  de l'app (`DemandeEquipeRow.tsx` notamment). Fond final : `bg-white/50` (blanc 50% d'opacité), pour
+  se fondre dans la carte 2 désormais teintée sans redevenir un rectangle blanc plein.
+- Bouton Valider : l'icône `Check` à gauche du texte décentrait visuellement "Valider" (pas de
+  contrepoids à droite) — corrigé avec une seconde icône `Check` identique mais `invisible` après le
+  texte, pure béquille de mise en page pour rééquilibrer le centrage (vérifié par mesure DOM :
+  centre du bouton = centre du texte, au pixel près).
+- Libellé "Commentaire (motif, traçabilité)" → **"Commentaire"** en gras (le texte entre parenthèses
+  jugé redondant dans ce contexte).
+- **Textarea du commentaire recoins moins arrondis** sur retour maquette : la valeur par défaut de
+  `Textarea` (`rounded-control`, 16px, tokenisée dans `globals.css`) remplacée localement par
+  `rounded-md` (6px, override Tailwind classique, testé en DOM — pas besoin de `!important`, l'ordre
+  de génération a suffi ici). **Nouvelle variante documentée dans `/design-system`** : deux exemples
+  "FieldLabel + Textarea" ajoutés (défaut `rounded-control` vs variante compacte `rounded-md`), pour
+  que ce choix de style reste visible/réutilisable plutôt qu'enterré dans un seul composant.
+- Vérifié au passage (question posée par Vincent) : le texte de guidance du `placeholder` HTML natif
+  ne part jamais en base si le champ n'est pas touché — `value` reste `""`, `executer()` envoie
+  `commentaire.trim()`, et `deciderDemande()` fait `commentaire_decision: commentaire || null`.
+  Comportement déjà correct, rien à corriger.
+
+**Pastille jour (`JourBadge`) devant la date, `SuiviDemandeRow` (16/08/2026)** — demande initialement
+mal ciblée (essayée par erreur sur le snippet CPI de `/parametrer/calendrier2`, revert immédiat) :
+la bonne cible était `SuiviDemandeRow.tsx`, utilisé par `DetailCongePanel` (Suivre les demandes/Export
+paie) et `SuivrePage`. `nomJourSemaine` (jusqu'ici locale à `CalendrierPage.tsx`) déplacée dans
+`lib/format.ts`, exportée, pour être partagée sans dupliquer la logique. Trois cas de rendu, précisés
+par itérations :
+
+- **Jour plein** (`debut === fin`, pas de demi-journée) : `JourBadge` (abréviation 2 lettres du jour,
+  `nomJourSemaine(debut).slice(0, 2)`, `h-6 w-6 rounded-lg` — variante compacte du `h-9 w-9` par
+  défaut) devant la date.
+- **Demi-journée** (`debut === fin`, `demiDebut === "apres_midi"` ou `demiFin === "matin"`) : même
+  pastille, suffixe `" - Ma"` ou `" - Apm"` **après** la date plutôt qu'une deuxième pastille.
+- **Période** (`debut !== fin`) : passage sur **deux lignes**, une pastille + une date par ligne
+  (début puis fin), au lieu de l'unique ligne "X au Y" (`formatPeriodeDemande`) utilisée pour les
+  deux autres cas.
+
 **En cours / pas encore fait** :
 
 - **Suite du chantier "Détail du congé" ci-dessus, explicitement interrompue pour reprise plus
   tard** : le feed ne montre que Posé le/Validé le/Refusé le — pas encore de traitement pour un
   événement de Régularisation (validé→annulé ou annulé→validé, voir `onRegulariser`), qui devrait
   logiquement devenir un item de feed lui aussi plutôt que de rester la mécanique à part actuelle.
-  Statut "en attente" (formulaire commentaire + Refuser/Valider) pas encore retouché pour matcher
-  le nouveau style.
 - **Bug trouvé en testant ce chantier, pas corrigé** : les mises à jour optimistes de
   `useDemandesEquipe.ts` (`valider`/`refuser`/`regulariser`) mettent à jour `statut` et
   `commentaireManager` en local mais **oublient `dateDecision` et `validateur`** — juste après avoir
@@ -1024,7 +1079,10 @@ reprise ultérieure**, voir "En cours" ci-dessous pour ce qui reste.
   page n'est pas rechargée (les données sont bien en base, seul l'état local React est incomplet).
 - Données de test polluées pendant la vérification de ce chantier : la demande RTT de Delphine
   (17 août 2026, posée le 15/08) a été refusée avec le commentaire "Test commentaire de
-  vérification" pour valider l'affichage — à renvoyer "en attente" ou nettoyer si besoin.
+  vérification" pour valider l'affichage. Toutes les demandes "en attente" initiales ont fini
+  validées/refusées au fil des tests des 15-16/08 (plus aucune en attente en base) — une demande CP
+  de test (Olivier Test, 01/12/2026, sans commentaire) a été reposée le 16/08 pour retester l'encart
+  Décision et reste actuellement "en attente" en base. À nettoyer/ignorer selon besoin.
 - Intégration de la vraie charte graphique Abeil (`Charte-abeil/` reçu en local, contient PDF +
   nouveau pack de logos, **non commité** — voir Conventions)
 - Espace Manager, suite de l'Espace Delphine (paramétrage RTT imposés, correction de solde), accès
