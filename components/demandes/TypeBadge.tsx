@@ -31,7 +31,7 @@ const CODE_STYLES_OUTLINE: Record<TypeBadgeCode, string> = {
 
 // Libellé court affiché dans le badge (cercle 36px) — les codes longs comme
 // "EVT_FAM" ne tiennent pas tels quels.
-const LABEL_COURT: Record<TypeBadgeCode, string> = {
+export const LABEL_COURT: Record<TypeBadgeCode, string> = {
   CP: "CP",
   RTT: "RTT",
   CPA: "CPA",

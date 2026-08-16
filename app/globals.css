@@ -85,6 +85,13 @@ body {
   color: var(--color-ink-900);
 }
 
+/* Le curseur natif d'un <button> est "default", pas "pointer" (contrairement
+   à <a href>) — règle globale plutôt que cursor-pointer répété sur chaque
+   bouton custom du repo (pills, X de fermeture, boutons de tableau...). */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 @media print {
   body {
     background: white;

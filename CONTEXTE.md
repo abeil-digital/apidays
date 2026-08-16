@@ -1087,6 +1087,35 @@ Rendu final, trois cas :
   `- apm`/`- ma` évalué séparément par extrémité (`labelDemiDebut`/`labelDemiFin`), contrairement au
   cas jour seul où `demiDebut`/`demiFin` décrivent la même unique journée.
 
+**Colonne Type en initiales + pill Dates "déclenchée" inversée, `HistoriqueTable` (16/08/2026)** —
+deux ajustements sur le tableau "Suivre les demandes" (mode `compact`), sans impact sur `/historique`
+(mode par défaut, non `compact`) :
+
+- **Type** : `libelleTypeCompact` (regex ad hoc qui abrégeait "Congés Payés" → "C. Payés") supprimée,
+  remplacée par `LABEL_COURT` — le mapping d'initiales déjà utilisé par `TypeBadge` (cercle 36px) et
+  la légende Accueil (CP, RTT, CPA, CSS, CE, RÉC, ÉVT...), désormais exporté de `TypeBadge.tsx` pour
+  être réutilisé ici plutôt que reformulé. Un seul mapping d'initiales dans tout le repo au lieu de
+  deux formulations différentes du même besoin.
+- **Pill Dates, état "déclenché" (sélection ouverte)** : remplacé `ring-mint ring-2` (contour ajouté
+  par-dessus le style normal) par une **inversion complète** — fond `classeFondTypeBadge(code)`
+  (couleur du type), texte blanc, bordure transparente — au lieu du fond neutre + bordure/texte
+  colorés de l'état normal. Reprend la convention déjà définie pour les pills de solde cliquables de
+  Suivre les soldes (`/design-system`, "Pill de solde cliquable — état normal vs état déclenché") :
+  état déclenché = inversion des couleurs de l'état normal, peu importe lequel des deux (fond plein
+  vs contour) sert de "normal" pour la pill en question. L'état survol (`hover:opacity-70`) existait
+  déjà et suit la même convention que ces pills de solde, inchangé.
+
+**Curseur `pointer` manquant sur tous les `<button>` (16/08/2026)** — signalé par Vincent en testant
+les pills et les boutons du panneau Décision ("je ne vois pas le curseur se transformer en main").
+Cause : contrairement à `<a href>`, le curseur natif d'un `<button>` HTML est `default`, pas
+`pointer` — vérifié en DOM (`getComputedStyle(...).cursor`) avant toute correction. Concernait tous
+les boutons du repo (composant `Button` partagé **et** les ~20 fichiers avec des `<button>` custom :
+pills, croix de fermeture, boutons de tableau...), pas seulement les deux exemples cités. Corrigé en
+**une seule règle globale** dans `globals.css` (`button:not(:disabled) { cursor: pointer; }`) plutôt
+que d'ajouter `cursor-pointer` fichier par fichier — plus robuste (couvre aussi les boutons futurs)
+et évite d'en oublier un sur ~20 fichiers concernés. Un essai initial (ajouter `cursor-pointer` dans
+`BASE_STYLES` de `Button.tsx`) a été reverté une fois la règle globale posée, devenu redondant.
+
 **En cours / pas encore fait** :
 
 - **Suite du chantier "Détail du congé" ci-dessus, explicitement interrompue pour reprise plus

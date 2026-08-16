@@ -3,6 +3,7 @@ import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/forma
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
+  LABEL_COURT,
   LABEL_LONG,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -33,15 +34,6 @@ function periodeCourte(debut: string, fin: string): string {
   return formatPeriodeDemande(debut, fin).replace(" au ", " - ");
 }
 
-// "Congés Payés" → "C. Payés", "Congé sans solde" → "C. sans solde", "Congés
-// en acquisition" → "C. acquisition" — gagner en largeur sur la colonne Type
-// quand `compact` (Suivre les demandes, qui a déjà une colonne Collaborateur
-// en plus par rapport à Historique). Types sans "Congé(s)" dans leur libellé
-// (RTT, Récupération...) inchangés.
-function libelleTypeCompact(libelle: string): string {
-  return libelle.replace(/^Congés?\s+(en\s+)?/, "C. ");
-}
-
 /**
  * Tableau "Type / Dates / Durée / Statut" des demandes d'un collaborateur —
  * remplace le rendu en cartes (`RequestList`) sur `/historique`, jugé pas
@@ -67,7 +59,8 @@ function libelleTypeCompact(libelle: string): string {
  *
  * `compact` (utilisé par `SuivreDemandesPage`, qui a déjà une colonne
  * Collaborateur en plus par rapport à `HistoriquePage`) : gagne en largeur —
- * libellé de type abrégé ("C. Payés" au lieu de "Congés Payés"), en-tête
+ * type réduit aux initiales déjà utilisées ailleurs dans l'app (`LABEL_COURT`,
+ * ex. "CP" au lieu de "Congés Payés") plutôt que le libellé complet, en-tête
  * "Durée" au lieu de "Nbre jours", colonne "Validé le" masquée.
  */
 export function HistoriqueTable(props: HistoriqueTableProps) {
@@ -77,11 +70,14 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
   function cellulesCommunes(demande: Demande) {
     const code = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
     const jours = demande.nbDemiJournees / 2;
-    const libelleType = compact ? libelleTypeCompact(LABEL_LONG[code]) : LABEL_LONG[code];
+    const libelleType = compact ? LABEL_COURT[code] : LABEL_LONG[code];
+    const selectionnee = demande.id === selectedId;
     const pillDates = (
       <span
-        className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)} ${
-          demande.id === selectedId ? "ring-mint ring-2" : ""
+        className={`flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+          selectionnee
+            ? `${classeFondTypeBadge(code)} border-transparent text-white`
+            : `bg-surface-app text-ink-900 ${classeBordureTypeBadge(code)}`
         }`}
       >
         {periodeCourte(demande.debut, demande.fin)}
