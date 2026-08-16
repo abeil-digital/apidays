@@ -76,10 +76,16 @@ export function SuiviDemandeRow({
   const labelDemiJournee = estPeriode
     ? null
     : demande.demiDebut === "apres_midi"
-      ? "Apm"
+      ? "apm"
       : demande.demiFin === "matin"
-        ? "Ma"
+        ? "ma"
         : null;
+  // Pour une période, le début/la fin peuvent chacun être une demi-journée
+  // (ex. arrivée l'après-midi du premier jour, départ le matin du dernier) —
+  // suffixe évalué indépendamment par extrémité, contrairement au jour seul
+  // ci-dessus où demiDebut/demiFin décrivent la même unique journée.
+  const labelDemiDebut = estPeriode && demande.demiDebut === "apres_midi" ? "apm" : null;
+  const labelDemiFin = estPeriode && demande.demiFin === "matin" ? "ma" : null;
 
   return (
     <div
@@ -95,26 +101,32 @@ export function SuiviDemandeRow({
         {estPeriode ? (
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+              <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
                 {nomJourSemaine(demande.debut).slice(0, 2)}
               </JourBadge>
-              <div className="text-ink-900 text-xs font-semibold">{formatDate(demande.debut)}</div>
+              <div className="text-ink-900 text-xs font-semibold">
+                {formatDate(demande.debut)}
+                {labelDemiDebut && <span className="text-ink-500"> - {labelDemiDebut}</span>}
+              </div>
             </div>
             <div className="flex items-center gap-2">
-              <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+              <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
                 {nomJourSemaine(demande.fin).slice(0, 2)}
               </JourBadge>
-              <div className="text-ink-900 text-xs font-semibold">{formatDate(demande.fin)}</div>
+              <div className="text-ink-900 text-xs font-semibold">
+                {formatDate(demande.fin)}
+                {labelDemiFin && <span className="text-ink-500"> - {labelDemiFin}</span>}
+              </div>
             </div>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <JourBadge className="h-6 w-6 rounded-lg text-[10px]">
+            <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
               {nomJourSemaine(demande.debut).slice(0, 2)}
             </JourBadge>
             <div className="text-ink-900 text-xs font-semibold">
               {formatPeriodeDemande(demande.debut, demande.fin)}
-              {labelDemiJournee && ` - ${labelDemiJournee}`}
+              {labelDemiJournee && <span className="text-ink-500"> - {labelDemiJournee}</span>}
             </div>
           </div>
         )}

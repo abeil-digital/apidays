@@ -1054,17 +1054,38 @@ l'idée "un événement = une carte" du reste du panneau.
 mal ciblée (essayée par erreur sur le snippet CPI de `/parametrer/calendrier2`, revert immédiat) :
 la bonne cible était `SuiviDemandeRow.tsx`, utilisé par `DetailCongePanel` (Suivre les demandes/Export
 paie) et `SuivrePage`. `nomJourSemaine` (jusqu'ici locale à `CalendrierPage.tsx`) déplacée dans
-`lib/format.ts`, exportée, pour être partagée sans dupliquer la logique. Trois cas de rendu, précisés
-par itérations :
+`lib/format.ts`, exportée, pour être partagée sans dupliquer la logique.
 
-- **Jour plein** (`debut === fin`, pas de demi-journée) : `JourBadge` (abréviation 2 lettres du jour,
-  `nomJourSemaine(debut).slice(0, 2)`, `h-6 w-6 rounded-lg` — variante compacte du `h-9 w-9` par
-  défaut) devant la date.
+**Piège rencontré, à retenir pour toute future variante compacte d'un composant `ui/` existant** :
+`JourBadge` a des classes par défaut (`h-9 w-9 rounded-xl text-ink-900`, voir `JourBadge.tsx`) codées
+en dur dans le `className` du composant, concaténées **avant** le `className` reçu en prop. Sur ce
+projet (Tailwind v4), l'ordre de génération du CSS ne garantit **pas** qu'une classe passée en prop
+gagne sur la classe par défaut de même propriété — constaté deux fois de façons opposées : `rounded-md`
+passé à `Textarea` (`components/ui/Textarea.tsx`) a bien gagné sur `rounded-control` sans rien de
+spécial, mais `rounded-none` puis `rounded-[2px]` passés à `JourBadge` n'ont **jamais** remplacé le
+`rounded-xl` par défaut tant qu'ils n'étaient pas préfixés `!` (`!rounded-[2px]`) — vérifié en DOM
+(`getComputedStyle(...).borderRadius`) après plusieurs allers-retours visuels trompeurs ("c'est
+toujours un rond" alors que la classe _semblait_ correcte à la lecture du JSX). **Réflexe à avoir** :
+dès qu'un override de classe sur un composant `ui/` ne semble pas prendre effet visuellement, vérifier
+immédiatement `getComputedStyle` plutôt que de re-changer la valeur en boucle — et utiliser `!classe`
+si le composant encode déjà cette propriété par défaut.
+
+Rendu final, trois cas :
+
+- **Jour plein** (`debut === fin`, pas de demi-journée) : `JourBadge` — `18×18px`
+  (`h-[18px] w-[18px]`, plus compact que le `h-9 w-9` par défaut), coins `2px`
+  (`!rounded-[2px]`, forcé), texte gris (`!text-ink-500`, forcé — le défaut du composant est
+  `text-ink-900`, quasi noir) — devant la date.
 - **Demi-journée** (`debut === fin`, `demiDebut === "apres_midi"` ou `demiFin === "matin"`) : même
-  pastille, suffixe `" - Ma"` ou `" - Apm"` **après** la date plutôt qu'une deuxième pastille.
+  pastille, suffixe `" - ma"` ou `" - apm"` (minuscules, en gris `text-ink-500` via un `<span>` dédié
+  — pas de majuscule contrairement à l'abréviation du jour dans la pastille) **après** la date plutôt
+  qu'une deuxième pastille.
 - **Période** (`debut !== fin`) : passage sur **deux lignes**, une pastille + une date par ligne
   (début puis fin), au lieu de l'unique ligne "X au Y" (`formatPeriodeDemande`) utilisée pour les
-  deux autres cas.
+  deux autres cas. Le début et la fin d'une période peuvent chacun être une demi-journée
+  indépendamment (ex. arrivée l'après-midi du premier jour, départ le matin du dernier) — suffixe
+  `- apm`/`- ma` évalué séparément par extrémité (`labelDemiDebut`/`labelDemiFin`), contrairement au
+  cas jour seul où `demiDebut`/`demiFin` décrivent la même unique journée.
 
 **En cours / pas encore fait** :
 
