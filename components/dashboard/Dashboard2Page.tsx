@@ -10,21 +10,23 @@ import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
+import { Badge } from "@/components/ui/Badge";
+import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
 import { SoldeCard } from "@/components/ui/SoldeCard";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { RequestList } from "@/components/demandes/RequestList";
+import { STATUT_CONFIG, StatusBadge } from "@/components/ui/StatusBadge";
 import {
   TypeBadge,
-  classeBordureTypeBadge,
   classeFondAttenueTypeBadge,
   classeFondTypeBadge,
-  classeTexteTypeBadge,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
-import { Modal } from "@/components/ui/Modal";
+import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
 import { ReglesCongesModal } from "@/components/dashboard/ReglesCongesModal";
+import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
 import type { Demande } from "@/lib/types";
+
+type CodeSoldeDetail = "CP" | "RTT" | "CPA";
 
 type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
 
@@ -57,7 +59,7 @@ function formatMoisAnneeCourt(dateIso: string): string {
  * `SelectPille` des popins DJI/CPI, trop visible ici). */
 function SelectAffichage({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
   return (
-    <div className="relative inline-flex w-fit items-center gap-1.5 self-start">
+    <div className="relative inline-flex w-fit items-center gap-1.5">
       <span className="text-ink-500 text-xs">Débute :</span>
       <select
         value={actif ? "complete" : "mois_en_cours"}
@@ -211,7 +213,8 @@ export function Dashboard2Page() {
   const { demandes, loading: loadingDemandes } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
-  const [attentesOuvertes, setAttentesOuvertes] = useState(false);
+  const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
+  const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
   const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
   const [calendrierHauteur, setCalendrierHauteur] = useState<number | null>(null);
   const calendrierGridRef = useRef<HTMLDivElement>(null);
@@ -317,9 +320,7 @@ export function Dashboard2Page() {
     return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
-  const enCours = demandes
-    .filter((d) => d.statut === "en attente")
-    .sort((a, b) => a.debut.localeCompare(b.debut));
+  const nbEnValidation = demandes.filter((d) => d.statut === "en attente").length;
 
   // Légende (remplace l'ancienne colonne "En attente de validation") — jours
   // communs et types de demandes perso, scopés à la fenêtre affichée par
@@ -571,18 +572,24 @@ export function Dashboard2Page() {
               conditionPrefixe={soldes.cp.conditionPrefixe}
               conditionAccent={soldes.cp.conditionAccent}
               tone="cp"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("CP")}
             />
             <SoldeCard
               valeur={soldes.rtt.valeur}
               conditionPrefixe={soldes.rtt.conditionPrefixe}
               conditionAccent={soldes.rtt.conditionAccent}
               tone="rtt"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("RTT")}
             />
             <SoldeCard
               valeur={soldes.cpa.valeur}
               conditionPrefixe={soldes.cpa.conditionPrefixe}
               conditionAccent={soldes.cpa.conditionAccent}
               tone="cpa"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("CPA")}
             />
             <Link
               href="/nouvelle-demande"
@@ -593,21 +600,38 @@ export function Dashboard2Page() {
             </Link>
           </div>
         </div>
-      </div>
 
-      <button
-        type="button"
-        onClick={() => setAttentesOuvertes(true)}
-        className={`rounded-control px-4 py-3 text-left text-sm font-semibold transition-opacity duration-150 hover:opacity-80 ${
-          enCours.length > 0
-            ? "bg-status-warning-bg text-status-warning-fg"
-            : "bg-status-neutral-bg text-status-neutral-fg"
-        }`}
-      >
-        {enCours.length > 0
-          ? `En attente de validation (${enCours.length})`
-          : "Aucune demande de validation en cours"}
-      </button>
+        {/* Pill "En validation" (18/08/2026) — orange si des demandes sont en
+            attente, gris neutre sinon ; lien vers l'historique personnel
+            filtré sur "En validation" (`?statut=en_attente`, lu par
+            `HistoriquePage`). "Suivre mes demandes" à la suite, vers
+            l'historique non filtré. "Journal" ouvre le tiroir "Activité
+            récente" (`ActiviteRecenteFeed`), même déclencheur que le bandeau
+            "Suivre mes activités"/"Activité récente" plus bas. */}
+        <h2 className="text-ink-900 px-1 text-lg font-bold">Mes demandes</h2>
+        <div className="flex items-center gap-3 px-1">
+          <Link
+            href="/historique?statut=en_attente"
+            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold transition-opacity duration-150 hover:opacity-80 ${
+              nbEnValidation > 0
+                ? "bg-status-warning-bg text-status-warning-fg"
+                : "bg-status-neutral-bg text-status-neutral-fg"
+            }`}
+          >
+            {nbEnValidation} En validation
+          </Link>
+          <Link href="/historique" className="text-ink-900 text-xs font-semibold underline">
+            Suivre mes demandes
+          </Link>
+          <button
+            type="button"
+            onClick={() => setTiroirActiviteOuvert(true)}
+            className="text-ink-900 text-xs font-semibold underline"
+          >
+            Journal
+          </button>
+        </div>
+      </div>
 
       <h2 className="text-ink-900 px-1 text-lg font-bold">Mes Congés</h2>
 
@@ -645,14 +669,13 @@ export function Dashboard2Page() {
         >
           {anneeSuivante}
         </button>
+        {onglet === "en_cours" && (
+          <SelectAffichage actif={vueCompleteEnCours} onChange={setVueCompleteEnCours} />
+        )}
+        {onglet === "periode_cp" && (
+          <SelectAffichage actif={vueCompletePeriodeCp} onChange={setVueCompletePeriodeCp} />
+        )}
       </div>
-
-      {onglet === "en_cours" && (
-        <SelectAffichage actif={vueCompleteEnCours} onChange={setVueCompleteEnCours} />
-      )}
-      {onglet === "periode_cp" && (
-        <SelectAffichage actif={vueCompletePeriodeCp} onChange={setVueCompletePeriodeCp} />
-      )}
 
       {onglet === "annee_suivante" && !anneeSuivanteParametree && (
         <div className="bg-status-neutral-bg text-status-neutral-fg rounded-control px-4 py-3 text-sm font-semibold">
@@ -674,6 +697,7 @@ export function Dashboard2Page() {
               estEnGroupe={estEnGroupe}
               onJourClick={handleJourClick}
               estMisEnAvant={estJourDuPopinOuverte}
+              estAujourdhui={(iso) => iso === todayIso}
             />
           ))}
         </div>
@@ -713,23 +737,38 @@ export function Dashboard2Page() {
                         )}
 
                 <div className="border-ink-300/60 border-t px-4 py-1">
+                  {/* CPI/DJI/FERIE/PERSO (18/08/2026) — même gabarit (période +
+                      `Badge`), tone "success" et pas d'icône pour CPI/DJI/FERIE
+                      (pas de notion de statut/décision ici, même convention que
+                      `ProchainsJoursOffCard`). `TypeBadge` remplacé par une
+                      simple pastille de couleur (18/08/2026) : toutes les
+                      lignes d'une même popin partagent le même type, le cercle
+                      "CPI"/"DJI"/"CP"... répété à chaque ligne faisait redite
+                      avec le titre de la popin. */}
                   {legendeOuverte.kind === "CPI" &&
                     (congesImposesTous.length === 0 ? (
                       <p className="text-ink-500 py-3 text-sm">Aucun congé imposé.</p>
                     ) : (
                       <div className="flex flex-col">
                         {congesImposesTous.map((c) => (
-                          <div
-                            key={c.id}
-                            className="flex items-center justify-between py-3 text-sm"
-                          >
+                          <div key={c.id} className="flex items-center gap-3 py-3">
                             <span
-                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("CPI")}`}
-                            >
-                              {formatPeriodeDemande(c.debut, c.fin)}
-                            </span>
-                            <span className="text-ink-500 text-xs">
-                              {formatJours(dureeCongeImpose(c, joursFeriesToutesAnnees))} j
+                              className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge("CPI")}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <PeriodeAvecPastilles
+                                debut={c.debut}
+                                fin={c.fin}
+                                demiDebut="matin"
+                                demiFin="apres_midi"
+                              />
+                            </div>
+                            <span className="origin-right scale-90">
+                              <Badge tone="success">
+                                <span className="text-[14.4px]">
+                                  {formatJours(dureeCongeImpose(c, joursFeriesToutesAnnees))} j
+                                </span>
+                              </Badge>
                             </span>
                           </div>
                         ))}
@@ -742,17 +781,22 @@ export function Dashboard2Page() {
                     ) : (
                       <div className="flex flex-col">
                         {djImposeesTous.map((d) => (
-                          <div
-                            key={d.id}
-                            className="flex items-center justify-between py-3 text-sm"
-                          >
+                          <div key={d.id} className="flex items-center gap-3 py-3">
                             <span
-                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("DJI")}`}
-                            >
-                              {formatDate(d.date)}
-                            </span>
-                            <span className="text-ink-500 text-xs">
-                              {d.demiJournee === "matin" ? "Matin" : "Après-midi"}
+                              className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge("DJI")}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <PeriodeAvecPastilles
+                                debut={d.date}
+                                fin={d.date}
+                                demiDebut={d.demiJournee}
+                                demiFin={d.demiJournee}
+                              />
+                            </div>
+                            <span className="origin-right scale-90">
+                              <Badge tone="success">
+                                <span className="text-[14.4px]">0,5 j</span>
+                              </Badge>
                             </span>
                           </div>
                         ))}
@@ -765,16 +809,23 @@ export function Dashboard2Page() {
                     ) : (
                       <div className="flex flex-col">
                         {joursFeriesTous.map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center justify-between py-3 text-sm"
-                          >
+                          <div key={f.id} className="flex items-center gap-3 py-3">
                             <span
-                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("FERIE")}`}
-                            >
-                              {formatDate(f.date)}
+                              className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge("FERIE")}`}
+                            />
+                            <div className="min-w-0 flex-1">
+                              <PeriodeAvecPastilles
+                                debut={f.date}
+                                fin={f.date}
+                                demiDebut="matin"
+                                demiFin="apres_midi"
+                              />
+                            </div>
+                            <span className="origin-right scale-90">
+                              <Badge tone="success">
+                                <span className="text-[14.4px]">1 j</span>
+                              </Badge>
                             </span>
-                            <span className="text-ink-500 text-xs">{f.libelle}</span>
                           </div>
                         ))}
                       </div>
@@ -784,40 +835,40 @@ export function Dashboard2Page() {
                     (() => {
                       const code = legendeOuverte.code;
                       const demandes = demandesDuType(code);
+                      // Même gabarit que la popin "Suivre les demandes"
+                      // (`ProchainsJoursOffCard`/`SuiviDemandeRow`) — période +
+                      // `Badge` statut/durée, plutôt que la pastille
+                      // pill+contour d'origine (17/08/2026).
                       return demandes.length === 0 ? (
                         <p className="text-ink-500 py-3 text-sm">Aucune demande.</p>
                       ) : (
                         <div className="flex flex-col">
-                          {demandes.map((d) => (
-                            <div
-                              key={d.id}
-                              className="flex items-center justify-between py-3 text-sm"
-                            >
-                              <span
-                                className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
-                              >
+                          {demandes.map((d) => {
+                            const { tone, Icon } = STATUT_CONFIG[d.statut];
+                            return (
+                              <div key={d.id} className="flex items-center gap-3 py-3">
                                 <span
-                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                    d.statut === "validé"
-                                      ? "bg-status-success-fg"
-                                      : d.statut === "en attente"
-                                        ? "bg-status-warning-fg"
-                                        : "bg-status-danger-fg"
-                                  }`}
+                                  className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
                                 />
-                                {formatPeriodeDemande(d.debut, d.fin)}
-                              </span>
-                              <span
-                                className={`text-xs font-semibold ${
-                                  d.statut === "en attente"
-                                    ? "text-ink-500"
-                                    : classeTexteTypeBadge(code)
-                                }`}
-                              >
-                                {formatJours(d.nbDemiJournees / 2)} j
-                              </span>
-                            </div>
-                          ))}
+                                <div className="min-w-0 flex-1">
+                                  <PeriodeAvecPastilles
+                                    debut={d.debut}
+                                    fin={d.fin}
+                                    demiDebut={d.demiDebut}
+                                    demiFin={d.demiFin}
+                                  />
+                                </div>
+                                <span className="origin-right scale-90">
+                                  <Badge tone={tone}>
+                                    <Icon size={12} strokeWidth={2.5} />
+                                    <span className="text-[14.4px]">
+                                      {formatJours(d.nbDemiJournees / 2)} j
+                                    </span>
+                                  </Badge>
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
                       );
                     })()}
@@ -840,11 +891,35 @@ export function Dashboard2Page() {
         <ReglesCongesModal soldes={soldes} onClose={() => setReglesOuvertes(false)} />
       )}
 
-      {attentesOuvertes && (
-        <Modal title="En attente de validation" onClose={() => setAttentesOuvertes(false)}>
-          <RequestList demandes={enCours} emptyText="Aucune demande en attente." />
-        </Modal>
+      {/* Détail de solde (17/08/2026) — même `SoldeDetailPanel` que "Suivre les
+          soldes" (vue manager sur un collaborateur), ici recentré en overlay
+          pour la propre consultation du salarié sur son solde. Backdrop
+          manuel plutôt que `Modal` : `SoldeDetailPanel` a déjà son propre
+          bandeau coloré plein bord (voir `DetailCongePanel`/`Modal`
+          `header`), l'encapsuler dans le `children` par défaut de `Modal`
+          aurait ajouté un double padding. */}
+      {soldeDetailOuvert && (
+        <div
+          className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center px-4"
+          onClick={() => setSoldeDetailOuvert(null)}
+        >
+          <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <SoldeDetailPanel
+              key={soldeDetailOuvert}
+              code={soldeDetailOuvert}
+              utilisateurId={utilisateur.id}
+              nomComplet={`${utilisateur.prenom} ${utilisateur.nom}`}
+              onClose={() => setSoldeDetailOuvert(null)}
+            />
+          </div>
+        </div>
       )}
+
+      <ActiviteRecenteFeed
+        demandes={demandes}
+        tiroirOuvert={tiroirActiviteOuvert}
+        onFermerTiroir={() => setTiroirActiviteOuvert(false)}
+      />
     </div>
   );
 }

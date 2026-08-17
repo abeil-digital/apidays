@@ -19,7 +19,7 @@ type Vue = "prochains" | "attente";
 
 const LABEL_VUE: Record<Vue, string> = {
   prochains: "Prochains jours off",
-  attente: "En attente de validation",
+  attente: "En validation",
 };
 
 const TEXTE_VIDE: Record<Vue, string> = {
@@ -77,7 +77,7 @@ export function ProchainsJoursOffCard() {
         <select
           value={vue}
           onChange={(e) => setVue(e.target.value as Vue)}
-          className="text-ink-900 relative cursor-pointer appearance-none bg-transparent pr-5 text-lg font-bold outline-none"
+          className="text-ink-500 relative cursor-pointer appearance-none bg-transparent pr-5 text-base font-bold outline-none"
         >
           {(Object.entries(LABEL_VUE) as [Vue, string][]).map(([v, label]) => (
             <option key={v} value={v}>
@@ -85,14 +85,14 @@ export function ProchainsJoursOffCard() {
             </option>
           ))}
         </select>
-        <ChevronDown size={16} className="text-ink-900 pointer-events-none absolute right-0" />
+        <ChevronDown size={16} className="text-ink-500 pointer-events-none absolute right-0" />
       </span>
     </div>
   );
 
   if (calActuel.loading || calSuivant.loading || loadingDemandes) {
     return (
-      <div className="bg-surface-card w-full md:max-w-sm">
+      <div className="w-full lg:max-w-[300px] lg:shrink-0">
         {entete}
         <div className="border-ink-300/60 border-t p-4">
           <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
@@ -171,17 +171,14 @@ export function ProchainsJoursOffCard() {
     .slice(0, NB_LIGNES);
 
   return (
-    <div className="bg-surface-card w-full md:max-w-sm">
+    <div className="w-full lg:max-w-[300px] lg:shrink-0">
       {entete}
-      <div className="border-ink-300/60 border-t">
+      <div className="flex flex-col gap-1">
         {prochains.length === 0 ? (
           <EmptyRow text={TEXTE_VIDE[vue]} />
         ) : (
-          prochains.map((j, i) => (
-            <div
-              key={j.id}
-              className={`flex items-center gap-3 px-4 py-3 ${i === prochains.length - 1 ? "" : "border-ink-300/60 border-b"}`}
-            >
+          prochains.map((j) => (
+            <div key={j.id} className="bg-surface-card flex items-center gap-3 px-4 py-3">
               <TypeBadge code={j.code} />
               <div className="min-w-0 flex-1">
                 <PeriodeAvecPastilles
@@ -189,13 +186,12 @@ export function ProchainsJoursOffCard() {
                   fin={j.fin}
                   demiDebut={j.demiDebut}
                   demiFin={j.demiFin}
-                  grand
                 />
               </div>
               <span className="origin-right scale-90">
                 <Badge tone={j.tone}>
-                  {j.Icon && <j.Icon size={13} strokeWidth={2.5} />}
-                  <span className="text-[16px]">{formatJours(j.jours)} j</span>
+                  {j.Icon && <j.Icon size={12} strokeWidth={2.5} />}
+                  <span className="text-[14.4px]">{formatJours(j.jours)} j</span>
                 </Badge>
               </span>
             </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PlusCircle } from "lucide-react";
+import { Check, PlusCircle } from "lucide-react";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
@@ -33,6 +33,7 @@ export function Dashboard3Page() {
   const { soldes, loading: loadingSoldes } = useSoldes();
   const { demandes, loading: loadingDemandes } = useDemandes();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
+  const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
 
   const loading = loadingUtilisateur || loadingSoldes || loadingDemandes;
 
@@ -42,8 +43,19 @@ export function Dashboard3Page() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
-      <div className="px-1 pt-5 md:pt-0">
+      <div className="flex items-center gap-2 px-1 pt-5 md:pt-0">
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
+        {/* Picto coche (17/08/2026) — déclencheur du tiroir "Activité
+            récente" (`ActiviteRecenteFeed`), seul point d'entrée depuis que
+            la colonne inline a été retirée du corps de page. */}
+        <button
+          type="button"
+          onClick={() => setTiroirActiviteOuvert(true)}
+          aria-label="Activité récente"
+          className="text-ink-500 flex h-8 w-8 items-center justify-center rounded-full"
+        >
+          <Check size={18} />
+        </button>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -93,11 +105,16 @@ export function Dashboard3Page() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 md:flex-row md:items-start">
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         <ProchainsJoursOffCard />
         <CalendrierMoisCourantCard />
-        <ActiviteRecenteFeed demandes={demandes} />
       </div>
+
+      <ActiviteRecenteFeed
+        demandes={demandes}
+        tiroirOuvert={tiroirActiviteOuvert}
+        onFermerTiroir={() => setTiroirActiviteOuvert(false)}
+      />
 
       {reglesOuvertes && (
         <ReglesCongesModal soldes={soldes} onClose={() => setReglesOuvertes(false)} />

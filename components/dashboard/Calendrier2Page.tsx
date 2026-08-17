@@ -176,15 +176,14 @@ function SnippetDemande({
 }
 
 /**
- * "Mon calendrier" (16/08/2026) — sous-rubrique "Poser" extraite de la
- * section "Mes Congés" d'Accueil2 (`Dashboard3Page`), qui ne montre plus que
- * Soldes + En attente de validation. Toute la gestion des calendriers
- * (onglets Année en cours/Période de référence/Année suivante, calendrier +
- * légende cliquable, popins CPI/DJI/Fériés/PERSO) vit ici — même logique
- * qu'avant, juste déplacée dans son propre écran avec un header "Titre de
- * rubrique" standard au lieu du "Bonjour, {prénom}" de l'accueil.
+ * "Calendrier2" (17/08/2026) — duplicata de travail de `MonCalendrierPage`
+ * (copie exacte au moment du fork) pour itérer sans toucher à la version
+ * actuellement en ligne sur `/mon-calendrier`, même logique que
+ * Accueil2/`Dashboard3Page` en son temps. Route provisoire `/calendrier2`,
+ * reliée à la nav sous "Calendrier2". À fusionner ou remplacer
+ * `MonCalendrierPage` une fois les changements validés.
  */
-export function MonCalendrierPage() {
+export function Calendrier2Page() {
   const { demandes, loading: loadingDemandes } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
@@ -513,7 +512,7 @@ export function MonCalendrierPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Mon calendrier</h1>
+      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Calendrier2</h1>
 
       <div className="flex flex-wrap items-center gap-2 px-1">
         <button
@@ -567,7 +566,7 @@ export function MonCalendrierPage() {
       <div className="flex flex-col gap-6 md:flex-row">
         <div
           ref={calendrierGridRef}
-          className="grid max-w-[900px] min-w-0 flex-1 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4"
+          className="grid max-w-[900px] flex-1 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4"
         >
           {moisActifs.map(({ annee, moisIndex }) => (
             <MiniCalendrier
@@ -578,6 +577,7 @@ export function MonCalendrierPage() {
               estEnGroupe={estEnGroupe}
               onJourClick={handleJourClick}
               estMisEnAvant={estJourDuPopinOuverte}
+              agrandi
             />
           ))}
         </div>

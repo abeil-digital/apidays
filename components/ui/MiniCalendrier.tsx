@@ -309,15 +309,23 @@ function PeriodeSegment({
     : `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`;
   const survol = isHovered ? "brightness-110" : "";
   const curseur = onJourClick ? "cursor-pointer" : "";
-  const hauteur = agrandi ? "h-9" : "h-7";
+  // En mode `agrandi`, la hauteur ne peut pas dépendre des cases voisines
+  // `aspect-square` (une semaine entière peut être fusionnée en une seule
+  // barre, sans aucune case voisine dans la ligne pour fixer sa hauteur —
+  // `h-full` retombait alors sur un filet de sécurité plus court que les
+  // autres lignes, rendu inégal). `aspect-ratio: N/1` reproduit directement
+  // "N colonnes de large, 1 de haut" : même hauteur qu'une case `aspect-square`
+  // de la même grille, quel que soit N, sans dépendre du contenu des lignes
+  // voisines.
   const texte = agrandi ? "text-sm" : "text-xs";
 
   return (
     <div
-      className={`grid ${hauteur} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
+        aspectRatio: agrandi ? `${jours.length} / 1` : undefined,
       }}
       onMouseEnter={() => onSurvol(true)}
       onMouseLeave={() => onSurvol(false)}
@@ -627,7 +635,7 @@ export function MiniCalendrier({
             return (
               <div
                 key={i}
-                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 border" : ""}`}
+                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 aspect-square border" : ""}`}
               >
                 <span className={agrandi ? "h-9 w-9" : "h-7 w-7"} />
               </div>
@@ -638,7 +646,7 @@ export function MiniCalendrier({
             return (
               <div
                 key={i}
-                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 border" : ""}`}
+                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 aspect-square border" : ""}`}
               >
                 <JourPastille
                   jour={item.jour}
@@ -684,5 +692,7 @@ export function MiniCalendrier({
 
   if (sansCarte) return grille;
 
-  return <div className="bg-surface-card rounded-xl p-4 shadow-sm">{grille}</div>;
+  return (
+    <div className={`bg-surface-card p-4 shadow-sm ${agrandi ? "" : "rounded-xl"}`}>{grille}</div>
+  );
 }

@@ -1309,6 +1309,58 @@ désormais iso entre les deux.
     d'un panneau dédié à une seule demande). Fichiers `MesSoldesCard.tsx`/`ActiviteRecenteListe.tsx`
     conservés mais inutilisés (aucun import actif) au cas où.
 
+**Accueil / Accueil2 — itération du 18/08/2026** (session dense, beaucoup d'allers-retours ;
+liste ci-dessous = ce qui est réellement resté) :
+
+- **Deux bugs réels trouvés et corrigés en cours de route** (pas des changements demandés au
+  départ, remontés par Vincent en testant) :
+  - **Débordement horizontal** sur `MonCalendrierPage` (`/mon-calendrier`) et
+    `CalendrierMoisCourantCard` (Accueil2) : la grille des mois (`flex-1`, CSS
+    `grid-template-columns: repeat(auto-fit, minmax(170px,1fr))`) n'avait pas de `min-w-0` —
+    ne pouvait jamais rétrécir sous la largeur min-content de tous ses mois, débordait hors de
+    l'écran au lieu de replier en colonnes. Corrigé (`min-w-0` sur l'élément flex concerné),
+    vérifié de 375px à 1280px.
+  - **`fetchHistoriqueCp`/`fetchHistoriqueRtt`** (`soldes.repository.ts`) généraient leur liste de
+    mois seulement du début de la période jusqu'au mois **courant** — toute demande validée par
+    avance sur un mois futur de la période (ex. novembre alors qu'on est en août) tombait sur une
+    clé de mois inexistante et disparaissait silencieusement du détail de solde (`SoldeDetailPanel`),
+    créant un delta avec le résumé (`fetchSoldes`, lui non borné). Corrigé : borne haute = le plus
+    tardif entre aujourd'hui et le dernier mouvement réel. `fetchHistoriqueCpa` n'avait pas ce bug
+    (clés dérivées directement des dates de mouvements, pas d'une boucle bornée à "aujourd'hui").
+  - **Tri du feed "Activité récente"** (`ActiviteRecenteFeed.tsx`) : `date` n'a qu'une granularité
+    jour, donc "posé" et "décidé" le même jour étaient à égalité — le tri stable de JS gardait
+    l'ordre d'insertion ("posé" avant "décidé"), alors qu'une décision arrive forcément après la
+    pose. Départage explicite ajouté (`comparerEvenements`) : à date égale, "décidé" passe devant
+    "posé".
+  - **`useDemandes`** ne fetchait qu'une fois au montage — une décision prise ailleurs (autre
+    onglet/session) pendant qu'Accueil restait ouvert n'était jamais remontée. Ajout d'un refetch
+    automatique au retour sur l'onglet (`visibilitychange`), même pattern `refetch`/`version` que
+    `useCongesConsommes`/`useDemandesEquipe`.
+- **Accueil (`Dashboard2Page`, `/`)** :
+  - `SoldeCard` gagne une pastille "i" colorée (couleur du type, pas l'icône `Info` de lucide qui a
+    son propre contour — double contour sinon) à droite de la valeur, ouvre `SoldeDetailPanel` en
+    overlay centré (backdrop manuel, pas `Modal` — le panneau a déjà son propre bandeau plein bord).
+  - Popins légende CPI/DJI/Fériés/PERSO (clic sur une card légende) : lignes alignées sur le
+    gabarit période + `Badge`, `TypeBadge` remplacé par une simple pastille de couleur (toutes les
+    lignes d'une même popin partagent déjà le même type, le cercle répété faisait redite).
+  - Jour courant cerclé sur le calendrier "Mes Congés" (`estAujourdhui` n'était pas câblé).
+  - Sélecteur "Débute : Mois en cours" déplacé dans la même ligne que les pastilles
+    année/période au lieu d'être sur sa propre ligne.
+  - Bandeau "En attente de validation" retiré, remplacé par une ligne "Mes demandes" : pill
+    "{n} En validation" (orange si > 0, cliquable vers `/historique?statut=en_attente` — nouveau
+    filtre pré-sélectionné, lu par `HistoriquePage`), lien "Suivre mes demandes" (`/historique`),
+    lien "Journal" (ouvre le tiroir `ActiviteRecenteFeed`, réutilisé tel quel depuis Accueil2).
+  - **Essai abandonné en cours de session** : bandeau "Activité récente"/"Suivre mes activités"
+    (surligné selon décisions non vues, tracking `localStorage`) — ajouté puis retiré une fois
+    "Journal" en place (devenu redondant), tracking `localStorage` nettoyé avec.
+- **Accueil2 (`Dashboard3Page`, `/dashboard3`)** : calendrier réintégré à droite de "Prochains
+  jours off" (gabarit `MiniCalendrier` par défaut, pas `agrandi` — demande explicite "les templates
+  de Mon calendrier"), grille `auto-fit`/`minmax(170px,1fr)` pour replier en 1 colonne si la place
+  manque. **Essai tenté puis annulé** : encart "Soldes" (300px, CP/RTT/CPA empilés) à gauche de
+  "Prochains jours off" — retiré à la demande de Vincent juste après l'avoir vu.
+- **`compterDecisionsRecentes`** (ajouté pour le bandeau "Activité récente" ci-dessus) retiré avec
+  lui, pas de trace morte.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

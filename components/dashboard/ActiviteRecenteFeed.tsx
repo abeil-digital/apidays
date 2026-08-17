@@ -1,11 +1,32 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
+import { X } from "lucide-react";
 import type { Demande } from "@/lib/types";
 import { formatDateAction, formatJours } from "@/lib/format";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 
 const NB_LIGNES = 6;
+
+// Fond au survol : blanc teinté à 5% de la couleur du type de congé
+// concerné (même procédé `color-mix` que `DetailCongePanel`/`MiniCalendrier`)
+// plutôt que le gris neutre générique — classes littérales une par code
+// (obligatoire : une classe Tailwind construite par interpolation à
+// l'exécution n'est jamais générée par le compilateur, voir CONTEXTE.md).
+const HOVER_TEINTE: Record<TypeBadgeCode, string> = {
+  CP: "hover:bg-[color-mix(in_srgb,var(--color-cp)_5%,white)]",
+  RTT: "hover:bg-[color-mix(in_srgb,var(--color-rtt)_5%,white)]",
+  CPA: "hover:bg-[color-mix(in_srgb,var(--color-cpa)_5%,white)]",
+  CSS: "hover:bg-[color-mix(in_srgb,var(--color-css)_5%,white)]",
+  CE: "hover:bg-[color-mix(in_srgb,var(--color-ce)_5%,white)]",
+  RECUP: "hover:bg-[color-mix(in_srgb,var(--color-recup)_5%,white)]",
+  EVT_FAM: "hover:bg-[color-mix(in_srgb,var(--color-evtfam)_5%,white)]",
+  DJI: "hover:bg-[color-mix(in_srgb,var(--color-dji)_5%,white)]",
+  CPI: "hover:bg-[color-mix(in_srgb,var(--color-cpi)_5%,white)]",
+  FERIE: "hover:bg-[color-mix(in_srgb,var(--color-ferie)_5%,white)]",
+};
 
 function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
@@ -122,48 +143,103 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
   return evenements;
 }
 
+/** Tri antéchronologique (plus récent en premier) — `date` n'a qu'une
+ * granularité jour (`YYYY-MM-DD`), donc "posé" et "décidé" le même jour sont
+ * à égalité sur ce seul critère ; un tri stable garderait alors "posé" en
+ * premier (ordre d'insertion de `evenementsDeDemande`), alors qu'une décision
+ * arrive forcément après la pose dans le temps réel — départage explicite
+ * pour que "décidé" passe toujours devant "posé" à date égale. */
+function comparerEvenements(a: EvenementFeed, b: EvenementFeed): number {
+  const parDate = b.date.localeCompare(a.date);
+  if (parDate !== 0) return parDate;
+  return Number(b.id.endsWith("-decision")) - Number(a.id.endsWith("-decision"));
+}
+
+function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {evenements.length === 0 ? (
+        <EmptyRow text="Aucune activité récente." />
+      ) : (
+        evenements.map((e) => (
+          <Link
+            key={e.id}
+            href={`/historique?demande=${e.demandeId}`}
+            className={`bg-surface-card flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 ${HOVER_TEINTE[e.code]}`}
+          >
+            <span
+              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(e.code)}`}
+            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-ink-500 text-[10px]">Le {formatDateAction(e.date)}</span>
+              <span className="text-ink-900 text-xs leading-snug">{e.texte}</span>
+            </div>
+          </Link>
+        ))
+      )}
+    </div>
+  );
+}
+
 /**
- * "Activité récente" — variante feed (16/08/2026, Accueil2, essai) : phrases
- * en langage naturel plutôt que le format carte (`ActiviteRecenteListe`),
- * un événement par ligne (posé / décidé), triés du plus récent au plus
- * ancien, 6 derniers. Verbes/statut surlignés (`Stabilo`) conformément à la
- * charte statut ; pastille de couleur (type de congé) devant chaque entrée ;
- * chaque ligne est un lien vers `/historique` (roll au survol comme seule
- * affordance, pas de soulignement ni de libellé "Voir"), qui ouvre
- * directement le panneau détaillé sur la demande concernée.
+ * "Activité récente" — tiroir latéral (17/08/2026, Accueil2) : phrases en
+ * langage naturel plutôt que le format carte (`ActiviteRecenteListe`), un
+ * événement par ligne (posé / décidé), triés du plus récent au plus ancien,
+ * 6 derniers. Verbes/statut surlignés (`Stabilo`) conformément à la charte
+ * statut ; pastille de couleur (type de congé) devant chaque entrée ; chaque
+ * ligne est un lien vers `/historique` (roll au survol comme seule
+ * affordance), qui ouvre directement le panneau détaillé sur la demande.
+ *
+ * N'affiche plus de carte inline dans le corps de page (retirée le
+ * 17/08/2026, devenue redondante une fois le tiroir en place) — uniquement
+ * le tiroir, piloté par le parent (`tiroirOuvert`/`onFermerTiroir`) dont le
+ * déclencheur est le picto à côté de "Bonjour, {prénom}" (`Dashboard3Page`).
  */
-export function ActiviteRecenteFeed({ demandes }: { demandes: Demande[] }) {
+export function ActiviteRecenteFeed({
+  demandes,
+  tiroirOuvert,
+  onFermerTiroir,
+}: {
+  demandes: Demande[];
+  tiroirOuvert: boolean;
+  onFermerTiroir: () => void;
+}) {
   const evenements = demandes
     .flatMap(evenementsDeDemande)
-    .sort((a, b) => b.date.localeCompare(a.date))
+    .sort(comparerEvenements)
     .slice(0, NB_LIGNES);
 
-  return (
-    <div className="bg-surface-card w-full md:max-w-[270px]">
-      <div className="px-4 py-3">
-        <h2 className="text-ink-900 text-lg font-bold">Activité récente</h2>
-      </div>
+  useEffect(() => {
+    if (!tiroirOuvert) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onFermerTiroir();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [tiroirOuvert, onFermerTiroir]);
 
-      <div className="border-ink-300/60 border-t">
-        {evenements.length === 0 ? (
-          <EmptyRow text="Aucune activité récente." />
-        ) : (
-          evenements.map((e) => (
-            <Link
-              key={e.id}
-              href={`/historique?demande=${e.demandeId}`}
-              className="hover:bg-surface-app flex items-start gap-2.5 px-4 py-3 transition-colors duration-150"
-            >
-              <span
-                className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(e.code)}`}
-              />
-              <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="text-ink-500 text-[10px]">Le {formatDateAction(e.date)}</span>
-                <span className="text-ink-900 text-xs leading-snug">{e.texte}</span>
-              </div>
-            </Link>
-          ))
-        )}
+  if (!tiroirOuvert) return null;
+
+  return (
+    <div className="bg-ink-900/50 fixed inset-0 z-50 flex justify-end" onClick={onFermerTiroir}>
+      <div
+        className="bg-surface-card animate-drawer-in-right flex h-full w-full max-w-sm flex-col shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="border-ink-300/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
+          <h2 className="text-ink-900 text-base font-bold">Activité récente</h2>
+          <button
+            type="button"
+            onClick={onFermerTiroir}
+            aria-label="Fermer"
+            className="text-ink-500 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          <ListeEvenements evenements={evenements} />
+        </div>
       </div>
     </div>
   );

@@ -39,7 +39,12 @@ export function HistoriquePage() {
   const { demandes } = useDemandes();
   const { utilisateur } = useUtilisateur();
   const { reglesAcquisition } = useReglesConges();
-  const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
+  const searchParams = useSearchParams();
+  // Pré-sélection via `?statut=en_attente` — lien "X en validation" depuis
+  // Accueil (pill "Mes demandes"), même principe que `?demande=<id>` plus bas.
+  const [filtre, setFiltre] = useState<Filtre>(
+    searchParams.get("statut") === "en_attente" ? "En validation" : "Tous les statuts",
+  );
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
   const [debutPerso, setDebutPerso] = useState("");
@@ -47,7 +52,6 @@ export function HistoriquePage() {
   // Pré-sélection via `?demande=<id>` — lien "cliquable" depuis l'encart
   // Activité récente d'Accueil2, qui ouvre directement le panneau déployé
   // sur cette demande plutôt que de renvoyer sur un historique "à plat".
-  const searchParams = useSearchParams();
   const [selectionId, setSelectionId] = useState<string | null>(searchParams.get("demande"));
 
   const anneeActuelle = new Date().getFullYear();

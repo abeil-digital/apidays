@@ -464,12 +464,24 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
 
   // Un bloc par mois, du 1er mois de la période jusqu'au mois en cours —
   // même sans mouvement, pour garder la continuité visuelle mois par mois.
+  // Borne haute = le plus tardif entre aujourd'hui et le dernier mouvement
+  // (`mouvementsBruts`, déjà trié par date croissante) : une demande validée
+  // par avance sur un mois futur de la période (ex. novembre alors qu'on est
+  // en août) doit rester dans la liste plutôt que d'être silencieusement
+  // exclue faute de clé de mois correspondante — bug corrigé le 18/08/2026,
+  // provoquait un delta entre ce feed et le badge `fetchSoldes` (qui, lui,
+  // somme sur toute la période sans plafonner à "aujourd'hui").
   const cles: string[] = [];
   {
     let annee = periodeEnCours.debut.getUTCFullYear();
     let mois = periodeEnCours.debut.getUTCMonth();
-    const anneeFin = aujourdhui.getUTCFullYear();
-    const moisFin = aujourdhui.getUTCMonth();
+    const dernierMouvement = mouvementsBruts[mouvementsBruts.length - 1];
+    const borneFin =
+      dernierMouvement && dernierMouvement.date > dateIso(aujourdhui)
+        ? new Date(`${dernierMouvement.date}T00:00:00Z`)
+        : aujourdhui;
+    const anneeFin = borneFin.getUTCFullYear();
+    const moisFin = borneFin.getUTCMonth();
     while (annee < anneeFin || (annee === anneeFin && mois <= moisFin)) {
       cles.push(`${annee}-${String(mois + 1).padStart(2, "0")}`);
       mois += 1;
@@ -628,12 +640,20 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
+  // Voir `fetchHistoriqueCp` — même correctif (18/08/2026) : borne haute au
+  // plus tardif entre aujourd'hui et le dernier mouvement, pas seulement
+  // "aujourd'hui", pour ne pas exclure une demande validée sur un mois futur.
   const cles: string[] = [];
   {
     let annee = periodeRtt.debut.getUTCFullYear();
     let mois = periodeRtt.debut.getUTCMonth();
-    const anneeFin = aujourdhui.getUTCFullYear();
-    const moisFin = aujourdhui.getUTCMonth();
+    const dernierMouvement = mouvementsBruts[mouvementsBruts.length - 1];
+    const borneFin =
+      dernierMouvement && dernierMouvement.date > dateIso(aujourdhui)
+        ? new Date(`${dernierMouvement.date}T00:00:00Z`)
+        : aujourdhui;
+    const anneeFin = borneFin.getUTCFullYear();
+    const moisFin = borneFin.getUTCMonth();
     while (annee < anneeFin || (annee === anneeFin && mois <= moisFin)) {
       cles.push(`${annee}-${String(mois + 1).padStart(2, "0")}`);
       mois += 1;

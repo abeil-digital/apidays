@@ -63,6 +63,19 @@
   /* Rayons de bordure — cartes/tuiles arrondies façon iOS */
   --radius-card: 1.375rem; /* 22px */
   --radius-control: 1rem; /* 16px */
+
+  /* Tiroir latéral (17/08/2026, Activité récente Accueil2) — entrée depuis
+     le bord droit de l'écran, voir `@keyframes` plus bas. */
+  --animate-drawer-in-right: drawer-in-right 200ms ease-out;
+}
+
+@keyframes drawer-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 /*
