@@ -1,18 +1,16 @@
-import type { DemandeEquipe } from "@/lib/types";
-import {
-  formatDate,
-  formatDateAction,
-  formatJours,
-  formatPeriodeDemande,
-  nomJourSemaine,
-} from "@/lib/format";
+import type { Demande } from "@/lib/types";
+import { formatDateAction, formatJours } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
-import { JourBadge } from "@/components/ui/JourBadge";
+import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
 import { STATUT_CONFIG } from "@/components/ui/StatusBadge";
 import { classeFondTypeBadge, LABEL_LONG } from "@/components/demandes/TypeBadge";
 
 interface SuiviDemandeRowProps {
-  demande: DemandeEquipe;
+  // `Demande` suffit (le `demandeur` de `DemandeEquipe` n'est jamais lu ici,
+  // affiché par l'appelant — voir doc plus bas) ; accepte aussi bien un
+  // `DemandeEquipe[]` existant (Suivre) qu'un `Demande[]` sans collaborateur
+  // (ex. `ActiviteRecenteCard`, Accueil2).
+  demande: Demande;
   isLast: boolean;
   /** Masque la ligne point de couleur + libellé du type — utile quand
    * l'appelant affiche déjà le type ailleurs (ex. `DetailCongePanel`, dont le
@@ -72,20 +70,6 @@ export function SuiviDemandeRow({
   const jours = demande.nbDemiJournees / 2;
   const codeBadge = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
   const { tone, Icon } = STATUT_CONFIG[demande.statut];
-  const estPeriode = demande.debut !== demande.fin;
-  const labelDemiJournee = estPeriode
-    ? null
-    : demande.demiDebut === "apres_midi"
-      ? "apm"
-      : demande.demiFin === "matin"
-        ? "ma"
-        : null;
-  // Pour une période, le début/la fin peuvent chacun être une demi-journée
-  // (ex. arrivée l'après-midi du premier jour, départ le matin du dernier) —
-  // suffixe évalué indépendamment par extrémité, contrairement au jour seul
-  // ci-dessus où demiDebut/demiFin décrivent la même unique journée.
-  const labelDemiDebut = estPeriode && demande.demiDebut === "apres_midi" ? "apm" : null;
-  const labelDemiFin = estPeriode && demande.demiFin === "matin" ? "ma" : null;
 
   return (
     <div
@@ -98,38 +82,12 @@ export function SuiviDemandeRow({
             <span className="text-ink-500 text-[11px] font-semibold">{LABEL_LONG[codeBadge]}</span>
           </span>
         )}
-        {estPeriode ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
-                {nomJourSemaine(demande.debut).slice(0, 2)}
-              </JourBadge>
-              <div className="text-ink-900 text-xs font-semibold">
-                {formatDate(demande.debut)}
-                {labelDemiDebut && <span className="text-ink-500"> - {labelDemiDebut}</span>}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
-                {nomJourSemaine(demande.fin).slice(0, 2)}
-              </JourBadge>
-              <div className="text-ink-900 text-xs font-semibold">
-                {formatDate(demande.fin)}
-                {labelDemiFin && <span className="text-ink-500"> - {labelDemiFin}</span>}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <JourBadge className="!text-ink-500 h-[18px] w-[18px] !rounded-[2px] text-[10px]">
-              {nomJourSemaine(demande.debut).slice(0, 2)}
-            </JourBadge>
-            <div className="text-ink-900 text-xs font-semibold">
-              {formatPeriodeDemande(demande.debut, demande.fin)}
-              {labelDemiJournee && <span className="text-ink-500"> - {labelDemiJournee}</span>}
-            </div>
-          </div>
-        )}
+        <PeriodeAvecPastilles
+          debut={demande.debut}
+          fin={demande.fin}
+          demiDebut={demande.demiDebut}
+          demiFin={demande.demiFin}
+        />
         {!masquerPoseLe && (
           <div className="text-ink-500 text-[10px]">
             {`Posé le ${formatDateAction(demande.datePose)}`}

@@ -165,6 +165,8 @@ function JourPastille({
   isStart,
   isEnd,
   isHovered,
+  estAujourdhui,
+  agrandi,
   onSurvol,
   onJourClick,
 }: {
@@ -174,28 +176,61 @@ function JourPastille({
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
+  estAujourdhui: boolean;
+  agrandi?: boolean;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
 }) {
+  // Grossi (16/08/2026, card "Calendrier" d'Accueil2) — typo des jours
+  // recalée sur celle des dates de "Prochains jours off" (`PeriodeAvecPastilles`
+  // en mode `grand`, `text-sm`/14px), case agrandie en conséquence — opt-in
+  // pour ne pas toucher le format par défaut du composant (Mon calendrier).
+  const hauteur = agrandi ? "h-9" : "h-7";
+  const largeur = agrandi ? "w-9" : "w-7";
+  const texte = agrandi ? "text-sm" : "text-xs";
+  // "Aujourd'hui" : un cercle serré autour du seul chiffre (jamais la case
+  // entière), toujours parfaitement rond — indépendant de la forme
+  // carrée/pilule de la pastille de congé sous-jacente, qui n'est jamais
+  // altérée par ce contour.
+  function chiffreAujourdhui(couleurContour: string) {
+    return estAujourdhui ? (
+      <span
+        className={`ring-2 ring-inset ${couleurContour} flex aspect-square h-[1.6em] items-center justify-center rounded-full`}
+      >
+        {jour}
+      </span>
+    ) : (
+      jour
+    );
+  }
+
   if (!pastille) {
     return (
-      <span className="text-ink-500 flex h-7 w-7 items-center justify-center text-xs">{jour}</span>
+      <span
+        className={`text-ink-500 flex ${hauteur} ${largeur} items-center justify-center ${agrandi ? "rounded-none" : "rounded-full"} ${texte}`}
+      >
+        {chiffreAujourdhui("ring-ink-900")}
+      </span>
     );
   }
 
   // Jours isolés → pastille ronde ; jours consécutifs du même groupe → barre
   // continue (coins arrondis seulement aux extrémités du groupe, façon pilule).
+  // Carrée plutôt que ronde en mode `agrandi` (16/08/2026, card "Calendrier"
+  // d'Accueil2) — pas d'arrondi, ni aux extrémités de groupe.
   const groupe = !(isStart && isEnd);
-  const forme = groupe
-    ? `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`
-    : "rounded-full";
-  const taille = groupe ? "h-7 w-full" : "h-7 w-7";
+  const forme = agrandi
+    ? "rounded-none"
+    : groupe
+      ? `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`
+      : "rounded-full";
+  const taille = groupe ? `${hauteur} w-full` : `${hauteur} ${largeur}`;
   // Le survol met en avant toute la période (pas juste le jour survolé) —
   // luminosité plutôt qu'un scale, pour ne pas casser la continuité visuelle
   // d'une barre groupée.
   const survol = isHovered ? "brightness-110" : "";
   const curseur = onJourClick ? "cursor-pointer" : "";
-  const base = `flex ${taille} items-center justify-center ${forme} text-xs font-bold transition-[filter] duration-150 ${survol} ${curseur}`;
+  const base = `flex ${taille} items-center justify-center ${forme} ${texte} font-bold transition-[filter] duration-150 ${survol} ${curseur}`;
   const evenements = {
     onMouseEnter: () => onSurvol(true),
     onMouseLeave: () => onSurvol(false),
@@ -210,7 +245,7 @@ function JourPastille({
     const gradient = `linear-gradient(to right, ${gauche} 50%, ${droite} 50%)`;
     return (
       <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
-        {jour}
+        {chiffreAujourdhui("ring-white")}
       </span>
     );
   }
@@ -218,7 +253,7 @@ function JourPastille({
   if (!pastille.moitie) {
     return (
       <span className={`${base} ${pastille.classeFond} text-white`} {...evenements}>
-        {jour}
+        {chiffreAujourdhui("ring-white")}
       </span>
     );
   }
@@ -232,7 +267,7 @@ function JourPastille({
 
   return (
     <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
-      {jour}
+      {chiffreAujourdhui("ring-white")}
     </span>
   );
 }
@@ -246,30 +281,40 @@ function JourPastille({
  */
 function PeriodeSegment({
   jours,
+  isos,
   isoPremierJour,
   classeFond,
   isStart,
   isEnd,
   isHovered,
+  estAujourdhui,
+  agrandi,
   onSurvol,
   onJourClick,
 }: {
   jours: number[];
+  isos: string[];
   isoPremierJour: string;
   classeFond: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
+  estAujourdhui?: (iso: string) => boolean;
+  agrandi?: boolean;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
 }) {
-  const forme = `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`;
+  const forme = agrandi
+    ? "rounded-none"
+    : `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`;
   const survol = isHovered ? "brightness-110" : "";
   const curseur = onJourClick ? "cursor-pointer" : "";
+  const hauteur = agrandi ? "h-9" : "h-7";
+  const texte = agrandi ? "text-sm" : "text-xs";
 
   return (
     <div
-      className={`grid h-7 items-center ${forme} ${classeFond} text-xs font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`grid ${hauteur} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
@@ -283,11 +328,19 @@ function PeriodeSegment({
           : undefined
       }
     >
-      {jours.map((j) => (
-        <span key={j} className="text-center">
-          {j}
-        </span>
-      ))}
+      {jours.map((j, idx) =>
+        estAujourdhui?.(isos[idx]) ? (
+          <span key={j} className="flex h-full items-center justify-center">
+            <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
+              {j}
+            </span>
+          </span>
+        ) : (
+          <span key={j} className="flex h-full items-center justify-center">
+            {j}
+          </span>
+        ),
+      )}
     </div>
   );
 }
@@ -476,6 +529,27 @@ export interface MiniCalendrierProps {
    * (l'un ou l'autre suffit).
    */
   estMisEnAvant?: (iso: string) => boolean;
+  /**
+   * N'affiche que le snippet (nom du mois + grille), sans la carte
+   * `bg-surface-card`/ombre qui l'entoure par défaut — pour un appelant qui
+   * fournit sa propre carte/en-tête (ex. carte "Calendrier" d'Accueil2, au
+   * format des autres encarts de la page plutôt que celui par défaut du
+   * composant), tout en gardant le même snippet (mêmes dimensions) qu'un
+   * mois affiché par ailleurs (ex. Mon calendrier).
+   */
+  sansCarte?: boolean;
+  /**
+   * Marque un jour d'un simple contour (jamais un remplissage) — pour
+   * distinguer "aujourd'hui" sans le confondre visuellement avec une
+   * pastille de congé. Se cumule avec une pastille existante ce jour-là.
+   */
+  estAujourdhui?: (iso: string) => boolean;
+  /**
+   * Grossit +20% la typo des jours et la hauteur des lignes (16/08/2026,
+   * card "Calendrier" d'Accueil2) — n'affecte pas la largeur des pastilles
+   * ni l'en-tête du mois. Opt-in, sans effet sur le format par défaut.
+   */
+  agrandi?: boolean;
 }
 
 export function MiniCalendrier({
@@ -487,6 +561,9 @@ export function MiniCalendrier({
   premiereSemaine,
   derniereSemaine,
   estMisEnAvant,
+  sansCarte,
+  estAujourdhui,
+  agrandi,
 }: MiniCalendrierProps) {
   const [groupeSurvole, setGroupeSurvole] = useState<string | null>(null);
   const semaines = genererSemaines(annee, moisIndex, tipoDuJour);
@@ -523,27 +600,46 @@ export function MiniCalendrier({
     groupeIds.slice(debutIndex, finIndex),
   );
 
-  return (
-    <div className="bg-surface-card rounded-xl p-4 shadow-sm">
-      <div className="text-ink-900 mb-3 text-base font-bold">{MOIS_FR[moisIndex]}</div>
+  const grille = (
+    <>
+      {/* Toujours plus grand que le contenu qu'il coiffe (en-tête jours et
+          chiffres alignés sur `text-xs`/`text-sm`, en mode `agrandi`) — un
+          titre de section plus petit que son propre contenu inverse la
+          hiérarchie de lecture. Gris (`text-ink-500`, charte DS) plutôt que
+          noir en mode `agrandi` — titre secondaire, pas la donnée principale
+          de la card. */}
+      <div
+        className={`mb-3 font-bold ${agrandi ? "text-ink-500 text-base" : "text-ink-900 text-base"}`}
+      >
+        {MOIS_FR[moisIndex]}
+      </div>
       <div className="grid grid-cols-5 gap-y-[3px]">
         {JOURS_SEMAINE_COURT.map((j, i) => (
-          <div key={i} className="text-ink-900 text-center text-[10px] font-bold">
+          <div
+            key={i}
+            className={`text-ink-900 text-center font-bold ${agrandi ? "text-[13px]" : "text-[10px]"}`}
+          >
             {j}
           </div>
         ))}
         {items.map((item, i) => {
           if (item.type === "vide") {
             return (
-              <div key={i} className="flex items-center justify-center">
-                <span className="h-7 w-7" />
+              <div
+                key={i}
+                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 border" : ""}`}
+              >
+                <span className={agrandi ? "h-9 w-9" : "h-7 w-7"} />
               </div>
             );
           }
 
           if (item.type === "seul") {
             return (
-              <div key={i} className="flex items-center justify-center">
+              <div
+                key={i}
+                className={`flex items-center justify-center ${agrandi ? "border-ink-300/40 border" : ""}`}
+              >
                 <JourPastille
                   jour={item.jour}
                   iso={item.iso}
@@ -554,6 +650,8 @@ export function MiniCalendrier({
                     (item.groupeId !== null && item.groupeId === groupeSurvole) ||
                     (estMisEnAvant?.(item.iso) ?? false)
                   }
+                  estAujourdhui={estAujourdhui?.(item.iso) ?? false}
+                  agrandi={agrandi}
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
                   onJourClick={item.pastille ? onJourClick : undefined}
                 />
@@ -565,6 +663,7 @@ export function MiniCalendrier({
             <PeriodeSegment
               key={i}
               jours={item.jours}
+              isos={item.isos}
               isoPremierJour={item.isoPremierJour}
               classeFond={item.classeFond}
               isStart={item.isStart}
@@ -572,12 +671,18 @@ export function MiniCalendrier({
               isHovered={
                 item.groupeId === groupeSurvole || item.isos.some((iso) => estMisEnAvant?.(iso))
               }
+              estAujourdhui={estAujourdhui}
+              agrandi={agrandi}
               onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
               onJourClick={onJourClick}
             />
           );
         })}
       </div>
-    </div>
+    </>
   );
+
+  if (sansCarte) return grille;
+
+  return <div className="bg-surface-card rounded-xl p-4 shadow-sm">{grille}</div>;
 }

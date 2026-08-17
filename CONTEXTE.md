@@ -1245,6 +1245,70 @@ désormais iso entre les deux.
   persistance après rechargement) — migration appliquée (tables + RLS + policies + grants).
   **Prochaine session : ajustements UI** sur cet écran
 
+**Accueil2 — itération intensive (16-17/08/2026)**, route `/dashboard3` (nom de fichier
+`Dashboard3Page.tsx` — 3e itération après `Dashboard2Page`), nav sous "Accueil2" :
+
+- Sous-rubrique **"Mon calendrier"** (`/mon-calendrier`, `MonCalendrierPage.tsx`) créée en
+  extrayant tel quel l'ancien bloc "Mes Congés" (calendrier + légende CPI/DJI/Fériés/PERSO)
+  d'Accueil2, qui ne montre plus que le bandeau Soldes.
+- **3 cards 1/3 largeur** en dessous du bandeau Soldes, ordre final : `ProchainsJoursOffCard` →
+  `CalendrierMoisCourantCard` (1/3) → `ActiviteRecenteFeed` (1/4, seule à avoir été repassée en
+  largeur réduite sur demande explicite).
+  - **`CalendrierMoisCourantCard`** : mois en cours + mois suivant (gère le chevauchement d'année,
+    deux `useCalendrier`), congés/CPI/DJI/FERIE réels avec la même priorité d'affichage que
+    `MonCalendrierPage`. `MiniCalendrier` (`components/ui/MiniCalendrier.tsx`) gagne deux props
+    opt-in **`sansCarte`** (snippet nu, sans la carte/le titre par défaut — pour un appelant qui
+    fournit sa propre carte) et **`agrandi`** (case carrée au lieu de ronde/pilule, typo/hauteur de
+    ligne recalées sur `PeriodeAvecPastilles` en mode `grand`, liseré `border-ink-300/40` délimitant
+    chaque case, titre du mois en `text-ink-500`/`text-base` — gris et sobre plutôt que noir/gras) et
+    **`estAujourdhui`** (contour rond serré autour du seul chiffre, jamais un remplissage, pour ne
+    jamais laisser croire à un type de congé qui n'existe pas — y compris quand le jour tombe dans
+    une barre de congé fusionnée). Aucun de ces props ne touche le rendu par défaut de
+    `MonCalendrierPage`.
+  - **`ProchainsJoursOffCard`** : jours non travaillés à venir, sélecteur de vue en titre (natif
+    `<select>` stylé + chevron, même pattern que "Solde actuel ▾" de `SoldeDetailPanel` — pas une
+    case à cocher) entre "Prochains jours off" (demandes perso validées + CPI + DJI + FERIE, badge
+    Durée vert) et "En attente de validation" (uniquement les demandes perso non tranchées, badge
+    Durée orange ; CPI/DJI/FERIE n'ont pas de notion d'attente, absents de cette vue). Chaque ligne :
+    `TypeBadge` cerclé + `PeriodeAvecPastilles` (`grand`) + `Badge` (icône `STATUT_CONFIG` pour les
+    demandes perso, vert sans icône pour CPI/DJI/FERIE — jamais un événement de décision).
+    `PeriodeAvecPastilles` gagne une prop opt-in **`grand`** (`text-sm` au lieu de `text-xs`,
+    `JourBadge` 17px) pour cette card, sans toucher `SuiviDemandeRow`/`ActiviteRecenteCard`.
+  - **`ActiviteRecenteFeed`** : remplace `ActiviteRecenteListe` (gardé en fichier, inutilisé) —
+    format phrases en langage naturel ("Vous avez posé une journée de CP - le 15/01/2027 - **en
+    validation**", "Olivier a **validé** votre journée de CP du 01/12/2026") plutôt que le format
+    carte. Un événement "posé" (toujours) + un événement "décision" (si tranchée) par demande, triés
+    du plus récent au plus ancien. Verbe/statut surlignés en "stabilo" (fond coloré, tokens
+    `status-warning/success/danger`) ; type et dates en semi-gras (essayé en couleur du type
+    d'abord, jugé plus sobre en semi-gras simple) ; pastille de couleur (type de congé) devant
+    chaque entrée ; chaque ligne est un lien vers `/historique?demande=<id>` (roll au survol comme
+    seule affordance, pas de soulignement) qui ouvre directement le panneau détaillé sur la demande
+    concernée.
+  - **`validateur` remonté au niveau de `Demande`** (`lib/types.ts`) — auparavant réservé à
+    `DemandeEquipe` (vue manager). `fetchDemandes()` (`lib/data/demandes.repository.ts`) embarque
+    désormais `utilisateurs!validateur_id(id, prenom, nom)` dans son select de base, pour que le
+    feed "Activité récente" du collaborateur puisse nommer qui a validé/refusé sa propre demande
+    (pas seulement côté `/suivre`).
+  - **`HistoriquePage`** (`/historique`) : pré-sélection via `?demande=<id>` (lien depuis Activité
+    récente d'Accueil2) qui ouvre directement `DetailCongePanel` déployé sur cette demande — `useSearchParams`
+    nécessite un `<Suspense>` autour de la page (`app/(app)/historique/page.tsx`). Fallback sur la
+    liste complète non filtrée si la demande liée est exclue par les filtres actifs de la page
+    (ex. lien vers une demande 2027 alors que le filtre par défaut est "Année en cours"). Nouveau
+    filtre **"Tous les types"** (même liste/pattern que `SuivreDemandesPage`).
+  - **`DetailCongePanel`** passe en lecture seule pour un collaborateur consultant sa propre
+    demande : `selection` accepte `Demande & Partial<Pick<DemandeEquipe, "demandeur" | "validateur">>`,
+    `onValider`/`onRefuser`/`onRegulariser` optionnels — `peutDecider` (dérivé) masque entièrement
+    les encarts Décision/Régularisation quand absents, sans dupliquer le composant.
+  - **Essais tentés puis explicitement abandonnés** (à ne pas reproduire sans revalider l'intention) :
+    card "Mes soldes" (fond mint, `SoldeCard` empilées) en 3e position — annulé, retour au bandeau
+    Soldes du haut ; dates de décision recolorées directement dans le corps de la phrase (sans
+    stabilo) ; libellé "Voir" + soulignement sur les liens du feed ; extraction d'un composant
+    `FeedDemande` partagé entre la popin et Accueil2 reprenant la timeline à points "Posé
+    le/Validé le" de `DetailCongePanel` — la card garde finalement le simple trio `TypeBadge` +
+    `PeriodeAvecPastilles` + `Badge`, pas la timeline complète (qui n'a de sens que dans le contexte
+    d'un panneau dédié à une seule demande). Fichiers `MesSoldesCard.tsx`/`ActiviteRecenteListe.tsx`
+    conservés mais inutilisés (aucun import actif) au cas où.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

@@ -1,0 +1,743 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, Eye, X } from "lucide-react";
+import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
+import { dureeCongeImpose } from "@/lib/joursFeries";
+import { useCalendrier } from "@/hooks/useCalendrier";
+import { useDemandes } from "@/hooks/useDemandes";
+import { useReglesConges } from "@/hooks/useReglesConges";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import {
+  TypeBadge,
+  classeBordureTypeBadge,
+  classeFondAttenueTypeBadge,
+  classeFondTypeBadge,
+  classeTexteTypeBadge,
+  type TypeBadgeCode,
+} from "@/components/demandes/TypeBadge";
+import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
+import type { Demande } from "@/lib/types";
+
+type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
+
+function isoDate(annee: number, moisIndex: number, jour: number): string {
+  return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
+}
+
+function ajouterJoursIso(dateIso: string, n: number): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "Juin 26" — mois abrégé + année sur 2 chiffres, pour le libellé de
+ * l'onglet "Période de référence" (ex. "Juin 26 → Mai 27"). */
+function formatMoisAnneeCourt(dateIso: string): string {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const texte = new Intl.DateTimeFormat("fr-FR", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(d);
+  return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
+}
+
+/** Sélecteur "Débute : Mois en cours / Début période" — pas un vrai 3e
+ * comportement : pilote exactement le même booléen "vue complète" qu'avant
+ * (mois en cours = aujourd'hui → fin de la fenêtre), juste un select. Rendu
+ * en texte souligné + chevron, volontairement discret (pas la pilule
+ * `SelectPille` des popins DJI/CPI, trop visible ici). */
+function SelectAffichage({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="relative inline-flex w-fit items-center gap-1.5 self-start">
+      <span className="text-ink-500 text-xs">Débute :</span>
+      <select
+        value={actif ? "complete" : "mois_en_cours"}
+        onChange={(e) => onChange(e.target.value === "complete")}
+        className="text-ink-900 relative appearance-none pr-4 text-xs font-semibold underline underline-offset-2 outline-none"
+      >
+        <option value="mois_en_cours">Mois en cours</option>
+        <option value="complete">Début période</option>
+      </select>
+      <ChevronDown size={11} className="text-ink-900 pointer-events-none absolute right-0" />
+    </div>
+  );
+}
+
+/** Tous les mois (année + index) couverts par une plage de dates ISO,
+ * bornes incluses — remplace l'ancien rolling 12 mois par une plage dont la
+ * longueur dépend de l'onglet actif (jusqu'à la fin de l'année civile ou de
+ * la période de référence CP). */
+function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex: number }[] {
+  const mois: { annee: number; moisIndex: number }[] = [];
+  let annee = Number(debutIso.slice(0, 4));
+  let moisIndex = Number(debutIso.slice(5, 7)) - 1;
+  const anneeFin = Number(finIso.slice(0, 4));
+  const moisIndexFin = Number(finIso.slice(5, 7)) - 1;
+
+  while (annee < anneeFin || (annee === anneeFin && moisIndex <= moisIndexFin)) {
+    mois.push({ annee, moisIndex });
+    moisIndex += 1;
+    if (moisIndex > 11) {
+      moisIndex = 0;
+      annee += 1;
+    }
+  }
+
+  return mois;
+}
+
+function codeBadgeDemande(demande: Demande): TypeBadgeCode {
+  return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
+}
+
+const LABEL_LEGENDE: Partial<Record<TypeBadgeCode, string>> = {
+  CP: "Congés payés",
+  RTT: "RTT",
+  CPA: "Congés en acquisition",
+  CSS: "Congé sans solde",
+  CE: "Congé exceptionnel",
+  RECUP: "Récupération",
+  EVT_FAM: "Événement familial",
+};
+
+// Ordre d'affichage fixe des cartes de légende — CPI juste après DJI (les
+// deux "imposés" par l'admin). Les codes perso hors de cette liste (CE,
+// RECUP, EVT_FAM...) restent affichés, ajoutés après dans leur ordre naturel
+// (voir usage plus bas).
+const ORDRE_LEGENDE: TypeBadgeCode[] = ["CP", "RTT", "CPA", "DJI", "CPI", "FERIE", "CSS"];
+
+/** Carte de légende cliquable — même gabarit que les cartes CPI/DJI/Fériés de
+ * Paramétrer > Calendrier, adapté en lecture seule (toujours l'icône œil,
+ * jamais de +, le collaborateur ne peut rien ajouter depuis cet écran). */
+function LegendeCard({
+  code,
+  label,
+  compteur,
+  onClick,
+}: {
+  code: TypeBadgeCode;
+  label: string;
+  compteur: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
+    >
+      <TypeBadge code={code} />
+      <div className="flex flex-1 flex-col">
+        <span className="text-ink-900 text-sm">{label}</span>
+        <span className="text-ink-500 mt-1 text-xs">{compteur}</span>
+      </div>
+      <Eye
+        size={18}
+        className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
+      />
+    </button>
+  );
+}
+
+type LegendeOuverte =
+  { kind: "CPI" } | { kind: "DJI" } | { kind: "FERIE" } | { kind: "PERSO"; code: TypeBadgeCode };
+
+function SnippetDemande({
+  demande,
+  ancre,
+  onFermer,
+}: {
+  demande: Demande;
+  ancre: DOMRect;
+  onFermer: () => void;
+}) {
+  return (
+    <>
+      <div className="fixed inset-0 z-20" onClick={onFermer} />
+      <div
+        style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
+        className="bg-surface-card z-30 flex w-56 flex-col gap-2 rounded-xl p-3 shadow-lg"
+      >
+        <div className="flex items-center gap-2">
+          <TypeBadge code={codeBadgeDemande(demande)} />
+          <div className="text-ink-900 text-sm font-bold">
+            {formatPeriodeDemande(demande.debut, demande.fin)}
+          </div>
+        </div>
+        <div className="text-ink-500 text-xs">
+          {formatJours(demande.nbDemiJournees / 2)} jour{demande.nbDemiJournees / 2 > 1 ? "s" : ""}
+        </div>
+        <StatusBadge statut={demande.statut} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * "Mon calendrier" (16/08/2026) — sous-rubrique "Poser" extraite de la
+ * section "Mes Congés" d'Accueil2 (`Dashboard3Page`), qui ne montre plus que
+ * Soldes + En attente de validation. Toute la gestion des calendriers
+ * (onglets Année en cours/Période de référence/Année suivante, calendrier +
+ * légende cliquable, popins CPI/DJI/Fériés/PERSO) vit ici — même logique
+ * qu'avant, juste déplacée dans son propre écran avec un header "Titre de
+ * rubrique" standard au lieu du "Bonjour, {prénom}" de l'accueil.
+ */
+export function MonCalendrierPage() {
+  const { demandes, loading: loadingDemandes } = useDemandes();
+  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
+  const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
+  const [calendrierHauteur, setCalendrierHauteur] = useState<number | null>(null);
+  const calendrierGridRef = useRef<HTMLDivElement>(null);
+  const [snippet, setSnippet] = useState<{ demande: Demande; ancre: DOMRect } | null>(null);
+  const [onglet, setOnglet] = useState<Onglet>("en_cours");
+  const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
+  const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
+
+  // Toutes les popins CPI/DJI/Fériés/PERSO s'ouvrent à la même position — le
+  // haut de la colonne légende (`absolute` dans son propre conteneur
+  // `relative`, pas `fixed` : reste alignée avec le calendrier au scroll,
+  // contrairement à un ancrage viewport). Hauteur calée sur celle du
+  // calendrier affiché (mesurée au clic) plutôt que sur le nombre de lignes
+  // de la liste, pour ne jamais laisser entrevoir les cartes en dessous.
+  function ouvrirLegende(cible: LegendeOuverte) {
+    setLegendeOuverte(cible);
+    setCalendrierHauteur(calendrierGridRef.current?.getBoundingClientRect().height ?? null);
+  }
+
+  function fermerLegende() {
+    setLegendeOuverte(null);
+    setCalendrierHauteur(null);
+  }
+
+  // Popin CPI/DJI/Fériés/PERSO — ferme aussi au clavier, comme `Modal`.
+  useEffect(() => {
+    if (!legendeOuverte) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") fermerLegende();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [legendeOuverte]);
+
+  const anneeActuelle = new Date().getFullYear();
+  const anneePrecedente = anneeActuelle - 1;
+  const anneeSuivante = anneeActuelle + 1;
+  // Jours "communs" (Fériés/CPI/DJI) — 3 années possibles selon l'onglet :
+  // la période de référence CP peut chevaucher l'année précédente si elle
+  // n'a pas encore démarré cette année (ex. période "juin → mai", vue avant
+  // le 1er juin).
+  const calendrierAnneePrecedente = useCalendrier(anneePrecedente);
+  const calendrierAnneeA = useCalendrier(anneeActuelle);
+  const calendrierAnneeB = useCalendrier(anneeSuivante);
+
+  const loading =
+    loadingDemandes ||
+    loadingRegles ||
+    calendrierAnneePrecedente.loading ||
+    calendrierAnneeA.loading ||
+    calendrierAnneeB.loading;
+
+  if (loading) {
+    return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
+  }
+
+  const todayIso = todayISO();
+  const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
+  const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
+
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  // Fenêtre de la période de référence CP contenant aujourd'hui — par
+  // exemple pour "1er juin → 31 mai", si on est en août la période va du
+  // 01/06 cette année au 31/05 l'an prochain ; si on est en mars, elle va du
+  // 01/06 l'an dernier au 31/05 cette année.
+  const debutPeriodeCp = regleCp
+    ? todayIso >= isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+      ? isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+      : isoDate(anneePrecedente, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
+    : debutAnneeActuelle;
+  const finPeriodeCp = regleCp
+    ? ajouterJoursIso(
+        isoDate(
+          Number(debutPeriodeCp.slice(0, 4)) + 1,
+          regleCp.periodeDebutMois - 1,
+          regleCp.periodeDebutJour,
+        ),
+        -1,
+      )
+    : finAnneeActuelle;
+
+  const ranges: Record<Onglet, { debut: string; fin: string }> = {
+    en_cours: { debut: vueCompleteEnCours ? debutAnneeActuelle : todayIso, fin: finAnneeActuelle },
+    periode_cp: {
+      debut: vueCompletePeriodeCp ? debutPeriodeCp : todayIso,
+      fin: finPeriodeCp,
+    },
+    annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
+  };
+  const rangeActive = ranges[onglet];
+  const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
+  const anneeSuivanteParametree = Boolean(calendrierAnneeB.parametrage?.valideLe);
+
+  function calendrierPourAnnee(annee: number) {
+    if (annee === anneePrecedente) return calendrierAnneePrecedente;
+    if (annee === anneeSuivante) return calendrierAnneeB;
+    return calendrierAnneeA;
+  }
+
+  function anneeVisiblePourCommuns(annee: number): boolean {
+    return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
+  }
+
+  // Légende — jours communs et types de demandes perso, scopés à la fenêtre
+  // affichée par l'onglet actif (plus de fusion aveugle de deux années).
+  const demandesVisibles = demandes.filter(
+    (d) => d.statut !== "refusé" && d.debut <= rangeActive.fin && d.fin >= rangeActive.debut,
+  );
+  const typesPersoPresents = Array.from(new Set(demandesVisibles.map(codeBadgeDemande)));
+  const congesImposesTous = [
+    ...calendrierAnneePrecedente.congesImposes,
+    ...calendrierAnneeA.congesImposes,
+    ...calendrierAnneeB.congesImposes,
+  ]
+    .filter(
+      (c) =>
+        anneeVisiblePourCommuns(Number(c.debut.slice(0, 4))) &&
+        c.debut <= rangeActive.fin &&
+        c.fin >= rangeActive.debut,
+    )
+    .sort((a, b) => a.debut.localeCompare(b.debut));
+  const congesImposesLabel = `${congesImposesTous.length} période${congesImposesTous.length > 1 ? "s" : ""}`;
+  const djImposeesTous = [
+    ...calendrierAnneePrecedente.djImposees,
+    ...calendrierAnneeA.djImposees,
+    ...calendrierAnneeB.djImposees,
+  ]
+    .filter(
+      (d) =>
+        anneeVisiblePourCommuns(Number(d.date.slice(0, 4))) &&
+        d.date >= rangeActive.debut &&
+        d.date <= rangeActive.fin,
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const djImposeesLabel = `${djImposeesTous.length} demi-journée${djImposeesTous.length > 1 ? "s" : ""}`;
+  const periodeActiveLabel = `${formatDate(rangeActive.debut)} - ${formatDate(rangeActive.fin)}`;
+  // Non filtré par `rangeActive` (contrairement à `joursFeriesTous` juste en
+  // dessous) : une période de congé imposé affichée peut déborder de la
+  // fenêtre active (chevauchement partiel), `dureeCongeImpose` a besoin de
+  // TOUS les fériés qui la couvrent réellement pour un décompte juste.
+  const joursFeriesToutesAnnees = [
+    ...calendrierAnneePrecedente.joursFeries,
+    ...calendrierAnneeA.joursFeries,
+    ...calendrierAnneeB.joursFeries,
+  ];
+  const joursFeriesTous = joursFeriesToutesAnnees
+    .filter((f) => f.date >= rangeActive.debut && f.date <= rangeActive.fin)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const joursFeriesLabel = `${joursFeriesTous.length} jour${joursFeriesTous.length > 1 ? "s" : ""}`;
+
+  // Demandes perso (CP/RTT/CPA/CSS/...) de la fenêtre active pour un code
+  // donné — même filtre que `typesPersoPresents`/`LegendeCard`, factorisé
+  // pour être réutilisé à la fois par l'en-tête et le corps de la popin.
+  function demandesDuType(code: TypeBadgeCode): Demande[] {
+    return demandesVisibles.filter((d) => codeBadgeDemande(d) === code);
+  }
+
+  function labelDemandes(n: number): string {
+    return `${n} demande${n > 1 ? "s" : ""}`;
+  }
+
+  // Rend la carte de légende pour un `code` donné, quel que soit son type
+  // (commun CPI/DJI/Fériés ou perso CP/RTT/CPA/...) — `null` pour un code
+  // perso absent de la fenêtre active (voir `ORDRE_LEGENDE`, filtré avant
+  // affichage). Centralise le mapping code → libellé/compteur/onClick pour
+  // que l'ordre d'affichage (un simple tableau) n'ait pas à dupliquer cette
+  // logique.
+  function renderLegendeCard(code: TypeBadgeCode) {
+    if (code === "CPI") {
+      return (
+        <LegendeCard
+          key="CPI"
+          code="CPI"
+          label="Congés imposés"
+          compteur={congesImposesLabel}
+          onClick={() => ouvrirLegende({ kind: "CPI" })}
+        />
+      );
+    }
+    if (code === "DJI") {
+      return (
+        <LegendeCard
+          key="DJI"
+          code="DJI"
+          label="Demi-journées imposées"
+          compteur={djImposeesLabel}
+          onClick={() => ouvrirLegende({ kind: "DJI" })}
+        />
+      );
+    }
+    if (code === "FERIE") {
+      return (
+        <LegendeCard
+          key="FERIE"
+          code="FERIE"
+          label="Jours fériés"
+          compteur={joursFeriesLabel}
+          onClick={() => ouvrirLegende({ kind: "FERIE" })}
+        />
+      );
+    }
+    if (!typesPersoPresents.includes(code)) return null;
+    return (
+      <LegendeCard
+        key={code}
+        code={code}
+        label={LABEL_LEGENDE[code] ?? code}
+        compteur={labelDemandes(demandesDuType(code).length)}
+        onClick={() => ouvrirLegende({ kind: "PERSO", code })}
+      />
+    );
+  }
+
+  function demandeDuJour(iso: string): Demande | undefined {
+    return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
+  }
+
+  // Met en avant sur le calendrier les jours couverts par la popin
+  // actuellement ouverte (CPI/DJI/Fériés/PERSO) — passé à chaque
+  // `MiniCalendrier` via `estMisEnAvant`, indépendant du survol.
+  function estJourDuPopinOuverte(iso: string): boolean {
+    if (!legendeOuverte) return false;
+    if (legendeOuverte.kind === "DJI") return djImposeesTous.some((d) => d.date === iso);
+    if (legendeOuverte.kind === "FERIE") return joursFeriesTous.some((f) => f.date === iso);
+    if (legendeOuverte.kind === "CPI") {
+      return congesImposesTous.some((c) => iso >= c.debut && iso <= c.fin);
+    }
+    return demandesDuType(legendeOuverte.code).some((d) => iso >= d.debut && iso <= d.fin);
+  }
+
+  // En-tête plein-cadre coloré des popins récapitulatives CPI/DJI (même
+  // gabarit que `SoldeDetailPanel`) : `TypeBadge` cerclé de blanc à la place
+  // de l'avatar (sinon invisible sur un fond de la même couleur), compteur à
+  // la place du nom, période active affichée (`rangeActive`) à la place du
+  // sous-titre "Détail du solde".
+  function headerLegende(code: TypeBadgeCode, compteur: string) {
+    return (
+      <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
+        <div className="flex items-center gap-2.5">
+          <div className="rounded-full ring-2 ring-white">
+            <TypeBadge code={code} />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">{compteur}</div>
+            <div className="text-xs font-semibold text-white/80">{periodeActiveLabel}</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={fermerLegende}
+          className="shrink-0 text-white/70 hover:text-white"
+          aria-label="Fermer"
+        >
+          <X size={18} />
+        </button>
+      </div>
+    );
+  }
+
+  // Jours communs, tous types confondus : les Fériés sont montrés même sur
+  // une année pas encore publiée (fixes, connus à l'avance). CPI/DJI de
+  // l'année EN COURS sont toujours affichés (déjà réels/en vigueur) ; ceux de
+  // l'année À VENIR ne le sont que si le paramétrage a été publié par
+  // Delphine — pas encore garantis/définitifs avant ça. Une DJI est une
+  // demi-journée (variante `moitie`, matin=gauche/après-midi=droite) —
+  // jamais un fond plein, sinon on perd l'info du créneau.
+  function communDuJour(iso: string): PastilleJour | null {
+    const annee = Number(iso.slice(0, 4));
+    const cal = calendrierPourAnnee(annee);
+    if (cal.joursFeries.some((f) => f.date === iso)) {
+      return { classeFond: classeFondTypeBadge("FERIE") };
+    }
+    if (!anneeVisiblePourCommuns(annee)) return null;
+    if (cal.congesImposes.some((c) => iso >= c.debut && iso <= c.fin)) {
+      return { classeFond: classeFondTypeBadge("CPI") };
+    }
+    const dji = cal.djImposees.find((d) => d.date === iso);
+    if (dji) {
+      return {
+        moitie: {
+          couleur: "var(--color-dji)",
+          cote: dji.demiJournee === "matin" ? "gauche" : "droite",
+        },
+      };
+    }
+    return null;
+  }
+
+  // Priorité d'affichage : demande personnelle du collaborateur > férié > CPI
+  // > DJI. Un chevauchement demande/CPI-DJI reste un cas marginal (voir
+  // Backlog.md — scan de chevauchement dédié), la demande perso l'emporte
+  // visuellement ici plutôt que de le masquer.
+  function tipoDuJour(iso: string): PastilleJour | null {
+    const demande = demandeDuJour(iso);
+    if (demande) {
+      const code = codeBadgeDemande(demande);
+      const classeFond =
+        demande.statut === "en attente"
+          ? classeFondAttenueTypeBadge(code)
+          : classeFondTypeBadge(code);
+      return { classeFond };
+    }
+    return communDuJour(iso);
+  }
+
+  function estEnGroupe(isoA: string, isoB: string): boolean {
+    const demandeA = demandeDuJour(isoA);
+    const demandeB = demandeDuJour(isoB);
+    if (demandeA || demandeB) return Boolean(demandeA && demandeB && demandeA.id === demandeB.id);
+
+    // Continuité d'une période CPI à cheval sur plusieurs jours — Fériés/DJI
+    // restent toujours des pastilles isolées (jamais de période multi-jours).
+    const annee = Number(isoA.slice(0, 4));
+    const cal = calendrierPourAnnee(annee);
+    const cpiA = cal.congesImposes.find((c) => isoA >= c.debut && isoA <= c.fin);
+    const cpiB = cal.congesImposes.find((c) => isoB >= c.debut && isoB <= c.fin);
+    return Boolean(cpiA && cpiB && cpiA.id === cpiB.id);
+  }
+
+  function handleJourClick(iso: string, ancre: DOMRect) {
+    const demande = demandeDuJour(iso);
+    if (demande) setSnippet({ demande, ancre });
+  }
+
+  return (
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
+      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Mon calendrier</h1>
+
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <button
+          type="button"
+          onClick={() => setOnglet("en_cours")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "en_cours"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeActuelle}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnglet("periode_cp")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "periode_cp"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOnglet("annee_suivante")}
+          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+            onglet === "annee_suivante"
+              ? "bg-brand text-brand-foreground"
+              : "bg-surface-card text-ink-900 shadow-sm"
+          }`}
+        >
+          {anneeSuivante}
+        </button>
+      </div>
+
+      {onglet === "en_cours" && (
+        <SelectAffichage actif={vueCompleteEnCours} onChange={setVueCompleteEnCours} />
+      )}
+      {onglet === "periode_cp" && (
+        <SelectAffichage actif={vueCompletePeriodeCp} onChange={setVueCompletePeriodeCp} />
+      )}
+
+      {onglet === "annee_suivante" && !anneeSuivanteParametree && (
+        <div className="bg-status-neutral-bg text-status-neutral-fg rounded-control px-4 py-3 text-sm font-semibold">
+          {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-6 md:flex-row">
+        <div
+          ref={calendrierGridRef}
+          className="grid max-w-[900px] flex-1 [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4"
+        >
+          {moisActifs.map(({ annee, moisIndex }) => (
+            <MiniCalendrier
+              key={`${annee}-${moisIndex}`}
+              annee={annee}
+              moisIndex={moisIndex}
+              tipoDuJour={tipoDuJour}
+              estEnGroupe={estEnGroupe}
+              onJourClick={handleJourClick}
+              estMisEnAvant={estJourDuPopinOuverte}
+            />
+          ))}
+        </div>
+
+        <div className="relative flex w-full flex-col gap-3 md:w-72 md:shrink-0">
+          {ORDRE_LEGENDE.map((code) => renderLegendeCard(code))}
+          {typesPersoPresents
+            .filter((code) => !ORDRE_LEGENDE.includes(code))
+            .map((code) => renderLegendeCard(code))}
+          {/* Popin CPI/DJI/Fériés/PERSO — `absolute` dans ce conteneur `relative`
+            (pas `fixed`) : reste alignée avec le calendrier au scroll plutôt
+            que figée à l'écran, et posée en haut de la colonne (`top-0`, la
+            carte cliquée n'importe plus, voir `ouvrirLegende`). Hauteur calée
+            sur celle du calendrier affiché (mesurée au clic, pas sur le
+            nombre de lignes de la liste) pour ne jamais laisser entrevoir les
+            cartes de légende suivantes en dessous. Pas de fond assombri :
+            expérimentation demandée explicitement pour ces 4 popins
+            seulement, `Modal` reste le composant par défaut partout ailleurs. */}
+          {legendeOuverte && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={fermerLegende} />
+              <div
+                style={calendrierHauteur ? { height: calendrierHauteur } : undefined}
+                className="bg-surface-card absolute top-0 left-0 z-50 w-full overflow-y-auto shadow-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {legendeOuverte.kind === "DJI"
+                  ? headerLegende("DJI", djImposeesLabel)
+                  : legendeOuverte.kind === "CPI"
+                    ? headerLegende("CPI", congesImposesLabel)
+                    : legendeOuverte.kind === "FERIE"
+                      ? headerLegende("FERIE", joursFeriesLabel)
+                      : headerLegende(
+                          legendeOuverte.code,
+                          labelDemandes(demandesDuType(legendeOuverte.code).length),
+                        )}
+
+                <div className="border-ink-300/60 border-t px-4 py-1">
+                  {legendeOuverte.kind === "CPI" &&
+                    (congesImposesTous.length === 0 ? (
+                      <p className="text-ink-500 py-3 text-sm">Aucun congé imposé.</p>
+                    ) : (
+                      <div className="flex flex-col">
+                        {congesImposesTous.map((c) => (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between py-3 text-sm"
+                          >
+                            <span
+                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("CPI")}`}
+                            >
+                              {formatPeriodeDemande(c.debut, c.fin)}
+                            </span>
+                            <span className="text-ink-500 text-xs">
+                              {formatJours(dureeCongeImpose(c, joursFeriesToutesAnnees))} j
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+
+                  {legendeOuverte.kind === "DJI" &&
+                    (djImposeesTous.length === 0 ? (
+                      <p className="text-ink-500 py-3 text-sm">Aucune demi-journée imposée.</p>
+                    ) : (
+                      <div className="flex flex-col">
+                        {djImposeesTous.map((d) => (
+                          <div
+                            key={d.id}
+                            className="flex items-center justify-between py-3 text-sm"
+                          >
+                            <span
+                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("DJI")}`}
+                            >
+                              {formatDate(d.date)}
+                            </span>
+                            <span className="text-ink-500 text-xs">
+                              {d.demiJournee === "matin" ? "Matin" : "Après-midi"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+
+                  {legendeOuverte.kind === "FERIE" &&
+                    (joursFeriesTous.length === 0 ? (
+                      <p className="text-ink-500 py-3 text-sm">Aucun jour férié.</p>
+                    ) : (
+                      <div className="flex flex-col">
+                        {joursFeriesTous.map((f) => (
+                          <div
+                            key={f.id}
+                            className="flex items-center justify-between py-3 text-sm"
+                          >
+                            <span
+                              className={`bg-surface-app text-ink-900 flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge("FERIE")}`}
+                            >
+                              {formatDate(f.date)}
+                            </span>
+                            <span className="text-ink-500 text-xs">{f.libelle}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+
+                  {legendeOuverte.kind === "PERSO" &&
+                    (() => {
+                      const code = legendeOuverte.code;
+                      const demandesDeCeType = demandesDuType(code);
+                      return demandesDeCeType.length === 0 ? (
+                        <p className="text-ink-500 py-3 text-sm">Aucune demande.</p>
+                      ) : (
+                        <div className="flex flex-col">
+                          {demandesDeCeType.map((d) => (
+                            <div
+                              key={d.id}
+                              className="flex items-center justify-between py-3 text-sm"
+                            >
+                              <span
+                                className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    d.statut === "validé"
+                                      ? "bg-status-success-fg"
+                                      : d.statut === "en attente"
+                                        ? "bg-status-warning-fg"
+                                        : "bg-status-danger-fg"
+                                  }`}
+                                />
+                                {formatPeriodeDemande(d.debut, d.fin)}
+                              </span>
+                              <span
+                                className={`text-xs font-semibold ${
+                                  d.statut === "en attente"
+                                    ? "text-ink-500"
+                                    : classeTexteTypeBadge(code)
+                                }`}
+                              >
+                                {formatJours(d.nbDemiJournees / 2)} j
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {snippet && (
+        <SnippetDemande
+          demande={snippet.demande}
+          ancre={snippet.ancre}
+          onFermer={() => setSnippet(null)}
+        />
+      )}
+    </div>
+  );
+}

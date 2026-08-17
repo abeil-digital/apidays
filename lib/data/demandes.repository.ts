@@ -33,10 +33,18 @@ interface DemandeRow {
   commentaire_decision: string | null;
   date_decision: string | null;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
+  validateur:
+    | { id: string; prenom: string; nom: string }
+    | { id: string; prenom: string; nom: string }[]
+    | null;
 }
 
+// `validateur:` alias l'embed vers `utilisateurs!validateur_id` (désambiguïse
+// des 3 FK de `demandes_conges` vers `utilisateurs`) — inclus dès la requête
+// de base pour que le feed "Activité récente" du collaborateur (ses propres
+// demandes) puisse nommer qui a validé/refusé, pas seulement l'Espace Suivre.
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, types_absences(code)";
+  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
 
 interface DemandeEquipeRow extends DemandeRow {
   utilisateur_id: string;
@@ -44,17 +52,13 @@ interface DemandeEquipeRow extends DemandeRow {
     | { id: string; prenom: string; nom: string }
     | { id: string; prenom: string; nom: string }[]
     | null;
-  validateur:
-    | { id: string; prenom: string; nom: string }
-    | { id: string; prenom: string; nom: string }[]
-    | null;
 }
 
 // `demandes_conges` a 3 FK vers `utilisateurs` (utilisateur_id, validateur_id,
 // devalidee_par) — PostgREST refuse d'embarquer sans préciser laquelle
-// désambiguïser via `!utilisateur_id`/`!validateur_id`. `validateur:` alias
-// le second embed (sinon collision de nom avec `utilisateurs` du premier).
-const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom), validateur:utilisateurs!validateur_id(id, prenom, nom)`;
+// désambiguïser via `!utilisateur_id` (le `validateur` est déjà dans
+// `SELECT_DEMANDE`, voir plus haut).
+const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
 
 const STATUT_DEPUIS_DB: Record<string, StatutDemande> = {
   en_attente: "en attente",
@@ -67,6 +71,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
   const typeAbsence = Array.isArray(row.types_absences)
     ? row.types_absences[0]
     : row.types_absences;
+  const validateur = Array.isArray(row.validateur) ? row.validateur[0] : row.validateur;
 
   return {
     id: row.id,
@@ -82,6 +87,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     statut: STATUT_DEPUIS_DB[row.statut] ?? "en attente",
     note: row.commentaire_salarie ?? "",
     commentaireManager: row.commentaire_decision ?? "",
+    validateur: validateur ?? null,
   };
 }
 
@@ -225,12 +231,12 @@ export async function annulerDemande(id: string): Promise<void> {
 
 function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
   const demandeur = Array.isArray(row.utilisateurs) ? row.utilisateurs[0] : row.utilisateurs;
-  const validateur = Array.isArray(row.validateur) ? row.validateur[0] : row.validateur;
 
+  // `validateur` est déjà mappé par `mapDemandeDepuisDb` (présent dans
+  // `DemandeRow` depuis le select de base, voir `SELECT_DEMANDE`).
   return {
     ...mapDemandeDepuisDb(row),
     demandeur: demandeur ?? { id: row.utilisateur_id, prenom: "", nom: "" },
-    validateur: validateur ?? null,
   };
 }
 

@@ -21,6 +21,15 @@ export interface Demande {
   statut: StatutDemande;
   note: string;
   commentaireManager: string;
+  // Auteur de la décision (validation/refus) — null tant que "en attente",
+  // et pour une régularisation (`annulé`) qui réutilise les mêmes colonnes.
+  // Disponible même sur ses propres demandes (pas seulement côté manager) —
+  // utilisé par ex. par le feed "Activité récente" pour nommer qui a décidé.
+  validateur: {
+    id: string;
+    prenom: string;
+    nom: string;
+  } | null;
 }
 
 // Demande vue côté manager (Espace Suivre) — mêmes champs qu'une `Demande`,
@@ -32,13 +41,6 @@ export interface DemandeEquipe extends Demande {
     prenom: string;
     nom: string;
   };
-  // Auteur de la décision (validation/refus) — null tant que "en attente",
-  // et pour une régularisation (`annulé`) qui réutilise les mêmes colonnes.
-  validateur: {
-    id: string;
-    prenom: string;
-    nom: string;
-  } | null;
 }
 
 export interface NouvelleDemandeInput {

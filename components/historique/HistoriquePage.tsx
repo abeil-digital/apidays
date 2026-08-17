@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
+import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
+import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
 type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
@@ -27,14 +30,25 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
   personnalisee: "Sélectionner une période",
 };
 
+// Types de congés sélectionnables — mêmes codes que la colonne Type du
+// tableau (CPA dérivé de CP + isAnticipation, voir HistoriqueTable), même
+// liste que le filtre équivalent de Suivre les demandes.
+const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
+
 export function HistoriquePage() {
   const { demandes } = useDemandes();
   const { utilisateur } = useUtilisateur();
   const { reglesAcquisition } = useReglesConges();
   const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
+  const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
   const [debutPerso, setDebutPerso] = useState("");
   const [finPerso, setFinPerso] = useState("");
+  // Pré-sélection via `?demande=<id>` — lien "cliquable" depuis l'encart
+  // Activité récente d'Accueil2, qui ouvre directement le panneau déployé
+  // sur cette demande plutôt que de renvoyer sur un historique "à plat".
+  const searchParams = useSearchParams();
+  const [selectionId, setSelectionId] = useState<string | null>(searchParams.get("demande"));
 
   const anneeActuelle = new Date().getFullYear();
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
@@ -53,12 +67,25 @@ export function HistoriquePage() {
       if (statutAttendu && d.statut !== statutAttendu) return false;
       if (debut && d.debut < debut) return false;
       if (fin && d.debut > fin) return false;
+      if (typeFiltre !== "tous") {
+        const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
+        if (code !== typeFiltre) return false;
+      }
       return true;
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
+  // Le tableau respecte les filtres, mais le panneau doit pouvoir s'ouvrir
+  // même sur une demande qu'ils excluent (lien "?demande=" depuis Activité
+  // récente d'Accueil2, qui n'a pas de notion de filtre) — repli sur la liste
+  // complète, non filtrée, si besoin.
+  const selection =
+    filtered.find((d) => d.id === selectionId) ??
+    demandes.find((d) => d.id === selectionId) ??
+    null;
+
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-4xl md:pt-0 print:pb-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0 print:pb-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Historique</h1>
 
       <div className="hidden px-1 print:block">
@@ -67,55 +94,86 @@ export function HistoriquePage() {
         </h1>
       </div>
 
-      <div className="bg-surface-card w-full">
-        <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
-          <div className="flex flex-wrap items-end gap-2">
-            <SelectFiltrePill value={filtre} onChange={(e) => setFiltre(e.target.value as Filtre)}>
-              {FILTRES.map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            <SelectFiltrePill
-              value={periodeFiltre}
-              onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start print:block">
+        <div
+          className={`bg-surface-card w-full xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
+        >
+          <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
+            <div className="flex flex-wrap items-end gap-2">
+              <SelectFiltrePill
+                value={typeFiltre}
+                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+              >
+                <option value="tous">Tous les types</option>
+                {TYPES_FILTRABLES.map((code) => (
+                  <option key={code} value={code}>
+                    {LABEL_LONG[code]}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              <SelectFiltrePill
+                value={filtre}
+                onChange={(e) => setFiltre(e.target.value as Filtre)}
+              >
+                {FILTRES.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              <SelectFiltrePill
+                value={periodeFiltre}
+                onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+              >
+                {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </SelectFiltrePill>
+              {periodeFiltre === "personnalisee" && (
+                <>
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Du"
+                    value={debutPerso}
+                    onChange={(e) => setDebutPerso(e.target.value)}
+                  />
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Au"
+                    value={finPerso}
+                    onChange={(e) => setFinPerso(e.target.value)}
+                  />
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => window.print()}
+              className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
             >
-              {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
-                <option key={v} value={v}>
-                  {label}
-                </option>
-              ))}
-            </SelectFiltrePill>
-            {periodeFiltre === "personnalisee" && (
-              <>
-                <InputFiltrePill
-                  type="date"
-                  aria-label="Du"
-                  value={debutPerso}
-                  onChange={(e) => setDebutPerso(e.target.value)}
-                />
-                <InputFiltrePill
-                  type="date"
-                  aria-label="Au"
-                  value={finPerso}
-                  onChange={(e) => setFinPerso(e.target.value)}
-                />
-              </>
-            )}
+              <Printer size={13} />
+              Exporter
+            </button>
           </div>
-          <button
-            onClick={() => window.print()}
-            className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
-          >
-            <Printer size={13} />
-            Exporter
-          </button>
+
+          <div className="border-ink-300/60 border-t">
+            <HistoriqueTable
+              demandes={filtered}
+              emptyText="Aucune demande sur cette période."
+              onDateClick={setSelectionId}
+              selectedId={selectionId}
+            />
+          </div>
         </div>
 
-        <div className="border-ink-300/60 border-t">
-          <HistoriqueTable demandes={filtered} emptyText="Aucune demande sur cette période." />
-        </div>
+        {selection && (
+          <DetailCongePanel
+            key={selection.id}
+            selection={selection}
+            onClose={() => setSelectionId(null)}
+          />
+        )}
       </div>
     </div>
   );

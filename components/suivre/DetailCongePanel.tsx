@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
-import type { DemandeEquipe, StatutDemande } from "@/lib/types";
+import type { Demande, DemandeEquipe, StatutDemande } from "@/lib/types";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
   classeFondTypeBadge,
@@ -16,11 +16,20 @@ import { Textarea } from "@/components/ui/Textarea";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
 
 interface DetailCongePanelProps {
-  selection: DemandeEquipe;
+  // `demandeur`/`validateur` optionnels : un collaborateur consultant son
+  // propre historique (`HistoriquePage`) n'a que des `Demande` simples, pas
+  // de `DemandeEquipe` (pas de notion de "collaborateur" sur sa propre
+  // demande). Les deux champs restent affichés quand présents (vue manager),
+  // simplement omis sinon.
+  selection: Demande & Partial<Pick<DemandeEquipe, "demandeur" | "validateur">>;
   onClose: () => void;
-  onValider: (commentaire: string) => Promise<void>;
-  onRefuser: (commentaire: string) => Promise<void>;
-  onRegulariser: (commentaire: string) => Promise<void>;
+  /** Actions de décision — absentes en lecture seule (collaborateur sur son
+   * propre historique) : les encarts Décision/Régularisation ne s'affichent
+   * alors pas du tout, seul le feed (Posé le/Validé le/Refusé le) reste
+   * visible. */
+  onValider?: (commentaire: string) => Promise<void>;
+  onRefuser?: (commentaire: string) => Promise<void>;
+  onRegulariser?: (commentaire: string) => Promise<void>;
   /** Remonte l'état "action en cours" à l'appelant — `CongesPaiePage` verrouille
    * aussi ses propres contrôles (pills, champs Du/Au...) pendant ce temps, pour
    * éviter qu'une autre action ne parte en même temps (course déjà rencontrée
@@ -110,17 +119,27 @@ export function DetailCongePanel({
   );
 
   const code = selection.type === "CP" && selection.isAnticipation ? "CPA" : selection.type;
-  const resumeConge = `${selection.demandeur.prenom} ${selection.demandeur.nom} - ${formatPeriodeDemande(
-    selection.debut,
-    selection.fin,
-  )} - ${formatJours(selection.nbDemiJournees / 2)} j`;
+  // Uniquement utile pour le toast/la modale de confirmation, tous deux
+  // absents en lecture seule (pas de `demandeur` dans ce cas) — préfixe nom
+  // omis plutôt qu'un risque d'accès à un champ absent.
+  const periodeEtDuree = `${formatPeriodeDemande(selection.debut, selection.fin)} - ${formatJours(
+    selection.nbDemiJournees / 2,
+  )} j`;
+  const resumeConge = selection.demandeur
+    ? `${selection.demandeur.prenom} ${selection.demandeur.nom} - ${periodeEtDuree}`
+    : periodeEtDuree;
+  const peutDecider = Boolean(onValider && onRefuser && onRegulariser);
 
   // Refuser/Signaler comme non pris/Restaurer laissent le panneau ouvert
   // après succès (contrairement à Valider, qui ferme + bandeau — voir
   // `executerValidation`) : l'utilisateur voit tout de suite le changement
   // de statut dans le feed (ligne "Refusé le"/"Validé le" mise à jour) sans
   // avoir à rouvrir le panneau.
-  async function executer(action: (commentaire: string) => Promise<void>, messageErreur: string) {
+  async function executer(
+    action: ((commentaire: string) => Promise<void>) | undefined,
+    messageErreur: string,
+  ) {
+    if (!action) return;
     setEnCours(true);
     onEnCoursChange?.(true);
     setErreurAction(null);
@@ -136,6 +155,7 @@ export function DetailCongePanel({
   }
 
   async function executerValidation() {
+    if (!onValider) return;
     setEnCours(true);
     onEnCoursChange?.(true);
     setErreurAction(null);
@@ -173,9 +193,13 @@ export function DetailCongePanel({
             </div>
             <div>
               <div className="text-sm font-bold text-white">
-                {selection.demandeur.prenom} {selection.demandeur.nom}
+                {selection.demandeur
+                  ? `${selection.demandeur.prenom} ${selection.demandeur.nom}`
+                  : LABEL_LONG[code]}
               </div>
-              <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
+              {selection.demandeur && (
+                <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
+              )}
             </div>
           </div>
           <button
@@ -245,7 +269,7 @@ export function DetailCongePanel({
         }
       </div>
 
-      {(selection.statut === "validé" || selection.statut === "annulé") && (
+      {peutDecider && (selection.statut === "validé" || selection.statut === "annulé") && (
         <>
           <button
             type="button"
@@ -328,7 +352,7 @@ export function DetailCongePanel({
         </>
       )}
 
-      {selection.statut === "en attente" && (
+      {peutDecider && selection.statut === "en attente" && (
         <div
           className="w-full shadow-sm"
           style={{

@@ -14,11 +14,23 @@ interface SoldeCardProps {
   conditionPrefixe: string;
   conditionAccent: string;
   tone: SoldeCardTone;
+  /** Coins carrés au lieu d'arrondis — variante utilisée par Accueil2
+   * (`Dashboard3Page`, en cours d'itération), défaut inchangé partout
+   * ailleurs. */
+  carre?: boolean;
 }
 
-export function SoldeCard({ valeur, conditionPrefixe, conditionAccent, tone }: SoldeCardProps) {
+export function SoldeCard({
+  valeur,
+  conditionPrefixe,
+  conditionAccent,
+  tone,
+  carre = false,
+}: SoldeCardProps) {
   return (
-    <div className="bg-surface-card flex h-full w-full flex-col gap-1.5 rounded-xl p-4 shadow-sm">
+    <div
+      className={`bg-surface-card flex h-full w-full flex-col gap-1.5 p-4 shadow-sm ${carre ? "" : "rounded-xl"}`}
+    >
       <TypeBadge code={TONE_CODE[tone]} />
       <span className="text-ink-900 text-2xl font-bold">{formatJours(valeur)} j</span>
       <span className="text-ink-500 text-xs leading-snug">
