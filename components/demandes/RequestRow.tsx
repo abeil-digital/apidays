@@ -10,9 +10,9 @@ interface RequestRowProps {
 
 export function RequestRow({ demande, isLast }: RequestRowProps) {
   const jours = demande.nbDemiJournees / 2;
-  // "Congés anticipés" n'est pas un type d'absence distinct en base (voir
-  // NouvelleDemandeForm) — c'est un CP avec is_anticipation=true, affiché
-  // avec le badge "CPA" pour le distinguer visuellement d'un CP classique.
+  // "Congés anticipés" n'est pas un type d'absence distinct en base — c'est
+  // un CP avec is_anticipation=true, affiché avec le badge "CPA" pour le
+  // distinguer visuellement d'un CP classique.
   const codeBadge = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 
   return (

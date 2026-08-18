@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Send, X } from "lucide-react";
 import type { Demande, DemiJournee, TypeDemande } from "@/lib/types";
 import { formatJours } from "@/lib/format";
-import { estJourOuvre, joursOuvres } from "@/lib/joursFeries";
+import { estJourOuvre } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useSoldeAnticipe } from "@/hooks/useSoldeAnticipe";
@@ -118,18 +118,21 @@ function dateVersIsoLocal(date: Date): string {
 
 /**
  * "Nouvelle demande" — popin de dépôt d'une demande (18/08/2026), remplace
- * l'ancien formulaire plein écran (`NouvelleDemandeForm`, conservé mais
- * inutilisé) ET un premier essai à calendrier custom cliquable (abandonné le
- * même jour). Reprend le gabarit de `ModalCongesImposes` (Paramétrer >
+ * l'ancien formulaire plein écran (`NouvelleDemandeForm`, supprimé le même
+ * jour — plus référencé par aucune route depuis que `/nouvelle-demande`
+ * pointe sur cette popin) ET un premier essai à calendrier custom cliquable
+ * (abandonné le même jour). Reprend le gabarit de `ModalCongesImposes` (Paramétrer >
  * Calendrier, popin CPI) plutôt qu'un calendrier maison : deux `DatePicker`
  * (Du/Au) dont le `disabled` bloque directement les jours non sélectionnables
  * (week-end, férié, jour déjà imposé/posé) — un vrai blocage plutôt qu'un
  * simple avertissement visuel, et beaucoup moins de code qu'un calendrier de
  * sélection de période fait main.
  *
- * Le nombre de jours réutilise `joursOuvres` (même brique que les congés
- * imposés) — week-ends et fériés exclus, comme le fait le serveur à
- * l'enregistrement (`calculerNbDemiJournees`, `demandes.repository.ts`).
+ * Le nombre de jours (voir `typeSurDemiJour`) exclut week-ends et fériés,
+ * comme le fait le serveur à l'enregistrement (`calculerNbDemiJournees`,
+ * `demandes.repository.ts`) — et déduit en plus tout ce qui couvre déjà une
+ * demi-journée de la période (CPI, DJI, une autre demande déjà posée), ce que
+ * le calcul serveur ne fait PAS encore (voir Backlog.md).
  *
  * "Solde à la date de la demande" (`fetchSoldeAnticipe`) — uniquement pour
  * RTT et Congés anticipés (CP a un capital connu d'avance, la notion
@@ -181,20 +184,67 @@ export function PoserDemandeModal({
     return congesImposes.some((c) => iso >= c.debut && iso <= c.fin) || Boolean(demandeDuJour(iso));
   }
 
-  // Type à afficher pour un jour du détail "voir" — même priorité que dans
-  // `MiniCalendrier` (Paramétrer > Calendrier) : férié > congé imposé (CPI) >
-  // demi-journée imposée (DJI) > une autre demande personnelle déjà posée
-  // (rare à l'intérieur d'une période tout juste sélectionnée, mais un jour
-  // au milieu d'une période choisie n'est pas bloqué par le `disabled` du
-  // `DatePicker`, qui ne vérifie que les bornes début/fin) > le type en cours
-  // de saisie sinon.
-  function codeDuJour(iso: string): TypeBadgeCode {
+  // Une demi-journée donnée (`demi`) d'un jour (`iso`) fait-elle partie d'une
+  // période [debutP, finP] ? Vrai sur toute la période SAUF sur la demi-
+  // journée exclue à chaque borne (`demiDebutP === "apres_midi"` exclut le
+  // matin du premier jour, `demiFinP === "matin"` exclut l'après-midi du
+  // dernier) — même forme que `CongeImpose`/`Demande` (demiDebut/demiFin) et
+  // que la demande en cours de saisie (debut/finPourCalcul/demiDebut/demiFin).
+  function demiCouvertePeriode(
+    iso: string,
+    demi: DemiJournee,
+    debutP: string,
+    finP: string,
+    demiDebutP: DemiJournee,
+    demiFinP: DemiJournee,
+  ): boolean {
+    if (iso < debutP || iso > finP) return false;
+    if (iso === debutP && demiDebutP === "apres_midi" && demi === "matin") return false;
+    if (iso === finP && demiFinP === "matin" && demi === "apres_midi") return false;
+    return true;
+  }
+
+  // Ce qui occupe DÉJÀ une demi-journée, indépendamment de la demande en
+  // cours de saisie — férié > congé imposé (CPI) > demi-journée imposée
+  // (DJI) > une autre demande personnelle déjà posée (rare à l'intérieur
+  // d'une période tout juste sélectionnée, mais un jour au milieu d'une
+  // période choisie n'est pas bloqué par le `disabled` du `DatePicker`, qui
+  // ne vérifie que les bornes début/fin). `null` si rien n'occupe cette
+  // demi-journée. Sert à la fois au détail "voir" et au calcul du nombre de
+  // jours — les deux doivent voir EXACTEMENT la même chose.
+  function typeOccupantDemiJour(iso: string, demi: DemiJournee): TypeBadgeCode | null {
     if (joursFeries.some((f) => f.date === iso)) return "FERIE";
-    if (congesImposes.some((c) => iso >= c.debut && iso <= c.fin)) return "CPI";
-    if (djImposees.some((d) => d.date === iso)) return "DJI";
-    const demande = demandeDuJour(iso);
+    const cpi = congesImposes.find((c) =>
+      demiCouvertePeriode(iso, demi, c.debut, c.fin, c.demiDebut, c.demiFin),
+    );
+    if (cpi) return "CPI";
+    if (djImposees.some((d) => d.date === iso && d.demiJournee === demi)) return "DJI";
+    const demande = demandes.find(
+      (d) =>
+        d.statut !== "refusé" &&
+        d.statut !== "annulé" &&
+        demiCouvertePeriode(iso, demi, d.debut, d.fin, d.demiDebut, d.demiFin),
+    );
     if (demande) return demande.isAnticipation ? "CPA" : (demande.type as TypeBadgeCode);
-    return option.code;
+    return null;
+  }
+
+  // Type à afficher pour UNE demi-journée du détail "voir" — ce qui l'occupe
+  // déjà, sinon le type en cours de saisie s'il couvre cette demi-journée,
+  // sinon `null` (ex. le matin d'un premier jour posé à partir de l'après-
+  // midi seulement). ATTENTION : ne PAS utiliser ce résultat pour compter les
+  // jours demandés — comparer ce code à `option.code` confond à tort "cette
+  // demi-journée est libre et fait partie de la demande" avec "elle est déjà
+  // occupée par une AUTRE demande qui se trouve être du même type" (bug
+  // trouvé le 18/08/2026 : chevauchement avec une demande CP existante compté
+  // comme des jours demandés en plus). Utiliser `typeOccupantDemiJour` pour
+  // savoir si une demi-journée est libre.
+  function typeSurDemiJour(iso: string, demi: DemiJournee): TypeBadgeCode | null {
+    const occupant = typeOccupantDemiJour(iso, demi);
+    if (occupant) return occupant;
+    if (demiCouvertePeriode(iso, demi, debut, finPourCalcul, demiDebut, demiFin))
+      return option.code;
+    return null;
   }
 
   function jourIndisponible(date: Date): boolean {
@@ -253,12 +303,44 @@ export function PoserDemandeModal({
   // une demande d'un jour en ne remplissant qu'une seule date, sans quoi le
   // nombre de jours et le solde restent à "…" pour rien.
   const finPourCalcul = fin && fin >= debut ? fin : debut;
+  // Basé sur `typeOccupantDemiJour` (même brique que le détail "voir" plus
+  // bas) plutôt que sur `joursOuvres` seul : une demi-journée ne compte QUE
+  // si rien d'autre ne l'occupe déjà (férié, CPI, DJI, ou une autre demande
+  // personnelle déjà posée sur la période) ET qu'elle fait partie de la
+  // période demandée. `joursOuvres` seul ne déduisait que fériés/DJI, pas les
+  // CPI ni les demandes déjà posées : un congé imposé (CPI) ou une demande
+  // déjà existante à l'intérieur de la période choisie se retrouvait compté
+  // en plus dans "Soit N jours" et dans l'impact sur le solde (bug signalé le
+  // 18/08/2026). Comparer plutôt `typeSurDemiJour(...) === option.code`
+  // semblait marcher mais confondait à tort "libre et demandé" avec "déjà
+  // occupé par une AUTRE demande du même type" (ex. une demande CP existante
+  // masquée par la nouvelle demande CP en cours — signalé juste après par
+  // Vincent, `typeOccupantDemiJour` distingue explicitement les deux).
   let joursDemandes: number | null = null;
   if (debut) {
-    const base = joursOuvres(debut, finPourCalcul, joursFeries, djImposees);
-    const ajustDebut = demiDebut === "apres_midi" ? 0.5 : 0;
-    const ajustFin = demiFin === "matin" ? 0.5 : 0;
-    joursDemandes = base - ajustDebut - ajustFin;
+    let total = 0;
+    const curseurJours = new Date(`${debut}T00:00:00Z`);
+    const finJours = new Date(`${finPourCalcul}T00:00:00Z`);
+    while (curseurJours <= finJours) {
+      const iso = curseurJours.toISOString().slice(0, 10);
+      const jourSemaine = curseurJours.getUTCDay();
+      if (jourSemaine !== 0 && jourSemaine !== 6) {
+        if (
+          !typeOccupantDemiJour(iso, "matin") &&
+          demiCouvertePeriode(iso, "matin", debut, finPourCalcul, demiDebut, demiFin)
+        ) {
+          total += 0.5;
+        }
+        if (
+          !typeOccupantDemiJour(iso, "apres_midi") &&
+          demiCouvertePeriode(iso, "apres_midi", debut, finPourCalcul, demiDebut, demiFin)
+        ) {
+          total += 0.5;
+        }
+      }
+      curseurJours.setUTCDate(curseurJours.getUTCDate() + 1);
+    }
+    joursDemandes = total;
   }
 
   // Détail "voir" — jours de la période mis à plat par semaine (L-V, jamais
@@ -284,7 +366,7 @@ export function PoserDemandeModal({
           semaineCourante = [];
         }
         if (semaineCourante.length === 0) {
-          libelleCourant = `${MOIS_FR[curseurDetail.getUTCMonth()]} ${curseurDetail.getUTCFullYear()}`;
+          libelleCourant = MOIS_FR[curseurDetail.getUTCMonth()];
         }
         semaineCourante.push({ iso, jour: curseurDetail.getUTCDate(), jourSemaine });
       }
@@ -292,6 +374,19 @@ export function PoserDemandeModal({
     }
     if (semaineCourante.length > 0) {
       semainesDetail.push({ libelleMois: libelleCourant, jours: semaineCourante });
+    }
+  }
+
+  // Regroupe les semaines consécutives du même mois — le libellé du mois
+  // s'affiche une fois par groupe, sur le côté gauche, plutôt que répété au-
+  // dessus de chaque semaine.
+  const moisDetail: (typeof semainesDetail)[number][][] = [];
+  for (const semaine of semainesDetail) {
+    const dernierGroupe = moisDetail[moisDetail.length - 1];
+    if (dernierGroupe && dernierGroupe[0].libelleMois === semaine.libelleMois) {
+      dernierGroupe.push(semaine);
+    } else {
+      moisDetail.push([semaine]);
     }
   }
 
@@ -565,25 +660,74 @@ export function PoserDemandeModal({
           )}
 
           {voirDetail && semainesDetail.length > 0 && (
-            <div className="bg-surface-app mt-2 flex flex-col gap-3 rounded-xl p-3">
-              {semainesDetail.map((semaine, i) => (
-                <div key={semaine.jours[0].iso}>
-                  {(i === 0 || semaine.libelleMois !== semainesDetail[i - 1].libelleMois) && (
-                    <p className="text-ink-900 mb-1 px-1 text-xs font-semibold">
-                      {semaine.libelleMois}
-                    </p>
-                  )}
-                  <div className="flex gap-1">
-                    {semaine.jours.map((j) => (
-                      <div key={j.iso} className="flex w-8 flex-col items-center gap-1">
-                        <span className="text-ink-500 text-[10px]">
-                          {JOURS_SEMAINE_COURT[j.jourSemaine - 1]}
-                        </span>
-                        <div
-                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white ${classeFondTypeBadge(codeDuJour(j.iso))}`}
-                        >
-                          {j.jour}
-                        </div>
+            <div className="bg-surface-app mt-2 rounded-xl p-3">
+              {/* En-têtes L-M-M-J-V affichés une seule fois en haut — même
+                  colonne de gauche (largeur `w-16` + `gap-3`) qu'un nom de
+                  mois pour rester alignés avec les grilles de jours en
+                  dessous. Largeur choisie pour laisser un peu d'air même au
+                  plus long des noms de mois ("Septembre"). */}
+              <div className="flex items-start gap-3">
+                <span className="w-16 shrink-0" />
+                <div className="grid grid-cols-5 gap-1">
+                  {JOURS_SEMAINE_COURT.map((lettre, index) => (
+                    <span
+                      key={index}
+                      className="text-ink-500 flex h-5 w-5 items-center justify-center text-[10px]"
+                    >
+                      {lettre}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {moisDetail.map((semainesDuMois, indexMois) => (
+                <div
+                  key={semainesDuMois[0].jours[0].iso}
+                  className={`flex items-start gap-3 ${indexMois === 0 ? "mt-1" : "mt-4"}`}
+                >
+                  <span className="w-16 shrink-0 pt-1 text-xs font-semibold text-[#374151]">
+                    {semainesDuMois[0].libelleMois}
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {semainesDuMois.map((semaine) => (
+                      <div key={semaine.jours[0].iso} className="grid grid-cols-5 gap-1">
+                        {[1, 2, 3, 4, 5].map((jourSemaine) => {
+                          const j = semaine.jours.find((jour) => jour.jourSemaine === jourSemaine);
+                          if (!j) return <div key={jourSemaine} className="h-5 w-5" />;
+                          const codeMatin = typeSurDemiJour(j.iso, "matin");
+                          const codeApresMidi = typeSurDemiJour(j.iso, "apres_midi");
+                          return codeMatin === codeApresMidi ? (
+                            <div
+                              key={j.iso}
+                              className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-white ${
+                                codeMatin ? classeFondTypeBadge(codeMatin) : "bg-ink-300/40"
+                              }`}
+                            >
+                              {j.jour}
+                            </div>
+                          ) : (
+                            <div
+                              key={j.iso}
+                              className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-md"
+                            >
+                              <div
+                                className={`absolute inset-y-0 left-0 w-1/2 ${
+                                  codeMatin ? classeFondTypeBadge(codeMatin) : "bg-ink-300/40"
+                                }`}
+                              />
+                              <div
+                                className={`absolute inset-y-0 right-0 w-1/2 ${
+                                  codeApresMidi
+                                    ? classeFondTypeBadge(codeApresMidi)
+                                    : "bg-ink-300/40"
+                                }`}
+                              />
+                              <span className="relative z-10 text-[10px] font-bold text-white">
+                                {j.jour}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     ))}
                   </div>
@@ -629,7 +773,7 @@ export function PoserDemandeModal({
           )}
         </div>
 
-        <div>
+        <div className="mb-16">
           <label htmlFor="note" className="text-ink-900 px-1 text-sm font-semibold">
             Message (facultatif)
           </label>
@@ -660,11 +804,19 @@ export function PoserDemandeModal({
             {error}
           </div>
         )}
+      </div>
 
+      {/* Bandeau de validation collé en bas de la zone scrollable de la
+          popin (`position: sticky`, ancré au conteneur `overflow-y-auto` de
+          `Modal`) — reste visible pendant qu'on scrolle un contenu long
+          (période multi-semaines, détail "voir" déployé...). Marges
+          négatives pour reprendre toute la largeur du panneau malgré le
+          padding du corps de la popin. */}
+      <div className="bg-surface-card border-ink-300/60 sticky bottom-0 -mx-6 border-t px-6 py-3">
         <Button
           onClick={handleSubmit}
           disabled={envoiEnCours || soldeNegatif}
-          className="rounded-card w-fit self-start px-6 py-3.5"
+          className="rounded-card w-fit px-6 py-3.5"
         >
           <Send size={16} />
           Envoyer la demande

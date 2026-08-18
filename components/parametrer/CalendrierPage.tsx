@@ -161,10 +161,10 @@ function ModalCongesImposes({
 }: ModalCongesImposesProps) {
   const [debut, setDebut] = useState("");
   const [fin, setFin] = useState("");
-  // Gestion demi-journée alignée sur NouvelleDemandeForm : un seul jour →
-  // matin/après-midi/journée entière ; une période → seulement "après-midi
-  // au premier jour" et "matin au dernier jour" (une période ne commence/finit
-  // jamais à moitié dans l'autre sens).
+  // Gestion demi-journée alignée sur PoserDemandeModal (popin "Nouvelle
+  // demande") : un seul jour → matin/après-midi/journée entière ; une période
+  // → seulement "après-midi au premier jour" et "matin au dernier jour" (une
+  // période ne commence/finit jamais à moitié dans l'autre sens).
   const [demiDebut, setDemiDebut] = useState<DemiJournee>("matin");
   const [demiFin, setDemiFin] = useState<DemiJournee>("apres_midi");
   const [erreur, setErreur] = useState("");

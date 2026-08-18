@@ -1444,6 +1444,40 @@ imposé/posé) — un vrai blocage plutôt qu'un avertissement visuel après cou
   - **Essai fait puis annulé dans la même session** : verrouillage du scroll de la page derrière une
     popin ouverte (`document.body.style.overflow = "hidden"` en effet de montage/démontage) — retiré
     à la demande de Vincent juste après implémentation, la page derrière doit rester scrollable.
+- **Bug de comptage des jours corrigé (18/08/2026)** — "Soit N jours" dans la popin "Nouvelle
+  demande" ne déduisait que week-ends/fériés/DJI (via `joursOuvres`), pas les congés imposés (CPI)
+  ni une demande personnelle déjà posée sur la période choisie : ces jours étaient comptés en trop
+  dans le nombre de jours ET dans l'impact sur le solde (signalé par Vincent avec un cas réel : CP
+  10/07→31/08 avec un CPI 17→21 août, système affichait 35,5j au lieu de 30,5j). Premier correctif
+  (comparer `typeSurDemiJour(...)` à `option.code`) incomplet : confondait "demi-journée libre et
+  demandée" avec "déjà occupée par une AUTRE demande du même type" dès que le chevauchement était,
+  par exemple, un CP sur un CP déjà posé (aucune confusion possible avec RTT, couleur différente —
+  c'est ce qui a permis de déceler le vrai problème). Fix définitif : séparation de
+  `typeOccupantDemiJour` (ce qui occupe déjà une demi-journée, indépendamment de la nouvelle
+  demande) et `typeSurDemiJour` (ce qui s'affiche dans le détail "voir") — le comptage n'utilise
+  QUE le premier. Vérifié sur les deux cas réels signalés (30,5j ; et une demande CP 18/09→28/09
+  chevauchant une demande CP déjà posée 21→25/09 → 2j, pas 12).
+  - **Trou de règle de gestion identifié en creusant ce bug** (ajouté au Backlog, priorité Haute) :
+    le contrôle anti-chevauchement CPI/DJI/demande existante n'existe QUE côté client, dans le
+    filet de sécurité de `handleSubmit` (`PoserDemandeModal.tsx`) — et il ne couvre même pas les
+    DJI. Rien côté serveur : `creerDemande` (`demandes.repository.ts`) insère sans vérifier
+    `conges_imposes`/`demi_journees_imposees`, et `validerDemande` ne revérifie rien au moment de
+    la validation manager (un CPI ajouté après coup sur une demande déjà en attente ne redéclenche
+    aucune alerte). Explique une partie des données de test incohérentes trouvées en base (demandes
+    validées chevauchant un CPI).
+  - **Nettoyage associé** : `NouvelleDemandeForm.tsx` (ancien formulaire plein écran, remplacé par
+    la popin le 18/08/2026 mais laissé en place "au cas où") supprimé — plus référencé par aucune
+    route depuis que `/nouvelle-demande` pointe sur `PoserDemandeModal`, c'était un second chemin
+    de création qui contournait le filet de sécurité anti-chevauchement.
+- **Deux entrées retirées de la nav "Poser" (18/08/2026)**, `components/layout/tabs.ts` :
+  - **"Calendrier2"** (`/calendrier2`, `components/dashboard/Calendrier2Page.tsx`) — route et
+    composant supprimés, plus référencés nulle part ailleurs. Distinct de `/parametrer/calendrier2`
+    (`Calendrier2Page` dans `components/parametrer/CalendrierPage.tsx`, libellé nav "Calendrier"),
+    conservé — deux composants différents qui partageaient juste le même nom.
+  - **"Nouvelle demande"** (`/nouvelle-demande`) — seule l'entrée de nav est retirée, la route et
+    `PoserDemandeModal` restent en place (deep-link toujours fonctionnel) : le parcours réel passe
+    par la tuile "Poser un congé" d'Accueil, qui ouvre déjà la popin en state local sans navigation
+    (`Dashboard2Page.tsx`), rendant l'entrée de nav redondante.
 
 ## Décisions prises
 
