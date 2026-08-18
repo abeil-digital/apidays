@@ -570,7 +570,7 @@ export function Dashboard2Page() {
 
           <div className="grid max-w-2xl flex-1 grid-cols-2 gap-3 md:grid-cols-4">
             <SoldeCard
-              valeur={soldes.cp.valeur}
+              valeur={soldes.cp.valeurApresAttente}
               conditionPrefixe={soldes.cp.conditionPrefixe}
               conditionAccent={soldes.cp.conditionAccent}
               tone="cp"
@@ -578,7 +578,7 @@ export function Dashboard2Page() {
               onInfoClick={() => setSoldeDetailOuvert("CP")}
             />
             <SoldeCard
-              valeur={soldes.rtt.valeur}
+              valeur={soldes.rtt.valeurApresAttente}
               conditionPrefixe={soldes.rtt.conditionPrefixe}
               conditionAccent={soldes.rtt.conditionAccent}
               tone="rtt"
@@ -586,7 +586,7 @@ export function Dashboard2Page() {
               onInfoClick={() => setSoldeDetailOuvert("RTT")}
             />
             <SoldeCard
-              valeur={soldes.cpa.valeur}
+              valeur={soldes.cpa.valeurApresAttente}
               conditionPrefixe={soldes.cpa.conditionPrefixe}
               conditionAccent={soldes.cpa.conditionAccent}
               tone="cpa"

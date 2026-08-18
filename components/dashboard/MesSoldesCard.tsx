@@ -29,21 +29,21 @@ export function MesSoldesCard({ soldes }: { soldes: Soldes }) {
 
       <div className="border-ink-300/60 flex flex-col gap-3 border-t p-4">
         <SoldeCard
-          valeur={soldes.cp.valeur}
+          valeur={soldes.cp.valeurApresAttente}
           conditionPrefixe={soldes.cp.conditionPrefixe}
           conditionAccent={soldes.cp.conditionAccent}
           tone="cp"
           carre
         />
         <SoldeCard
-          valeur={soldes.rtt.valeur}
+          valeur={soldes.rtt.valeurApresAttente}
           conditionPrefixe={soldes.rtt.conditionPrefixe}
           conditionAccent={soldes.rtt.conditionAccent}
           tone="rtt"
           carre
         />
         <SoldeCard
-          valeur={soldes.cpa.valeur}
+          valeur={soldes.cpa.valeurApresAttente}
           conditionPrefixe={soldes.cpa.conditionPrefixe}
           conditionAccent={soldes.cpa.conditionAccent}
           tone="cpa"
