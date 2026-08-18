@@ -110,3 +110,25 @@ button:not(:disabled) {
     background: white;
   }
 }
+
+/* Jour "aujourd'hui" du calendrier (`DatePicker`, react-day-picker) :
+   matérialisé par un anneau neutre — identique sur tous les calendriers de
+   l'app (Nouvelle demande, CPI...), indépendant de la couleur d'accent
+   (`--rdp-accent-color`) propre à chaque instance, qui varie elle par type de
+   congé. */
+.rdp-today:not(.rdp-outside):not(.rdp-selected) .rdp-day_button {
+  border: 2px solid var(--color-ink-500);
+}
+
+.rdp-today:not(.rdp-outside) {
+  color: var(--color-ink-900);
+}
+
+/* Repère "date déjà choisie dans un autre picker" (`DatePicker`, prop
+   `dateMarquee`) — rond plein dans la couleur d'accent de CETTE instance
+   (`--rdp-accent-color`), pour matérialiser p. ex. la date "Du" une fois
+   passé sur le picker "Au". */
+.rdp-jour-marque:not(.rdp-selected) .rdp-day_button {
+  background-color: var(--rdp-accent-color);
+  color: white;
+}

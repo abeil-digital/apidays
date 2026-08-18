@@ -340,6 +340,65 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
 }
 
 /**
+ * Solde RTT/CPA "anticipé" à `dateReference` (typiquement la date de début
+ * d'une demande future, pour "Poser un jour") — même formule que `fetchSoldes`,
+ * mais l'accrual est calculé jusqu'à `dateReference` plutôt que jusqu'à
+ * aujourd'hui, pour refléter les jours qui auront été acquis d'ici là.
+ * N'existe que pour RTT/CPA : CP a un capital connu dès le 1er jour de la
+ * période (+ report), la notion de "anticipé" n'a pas de sens pour lui — son
+ * solde ne dépend pas de la date à laquelle on le consulte.
+ */
+export async function fetchSoldeAnticipe(
+  type: "RTT" | "CPA",
+  dateReference: string,
+): Promise<number> {
+  const supabase = createClient();
+  const id = await getUtilisateurIdCourant(supabase);
+  const reference = new Date(`${dateReference}T00:00:00Z`);
+
+  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
+    [
+      supabase.from("utilisateurs").select("taux_activite").eq("id", id).single(),
+      fetchReglesAcquisition(),
+    ],
+  );
+  if (erreurUtilisateur || !utilisateurRow) {
+    throw new Error("Impossible de charger le profil pour le calcul du solde anticipé.");
+  }
+  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+
+  if (type === "RTT") {
+    const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
+    if (!regleRTT) return 0;
+    const periodeRtt = periodeContenant(
+      reference,
+      regleRTT.periodeDebutMois,
+      regleRTT.periodeDebutJour,
+    );
+    const moisEcoules = moisEntiersEcoules(periodeRtt.debut, reference);
+    const accrual = moisEcoules * regleRTT.tauxAcquisitionMensuel * prorata;
+    const consomme = await sommeJours(supabase, id, "RTT", ["validee"], null, periodeRtt);
+    return Math.max(0, accrual - consomme);
+  }
+
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  if (!regleCP) return 0;
+  // CPA acquiert sur la période CP en cours (au sens de `dateReference`), pour
+  // financer des congés anticipés dont les dates tombent dans la période
+  // suivante — même logique que `fetchSoldes`.
+  const periodeEnCours = periodeContenant(
+    reference,
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+  const periodeSuivante = decalerPeriode(periodeEnCours, 1);
+  const moisEcoulesCpa = moisEntiersEcoules(periodeEnCours.debut, reference);
+  const accrualCpa = moisEcoulesCpa * regleCP.tauxAcquisitionMensuel * prorata;
+  const consommeCpa = await sommeJours(supabase, id, "CP", ["validee"], true, periodeSuivante);
+  return Math.max(0, accrualCpa - consommeCpa);
+}
+
+/**
  * Feed d'historique du solde CP d'un salarié (Espace Suivre, popin ouverte
  * au clic sur un solde) — solde de départ (capital + report au début de la
  * période en cours), puis chaque CP validé et chaque ajustement manuel,

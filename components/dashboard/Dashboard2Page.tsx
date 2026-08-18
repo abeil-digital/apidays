@@ -23,6 +23,7 @@ import {
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
 import { ReglesCongesModal } from "@/components/dashboard/ReglesCongesModal";
+import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
 import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
 import type { Demande } from "@/lib/types";
 
@@ -209,12 +210,13 @@ function SnippetDemande({
  */
 export function Dashboard2Page() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
-  const { soldes, loading: loadingSoldes } = useSoldes();
-  const { demandes, loading: loadingDemandes } = useDemandes();
+  const { soldes, loading: loadingSoldes, refetch: refetchSoldes } = useSoldes();
+  const { demandes, loading: loadingDemandes, refetch: refetchDemandes } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
   const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
+  const [nouvelleDemandeOuverte, setNouvelleDemandeOuverte] = useState(false);
   const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
   const [calendrierHauteur, setCalendrierHauteur] = useState<number | null>(null);
   const calendrierGridRef = useRef<HTMLDivElement>(null);
@@ -591,13 +593,14 @@ export function Dashboard2Page() {
               avecInfo
               onInfoClick={() => setSoldeDetailOuvert("CPA")}
             />
-            <Link
-              href="/nouvelle-demande"
+            <button
+              type="button"
+              onClick={() => setNouvelleDemandeOuverte(true)}
               className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
             >
               <span className="text-sm font-semibold">Poser un congé</span>
               <PlusCircle size={20} />
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -889,6 +892,22 @@ export function Dashboard2Page() {
 
       {reglesOuvertes && (
         <ReglesCongesModal soldes={soldes} onClose={() => setReglesOuvertes(false)} />
+      )}
+
+      {/* "Poser un congé" (18/08/2026) — s'affiche en popin contextuelle sur
+          Accueil plutôt que de naviguer vers `/nouvelle-demande` (route
+          conservée pour l'instant, vouée à être désactivée). `onSuccess`
+          rafraîchit `demandes`/`soldes` de CETTE page : la popin a sa propre
+          instance de `useDemandes`/`useSoldes`, l'ajout ne se répercute pas
+          automatiquement ici. */}
+      {nouvelleDemandeOuverte && (
+        <PoserDemandeModal
+          onClose={() => setNouvelleDemandeOuverte(false)}
+          onSuccess={() => {
+            refetchDemandes();
+            refetchSoldes();
+          }}
+        />
       )}
 
       {/* Détail de solde (17/08/2026) — même `SoldeDetailPanel` que "Suivre les

@@ -1361,6 +1361,90 @@ liste ci-dessous = ce qui est réellement resté) :
 - **`compterDecisionsRecentes`** (ajouté pour le bandeau "Activité récente" ci-dessus) retiré avec
   lui, pas de trace morte.
 
+**Popin "Nouvelle demande" refondue (18/08/2026)**, `components/nouvelle-demande/PoserDemandeModal.tsx`
+— remplace l'ancien formulaire plein écran (`NouvelleDemandeForm`, code conservé mais plus utilisé) et
+un premier essai de calendrier maison cliquable (abandonné le même jour). Reprend le gabarit
+`DatePicker` déjà en place pour les popins CPI/DJI plutôt qu'un calendrier fait main : le `disabled`
+bloque directement, dans la grille, les jours non sélectionnables (week-end, férié, jour déjà
+imposé/posé) — un vrai blocage plutôt qu'un avertissement visuel après coup.
+
+- **Structure de la popin** — bandeau plein `TypeBadge` cerclé de blanc (teinte = couleur du type
+  sélectionné) + titre + croix ; corps en quatre sections titrées dans la même typo que les onglets de
+  période "Mes Congés" (`text-sm font-semibold`) : **Type d'absence** (sélecteur), **Période**
+  (Du/Au), **Solde**, **Message (facultatif)**. `Modal` gagne `separateur={false}` pour cet en-tête
+  discret (pas de liseré entre bandeau et corps, contrairement à CPI/DJI).
+- **Sélecteur de type** (`SelectPille`) coloré dans la teinte du type en cours (bordure, chevron,
+  survol, texte) — CP/RTT/CPA/CSS/CE ont une variante de texte **plus foncée** que leur token de
+  base (`TEXTE_TYPE_IMPORTANT`, classes littérales une par code, RTT réutilisant
+  `--color-status-success-fg` déjà dans la palette, les autres en valeur arbitraire ~35% plus sombre)
+  — la couleur brute de ces tokens est trop peu contrastée en typo sur fond blanc, mais reste
+  inchangée partout ailleurs (badges, pastilles calendrier).
+- **Un seul jour possible en ne renseignant que "Du"** : le calcul de jours/solde ne bloque plus sur
+  `fin` renseigné — `finPourCalcul = fin && fin >= debut ? fin : debut`, utilisé partout (calcul,
+  solde, soumission). Le sélecteur journée/demi-journée reste toujours côté "Du" tant que la période
+  effective est un seul jour (`unSeulJour = Boolean(debut) && (!fin || fin === debut)`), y compris
+  quand "Au" est explicitement renseigné à la même date que "Du" — il ne "saute" côté "Au" que pour
+  une vraie période multi-jours.
+- **`DatePicker`** (`components/ui/DatePicker.tsx`) — quatre nouvelles props opt-in (défaut =
+  comportement historique pour CPI/DJI, non touché) :
+  - `compact` : champ + grille légèrement réduits (texte `text-lg` au lieu de `text-xl`, cellules
+    38/36px au lieu de 44/42px).
+  - `dateMarquee` : matérialise une date dans la grille par un **rond plein** dans la couleur
+    d'accent de CE picker (classe globale `.rdp-jour-marque`, `app/globals.css`) sans que ce soit la
+    date sélectionnée de ce picker — utilisé sur "Au" pour garder un repère visuel de "Du" une fois
+    qu'on choisit la fin de période.
+  - `moisInitial` : mois d'ouverture de la grille (sinon mois de `value`/mois courant) — le picker
+    "Au" s'ouvre directement sur le mois de "Du" plutôt que toujours le mois courant.
+  - **Calendrier rendu en portail** (`createPortal` dans `document.body`, `position: fixed` calculée
+    depuis `getBoundingClientRect()` du champ, recalculée au scroll/resize) — nécessaire depuis que
+    `Modal` limite sa hauteur (`max-h-[90vh]`, voir plus bas) : un calendrier en `position: absolute`
+    classique se retrouvait rogné par l'`overflow-y-auto` du corps de la popin dès qu'il dépassait la
+    zone visible. Le clic-extérieur (fermeture) vérifie maintenant aussi le contenu du portail
+    (`popoverRef`), sinon un clic dans le calendrier se serait interprété comme "extérieur".
+  - **Jour "aujourd'hui" matérialisé de façon neutre** sur tous les calendriers de l'app (règle
+    globale, `app/globals.css` : `.rdp-today` — anneau `--color-ink-500` + texte `--color-ink-900`),
+    plutôt que dans la couleur d'accent de chaque instance (qui varie par type de congé) — cohérence
+    demandée entre CPI/DJI et "Poser un jour".
+- **Bug de calcul corrigé** : `joursOuvres(debut, finPourCalcul, joursFeries)` n'passait pas
+  `djImposees` (4e paramètre optionnel de la fonction, `lib/joursFeries.ts`) — une ou plusieurs DJI à
+  l'intérieur d'une période sélectionnée n'étaient donc jamais déduites (0,5j chacune) du nombre de
+  jours ni du solde affichés. Signalé par Vincent avec un cas réel (31/08→25/09, 2 DJI dans la
+  période, total affiché comme si elles n'existaient pas) ; corrigé en passant `djImposees` (déjà
+  chargée pour le détail "voir", voir plus bas).
+- **Détail "voir" (lien sous "Soit N jours")** — bascule un encart gris `bg-surface-app` sous le
+  champ (le lien passe de "voir" à "masquer", pas de calendrier mensuel complet) : jours de la
+  période mis à plat par semaine (une ligne par semaine, week-ends toujours masqués comme
+  `MiniCalendrier`), en-têtes L-M-M-J-V par semaine, libellé du mois affiché seulement quand il
+  change d'une semaine à l'autre. Chaque jour coloré selon sa vraie nature plutôt que toujours la
+  couleur du type demandé — même priorité que `MiniCalendrier` : férié > congé imposé (CPI) > demi-
+  journée imposée (DJI) > une autre demande personnelle déjà posée (`codeDuJour`) > le type en cours
+  de saisie sinon. Objectif : visualiser comment la période choisie s'articule avec d'autres
+  absences déjà en place, sans reproduire un calendrier mensuel complet.
+- **Gestion des soldes négatifs** : `pillSolde` inverse son style quand la valeur est négative — fond
+  blanc, texte rouge (`--color-status-danger-fg`), liséré dans la couleur du type (au lieu du badge
+  plein couleur habituel). Le bouton "Envoyer la demande" est **désactivé** dès que "Après la
+  demande" serait négatif (`soldeNegatif`), et le `Button` (`components/ui/Button.tsx`) a son état
+  désactivé revu globalement — fond/texte gris (`bg-ink-300`/`text-ink-500`) au lieu d'une simple
+  opacité réduite sur la couleur active, pour que "désactivé" se voie sans ambiguïté (tous les
+  boutons de l'app, pas seulement celui-ci).
+- **Ligne "Actuel" du bloc Solde** volontairement moins mise en avant que les deux autres lignes
+  (à la date de la demande / après la demande) : fond blanc, liséré + texte dans la couleur du type
+  (variante "off" de `pillSolde`, 3e paramètre `attenue`) plutôt que le badge plein couleur.
+- **Compteur de caractères sur "Message"** (`NOTE_LONGUEUR_MAX = 200`, `maxLength` sur le
+  `Textarea`) — compteur `x/200` sous le champ, passe en orange (`text-status-warning-fg`) à partir
+  de 175 caractères, en rouge (`text-status-danger-fg`) à 200 (limite dure, blocage de la saisie au-
+  delà, pas juste un avertissement).
+- **`Modal` (`components/ui/Modal.tsx`)** — deux changements qui touchent TOUTES les popins de l'app,
+  pas seulement celle-ci :
+  - Le panneau est maintenant borné à `max-h-[90vh]` (`flex flex-col`) : l'en-tête reste fixe, le
+    corps scrolle en interne (`overflow-y-auto`) — avant ce fix, une popin au contenu long (ex.
+    "voir" déployé sur une longue période) pouvait dépasser la hauteur de l'écran sans aucun scroll
+    possible.
+  - `align="top"` remonté (`pt-12` au lieu de `pt-24`) — popin plus proche du haut de l'écran.
+  - **Essai fait puis annulé dans la même session** : verrouillage du scroll de la page derrière une
+    popin ouverte (`document.body.style.overflow = "hidden"` en effet de montage/démontage) — retiré
+    à la demande de Vincent juste après implémentation, la page derrière doit rester scrollable.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

@@ -10,7 +10,7 @@ const VARIANT_STYLES: Record<ButtonVariant, string> = {
 };
 
 const BASE_STYLES =
-  "inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ink-300 disabled:text-ink-500";
 
 interface ButtonOwnProps {
   variant?: ButtonVariant;
