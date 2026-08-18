@@ -1469,6 +1469,68 @@ imposé/posé) — un vrai blocage plutôt qu'un avertissement visuel après cou
     la popin le 18/08/2026 mais laissé en place "au cas où") supprimé — plus référencé par aucune
     route depuis que `/nouvelle-demande` pointe sur `PoserDemandeModal`, c'était un second chemin
     de création qui contournait le filet de sécurité anti-chevauchement.
+- **Décision produit sur le chevauchement CPI, puis étendue à tout chevauchement (18/08/2026)** —
+  signalé par Vincent avec un cas réel : demande CP 14→24 août avec 5 jours de CPI au milieu, comptage
+  correct (2 jours affichés) mais soumission bloquée par le filet de sécurité avec un message
+  générique. Première décision : un CPI au milieu d'une période plus large ne doit PLUS bloquer la
+  soumission — il est déjà exclu du décompte (`typeOccupantDemiJour`), donc une période avec un CPI
+  dedans est un cas légitime, pas une erreur à corriger. Étendue le même jour à TOUT chevauchement, y
+  compris avec une AUTRE demande personnelle (cas réel : une journée déjà posée le 11/08, pas encore
+  validée ; poser ensuite 10/08→13/08 compte bien 3 jours, ce qui est correct — il ne doit pas non plus
+  y avoir de blocage) : **la transparence prime sur le blocage**, principe produit explicite ("les
+  calendriers sur la page soldes sont là pour ça"). `handleSubmit` (`PoserDemandeModal.tsx`) n'a plus
+  aucun filet de sécurité anti-chevauchement — le calcul exclut déjà ce qui est occupé, il suffit de
+  l'afficher correctement. Le détail "voir" matérialise maintenant une légère transparence
+  (`opacity-45`) sur toute demi-journée déjà occupée (férié, CPI, DJI, ou une autre demande), même
+  quand elle partage la couleur du type affiché (avant, un jour "CP sur CP" se fondait visuellement en
+  un bloc plein sans distinction — corrigé en rendant systématiquement deux demi-blocs plutôt qu'un
+  bloc unique quand les couleurs coïncident). Vérifié en soumettant deux vraies demandes (14/08→24/08,
+  2j ; 10/08→13/08, 3j avec le 11 en transparence). `jourDejaOccupe` (CPI + demande) reste inchangée
+  par ailleurs, toujours utilisée pour désactiver les BORNES du `DatePicker` (on ne peut pas démarrer/
+  finir littéralement sur un jour déjà occupé, seul le milieu d'une période n'est plus bloquant).
+  - **Verrouillage du sélecteur de demi-journée sur une DJI** — cas à la marge signalé par Vincent :
+    une période qui démarre ou se termine sur une DJI doit verrouiller le sélecteur Du/Au (ou le
+    sélecteur "Journée/Matin/A. midi" en mode un seul jour) sur l'unique créneau cohérent (celui que la
+    DJI n'occupe pas) plutôt que de laisser un choix qui n'a pas de sens. Implémenté via
+    `djiSurDate`/`demiParDefautDebut`/`demiParDefautFin` et des listes d'options filtrées
+    (`dureeUnJourOptions`/`demiDebutOptions`/`demiFinOptions`), `SelectPille` passé en `disabled` quand
+    une seule option reste. Vérifié : demande d'un seul jour sur une date avec DJI l'après-midi →
+    sélecteur verrouillé sur "Matin", 0,5 jour.
+  - **Extraction en composant partagé** — le détail "voir" (grille par semaine, transparence) et le
+    résolveur d'occupant (`typeOccupantDemiJour`) étaient dupliqués nulle part ailleurs jusqu'ici, mais
+    la nouvelle fonctionnalité "Voir" côté validation manager (ci-dessous) en avait besoin à
+    l'identique : extraits dans `components/demandes/DetailPeriodeConges.tsx`
+    (`DetailPeriodeConges` + `creerResolveurOccupant` + `demiCouvertePeriode`), `PoserDemandeModal.tsx`
+    refactorisé pour consommer ce module plutôt que sa propre copie.
+- **Lien "Informations complémentaires" sur la validation manager (18/08/2026)** — demande de Vincent :
+  sur "Suivre les demandes" (`/suivre/demandes`, `SuivreDemandesPage.tsx`), dans le panneau de détail
+  d'une demande "en attente" (`DetailCongePanel.tsx`), APRÈS l'encart Décision (Commentaire +
+  Refuser/Valider), un lien "Informations complémentaires" (même gabarit que le lien "Régularisation"
+  déjà existant pour validé/annulé — texte + chevron) déploie la même représentation par semaine que la
+  popin de dépôt (`DetailPeriodeConges`), pour que le manager voie concrètement ce qui compte avant de
+  valider. Essai intermédiaire abandonné le même jour : d'abord posé sur `/suivre` ("Demandes à
+  traiter", `DemandeEquipeRow.tsx`) et libellé "voir"/"masquer" entre le récap et les boutons — mauvais
+  écran (Vincent visait "Suivre les demandes") et mauvais libellé/emplacement, entièrement revu.
+  L'occupant (transparence) se base sur les AUTRES demandes du même employé (filtrées depuis
+  `useDemandesEquipe`, qui charge déjà toute l'équipe) plutôt que sur celles du manager — calendrier
+  (fériés/CPI/DJI) chargé une fois dans `SuivreDemandesPage` via `useCalendrier` (année courante +
+  suivante, données globales valables pour n'importe quel employé) et passé en props (optionnelles :
+  absentes, le lien ne s'affiche pas — `CongesPaiePage.tsx`, qui réutilise aussi `DetailCongePanel`
+  mais ne traite pas de demandes "en attente" par ce panneau, n'a rien à changer).
+- **Comptage serveur corrigé — DJI et CPI (18/08/2026)** — `calculerNbDemiJournees`
+  (`demandes.repository.ts`, calcul exécuté à l'enregistrement réel dans `creerDemande`) ne déduisait
+  ni les DJI ni les CPI de la période, contrairement à l'aperçu client (`typeOccupantDemiJour`),
+  causant un décompte PERSISTÉ différent de celui affiché avant l'envoi (signalé par Vincent : demande
+  3→7 août comptée 5j en base au lieu de 4,5j, la DJI du 7/08 non déduite). Fix : ajout d'un fetch de
+  `demi_journees_imposees` et `conges_imposes` sur la période (en plus de `jours_feries` déjà
+  interrogé), et d'un helper `demiCouvertePeriode` dupliqué côté serveur (pas de module partagé entre
+  code serveur et composant, même limitation que côté client). Vérifié en soumettant une vraie demande
+  31/08→11/09/2026 couvrant la DJI du 11/09 après-midi : affichée 9,5j avant envoi, persistée 9,5j en
+  base après envoi (`/historique`). **Les demandes de test déjà en base avant ce fix ne sont PAS
+  corrigées rétroactivement** — "3 août-7 août 2026" reste à 5j (devrait être 4,5j) et "14 août-24 août
+  2026" reste à 7j (devrait être 2j), ce sont des données de test à corriger manuellement ou à ignorer.
+  Toujours aucune vérification anti-chevauchement CPI/DJI côté serveur ni à la validation manager (voir
+  Backlog, priorité Haute, point non traité par ce fix).
 - **Deux entrées retirées de la nav "Poser" (18/08/2026)**, `components/layout/tabs.ts` :
   - **"Calendrier2"** (`/calendrier2`, `components/dashboard/Calendrier2Page.tsx`) — route et
     composant supprimés, plus référencés nulle part ailleurs. Distinct de `/parametrer/calendrier2`

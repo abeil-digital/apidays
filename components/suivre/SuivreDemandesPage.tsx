@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
+import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
@@ -45,6 +46,16 @@ export function SuivreDemandesPage() {
   const { demandes, valider, refuser, regulariser, remettreEnAttente } = useDemandesEquipe();
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const { reglesAcquisition } = useReglesConges();
+
+  // Données calendrier (courant + suivant) pour le lien "Voir" du panneau de
+  // détail (`DetailCongePanel`) sur une demande "en attente" — mêmes données
+  // pour tous les employés, pas de re-fetch par utilisateur (18/08/2026).
+  const anneeActuelle = new Date().getFullYear();
+  const calActuel = useCalendrier(anneeActuelle);
+  const calSuivant = useCalendrier(anneeActuelle + 1);
+  const joursFeries = [...calActuel.joursFeries, ...calSuivant.joursFeries];
+  const congesImposes = [...calActuel.congesImposes, ...calSuivant.congesImposes];
+  const djImposees = [...calActuel.djImposees, ...calSuivant.djImposees];
   const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
   const [debutPerso, setDebutPerso] = useState("");
@@ -53,7 +64,6 @@ export function SuivreDemandesPage() {
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
   const [selectionId, setSelectionId] = useState<string | null>(null);
 
-  const anneeActuelle = new Date().getFullYear();
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const periodeReference = periodeReferenceCp(regleCp);
 
@@ -194,6 +204,12 @@ export function SuivreDemandesPage() {
             onRefuser={(commentaire) => refuser(selection.id, commentaire)}
             onRegulariser={(commentaire) => regulariser(selection.id, commentaire)}
             onValiderSucces={(id, message) => setToast({ id, message })}
+            joursFeries={joursFeries}
+            congesImposes={congesImposes}
+            djImposees={djImposees}
+            autresDemandes={demandes.filter(
+              (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
+            )}
           />
         )}
       </div>

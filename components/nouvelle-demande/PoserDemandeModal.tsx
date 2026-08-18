@@ -12,7 +12,6 @@ import { useSoldes } from "@/hooks/useSoldes";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { FieldLabel } from "@/components/ui/FieldLabel";
-import { MOIS_FR } from "@/components/ui/MiniCalendrier";
 import { Modal } from "@/components/ui/Modal";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { Textarea } from "@/components/ui/Textarea";
@@ -23,6 +22,11 @@ import {
   classeTexteTypeBadge,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
+import {
+  DetailPeriodeConges,
+  creerResolveurOccupant,
+  demiCouvertePeriode,
+} from "@/components/demandes/DetailPeriodeConges";
 
 interface OptionType {
   key: string;
@@ -53,10 +57,6 @@ const OPTIONS: OptionType[] = [
 ];
 
 type DureeUnJour = "entiere" | "matin" | "apres_midi";
-
-// Même abréviation que la grille `MiniCalendrier` (non exportée depuis
-// là-bas) — semaine L-V, jamais de week-end.
-const JOURS_SEMAINE_COURT = ["L", "M", "M", "J", "V"];
 
 const NOTE_LONGUEUR_MAX = 200;
 const NOTE_LONGUEUR_ALERTE = 175;
@@ -128,11 +128,11 @@ function dateVersIsoLocal(date: Date): string {
  * simple avertissement visuel, et beaucoup moins de code qu'un calendrier de
  * sélection de période fait main.
  *
- * Le nombre de jours (voir `typeSurDemiJour`) exclut week-ends et fériés,
- * comme le fait le serveur à l'enregistrement (`calculerNbDemiJournees`,
- * `demandes.repository.ts`) — et déduit en plus tout ce qui couvre déjà une
- * demi-journée de la période (CPI, DJI, une autre demande déjà posée), ce que
- * le calcul serveur ne fait PAS encore (voir Backlog.md).
+ * Le nombre de jours (voir `creerResolveurOccupant`, `DetailPeriodeConges.tsx`)
+ * exclut week-ends et fériés, comme le fait le serveur à l'enregistrement
+ * (`calculerNbDemiJournees`, `demandes.repository.ts`) — et déduit en plus
+ * tout ce qui couvre déjà une demi-journée de la période (CPI, DJI, une
+ * autre demande déjà posée), même chose côté serveur depuis le 18/08/2026.
  *
  * "Solde à la date de la demande" (`fetchSoldeAnticipe`) — uniquement pour
  * RTT et Congés anticipés (CP a un capital connu d'avance, la notion
@@ -184,24 +184,24 @@ export function PoserDemandeModal({
     return congesImposes.some((c) => iso >= c.debut && iso <= c.fin) || Boolean(demandeDuJour(iso));
   }
 
-  // Une demi-journée donnée (`demi`) d'un jour (`iso`) fait-elle partie d'une
-  // période [debutP, finP] ? Vrai sur toute la période SAUF sur la demi-
-  // journée exclue à chaque borne (`demiDebutP === "apres_midi"` exclut le
-  // matin du premier jour, `demiFinP === "matin"` exclut l'après-midi du
-  // dernier) — même forme que `CongeImpose`/`Demande` (demiDebut/demiFin) et
-  // que la demande en cours de saisie (debut/finPourCalcul/demiDebut/demiFin).
-  function demiCouvertePeriode(
-    iso: string,
-    demi: DemiJournee,
-    debutP: string,
-    finP: string,
-    demiDebutP: DemiJournee,
-    demiFinP: DemiJournee,
-  ): boolean {
-    if (iso < debutP || iso > finP) return false;
-    if (iso === debutP && demiDebutP === "apres_midi" && demi === "matin") return false;
-    if (iso === finP && demiFinP === "matin" && demi === "apres_midi") return false;
-    return true;
+  // Créneau DJI sur une date donnée (`null` si aucune DJI ce jour-là) — sert à
+  // verrouiller le sélecteur de demi-journée d'une borne (Du/Au) qui tombe
+  // sur une DJI : ce créneau est déjà imposé, donc pas question de le
+  // proposer comme un choix, un seul reste cohérent (18/08/2026, cas signalé
+  // par Vincent).
+  function djiSurDate(iso: string): DemiJournee | null {
+    const dj = djImposees.find((d) => d.date === iso);
+    return dj ? dj.demiJournee : null;
+  }
+
+  // Demi-journée à proposer par défaut pour une borne qui tombe sur une DJI —
+  // celle que la DJI n'occupe PAS, seule option cohérente (démarrer/finir sur
+  // le créneau déjà imposé n'a pas de sens, il est déjà exclu du décompte).
+  function demiParDefautDebut(iso: string): DemiJournee {
+    return djiSurDate(iso) === "matin" ? "apres_midi" : "matin";
+  }
+  function demiParDefautFin(iso: string): DemiJournee {
+    return djiSurDate(iso) === "apres_midi" ? "matin" : "apres_midi";
   }
 
   // Ce qui occupe DÉJÀ une demi-journée, indépendamment de la demande en
@@ -209,43 +209,11 @@ export function PoserDemandeModal({
   // (DJI) > une autre demande personnelle déjà posée (rare à l'intérieur
   // d'une période tout juste sélectionnée, mais un jour au milieu d'une
   // période choisie n'est pas bloqué par le `disabled` du `DatePicker`, qui
-  // ne vérifie que les bornes début/fin). `null` si rien n'occupe cette
-  // demi-journée. Sert à la fois au détail "voir" et au calcul du nombre de
-  // jours — les deux doivent voir EXACTEMENT la même chose.
-  function typeOccupantDemiJour(iso: string, demi: DemiJournee): TypeBadgeCode | null {
-    if (joursFeries.some((f) => f.date === iso)) return "FERIE";
-    const cpi = congesImposes.find((c) =>
-      demiCouvertePeriode(iso, demi, c.debut, c.fin, c.demiDebut, c.demiFin),
-    );
-    if (cpi) return "CPI";
-    if (djImposees.some((d) => d.date === iso && d.demiJournee === demi)) return "DJI";
-    const demande = demandes.find(
-      (d) =>
-        d.statut !== "refusé" &&
-        d.statut !== "annulé" &&
-        demiCouvertePeriode(iso, demi, d.debut, d.fin, d.demiDebut, d.demiFin),
-    );
-    if (demande) return demande.isAnticipation ? "CPA" : (demande.type as TypeBadgeCode);
-    return null;
-  }
-
-  // Type à afficher pour UNE demi-journée du détail "voir" — ce qui l'occupe
-  // déjà, sinon le type en cours de saisie s'il couvre cette demi-journée,
-  // sinon `null` (ex. le matin d'un premier jour posé à partir de l'après-
-  // midi seulement). ATTENTION : ne PAS utiliser ce résultat pour compter les
-  // jours demandés — comparer ce code à `option.code` confond à tort "cette
-  // demi-journée est libre et fait partie de la demande" avec "elle est déjà
-  // occupée par une AUTRE demande qui se trouve être du même type" (bug
-  // trouvé le 18/08/2026 : chevauchement avec une demande CP existante compté
-  // comme des jours demandés en plus). Utiliser `typeOccupantDemiJour` pour
-  // savoir si une demi-journée est libre.
-  function typeSurDemiJour(iso: string, demi: DemiJournee): TypeBadgeCode | null {
-    const occupant = typeOccupantDemiJour(iso, demi);
-    if (occupant) return occupant;
-    if (demiCouvertePeriode(iso, demi, debut, finPourCalcul, demiDebut, demiFin))
-      return option.code;
-    return null;
-  }
+  // ne vérifie que les bornes début/fin). Sert à la fois au détail "voir"
+  // (`DetailPeriodeConges`) et au calcul du nombre de jours ci-dessous — les
+  // deux doivent voir EXACTEMENT la même chose. Brique partagée avec le lien
+  // "Voir" de la validation manager (`DemandeEquipeRow`, 18/08/2026).
+  const occupant = creerResolveurOccupant({ joursFeries, congesImposes, djImposees, demandes });
 
   function jourIndisponible(date: Date): boolean {
     const iso = dateVersIsoLocal(date);
@@ -261,16 +229,17 @@ export function PoserDemandeModal({
   function handleDebutChange(valeur: string) {
     setError("");
     setDebut(valeur);
+    const finEffective = fin && fin >= valeur ? fin : valeur;
     if (fin && fin < valeur) setFin("");
-    setDemiDebut("matin");
-    setDemiFin("apres_midi");
+    setDemiDebut(demiParDefautDebut(valeur));
+    setDemiFin(demiParDefautFin(finEffective));
   }
 
   function handleFinChange(valeur: string) {
     setError("");
     setFin(valeur);
-    setDemiDebut("matin");
-    setDemiFin("apres_midi");
+    setDemiDebut(debut ? demiParDefautDebut(debut) : "matin");
+    setDemiFin(demiParDefautFin(valeur));
   }
 
   // "Un seul jour" couvre aussi le cas où "Au" n'est pas encore renseigné —
@@ -284,6 +253,46 @@ export function PoserDemandeModal({
       : demiDebut === "matin"
         ? "matin"
         : "apres_midi";
+
+  // Options réellement proposées pour chaque sélecteur de créneau — réduites
+  // à la seule option cohérente quand la borne (Du, Au, ou l'unique jour en
+  // mode "un seul jour") tombe sur une DJI (18/08/2026, cas signalé par
+  // Vincent). `disabled` sur le `SelectPille` quand une seule option reste :
+  // rien à choisir, le verrouillage doit être visible, pas juste une liste
+  // réduite à un select toujours actif.
+  const djiJourUnique = debut ? djiSurDate(debut) : null;
+  const dureeUnJourOptions: { value: DureeUnJour; label: string }[] =
+    djiJourUnique === "matin"
+      ? [{ value: "apres_midi", label: "A. midi" }]
+      : djiJourUnique === "apres_midi"
+        ? [{ value: "matin", label: "Matin" }]
+        : [
+            { value: "entiere", label: "Journée" },
+            { value: "matin", label: "Matin" },
+            { value: "apres_midi", label: "A. midi" },
+          ];
+
+  const djiDebutJour = debut ? djiSurDate(debut) : null;
+  const demiDebutOptions: { value: DemiJournee; label: string }[] =
+    djiDebutJour === "matin"
+      ? [{ value: "apres_midi", label: "A. midi" }]
+      : djiDebutJour === "apres_midi"
+        ? [{ value: "matin", label: "Journée" }]
+        : [
+            { value: "matin", label: "Journée" },
+            { value: "apres_midi", label: "A. midi" },
+          ];
+
+  const djiFinJour = fin ? djiSurDate(fin) : null;
+  const demiFinOptions: { value: DemiJournee; label: string }[] =
+    djiFinJour === "apres_midi"
+      ? [{ value: "matin", label: "Matin" }]
+      : djiFinJour === "matin"
+        ? [{ value: "apres_midi", label: "Journée" }]
+        : [
+            { value: "apres_midi", label: "Journée" },
+            { value: "matin", label: "Matin" },
+          ];
 
   function handleDureeUnJourChange(valeur: DureeUnJour) {
     if (valeur === "entiere") {
@@ -303,19 +312,20 @@ export function PoserDemandeModal({
   // une demande d'un jour en ne remplissant qu'une seule date, sans quoi le
   // nombre de jours et le solde restent à "…" pour rien.
   const finPourCalcul = fin && fin >= debut ? fin : debut;
-  // Basé sur `typeOccupantDemiJour` (même brique que le détail "voir" plus
-  // bas) plutôt que sur `joursOuvres` seul : une demi-journée ne compte QUE
-  // si rien d'autre ne l'occupe déjà (férié, CPI, DJI, ou une autre demande
-  // personnelle déjà posée sur la période) ET qu'elle fait partie de la
-  // période demandée. `joursOuvres` seul ne déduisait que fériés/DJI, pas les
-  // CPI ni les demandes déjà posées : un congé imposé (CPI) ou une demande
-  // déjà existante à l'intérieur de la période choisie se retrouvait compté
-  // en plus dans "Soit N jours" et dans l'impact sur le solde (bug signalé le
-  // 18/08/2026). Comparer plutôt `typeSurDemiJour(...) === option.code`
-  // semblait marcher mais confondait à tort "libre et demandé" avec "déjà
-  // occupé par une AUTRE demande du même type" (ex. une demande CP existante
-  // masquée par la nouvelle demande CP en cours — signalé juste après par
-  // Vincent, `typeOccupantDemiJour` distingue explicitement les deux).
+  // Basé sur `occupant` (`creerResolveurOccupant`, même brique que le détail
+  // "voir" plus bas) plutôt que sur `joursOuvres` seul : une demi-journée ne
+  // compte QUE si rien d'autre ne l'occupe déjà (férié, CPI, DJI, ou une
+  // autre demande personnelle déjà posée sur la période) ET qu'elle fait
+  // partie de la période demandée. `joursOuvres` seul ne déduisait que
+  // fériés/DJI, pas les CPI ni les demandes déjà posées : un congé imposé
+  // (CPI) ou une demande déjà existante à l'intérieur de la période choisie
+  // se retrouvait compté en plus dans "Soit N jours" et dans l'impact sur le
+  // solde (bug signalé le 18/08/2026). Comparer plutôt le code affiché dans
+  // le détail "voir" à `option.code` semblait marcher mais confondait à tort
+  // "libre et demandé" avec "déjà occupé par une AUTRE demande du même type"
+  // (ex. une demande CP existante masquée par la nouvelle demande CP en
+  // cours — signalé juste après par Vincent, `occupant` distingue
+  // explicitement les deux).
   let joursDemandes: number | null = null;
   if (debut) {
     let total = 0;
@@ -325,69 +335,18 @@ export function PoserDemandeModal({
       const iso = curseurJours.toISOString().slice(0, 10);
       const jourSemaine = curseurJours.getUTCDay();
       if (jourSemaine !== 0 && jourSemaine !== 6) {
-        if (
-          !typeOccupantDemiJour(iso, "matin") &&
-          demiCouvertePeriode(iso, "matin", debut, finPourCalcul, demiDebut, demiFin)
-        ) {
-          total += 0.5;
-        }
-        if (
-          !typeOccupantDemiJour(iso, "apres_midi") &&
-          demiCouvertePeriode(iso, "apres_midi", debut, finPourCalcul, demiDebut, demiFin)
-        ) {
-          total += 0.5;
-        }
+        const okMatin =
+          !occupant(iso, "matin") &&
+          demiCouvertePeriode(iso, "matin", debut, finPourCalcul, demiDebut, demiFin);
+        const okApresMidi =
+          !occupant(iso, "apres_midi") &&
+          demiCouvertePeriode(iso, "apres_midi", debut, finPourCalcul, demiDebut, demiFin);
+        if (okMatin) total += 0.5;
+        if (okApresMidi) total += 0.5;
       }
       curseurJours.setUTCDate(curseurJours.getUTCDate() + 1);
     }
     joursDemandes = total;
-  }
-
-  // Détail "voir" — jours de la période mis à plat par semaine (L-V, jamais
-  // de week-end, même convention que `MiniCalendrier`), chaque semaine
-  // portant le libellé du mois de son premier jour ouvré. Pas de grille
-  // mensuelle complète : uniquement les jours réellement concernés par la
-  // période choisie.
-  const semainesDetail: {
-    libelleMois: string;
-    jours: { iso: string; jour: number; jourSemaine: number }[];
-  }[] = [];
-  if (debut) {
-    let semaineCourante: { iso: string; jour: number; jourSemaine: number }[] = [];
-    let libelleCourant = "";
-    const curseurDetail = new Date(`${debut}T00:00:00Z`);
-    const finDetail = new Date(`${finPourCalcul}T00:00:00Z`);
-    while (curseurDetail <= finDetail) {
-      const iso = curseurDetail.toISOString().slice(0, 10);
-      const jourSemaine = curseurDetail.getUTCDay();
-      if (jourSemaine !== 0 && jourSemaine !== 6) {
-        if (jourSemaine === 1 && semaineCourante.length > 0) {
-          semainesDetail.push({ libelleMois: libelleCourant, jours: semaineCourante });
-          semaineCourante = [];
-        }
-        if (semaineCourante.length === 0) {
-          libelleCourant = MOIS_FR[curseurDetail.getUTCMonth()];
-        }
-        semaineCourante.push({ iso, jour: curseurDetail.getUTCDate(), jourSemaine });
-      }
-      curseurDetail.setUTCDate(curseurDetail.getUTCDate() + 1);
-    }
-    if (semaineCourante.length > 0) {
-      semainesDetail.push({ libelleMois: libelleCourant, jours: semaineCourante });
-    }
-  }
-
-  // Regroupe les semaines consécutives du même mois — le libellé du mois
-  // s'affiche une fois par groupe, sur le côté gauche, plutôt que répété au-
-  // dessus de chaque semaine.
-  const moisDetail: (typeof semainesDetail)[number][][] = [];
-  for (const semaine of semainesDetail) {
-    const dernierGroupe = moisDetail[moisDetail.length - 1];
-    if (dernierGroupe && dernierGroupe[0].libelleMois === semaine.libelleMois) {
-      dernierGroupe.push(semaine);
-    } else {
-      moisDetail.push([semaine]);
-    }
   }
 
   const afficherAnticipe = optionKey === "RTT" || optionKey === "CP_ANTICIPE";
@@ -418,22 +377,18 @@ export function PoserDemandeModal({
       setError("Merci d'indiquer une date de début.");
       return;
     }
-    // Filet de sécurité en plus du `disabled` des `DatePicker` (qui bloque les
-    // bornes début/fin, mais pas un jour déjà pris à l'intérieur d'une période
-    // plus large) — vérifie chaque jour ouvré de la période.
-    const cursor = new Date(`${debut}T00:00:00Z`);
-    const finDate = new Date(`${finPourCalcul}T00:00:00Z`);
-    while (cursor <= finDate) {
-      const iso = cursor.toISOString().slice(0, 10);
-      if (estJourOuvre(iso, joursFeries) && jourDejaOccupe(iso)) {
-        setError(
-          "La période sélectionnée chevauche un jour déjà posé ou imposé — vérifiez le calendrier.",
-        );
-        return;
-      }
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-    }
-
+    // Pas de filet de sécurité anti-chevauchement ici (retiré le 18/08/2026,
+    // décision produit) : un jour déjà occupé au milieu de la période choisie
+    // — par un CPI, une DJI, ou une AUTRE demande personnelle déjà posée —
+    // ne bloque jamais l'envoi. Ce jour est déjà exclu du décompte affiché
+    // (`occupant`, `creerResolveurOccupant`) et matérialisé en transparence dans le détail
+    // "voir" (ex. une demande CP 10/08→13/08 avec le 11/08 déjà posé ailleurs
+    // affiche 3 jours, transparence sur le 11) — exactement le même principe
+    // que pour un jour férié au milieu d'une période : pas de blocage, juste
+    // de la transparence sur ce qui compte réellement. Les BORNES
+    // (début/fin), elles, restent bloquées par le `disabled` des
+    // `DatePicker` (`jourIndisponible`/`jourDejaOccupe`, inchangé) — on ne
+    // peut pas démarrer/finir littéralement sur un jour déjà occupé.
     setError("");
     setEnvoiEnCours(true);
     try {
@@ -570,28 +525,35 @@ export function PoserDemandeModal({
                     <SelectPille
                       value={dureeUnJour}
                       onChange={(e) => handleDureeUnJourChange(e.target.value as DureeUnJour)}
+                      disabled={dureeUnJourOptions.length === 1}
                       className={TEXTE_TYPE_IMPORTANT[option.code]}
                       borderClassName={classeBordureTypeBadge(option.code)}
                       chevronClassName={classeTexteTypeBadge(option.code)}
                       hoverClassName={HOVER_TEINTE_TYPE[option.code]}
                       sansAnneauFocus
                     >
-                      <option value="entiere">Journée</option>
-                      <option value="matin">Matin</option>
-                      <option value="apres_midi">A. midi</option>
+                      {dureeUnJourOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </SelectPille>
                   ) : (
                     <SelectPille
                       value={demiDebut}
                       onChange={(e) => setDemiDebut(e.target.value as DemiJournee)}
+                      disabled={demiDebutOptions.length === 1}
                       className={TEXTE_TYPE_IMPORTANT[option.code]}
                       borderClassName={classeBordureTypeBadge(option.code)}
                       chevronClassName={classeTexteTypeBadge(option.code)}
                       hoverClassName={HOVER_TEINTE_TYPE[option.code]}
                       sansAnneauFocus
                     >
-                      <option value="matin">Journée</option>
-                      <option value="apres_midi">A. midi</option>
+                      {demiDebutOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
                     </SelectPille>
                   )}
                 </div>
@@ -624,14 +586,18 @@ export function PoserDemandeModal({
                   <SelectPille
                     value={demiFin}
                     onChange={(e) => setDemiFin(e.target.value as DemiJournee)}
+                    disabled={demiFinOptions.length === 1}
                     className={TEXTE_TYPE_IMPORTANT[option.code]}
                     borderClassName={classeBordureTypeBadge(option.code)}
                     chevronClassName={classeTexteTypeBadge(option.code)}
                     hoverClassName={HOVER_TEINTE_TYPE[option.code]}
                     sansAnneauFocus
                   >
-                    <option value="apres_midi">Journée</option>
-                    <option value="matin">Matin</option>
+                    {demiFinOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
                   </SelectPille>
                 </div>
               )}
@@ -659,80 +625,16 @@ export function PoserDemandeModal({
             </p>
           )}
 
-          {voirDetail && semainesDetail.length > 0 && (
-            <div className="bg-surface-app mt-2 rounded-xl p-3">
-              {/* En-têtes L-M-M-J-V affichés une seule fois en haut — même
-                  colonne de gauche (largeur `w-16` + `gap-3`) qu'un nom de
-                  mois pour rester alignés avec les grilles de jours en
-                  dessous. Largeur choisie pour laisser un peu d'air même au
-                  plus long des noms de mois ("Septembre"). */}
-              <div className="flex items-start gap-3">
-                <span className="w-16 shrink-0" />
-                <div className="grid grid-cols-5 gap-1">
-                  {JOURS_SEMAINE_COURT.map((lettre, index) => (
-                    <span
-                      key={index}
-                      className="text-ink-500 flex h-5 w-5 items-center justify-center text-[10px]"
-                    >
-                      {lettre}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {moisDetail.map((semainesDuMois, indexMois) => (
-                <div
-                  key={semainesDuMois[0].jours[0].iso}
-                  className={`flex items-start gap-3 ${indexMois === 0 ? "mt-1" : "mt-4"}`}
-                >
-                  <span className="w-16 shrink-0 pt-1 text-xs font-semibold text-[#374151]">
-                    {semainesDuMois[0].libelleMois}
-                  </span>
-                  <div className="flex flex-col gap-1">
-                    {semainesDuMois.map((semaine) => (
-                      <div key={semaine.jours[0].iso} className="grid grid-cols-5 gap-1">
-                        {[1, 2, 3, 4, 5].map((jourSemaine) => {
-                          const j = semaine.jours.find((jour) => jour.jourSemaine === jourSemaine);
-                          if (!j) return <div key={jourSemaine} className="h-5 w-5" />;
-                          const codeMatin = typeSurDemiJour(j.iso, "matin");
-                          const codeApresMidi = typeSurDemiJour(j.iso, "apres_midi");
-                          return codeMatin === codeApresMidi ? (
-                            <div
-                              key={j.iso}
-                              className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold text-white ${
-                                codeMatin ? classeFondTypeBadge(codeMatin) : "bg-ink-300/40"
-                              }`}
-                            >
-                              {j.jour}
-                            </div>
-                          ) : (
-                            <div
-                              key={j.iso}
-                              className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-md"
-                            >
-                              <div
-                                className={`absolute inset-y-0 left-0 w-1/2 ${
-                                  codeMatin ? classeFondTypeBadge(codeMatin) : "bg-ink-300/40"
-                                }`}
-                              />
-                              <div
-                                className={`absolute inset-y-0 right-0 w-1/2 ${
-                                  codeApresMidi
-                                    ? classeFondTypeBadge(codeApresMidi)
-                                    : "bg-ink-300/40"
-                                }`}
-                              />
-                              <span className="relative z-10 text-[10px] font-bold text-white">
-                                {j.jour}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+          {voirDetail && debut && (
+            <div className="mt-2">
+              <DetailPeriodeConges
+                debut={debut}
+                fin={finPourCalcul}
+                demiDebut={demiDebut}
+                demiFin={demiFin}
+                codeParDefaut={option.code}
+                occupant={occupant}
+              />
             </div>
           )}
         </div>

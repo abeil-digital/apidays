@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
-import type { Demande, DemandeEquipe, StatutDemande } from "@/lib/types";
+import type {
+  CongeImpose,
+  Demande,
+  DemandeEquipe,
+  DjImposee,
+  JourFerie,
+  StatutDemande,
+} from "@/lib/types";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
   classeFondTypeBadge,
@@ -14,6 +21,10 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
+import {
+  DetailPeriodeConges,
+  creerResolveurOccupant,
+} from "@/components/demandes/DetailPeriodeConges";
 
 interface DetailCongePanelProps {
   // `demandeur`/`validateur` optionnels : un collaborateur consultant son
@@ -40,6 +51,15 @@ interface DetailCongePanelProps {
    * autre sens) — l'appelant affiche un bandeau de confirmation qui doit
    * survivre à la fermeture de ce panneau, donc porté par lui, pas par nous. */
   onValiderSucces?: (id: string, message: string) => void;
+  /** Données calendrier + autres demandes du même employé — uniquement pour
+   * le lien "Voir" (demande "en attente", 18/08/2026), qui affiche le même
+   * détail par semaine que la popin de dépôt. Optionnelles : absentes, le
+   * lien "Voir" ne s'affiche simplement pas (ex. `CongesPaiePage`, qui ne
+   * traite pas de demandes "en attente" par ce panneau). */
+  joursFeries?: JourFerie[];
+  congesImposes?: CongeImpose[];
+  djImposees?: DjImposee[];
+  autresDemandes?: Demande[];
 }
 
 function formatJjMmAa(iso: string): string {
@@ -109,9 +129,14 @@ export function DetailCongePanel({
   onRegulariser,
   onEnCoursChange,
   onValiderSucces,
+  joursFeries,
+  congesImposes,
+  djImposees,
+  autresDemandes,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
   const [regularisationOuverte, setRegularisationOuverte] = useState(false);
+  const [voirDetail, setVoirDetail] = useState(false);
   const [enCours, setEnCours] = useState(false);
   const [erreurAction, setErreurAction] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ question: string; action: () => void } | null>(
@@ -129,6 +154,15 @@ export function DetailCongePanel({
     ? `${selection.demandeur.prenom} ${selection.demandeur.nom} - ${periodeEtDuree}`
     : periodeEtDuree;
   const peutDecider = Boolean(onValider && onRefuser && onRegulariser);
+  const peutVoirDetail = Boolean(joursFeries && congesImposes && djImposees && autresDemandes);
+  const occupant = peutVoirDetail
+    ? creerResolveurOccupant({
+        joursFeries: joursFeries!,
+        congesImposes: congesImposes!,
+        djImposees: djImposees!,
+        demandes: autresDemandes!,
+      })
+    : null;
 
   // Refuser/Signaler comme non pris/Restaurer laissent le panneau ouvert
   // après succès (contrairement à Valider, qui ferme + bandeau — voir
@@ -410,6 +444,32 @@ export function DetailCongePanel({
             </Button>
           </div>
         </div>
+      )}
+
+      {peutDecider && selection.statut === "en attente" && peutVoirDetail && (
+        <>
+          <button
+            type="button"
+            onClick={() => setVoirDetail((v) => !v)}
+            className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
+          >
+            Informations complémentaires
+            {voirDetail ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          {voirDetail && (
+            <div className="bg-surface-card w-full px-4 pb-3">
+              <DetailPeriodeConges
+                debut={selection.debut}
+                fin={selection.fin}
+                demiDebut={selection.demiDebut}
+                demiFin={selection.demiFin}
+                codeParDefaut={code}
+                occupant={occupant!}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {confirmation && (

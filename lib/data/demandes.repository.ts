@@ -99,13 +99,42 @@ async function getUtilisateurId(supabase: SupabaseClient): Promise<string> {
   return data;
 }
 
+// Une demi-journée (`demi`) d'un jour (`iso`) fait-elle partie d'une période
+// [debutP, finP] ? Vrai sur toute la période SAUF sur la demi-journée exclue
+// à chaque borne (`demiDebutP === "apres_midi"` exclut le matin du premier
+// jour, `demiFinP === "matin"` exclut l'après-midi du dernier) — même logique
+// que `demiCouvertePeriode` côté client (`PoserDemandeModal.tsx`), dupliquée
+// ici faute de module partagé entre code serveur et composant.
+function demiCouvertePeriode(
+  iso: string,
+  demi: DemiJournee,
+  debutP: string,
+  finP: string,
+  demiDebutP: DemiJournee,
+  demiFinP: DemiJournee,
+): boolean {
+  if (iso < debutP || iso > finP) return false;
+  if (iso === debutP && demiDebutP === "apres_midi" && demi === "matin") return false;
+  if (iso === finP && demiFinP === "matin" && demi === "apres_midi") return false;
+  return true;
+}
+
 /**
  * Nombre de demi-journées entre deux dates (incluses), jours fériés et
  * weekends exclus — voir BASE-DE-DONNEES.md. Chaque jour ouvré compte pour 2
- * demi-journées, sauf le premier jour si `demiDebut = "apres_midi"` (matin
+ * demi-journées, sauf : le premier jour si `demiDebut = "apres_midi"` (matin
  * non posé) et le dernier jour si `demiFin = "matin"` (après-midi non posé) —
  * l'ajustement ne s'applique que si ce jour est effectivement un jour ouvré
- * du décompte (sinon demande sur un jour férié/weekend n'a pas de sens).
+ * du décompte (sinon demande sur un jour férié/weekend n'a pas de sens) ; et
+ * toute demi-journée déjà couverte par un congé imposé (CPI,
+ * `conges_imposes`) ou une demi-journée imposée (DJI,
+ * `demi_journees_imposees`) dans la période, qui n'est jamais disponible pour
+ * cette demande — corrigé le 18/08/2026 : ce calcul serveur ne déduisait ni
+ * l'un ni l'autre, contrairement à l'aperçu client de la popin "Nouvelle
+ * demande" (`typeOccupantDemiJour`), d'où des écarts observés côté Suivre les
+ * demandes (DJI : 5j affichés au lieu de 4,5j ; CPI : une période 14→24 août
+ * chevauchant 5 jours de CPI enregistrée pour 7j au lieu des 2j réellement
+ * disponibles).
  */
 async function calculerNbDemiJournees(
   supabase: SupabaseClient,
@@ -114,12 +143,31 @@ async function calculerNbDemiJournees(
   demiDebut: DemiJournee,
   demiFin: DemiJournee,
 ): Promise<number> {
-  const { data: feries } = await supabase
-    .from("jours_feries")
-    .select("date")
-    .gte("date", debut)
-    .lte("date", fin);
+  const [{ data: feries }, { data: djis }, { data: cpis }] = await Promise.all([
+    supabase.from("jours_feries").select("date").gte("date", debut).lte("date", fin),
+    supabase
+      .from("demi_journees_imposees")
+      .select("date, demi_journee")
+      .gte("date", debut)
+      .lte("date", fin),
+    supabase
+      .from("conges_imposes")
+      .select("date_debut, date_fin, demi_debut, demi_fin")
+      .lte("date_debut", fin)
+      .gte("date_fin", debut),
+  ]);
   const joursFeries = new Set((feries ?? []).map((f: { date: string }) => f.date));
+  const djiParDemiJour = new Set(
+    (djis ?? []).map(
+      (d: { date: string; demi_journee: DemiJournee }) => `${d.date}_${d.demi_journee}`,
+    ),
+  );
+  const congesImposes = (cpis ?? []) as {
+    date_debut: string;
+    date_fin: string;
+    demi_debut: DemiJournee;
+    demi_fin: DemiJournee;
+  }[];
 
   // Dates manipulées en UTC (Date.UTC) pour éviter tout décalage de fuseau
   // horaire côté navigateur — un `new Date(iso + "T00:00:00")` en UTC+1/+2
@@ -137,9 +185,27 @@ async function calculerNbDemiJournees(
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  let total = joursOuvres.length * 2;
-  if (joursOuvres[0] === debut && demiDebut === "apres_midi") total -= 1;
-  if (joursOuvres[joursOuvres.length - 1] === fin && demiFin === "matin") total -= 1;
+  function demiOccupeeParCpi(iso: string, demi: DemiJournee): boolean {
+    return congesImposes.some((c) =>
+      demiCouvertePeriode(iso, demi, c.date_debut, c.date_fin, c.demi_debut, c.demi_fin),
+    );
+  }
+
+  let total = 0;
+  joursOuvres.forEach((iso, index) => {
+    const matinDemande = !(index === 0 && demiDebut === "apres_midi");
+    const apresMidiDemande = !(index === joursOuvres.length - 1 && demiFin === "matin");
+    if (matinDemande && !djiParDemiJour.has(`${iso}_matin`) && !demiOccupeeParCpi(iso, "matin")) {
+      total += 1;
+    }
+    if (
+      apresMidiDemande &&
+      !djiParDemiJour.has(`${iso}_apres_midi`) &&
+      !demiOccupeeParCpi(iso, "apres_midi")
+    ) {
+      total += 1;
+    }
+  });
 
   return total;
 }
