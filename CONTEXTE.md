@@ -1540,6 +1540,70 @@ imposé/posé) — un vrai blocage plutôt qu'un avertissement visuel après cou
     `PoserDemandeModal` restent en place (deep-link toujours fonctionnel) : le parcours réel passe
     par la tuile "Poser un congé" d'Accueil, qui ouvre déjà la popin en state local sans navigation
     (`Dashboard2Page.tsx`), rendant l'entrée de nav redondante.
+- **Tiroir "Mes demandes" ("Listing") sur Accueil (18/08/2026)**, `components/dashboard/ListingTiroir.tsx`
+  — nouveau tiroir déclenché par une pill grise après "Journal" : liste les demandes triées par date de
+  dernière action (Validé/Refusé si décidée, sinon Posé) décroissante, gabarit complet
+  `DetailCongePanel` empilé tel quel (pas de liste intermédiaire cliquable, essayé puis abandonné).
+  Trois nouvelles props opt-in sur `DetailCongePanel` (`components/suivre/DetailCongePanel.tsx`),
+  toutes scopées à cet usage (aucun autre appelant — `SuivreDemandesPage`/`CongesPaiePage` gardent le
+  gabarit d'origine) :
+  - `masquerFermer` — cache la croix de fermeture individuelle (le tiroir n'en a pas besoin, chaque
+    carte n'a pas sa propre fermeture).
+  - `masquerTypeBadgeBandeau` — cache le cercle `TypeBadge` du bandeau, remplacé par une pastille de
+    couleur directement sur la ligne dates (comme `SuiviDemandeRow`) ; le bandeau lui-même perd son
+    fond coloré plein cadre (devient transparent, juste le texte teinté via `classeTexteTypeBadge` +
+    la pastille), le séparateur entre le titre et les dates est retiré, celui entre les dates et le
+    feed (Posé/Validé/Refusé) passe dans la couleur du type (`classeBordureTypeBadge`) plutôt que gris,
+    l'espace en bas de carte est réduit de moitié, et les classes `xl:sticky xl:top-4 xl:w-64
+xl:shrink-0` (pensées pour l'usage sidebar de page) sont retirées pour ce contexte de tiroir étroit
+    — **sans ce dernier point, plusieurs cartes `position: sticky` empilées cassaient complètement le
+    scroll du tiroir sur grand écran (≥1280px), bug découvert et corrigé le 18/08/2026**.
+  - `masquerBandeau` (préexistant, ajouté plus tôt le même jour pour un tiroir "En validation" — voir
+    ci-dessous, depuis supprimé) : reste disponible dans l'API du composant, plus aucun appelant actuel.
+    Largeur du tiroir : `294px` (colonne droite normale de `DetailCongePanel`, `w-64`/256px, élargie de
+    15% à la demande explicite de Vincent). En-tête ("Mes demandes" + croix) repris tel quel du tiroir
+    "Journal" (`ActiviteRecenteFeed`).
+- **Tiroir "En validation" ajouté puis entièrement supprimé (18/08/2026)** — `DemandesEnAttenteTiroir`
+  (composant + pill orange sur Accueil, ouvrait la liste des demandes en attente du collaborateur) créé
+  en premier essai de ce type de tiroir, puis retiré à la demande de Vincent une fois "Mes demandes"
+  en place (redondant). Fichier `components/dashboard/DemandesEnAttenteTiroir.tsx` supprimé, plus
+  aucune référence dans le code (seul un commentaire dans `DetailCongePanel.tsx` documente encore
+  pourquoi `masquerBandeau` existe).
+- **Lien "Suivre mes demandes" retiré puis réintroduit en grande phrase cliquable (18/08/2026)** — le
+  lien texte souligné vers `/historique` (non filtré) a été supprimé une première fois (redondant avec
+  "Mes demandes"), puis Vincent a demandé 3 "grandes phrases" cliquables sous Soldes (même taille que
+  "Bonjour, {prénom}", `text-2xl`, puis passées à `text-[30px]`, fond `hover:bg-mint`/texte blanc au
+  survol) : "Poser un congé" (ouvre la popin), "Suivre mes demandes" (ouvre le tiroir "Mes demandes"),
+  "Quelles semaines poser en 2027 ?" (ouvre `ReglesCongesModal`, le même "découvrir"). **Ces 3 phrases
+  ont ensuite été retirées d'Accueil (`Dashboard2Page.tsx`) le même soir** — gardées uniquement sur
+  Accueil2 (`Dashboard3Page.tsx`, voir ci-dessous), le "premier Accueil" reste avec "découvrir" +
+  gros bouton "Poser un congé" dans la grille Soldes + "Journal"/"Mes demandes".
+- **Accueil2 redevenu un vrai duplicata de travail (18/08/2026)** — supprimé une première fois dans la
+  soirée (route `/dashboard3`, composant `Dashboard3Page.tsx`, entrée nav "Accueil2" dans
+  `components/layout/tabs.ts`, `CalendrierMoisCourantCard.tsx` orphelin supprimé avec), puis recréé à
+  la demande de Vincent ("tu me dupliques le dashboard d'accueil") — copie fraîche de `Dashboard2Page`
+  à ce moment-là (avec les 3 grandes phrases), pour itérer sans toucher à `/`. Diverge ensuite
+  rapidement de `Dashboard2Page` : "découvrir", gros bouton "Poser un congé", "Journal" et "Mes
+  demandes" retirés, titres "Soldes"/"Mes Congés" renommés "Mes Soldes"/"Mes Congés" en `text-sm
+font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`), puis **toute la
+  section "Mes Congés" (calendrier + colonne légende CPI/DJI/Fériés/PERSO + popins CPI/DJI/FERIE/PERSO
+  - snippet demande au clic jour) supprimée entièrement** — Accueil2 ne montre plus que Soldes + les 3
+    phrases. Gros nettoyage de code mort qui en découle (tous les états/fonctions/imports liés au
+    calendrier — `onglet`, `legendeOuverte`, `tipoDuJour`, `estEnGroupe`, `SnippetDemande`,
+    `LegendeCard`, etc. — retirés du fichier, plus que ~180 lignes contre ~780 avant).
+- **Alignement grille Soldes/calendrier — essai imparfait, à reprendre (18/08/2026)**, `Dashboard2Page.tsx`
+  — demande de Vincent : élargir les cards CP/RTT/CPA (pas le bouton "Poser un congé") pour que son
+  bord droit s'aligne avec le bord droit du 4ème mois du calendrier "Mes Congés" en dessous. Essayé via
+  une grille `md:grid-cols-[1fr_1fr_1fr_160px]` dans un conteneur `flex-1` accompagné d'une colonne
+  fantôme invisible `md:w-72 md:shrink-0` (même largeur que la colonne légende du calendrier, pour que
+  le calcul `flex-1` soit identique des deux côtés) — résultat approximatif (~40px d'écart mesuré à
+  1280px de large), pas un alignement pixel-parfait : la largeur du calendrier est **pilotée par son
+  contenu** (`grid-template-columns: repeat(auto-fit, minmax(170px, 1fr))`, s'arrête dès qu'un Nème mois
+  ne rentre plus) et non par l'espace flex disponible, alors que la grille Soldes (colonnes `1fr`) elle
+  grandit toujours pour remplir tout l'espace qu'on lui donne — les deux logiques de largeur sont
+  fondamentalement différentes, un alignement exact demanderait une mesure en JS plutôt qu'une règle
+  CSS déclarative. **Vincent : "il va falloir qu'on se pose sur les grilles à un moment, c'est
+  n'importe quoi"** — voir Backlog, à reprendre en session dédiée plutôt qu'en itérations rapides.
 
 ## Décisions prises
 

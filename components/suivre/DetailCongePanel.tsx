@@ -12,13 +12,17 @@ import type {
 } from "@/lib/types";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
+  classeBordureTypeBadge,
   classeFondTypeBadge,
   classeTexteTypeBadge,
   LABEL_LONG,
   TypeBadge,
 } from "@/components/demandes/TypeBadge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
+import { STATUT_CONFIG } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/Textarea";
 import { SuiviDemandeRow } from "@/components/suivre/SuiviDemandeRow";
 import {
@@ -60,6 +64,21 @@ interface DetailCongePanelProps {
   congesImposes?: CongeImpose[];
   djImposees?: DjImposee[];
   autresDemandes?: Demande[];
+  /** Masque le bandeau coloré du haut (TypeBadge + nom/type + fermer) — opt-in,
+   * ajouté le 18/08/2026 pour un tiroir "En validation" d'Accueil depuis
+   * retiré — plus aucun appelant actuel, gardé disponible pour un futur
+   * panneau étroit qui n'aurait pas besoin du bandeau pleine largeur. */
+  masquerBandeau?: boolean;
+  /** Masque uniquement le bouton "Fermer" (croix) du bandeau coloré — opt-in,
+   * bandeau lui-même conservé. Utilisé par le tiroir "Listing" d'Accueil
+   * (`ListingTiroir`, 18/08/2026), qui empile plusieurs cartes sans fermeture
+   * individuelle (le tiroir n'a lui-même pas de croix pour l'instant). */
+  masquerFermer?: boolean;
+  /** Masque uniquement le `TypeBadge` (cercle) du bandeau coloré — opt-in,
+   * reste du bandeau conservé (fond coloré, nom/type). Utilisé par le tiroir
+   * "Listing" d'Accueil (`ListingTiroir`, 18/08/2026) : le fond coloré + le
+   * texte suffisent déjà à identifier le type sur ces cartes empilées. */
+  masquerTypeBadgeBandeau?: boolean;
 }
 
 function formatJjMmAa(iso: string): string {
@@ -133,6 +152,9 @@ export function DetailCongePanel({
   congesImposes,
   djImposees,
   autresDemandes,
+  masquerBandeau = false,
+  masquerFermer = false,
+  masquerTypeBadgeBandeau = false,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
   const [regularisationOuverte, setRegularisationOuverte] = useState(false);
@@ -144,6 +166,8 @@ export function DetailCongePanel({
   );
 
   const code = selection.type === "CP" && selection.isAnticipation ? "CPA" : selection.type;
+  const jours = selection.nbDemiJournees / 2;
+  const { tone: toneStatut, Icon: IconStatut } = STATUT_CONFIG[selection.statut];
   // Uniquement utile pour le toast/la modale de confirmation, tous deux
   // absents en lecture seule (pas de `demandeur` dans ce cas) — préfixe nom
   // omis plutôt qu'un risque d'accès à un champ absent.
@@ -218,40 +242,90 @@ export function DetailCongePanel({
   }
 
   return (
-    <div className="flex w-full flex-col gap-[3px] xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
-      <div className="bg-surface-card w-full pb-[25px] shadow-sm">
-        <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
-          <div className="flex items-center gap-2.5">
-            <div className="rounded-full ring-2 ring-white">
-              <TypeBadge code={code} />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-white">
-                {selection.demandeur
-                  ? `${selection.demandeur.prenom} ${selection.demandeur.nom}`
-                  : LABEL_LONG[code]}
-              </div>
-              {selection.demandeur && (
-                <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={enCours}
-            className="shrink-0 text-white/70 hover:text-white disabled:opacity-40"
-            aria-label="Fermer"
+    <div
+      className={`flex w-full flex-col gap-[3px] ${
+        masquerBandeau || masquerTypeBadgeBandeau ? "" : "xl:sticky xl:top-4 xl:w-64 xl:shrink-0"
+      }`}
+    >
+      <div
+        className={`bg-surface-card w-full shadow-sm ${
+          masquerTypeBadgeBandeau ? "pb-[12.5px]" : "pb-[25px]"
+        }`}
+      >
+        {!masquerBandeau && (
+          <div
+            className={`flex items-center justify-between px-4 ${
+              masquerTypeBadgeBandeau ? "pt-3 pb-1.5" : `py-3 ${classeFondTypeBadge(code)}`
+            }`}
           >
-            <X size={18} />
-          </button>
-        </div>
+            <div className="flex items-center gap-2.5">
+              {masquerTypeBadgeBandeau ? (
+                <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+              ) : (
+                <div className="rounded-full ring-2 ring-white">
+                  <TypeBadge code={code} />
+                </div>
+              )}
+              <div>
+                <div
+                  className={`font-bold ${
+                    masquerTypeBadgeBandeau
+                      ? `text-xs ${classeTexteTypeBadge(code)}`
+                      : "text-sm text-white"
+                  }`}
+                >
+                  {selection.demandeur
+                    ? `${selection.demandeur.prenom} ${selection.demandeur.nom}`
+                    : LABEL_LONG[code]}
+                </div>
+                {selection.demandeur && (
+                  <div className="text-xs font-semibold text-white/80">{LABEL_LONG[code]}</div>
+                )}
+              </div>
+            </div>
+            {!masquerFermer && (
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={enCours}
+                className="shrink-0 text-white/70 hover:text-white disabled:opacity-40"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="border-ink-300/60 border-t">
-          <SuiviDemandeRow demande={selection} isLast masquerType masquerPoseLe />
-        </div>
+        {masquerBandeau ? (
+          <div className="flex items-center gap-3 px-4 pt-3">
+            <TypeBadge code={code} />
+            <div className="min-w-0 flex-1">
+              <PeriodeAvecPastilles
+                debut={selection.debut}
+                fin={selection.fin}
+                demiDebut={selection.demiDebut}
+                demiFin={selection.demiFin}
+              />
+            </div>
+            <span className="origin-right scale-90">
+              <Badge tone={toneStatut}>
+                <IconStatut size={12} strokeWidth={2.5} />
+                <span className="text-[14.4px]">{formatJours(jours)} j</span>
+              </Badge>
+            </span>
+          </div>
+        ) : (
+          <div className={masquerTypeBadgeBandeau ? "-mt-1.5" : "border-ink-300/60 border-t"}>
+            <SuiviDemandeRow demande={selection} isLast masquerType masquerPoseLe />
+          </div>
+        )}
 
-        <div className="border-ink-300/60 flex flex-col border-t px-4 pt-3">
+        <div
+          className={`flex flex-col border-t px-4 pt-3 ${
+            masquerTypeBadgeBandeau ? classeBordureTypeBadge(code) : "border-ink-300/60"
+          }`}
+        >
           <div className="flex items-center gap-2">
             <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
             <span className="text-ink-500 text-[10px]">

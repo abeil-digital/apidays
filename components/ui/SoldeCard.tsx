@@ -13,6 +13,16 @@ const TONE_CODE: Record<SoldeCardTone, TypeBadgeCode> = {
   cpa: "CPA",
 };
 
+// Nom de la variable CSS du token couleur du type — même valeur que
+// l'accent du sélecteur de date dans la popin "Nouvelle demande"
+// (`PoserDemandeModal.tsx`, `VAR_COULEUR_TYPE`), pour teinter le fond de la
+// card à 12% (test du 18/08/2026).
+const VAR_COULEUR_TONE: Record<SoldeCardTone, string> = {
+  cp: "--color-cp",
+  rtt: "--color-rtt",
+  cpa: "--color-cpa",
+};
+
 interface SoldeCardProps {
   valeur: number;
   conditionPrefixe: string;
@@ -46,7 +56,10 @@ export function SoldeCard({
   const code = TONE_CODE[tone];
   return (
     <div
-      className={`bg-surface-card flex h-full w-full flex-col gap-1.5 p-4 shadow-sm ${carre ? "" : "rounded-xl"}`}
+      className={`flex h-full w-full flex-col gap-1.5 p-4 shadow-sm ${carre ? "" : "rounded-xl"}`}
+      style={{
+        backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TONE[tone]}) 12%, white)`,
+      }}
     >
       <TypeBadge code={code} />
       <div className="flex items-center justify-between gap-2">

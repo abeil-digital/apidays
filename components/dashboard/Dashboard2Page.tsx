@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { ChevronDown, Eye, PlusCircle, X } from "lucide-react";
 import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import { dureeCongeImpose } from "@/lib/joursFeries";
@@ -22,6 +21,7 @@ import {
 } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
+import { ListingTiroir } from "@/components/dashboard/ListingTiroir";
 import { ReglesCongesModal } from "@/components/dashboard/ReglesCongesModal";
 import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
 import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
@@ -216,6 +216,7 @@ export function Dashboard2Page() {
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
   const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
+  const [tiroirListingOuvert, setTiroirListingOuvert] = useState(false);
   const [nouvelleDemandeOuverte, setNouvelleDemandeOuverte] = useState(false);
   const [legendeOuverte, setLegendeOuverte] = useState<LegendeOuverte | null>(null);
   const [calendrierHauteur, setCalendrierHauteur] = useState<number | null>(null);
@@ -321,8 +322,6 @@ export function Dashboard2Page() {
   function anneeVisiblePourCommuns(annee: number): boolean {
     return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
-
-  const nbEnValidation = demandes.filter((d) => d.statut === "en attente").length;
 
   // Légende (remplace l'ancienne colonne "En attente de validation") — jours
   // communs et types de demandes perso, scopés à la fenêtre affichée par
@@ -555,10 +554,9 @@ export function Dashboard2Page() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="bg-mint-tint flex flex-col gap-4 rounded-2xl p-4 md:flex-row md:items-center md:gap-6 md:p-5">
-          <div className="flex shrink-0 flex-col gap-1 md:w-44">
+        <div className="flex flex-col gap-4 rounded-2xl py-4 md:py-5">
+          <div className="flex flex-col gap-1 px-1">
             <h2 className="text-ink-900 text-lg font-bold">Soldes</h2>
-            <p className="text-ink-500 text-xs leading-snug">Quels congés imposés cette année ?</p>
             <button
               type="button"
               onClick={() => setReglesOuvertes(true)}
@@ -568,70 +566,72 @@ export function Dashboard2Page() {
             </button>
           </div>
 
-          <div className="grid max-w-2xl flex-1 grid-cols-2 gap-3 md:grid-cols-4">
-            <SoldeCard
-              valeur={soldes.cp.valeurApresAttente}
-              conditionPrefixe={soldes.cp.conditionPrefixe}
-              conditionAccent={soldes.cp.conditionAccent}
-              tone="cp"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("CP")}
-            />
-            <SoldeCard
-              valeur={soldes.rtt.valeurApresAttente}
-              conditionPrefixe={soldes.rtt.conditionPrefixe}
-              conditionAccent={soldes.rtt.conditionAccent}
-              tone="rtt"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("RTT")}
-            />
-            <SoldeCard
-              valeur={soldes.cpa.valeurApresAttente}
-              conditionPrefixe={soldes.cpa.conditionPrefixe}
-              conditionAccent={soldes.cpa.conditionAccent}
-              tone="cpa"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("CPA")}
-            />
-            <button
-              type="button"
-              onClick={() => setNouvelleDemandeOuverte(true)}
-              className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
-            >
-              <span className="text-sm font-semibold">Poser un congé</span>
-              <PlusCircle size={20} />
-            </button>
+          {/* Colonne fantôme `md:w-72 md:shrink-0` invisible (18/08/2026, test)
+              — même largeur que la colonne légende du calendrier plus bas,
+              pour que ce `flex-1` se calcule identiquement au sien : le bord
+              droit du bouton "Poser un congé" s'aligne alors exactement sur
+              celui du 4ème mois du calendrier, quelle que soit la largeur
+              d'écran, sans dupliquer sa largeur en dur. */}
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
+              <SoldeCard
+                valeur={soldes.cp.valeurApresAttente}
+                conditionPrefixe={soldes.cp.conditionPrefixe}
+                conditionAccent={soldes.cp.conditionAccent}
+                tone="cp"
+                avecInfo
+                onInfoClick={() => setSoldeDetailOuvert("CP")}
+              />
+              <SoldeCard
+                valeur={soldes.rtt.valeurApresAttente}
+                conditionPrefixe={soldes.rtt.conditionPrefixe}
+                conditionAccent={soldes.rtt.conditionAccent}
+                tone="rtt"
+                avecInfo
+                onInfoClick={() => setSoldeDetailOuvert("RTT")}
+              />
+              <SoldeCard
+                valeur={soldes.cpa.valeurApresAttente}
+                conditionPrefixe={soldes.cpa.conditionPrefixe}
+                conditionAccent={soldes.cpa.conditionAccent}
+                tone="cpa"
+                avecInfo
+                onInfoClick={() => setSoldeDetailOuvert("CPA")}
+              />
+              <button
+                type="button"
+                onClick={() => setNouvelleDemandeOuverte(true)}
+                className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
+              >
+                <span className="text-sm font-semibold">Poser un congé</span>
+                <PlusCircle size={20} />
+              </button>
+            </div>
+            <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
           </div>
         </div>
 
-        {/* Pill "En validation" (18/08/2026) — orange si des demandes sont en
-            attente, gris neutre sinon ; lien vers l'historique personnel
-            filtré sur "En validation" (`?statut=en_attente`, lu par
-            `HistoriquePage`). "Suivre mes demandes" à la suite, vers
-            l'historique non filtré. "Journal" ouvre le tiroir "Activité
-            récente" (`ActiviteRecenteFeed`), même déclencheur que le bandeau
-            "Suivre mes activités"/"Activité récente" plus bas. */}
-        <h2 className="text-ink-900 px-1 text-lg font-bold">Mes demandes</h2>
+        {/* "Journal" (18/08/2026) ouvre le tiroir "Activité récente"
+            (`ActiviteRecenteFeed`), même déclencheur que le bandeau "Suivre
+            mes activités"/"Activité récente" plus bas. "Mes demandes" ouvre
+            le tiroir `ListingTiroir` — remplace le lien "Suivre mes
+            demandes" vers `/historique` (retiré le 18/08/2026, redondant).
+            Pill "En validation" (ouvrait `DemandesEnAttenteTiroir`) retirée
+            le 18/08/2026, composant supprimé. */}
         <div className="flex items-center gap-3 px-1">
-          <Link
-            href="/historique?statut=en_attente"
-            className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold transition-opacity duration-150 hover:opacity-80 ${
-              nbEnValidation > 0
-                ? "bg-status-warning-bg text-status-warning-fg"
-                : "bg-status-neutral-bg text-status-neutral-fg"
-            }`}
-          >
-            {nbEnValidation} En validation
-          </Link>
-          <Link href="/historique" className="text-ink-900 text-xs font-semibold underline">
-            Suivre mes demandes
-          </Link>
           <button
             type="button"
             onClick={() => setTiroirActiviteOuvert(true)}
             className="text-ink-900 text-xs font-semibold underline"
           >
             Journal
+          </button>
+          <button
+            type="button"
+            onClick={() => setTiroirListingOuvert(true)}
+            className="bg-status-neutral-bg text-status-neutral-fg inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold transition-opacity duration-150 hover:opacity-80"
+          >
+            Mes demandes
           </button>
         </div>
       </div>
@@ -938,6 +938,12 @@ export function Dashboard2Page() {
         demandes={demandes}
         tiroirOuvert={tiroirActiviteOuvert}
         onFermerTiroir={() => setTiroirActiviteOuvert(false)}
+      />
+
+      <ListingTiroir
+        demandes={demandes}
+        tiroirOuvert={tiroirListingOuvert}
+        onFermerTiroir={() => setTiroirListingOuvert(false)}
       />
     </div>
   );
