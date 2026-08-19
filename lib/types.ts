@@ -30,6 +30,10 @@ export interface Demande {
     prenom: string;
     nom: string;
   } | null;
+  // Prise de connaissance par le salarié d'une décision — voir
+  // marquer_demande_vue() dans supabase/schema.sql. Toujours `false` tant que
+  // `statut === "en attente"`.
+  vu: boolean;
 }
 
 // Demande vue côté manager (Espace Suivre) — mêmes champs qu'une `Demande`,

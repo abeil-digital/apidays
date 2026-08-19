@@ -1604,6 +1604,51 @@ font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`),
   fondamentalement différentes, un alignement exact demanderait une mesure en JS plutôt qu'une règle
   CSS déclarative. **Vincent : "il va falloir qu'on se pose sur les grilles à un moment, c'est
   n'importe quoi"** — voir Backlog, à reprendre en session dédiée plutôt qu'en itérations rapides.
+- **"Mes demandes" (Accueil, `Dashboard2Page.tsx`) — chantier "vu" + refonte en phrase, en cours
+  d'itération (18/08/2026)**, déclenché par un constat de Vincent : "Validées"/"Refusées" ne sont pas
+  des notions valables dans la durée (ce sont des événements passés, pas un état), contrairement à "en
+  attente" (état réel, toujours vrai tant que non traité) — le journal (`ActiviteRecenteFeed`) est le
+  bon endroit pour représenter les décisions, pas des compteurs permanents.
+  - **Notion de "vu" — migration Supabase durable** (pas un flag client/localStorage, choix explicite
+    de Vincent : "je préfère que l'on code un truc pour durer") : colonne `demandes_conges.vu boolean
+    not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `security definer` (la
+    policy RLS salarié n'autorise l'update que sur une demande `en_attente` ; passer par une fonction
+    dédiée évite d'élargir cette policy aux demandes déjà décidées, ce qui aurait aussi exposé les
+    autres colonnes — dates, statut... — à une modification côté client). Générique à tout statut
+    décidé (pas seulement "validée"), donc déjà prêt pour "refusée" sans nouvelle migration. `vu`
+    repasse à `false` à chaque nouveau changement de statut (`deciderDemande`/
+    `remettreEnAttenteDemande` dans `demandes.repository.ts`) — une décision (ou un changement de
+    décision) est une nouvelle information à consulter. Migration appliquée manuellement par Vincent
+    dans le SQL editor Supabase (voir `supabase/schema.sql`, section demandes_conges + fonctions
+    utilitaires). Exposé côté app via `Demande.vu` (`lib/types.ts`), `marquerDemandeVue()`
+    (repository), `marquerVue()` (`useDemandes`).
+  - **3 pills "En attente"/"Validées"/"Refusées"** (compteur + lien vers `/historique` filtré,
+    `?statut=en_attente` / `valide_non_vu` / `refuse_non_vu`, sort par `datePose` desc côté
+    `HistoriquePage`) créées puis **la carte entière masquée (`hidden`, contenu conservé)** une fois
+    remplacée par la phrase ci-dessous — à supprimer pour de bon ou réutiliser plus tard, pas encore
+    tranché ("il y a un bloc qui est masqué que l'on effacera peut-être plus tard à voir").
+  - **État actuel retenu : une phrase unique** au-dessus de "Mes Congés" — "Mes demandes" (texte,
+    `text-sm`) + `{n} demande(s) en attente` (stabilo orange si `n > 0`, sinon texte gris neutre) +
+    séparateur `|` + soit "aucune décision récente" (gris) soit `{n} nouvelle(s) décision(s)` (stabilo
+    **vert** uniquement quand il n'y a **aucune** demande en attente — sinon reste en gris neutre, l'
+    attente prime toujours sur les décisions) + lien "afficher le journal" (gris, ou **vert gras**
+    dans le même cas de priorité "décisions"). Essais intermédiaires tous annulés à la demande de
+    Vincent : tiroir "Mon journal" calé/redimensionné sur le bord droit de la carte (290px) avec
+    `DetailCongePanel` affiché en ligne au clic sur une entrée ("ça devient compliqué, je suis pas
+    convaincu") ; 4ème bloc façon `SoldeCard` (fond `status-warning`, sablier à la place du
+    `TypeBadge`, "3 Demandes"/"en attente de validation") sous Soldes ; carte "Mes demandes"
+    dupliquée + renommée "Suivre les validations" à droite.
+  - **Journal (`ActiviteRecenteFeed.tsx`)** : titre "Activité récente" → "Mon journal". Une ligne
+    "décision" (validée/refusée) non vue (`!demande.vu`) s'affiche en emphase (fond `status-success`
+    à 40%, texte en gras) — le "vu" se marque à la **fermeture** du volet (`fermerJournal()` dans
+    `Dashboard2Page.tsx`, passé comme `onFermerTiroir`), pas à l'ouverture, sinon l'emphase
+    disparaîtrait avant que l'utilisateur n'ait eu le temps de la voir. **Bug corrigé le même jour** :
+    le journal est plafonné à 6 lignes (`NB_LIGNES`) et triait par date avec un départage "décidé
+    avant posé" à date égale — plusieurs décisions tombées le même jour pouvaient repousser une
+    demande encore "en attente" hors des 6 lignes visibles (constaté par Vincent : "je n'en vois que
+    2 dans son journal" alors que le compteur affichait 3). Les événements "posé" d'une demande encore
+    en attente (`EvenementFeed.enAttente`) sont désormais réservés en priorité, le reste des lignes
+    comblé par les événements les plus récents, l'ensemble retrié chronologiquement pour l'affichage.
 
 ## Décisions prises
 

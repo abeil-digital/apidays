@@ -38,6 +38,17 @@ interface EvenementFeed {
   date: string;
   code: TypeBadgeCode;
   texte: ReactNode;
+  // Décision (validée/refusée) pas encore vue — voir `Demande.vu` — met la
+  // ligne en emphase dans le journal. Toujours `false` pour un événement
+  // "posé" (pas concerné par la notion de "vu").
+  nonVu: boolean;
+  // Événement "posé" d'une demande encore "en attente" — toujours garanti
+  // visible dans le journal (voir découpage juste avant `NB_LIGNES` plus
+  // bas), quitte à exclure des décisions plus récentes : à date égale (même
+  // jour), `comparerEvenements` fait passer "décidé" avant "posé", ce qui
+  // pouvait repousser une demande encore en attente hors des 6 lignes
+  // affichées si plusieurs décisions tombaient le même jour.
+  enAttente: boolean;
 }
 
 // "Stabilo" — surlignage fond coloré (pas juste texte coloré), conforme à la
@@ -112,6 +123,8 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
           <Stabilo tone="warning">en validation</Stabilo>
         </>
       ),
+      nonVu: false,
+      enAttente: demande.statut === "en attente",
     },
   ];
 
@@ -137,6 +150,8 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
           <SemiBold>{periodePhrase(demande, "du")}</SemiBold>
         </>
       ),
+      nonVu: !demande.vu,
+      enAttente: false,
     });
   }
 
@@ -165,14 +180,20 @@ function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
           <Link
             key={e.id}
             href={`/historique?demande=${e.demandeId}`}
-            className={`bg-surface-card flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 ${HOVER_TEINTE[e.code]}`}
+            className={`flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 ${
+              e.nonVu ? "bg-status-success-bg/40" : "bg-surface-card"
+            } ${HOVER_TEINTE[e.code]}`}
           >
             <span
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(e.code)}`}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <span className="text-ink-500 text-[10px]">Le {formatDateAction(e.date)}</span>
-              <span className="text-ink-900 text-xs leading-snug">{e.texte}</span>
+              <span
+                className={`text-ink-900 text-xs leading-snug ${e.nonVu ? "font-semibold" : ""}`}
+              >
+                {e.texte}
+              </span>
             </div>
           </Link>
         ))
@@ -204,10 +225,16 @@ export function ActiviteRecenteFeed({
   tiroirOuvert: boolean;
   onFermerTiroir: () => void;
 }) {
-  const evenements = demandes
-    .flatMap(evenementsDeDemande)
-    .sort(comparerEvenements)
-    .slice(0, NB_LIGNES);
+  // Les "posé" de demandes encore en attente sont garantis présents (voir
+  // `EvenementFeed.enAttente`) : on les réserve d'abord, puis on complète
+  // avec les autres événements les plus récents, avant de re-trier
+  // chronologiquement l'ensemble pour l'affichage.
+  const tries = demandes.flatMap(evenementsDeDemande).sort(comparerEvenements);
+  const enAttente = tries.filter((e) => e.enAttente).slice(0, NB_LIGNES);
+  const autres = tries
+    .filter((e) => !e.enAttente)
+    .slice(0, Math.max(0, NB_LIGNES - enAttente.length));
+  const evenements = [...enAttente, ...autres].sort(comparerEvenements);
 
   useEffect(() => {
     if (!tiroirOuvert) return;
@@ -227,7 +254,7 @@ export function ActiviteRecenteFeed({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-ink-300/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 className="text-ink-900 text-base font-bold">Activité récente</h2>
+          <h2 className="text-ink-900 text-base font-bold">Mon journal</h2>
           <button
             type="button"
             onClick={onFermerTiroir}

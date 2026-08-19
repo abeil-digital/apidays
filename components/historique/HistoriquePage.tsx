@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
@@ -13,15 +13,30 @@ import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
-type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
+type Filtre =
+  | "Tous les statuts"
+  | "En validation"
+  | "Validés"
+  | "Validés non vus"
+  | "Refusés"
+  | "Refusés non vus";
 type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
 
-const FILTRES: Filtre[] = ["Tous les statuts", "En validation", "Validés", "Refusés"];
+const FILTRES: Filtre[] = [
+  "Tous les statuts",
+  "En validation",
+  "Validés",
+  "Validés non vus",
+  "Refusés",
+  "Refusés non vus",
+];
 
 const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
   "En validation": "en attente",
   Validés: "validé",
+  "Validés non vus": "validé",
   Refusés: "refusé",
+  "Refusés non vus": "refusé",
 };
 
 const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
@@ -35,15 +50,23 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
 // liste que le filtre équivalent de Suivre les demandes.
 const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
 
+// `?statut=` → `Filtre` pré-sélectionné — lien depuis les pills "Mes
+// demandes" d'Accueil (`en_attente` : compteur "En attente" ; `valide_non_vu`
+// / `refuse_non_vu` : compteurs "Validées"/"Refusé", voir
+// `marquerDemandeVue`/`Demande.vu`). Même principe que `?demande=<id>` plus bas.
+const FILTRE_PAR_PARAM_STATUT: Record<string, Filtre> = {
+  en_attente: "En validation",
+  valide_non_vu: "Validés non vus",
+  refuse_non_vu: "Refusés non vus",
+};
+
 export function HistoriquePage() {
-  const { demandes } = useDemandes();
+  const { demandes, marquerVue } = useDemandes();
   const { utilisateur } = useUtilisateur();
   const { reglesAcquisition } = useReglesConges();
   const searchParams = useSearchParams();
-  // Pré-sélection via `?statut=en_attente` — lien "X en validation" depuis
-  // Accueil (pill "Mes demandes"), même principe que `?demande=<id>` plus bas.
   const [filtre, setFiltre] = useState<Filtre>(
-    searchParams.get("statut") === "en_attente" ? "En validation" : "Tous les statuts",
+    FILTRE_PAR_PARAM_STATUT[searchParams.get("statut") ?? ""] ?? "Tous les statuts",
   );
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
   const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
@@ -69,6 +92,7 @@ export function HistoriquePage() {
     .filter((d) => {
       const statutAttendu = STATUT_PAR_FILTRE[filtre];
       if (statutAttendu && d.statut !== statutAttendu) return false;
+      if ((filtre === "Validés non vus" || filtre === "Refusés non vus") && d.vu) return false;
       if (debut && d.debut < debut) return false;
       if (fin && d.debut > fin) return false;
       if (typeFiltre !== "tous") {
@@ -77,7 +101,7 @@ export function HistoriquePage() {
       }
       return true;
     })
-    .sort((a, b) => b.debut.localeCompare(a.debut));
+    .sort((a, b) => b.datePose.localeCompare(a.datePose));
 
   // Le tableau respecte les filtres, mais le panneau doit pouvoir s'ouvrir
   // même sur une demande qu'ils excluent (lien "?demande=" depuis Activité
@@ -87,6 +111,15 @@ export function HistoriquePage() {
     filtered.find((d) => d.id === selectionId) ??
     demandes.find((d) => d.id === selectionId) ??
     null;
+
+  // Marque "vue" dès l'ouverture du panneau de détail — même logique que
+  // "lu" sur une notification, pas une action explicite séparée. Ne concerne
+  // que les demandes décidées (`vu` reste sans effet côté "en attente").
+  useEffect(() => {
+    if (selection && selection.statut !== "en attente" && !selection.vu) {
+      marquerVue(selection.id);
+    }
+  }, [selection, marquerVue]);
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0 print:pb-0">

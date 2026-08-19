@@ -32,6 +32,7 @@ interface DemandeRow {
   commentaire_salarie: string | null;
   commentaire_decision: string | null;
   date_decision: string | null;
+  vu: boolean;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
   validateur:
     | { id: string; prenom: string; nom: string }
@@ -44,7 +45,7 @@ interface DemandeRow {
 // de base pour que le feed "Activité récente" du collaborateur (ses propres
 // demandes) puisse nommer qui a validé/refusé, pas seulement l'Espace Suivre.
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
+  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, vu, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
 
 interface DemandeEquipeRow extends DemandeRow {
   utilisateur_id: string;
@@ -88,6 +89,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     note: row.commentaire_salarie ?? "",
     commentaireManager: row.commentaire_decision ?? "",
     validateur: validateur ?? null,
+    vu: row.vu,
   };
 }
 
@@ -383,6 +385,11 @@ async function deciderDemande(
       validateur_id: utilisateurId,
       commentaire_decision: commentaire || null,
       date_decision: new Date().toISOString(),
+      // `vu` repasse à false à chaque changement de statut — une décision
+      // (ou un changement de décision) est une nouvelle information à
+      // consulter, même si une précédente avait déjà été vue (ex. demande
+      // remise en attente puis re-décidée).
+      vu: false,
     })
     .eq("id", id)
     .select()
@@ -428,6 +435,7 @@ export async function remettreEnAttenteDemande(id: string): Promise<void> {
       validateur_id: null,
       commentaire_decision: null,
       date_decision: null,
+      vu: false, // changement de statut — voir deciderDemande
     })
     .eq("id", id)
     .select()
@@ -435,5 +443,22 @@ export async function remettreEnAttenteDemande(id: string): Promise<void> {
 
   if (error) {
     throw new Error("Impossible d'annuler cette validation.");
+  }
+}
+
+/**
+ * Marque une demande décidée (validée/refusée) comme vue par le salarié —
+ * passe par le RPC `marquer_demande_vue` (voir supabase/schema.sql) plutôt
+ * qu'un `update()` direct : la policy UPDATE du salarié ne couvre que les
+ * demandes 'en_attente', l'élargir aux demandes décidées exposerait aussi
+ * les autres colonnes (dates, statut...) à une modification côté client.
+ */
+export async function marquerDemandeVue(id: string): Promise<void> {
+  const supabase = createClient();
+
+  const { error } = await supabase.rpc("marquer_demande_vue", { p_demande_id: id });
+
+  if (error) {
+    throw new Error("Impossible de marquer la demande comme vue.");
   }
 }

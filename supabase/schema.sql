@@ -156,6 +156,14 @@ create table demandes_conges (
   -- décision que valider/refuser) — voir BASE-DE-DONNEES.md
   devalidee_par uuid references utilisateurs(id),
   date_devalidation timestamptz,
+  -- Prise de connaissance par le salarié d'une décision (18/08/2026) —
+  -- distingue "à consulter" (compteurs Accueil) de "déjà vue" une fois ouverte
+  -- dans l'Historique. Générique à tout statut décidé, pas seulement
+  -- 'validee' (même mécanique prévue pour 'refusee'). Modifiable uniquement
+  -- via marquer_demande_vue() (voir plus bas) : la policy UPDATE du salarié
+  -- ne couvre que les demandes 'en_attente', un UPDATE direct depuis le
+  -- client casserait cette garantie sur les autres colonnes une fois décidée.
+  vu boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -369,6 +377,26 @@ as $$
     where ms.salarie_id = p_salarie_id
       and ms.manager_id = my_utilisateur_id()
   );
+$$;
+
+-- Marque une demande décidée (validée/refusée) comme vue par son salarié
+-- (18/08/2026, voir demandes_conges.vu) — seule façon de modifier cette
+-- colonne : bypass volontaire, via `security definer`, de la policy UPDATE
+-- du salarié (limitée aux demandes 'en_attente') sans l'élargir aux demandes
+-- déjà décidées, ce qui exposerait aussi les autres colonnes (dates,
+-- statut...) à une modification côté client.
+create or replace function marquer_demande_vue(p_demande_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update demandes_conges
+  set vu = true
+  where id = p_demande_id
+    and utilisateur_id = my_utilisateur_id();
+end;
 $$;
 
 -- ------------------------------------------------------------

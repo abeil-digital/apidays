@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Demande, NouvelleDemandeInput } from "@/lib/types";
-import { creerDemande, fetchDemandes } from "@/lib/data/demandes.repository";
+import { creerDemande, fetchDemandes, marquerDemandeVue } from "@/lib/data/demandes.repository";
 
 interface UseDemandesResult {
   demandes: Demande[];
   loading: boolean;
   error: string | null;
   ajouterDemande: (input: NouvelleDemandeInput) => Promise<Demande>;
+  marquerVue: (id: string) => Promise<void>;
   refetch: () => void;
 }
 
@@ -68,5 +69,20 @@ export function useDemandes(): UseDemandesResult {
     return demande;
   }, []);
 
-  return { demandes, loading, error, ajouterDemande, refetch: () => setVersion((v) => v + 1) };
+  // Marque localement `vu: true` en optimiste — évite un refetch complet
+  // juste pour ce champ, comme `ajouterDemande` met déjà à jour l'état local
+  // sans repasser par le serveur.
+  const marquerVue = useCallback(async (id: string) => {
+    setDemandes((prev) => prev.map((d) => (d.id === id ? { ...d, vu: true } : d)));
+    await marquerDemandeVue(id);
+  }, []);
+
+  return {
+    demandes,
+    loading,
+    error,
+    ajouterDemande,
+    marquerVue,
+    refetch: () => setVersion((v) => v + 1),
+  };
 }

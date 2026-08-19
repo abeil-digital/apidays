@@ -12,7 +12,7 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex min-h-full flex-col">
       <HeaderBar />
 
-      <div className="mx-auto flex w-full flex-1 md:max-w-[1440px]">
+      <div className="relative mx-auto flex w-full flex-1 md:max-w-[1440px]">
         <SideNav />
 
         <div className="min-w-0 flex-1">

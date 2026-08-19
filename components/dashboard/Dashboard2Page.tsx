@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ChevronDown, Eye, PlusCircle, X } from "lucide-react";
 import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import { dureeCongeImpose } from "@/lib/joursFeries";
@@ -211,7 +212,12 @@ function SnippetDemande({
 export function Dashboard2Page() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes, refetch: refetchSoldes } = useSoldes();
-  const { demandes, loading: loadingDemandes, refetch: refetchDemandes } = useDemandes();
+  const {
+    demandes,
+    loading: loadingDemandes,
+    refetch: refetchDemandes,
+    marquerVue,
+  } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
@@ -547,93 +553,182 @@ export function Dashboard2Page() {
     if (demande) setSnippet({ demande, ancre });
   }
 
+  // Phrase "Mes demandes" (18/08/2026, test) — deux compteurs mutuellement
+  // exclusifs en emphase (stabilo) : "en attente" (nécessite une action du
+  // manager, toujours prioritaire si non nul) sinon "nouvelles décisions"
+  // (déjà tranchées, juste pas encore vues). "vu" se marque à la fermeture du
+  // volet journal plutôt qu'à l'ouverture — sinon l'emphase disparaîtrait
+  // avant que le volet n'ait eu le temps de la montrer (voir `fermerJournal`).
+  const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
+  const decisionsNonVues = demandes.filter(
+    (d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu,
+  );
+  const nbDecisionsNonVues = decisionsNonVues.length;
+
+  function fermerJournal() {
+    decisionsNonVues.forEach((d) => marquerVue(d.id));
+    setTiroirActiviteOuvert(false);
+  }
+
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
       <div className="px-1 pt-5 md:pt-0">
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col gap-4 rounded-2xl py-4 md:py-5">
-          <div className="flex flex-col gap-1 px-1">
-            <h2 className="text-ink-900 text-lg font-bold">Soldes</h2>
-            <button
-              type="button"
-              onClick={() => setReglesOuvertes(true)}
-              className="text-ink-900 w-fit text-xs font-semibold underline"
-            >
-              découvrir
-            </button>
-          </div>
+      <div className="flex flex-col gap-4 rounded-2xl py-4 md:py-5">
+        <div className="flex flex-col gap-1 px-1">
+          <h2 className="text-ink-900 text-lg font-bold">Soldes</h2>
+        </div>
 
-          {/* Colonne fantôme `md:w-72 md:shrink-0` invisible (18/08/2026, test)
+        {/* Colonne fantôme `md:w-72 md:shrink-0` invisible (18/08/2026, test)
               — même largeur que la colonne légende du calendrier plus bas,
               pour que ce `flex-1` se calcule identiquement au sien : le bord
               droit du bouton "Poser un congé" s'aligne alors exactement sur
               celui du 4ème mois du calendrier, quelle que soit la largeur
               d'écran, sans dupliquer sa largeur en dur. */}
-          <div className="flex flex-col gap-4 md:flex-row">
-            <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
-              <SoldeCard
-                valeur={soldes.cp.valeurApresAttente}
-                conditionPrefixe={soldes.cp.conditionPrefixe}
-                conditionAccent={soldes.cp.conditionAccent}
-                tone="cp"
-                avecInfo
-                onInfoClick={() => setSoldeDetailOuvert("CP")}
-              />
-              <SoldeCard
-                valeur={soldes.rtt.valeurApresAttente}
-                conditionPrefixe={soldes.rtt.conditionPrefixe}
-                conditionAccent={soldes.rtt.conditionAccent}
-                tone="rtt"
-                avecInfo
-                onInfoClick={() => setSoldeDetailOuvert("RTT")}
-              />
-              <SoldeCard
-                valeur={soldes.cpa.valeurApresAttente}
-                conditionPrefixe={soldes.cpa.conditionPrefixe}
-                conditionAccent={soldes.cpa.conditionAccent}
-                tone="cpa"
-                avecInfo
-                onInfoClick={() => setSoldeDetailOuvert("CPA")}
-              />
+        <div className="flex flex-col gap-4 md:flex-row">
+          <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
+            <SoldeCard
+              valeur={soldes.cp.valeurApresAttente}
+              conditionPrefixe={soldes.cp.conditionPrefixe}
+              conditionAccent={soldes.cp.conditionAccent}
+              tone="cp"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("CP")}
+            />
+            <SoldeCard
+              valeur={soldes.rtt.valeurApresAttente}
+              conditionPrefixe={soldes.rtt.conditionPrefixe}
+              conditionAccent={soldes.rtt.conditionAccent}
+              tone="rtt"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("RTT")}
+            />
+            <SoldeCard
+              valeur={soldes.cpa.valeurApresAttente}
+              conditionPrefixe={soldes.cpa.conditionPrefixe}
+              conditionAccent={soldes.cpa.conditionAccent}
+              tone="cpa"
+              avecInfo
+              onInfoClick={() => setSoldeDetailOuvert("CPA")}
+            />
+            <button
+              type="button"
+              onClick={() => setNouvelleDemandeOuverte(true)}
+              className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
+            >
+              <span className="text-sm font-semibold">Poser un congé</span>
+              <PlusCircle size={20} />
+            </button>
+          </div>
+          <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
+        </div>
+      </div>
+
+      {/* Même gabarit de grille que la grille Soldes ci-dessus (`max-w-[900px]
+          flex-1 md:grid-cols-[1fr_1fr_1fr_160px]`, colonne fantôme `md:w-72`
+          incluse) — la carte occupe les 2 premières colonnes (`md:col-span-2`),
+          calant ainsi son bord droit sur celui du bloc RTT sans dupliquer de
+          largeur en dur. */}
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
+        <h2 className="text-ink-900 mr-1.5">Mes demandes</h2>
+        {nbEnAttente > 0 ? (
+          <span className="bg-status-warning-bg text-status-warning-fg rounded-sm px-1 font-semibold">
+            {nbEnAttente} {nbEnAttente === 1 ? "demande" : "demandes"} en attente
+          </span>
+        ) : (
+          <span className="text-ink-500">0 demande en attente</span>
+        )}
+        <span className="text-ink-300" aria-hidden="true">
+          |
+        </span>
+        {nbEnAttente === 0 && nbDecisionsNonVues > 0 ? (
+          <>
+            <span className="bg-status-success-bg text-status-success-fg rounded-sm px-1 font-semibold">
+              {nbDecisionsNonVues}{" "}
+              {nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}
+            </span>
+            <span className="text-ink-500">-</span>
+            <button
+              type="button"
+              onClick={() => setTiroirActiviteOuvert(true)}
+              className="text-status-success-fg font-bold underline"
+            >
+              afficher le journal
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-ink-500">
+              {nbDecisionsNonVues > 0
+                ? `${nbDecisionsNonVues} ${nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}`
+                : "aucune décision récente"}{" "}
+              -
+            </span>
+            <button
+              type="button"
+              onClick={() => setTiroirActiviteOuvert(true)}
+              className="text-ink-500 underline"
+            >
+              afficher le journal
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Carte masquée (18/08/2026, test) — contenu conservé, juste caché
+          (`hidden`) le temps d'itérer sur la ligne au-dessus qui la remplace
+          potentiellement. Voir Backlog.md. */}
+      <div className="hidden flex-col gap-4 md:flex-row">
+        <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
+          <div className="bg-surface-card col-span-2 flex flex-col gap-4 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-0">
+                <h2 className="text-ink-900 text-lg font-bold">Mes demandes</h2>
+                <span className="text-ink-500 -mt-1 text-sm">Depuis votre dernière visite</span>
+              </div>
               <button
                 type="button"
-                onClick={() => setNouvelleDemandeOuverte(true)}
-                className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
+                onClick={() => setTiroirActiviteOuvert(true)}
+                className="text-mint text-sm font-semibold transition-opacity duration-150 hover:opacity-70"
               >
-                <span className="text-sm font-semibold">Poser un congé</span>
-                <PlusCircle size={20} />
+                Mon journal
               </button>
             </div>
-            <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/historique?statut=en_attente"
+                className="bg-status-warning-bg text-status-warning-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
+              >
+                <span className="font-semibold">
+                  {demandes.filter((d) => d.statut === "en attente").length}
+                </span>
+                En attente
+              </Link>
+              <Link
+                href="/historique?statut=valide_non_vu"
+                className="bg-status-success-bg text-status-success-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
+              >
+                <span className="font-semibold">
+                  {demandes.filter((d) => d.statut === "validé" && !d.vu).length}
+                </span>
+                Validées
+              </Link>
+              <Link
+                href="/historique?statut=refuse_non_vu"
+                className="bg-status-danger-bg text-status-danger-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
+              >
+                <span className="font-semibold">
+                  {demandes.filter((d) => d.statut === "refusé" && !d.vu).length}
+                </span>
+                Refusées
+              </Link>
+            </div>
           </div>
         </div>
-
-        {/* "Journal" (18/08/2026) ouvre le tiroir "Activité récente"
-            (`ActiviteRecenteFeed`), même déclencheur que le bandeau "Suivre
-            mes activités"/"Activité récente" plus bas. "Mes demandes" ouvre
-            le tiroir `ListingTiroir` — remplace le lien "Suivre mes
-            demandes" vers `/historique` (retiré le 18/08/2026, redondant).
-            Pill "En validation" (ouvrait `DemandesEnAttenteTiroir`) retirée
-            le 18/08/2026, composant supprimé. */}
-        <div className="flex items-center gap-3 px-1">
-          <button
-            type="button"
-            onClick={() => setTiroirActiviteOuvert(true)}
-            className="text-ink-900 text-xs font-semibold underline"
-          >
-            Journal
-          </button>
-          <button
-            type="button"
-            onClick={() => setTiroirListingOuvert(true)}
-            className="bg-status-neutral-bg text-status-neutral-fg inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold transition-opacity duration-150 hover:opacity-80"
-          >
-            Mes demandes
-          </button>
-        </div>
+        <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
       </div>
 
       <h2 className="text-ink-900 px-1 text-lg font-bold">Mes Congés</h2>
@@ -882,6 +977,27 @@ export function Dashboard2Page() {
         </div>
       </div>
 
+      {/* "découvrir"/"Mes demandes" déplacés ici (18/08/2026, temporaire) —
+          sous les calendriers plutôt qu'au-dessus, le temps de retravailler
+          leur emplacement définitif. Voir Backlog.md. "Journal" est remonté
+          juste après les compteurs En attente/Validées/Refusées. */}
+      <div className="flex items-center gap-3 px-1">
+        <button
+          type="button"
+          onClick={() => setReglesOuvertes(true)}
+          className="text-ink-900 text-xs font-semibold underline"
+        >
+          découvrir
+        </button>
+        <button
+          type="button"
+          onClick={() => setTiroirListingOuvert(true)}
+          className="bg-status-neutral-bg text-status-neutral-fg inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-semibold transition-opacity duration-150 hover:opacity-80"
+        >
+          Mes demandes
+        </button>
+      </div>
+
       {snippet && (
         <SnippetDemande
           demande={snippet.demande}
@@ -937,7 +1053,7 @@ export function Dashboard2Page() {
       <ActiviteRecenteFeed
         demandes={demandes}
         tiroirOuvert={tiroirActiviteOuvert}
-        onFermerTiroir={() => setTiroirActiviteOuvert(false)}
+        onFermerTiroir={fermerJournal}
       />
 
       <ListingTiroir
