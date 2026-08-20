@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
+import { Plus } from "lucide-react";
 
 /**
  * MiniCalendrier — vue mensuelle compacte (grille L-V, week-ends masqués)
@@ -167,8 +168,10 @@ function JourPastille({
   isHovered,
   estAujourdhui,
   agrandi,
+  texteJour,
   onSurvol,
   onJourClick,
+  onJourVideClick,
 }: {
   jour: number;
   iso: string;
@@ -178,8 +181,18 @@ function JourPastille({
   isHovered: boolean;
   estAujourdhui: boolean;
   agrandi?: boolean;
+  texteJour?: string;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
+  /**
+   * Clic sur un jour SANS congé (20/08/2026) — distinct d'`onJourClick`
+   * (jours porteurs d'une pastille) : sémantique différente, ouvrir "Poser
+   * un congé" pré-rempli plutôt qu'afficher le détail d'une période
+   * existante. Au survol, le chiffre du jour est remplacé par un petit "+"
+   * vert (`text-mint`, couleur de la card "Poser un congé") annonçant
+   * l'action. Opt-in, sans effet sur les appelants qui ne le passent pas.
+   */
+  onJourVideClick?: (iso: string, ancre: DOMRect) => void;
 }) {
   // Grossi (16/08/2026, card "Calendrier" d'Accueil2) — typo des jours
   // recalée sur celle des dates de "Prochains jours off" (`PeriodeAvecPastilles`
@@ -187,7 +200,12 @@ function JourPastille({
   // pour ne pas toucher le format par défaut du composant (Mon calendrier).
   const hauteur = agrandi ? "h-9" : "h-7";
   const largeur = agrandi ? "w-9" : "w-7";
-  const texte = agrandi ? "text-sm" : "text-xs";
+  // `texteJour` (20/08/2026) — override explicite de la taille de police,
+  // indépendant d'`agrandi` (qui change aussi la taille/forme de la case et
+  // l'en-tête du mois) : pour un appelant qui veut UNIQUEMENT grossir le
+  // chiffre du jour, pas le reste. Opt-in, `agrandi` reste la valeur par
+  // défaut si absent.
+  const texte = texteJour ?? (agrandi ? "text-sm" : "text-xs");
   // "Aujourd'hui" : un cercle serré autour du seul chiffre (jamais la case
   // entière), toujours parfaitement rond — indépendant de la forme
   // carrée/pilule de la pastille de congé sous-jacente, qui n'est jamais
@@ -207,9 +225,24 @@ function JourPastille({
   if (!pastille) {
     return (
       <span
-        className={`text-ink-500 flex ${hauteur} ${largeur} items-center justify-center ${agrandi ? "rounded-none" : "rounded-full"} ${texte}`}
+        className={`text-ink-500 group flex ${hauteur} ${largeur} items-center justify-center ${agrandi ? "rounded-none" : "rounded-full"} ${texte} ${onJourVideClick ? "cursor-pointer" : ""}`}
+        onClick={
+          onJourVideClick
+            ? (e: MouseEvent<HTMLSpanElement>) =>
+                onJourVideClick(iso, e.currentTarget.getBoundingClientRect())
+            : undefined
+        }
       >
-        {chiffreAujourdhui("ring-ink-900")}
+        <span className={onJourVideClick ? "group-hover:hidden" : ""}>
+          {chiffreAujourdhui("ring-ink-900")}
+        </span>
+        {onJourVideClick && (
+          <Plus
+            className="text-mint hidden group-hover:block"
+            size={agrandi ? 18 : 14}
+            strokeWidth={2.5}
+          />
+        )}
       </span>
     );
   }
@@ -289,6 +322,7 @@ function PeriodeSegment({
   isHovered,
   estAujourdhui,
   agrandi,
+  texteJour,
   onSurvol,
   onJourClick,
 }: {
@@ -301,6 +335,7 @@ function PeriodeSegment({
   isHovered: boolean;
   estAujourdhui?: (iso: string) => boolean;
   agrandi?: boolean;
+  texteJour?: string;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
 }) {
@@ -317,7 +352,7 @@ function PeriodeSegment({
   // "N colonnes de large, 1 de haut" : même hauteur qu'une case `aspect-square`
   // de la même grille, quel que soit N, sans dépendre du contenu des lignes
   // voisines.
-  const texte = agrandi ? "text-sm" : "text-xs";
+  const texte = texteJour ?? (agrandi ? "text-sm" : "text-xs");
 
   return (
     <div
@@ -522,6 +557,13 @@ export interface MiniCalendrierProps {
    */
   onJourClick?: (iso: string, ancre: DOMRect) => void;
   /**
+   * Rend chaque jour SANS pastille cliquable (20/08/2026) — distinct
+   * d'`onJourClick`. Au survol, le chiffre du jour est remplacé par un
+   * petit "+" vert. Pas de handler = comportement inchangé (jour vide non
+   * cliquable).
+   */
+  onJourVideClick?: (iso: string, ancre: DOMRect) => void;
+  /**
    * Ne rend qu'un sous-ensemble des semaines du mois (index 0-based,
    * inclusif) — "demi-calendrier" pour un aperçu de période à cheval sur
    * deux mois (ex. ne montrer que la fin du mois de début). L'en-tête
@@ -558,6 +600,30 @@ export interface MiniCalendrierProps {
    * ni l'en-tête du mois. Opt-in, sans effet sur le format par défaut.
    */
   agrandi?: boolean;
+  /**
+   * Classes additionnelles fusionnées sur la card `bg-surface-card`
+   * englobante (20/08/2026) — ex. dimensions explicites (`w-[250px]
+   * h-[290px]`) pour un appelant qui veut forcer une taille précise plutôt
+   * que la taille naturelle du contenu. Sans effet si `sansCarte`. Opt-in,
+   * aucun effet sur les appelants existants qui ne le passent pas.
+   */
+  className?: string;
+  /**
+   * Override explicite de la taille de police des chiffres de jour
+   * (20/08/2026), indépendant d'`agrandi` — n'affecte ni la taille des
+   * cases, ni l'en-tête du mois, ni l'en-tête des jours de la semaine (L M M
+   * J V). Opt-in, `agrandi` reste la valeur par défaut si absent.
+   */
+  texteJour?: string;
+  /**
+   * Override explicite du padding interne de la card (20/08/2026, défaut
+   * `p-4`) — ex. `p-6` pour une card plus aérée. Séparé de `className` (qui
+   * est simplement concaténé, donc pas fiable pour *remplacer* une classe
+   * déjà présente sur le composant) afin que l'override gagne à coup sûr.
+   * Sans effet si `sansCarte`. Opt-in, aucun effet sur les appelants
+   * existants qui ne le passent pas.
+   */
+  paddingClassName?: string;
 }
 
 export function MiniCalendrier({
@@ -566,12 +632,16 @@ export function MiniCalendrier({
   tipoDuJour,
   estEnGroupe,
   onJourClick,
+  onJourVideClick,
   premiereSemaine,
   derniereSemaine,
   estMisEnAvant,
   sansCarte,
   estAujourdhui,
   agrandi,
+  className,
+  texteJour,
+  paddingClassName,
 }: MiniCalendrierProps) {
   const [groupeSurvole, setGroupeSurvole] = useState<string | null>(null);
   const semaines = genererSemaines(annee, moisIndex, tipoDuJour);
@@ -617,15 +687,23 @@ export function MiniCalendrier({
           noir en mode `agrandi` — titre secondaire, pas la donnée principale
           de la card. */}
       <div
-        className={`mb-3 font-bold ${agrandi ? "text-ink-500 text-base" : "text-ink-900 text-base"}`}
+        className={`mb-3 shrink-0 text-center font-bold ${agrandi ? "text-ink-500 text-base" : "text-ink-900 text-base"}`}
       >
         {MOIS_FR[moisIndex]}
       </div>
-      <div className="grid grid-cols-5 gap-y-[3px]">
+      {/* `flex-1 content-between` (20/08/2026) — sur une card à hauteur
+          fixe (ex. `h-[290px]` côté Accueil), répartit l'espace vertical
+          disponible entre les lignes de semaines plutôt que de le laisser
+          vide en bas : le nombre de semaines varie (5 ou 6) selon le mois,
+          donc un `gap-y` fixe en px aurait soit laissé du vide soit débordé
+          selon les mois. `gap-y-[3px]` reste l'écart plancher entre lignes.
+          Sans effet si le conteneur n'a pas de hauteur explicite (callers
+          existants sans `className` de hauteur fixe). */}
+      <div className="grid flex-1 grid-cols-5 content-between gap-y-[3px]">
         {JOURS_SEMAINE_COURT.map((j, i) => (
           <div
             key={i}
-            className={`text-ink-900 text-center font-bold ${agrandi ? "text-[13px]" : "text-[10px]"}`}
+            className={`text-ink-900 text-center font-bold ${agrandi ? "text-[13px]" : "text-[14px]"}`}
           >
             {j}
           </div>
@@ -660,8 +738,10 @@ export function MiniCalendrier({
                   }
                   estAujourdhui={estAujourdhui?.(item.iso) ?? false}
                   agrandi={agrandi}
+                  texteJour={texteJour}
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
                   onJourClick={item.pastille ? onJourClick : undefined}
+                  onJourVideClick={item.pastille ? undefined : onJourVideClick}
                 />
               </div>
             );
@@ -681,6 +761,7 @@ export function MiniCalendrier({
               }
               estAujourdhui={estAujourdhui}
               agrandi={agrandi}
+              texteJour={texteJour}
               onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
               onJourClick={onJourClick}
             />
@@ -693,6 +774,10 @@ export function MiniCalendrier({
   if (sansCarte) return grille;
 
   return (
-    <div className={`bg-surface-card p-4 shadow-sm ${agrandi ? "" : "rounded-xl"}`}>{grille}</div>
+    <div
+      className={`bg-surface-card flex flex-col shadow-sm ${paddingClassName ?? "p-4"} ${agrandi ? "" : "rounded-xl"} ${className ?? ""}`}
+    >
+      {grille}
+    </div>
   );
 }

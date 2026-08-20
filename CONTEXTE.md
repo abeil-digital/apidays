@@ -1736,6 +1736,68 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
   object figé par valeur) dans SUIVI-SOLDE.md. Le même bug de transition `scale`/`transform` que
   celui découvert ici existe aussi dans `SoldeCard.tsx`, pas encore corrigé (tâche en arrière-plan
   proposée).
+- **Refonte "Mon Calendrier"/"Prochains jours off" (20/08/2026)** — suite du même chantier Accueil,
+  gros volume d'itérations dans la même session :
+  - **Colonne légende CPI/DJI/Fériés/PERSO retirée** (popins, cards, tout le code associé dans
+    `Dashboard2Page.tsx`, ~350 lignes) sans modifier la largeur du calendrier. `ProchainsJoursOffCard`
+    (jusque-là orphelin, voir Backlog) intégrée à la place — sœur de "Mon Calendrier" dans le même
+    `flex md:flex-row`, largeur 288px (`md:w-72`), liste dans une zone scrollable interne
+    (`overflow-y-auto`) plafonnée à 604px de haut (= 2 lignes de cards mois) plutôt que de suivre la
+    hauteur réelle du calendrier.
+  - **Notion "CI" (Congés Imposés)** introduite côté collaborateur uniquement (Accueil) : CPI et DJI
+    fusionnés visuellement (même couleur, celle de CPI ; même libellé "CI") sur le calendrier et dans
+    la liste — la distinction CPI/DJI reste pertinente côté paramétrage Delphine, jugée pas utile pour
+    le collaborateur. Bug découvert au passage : le variant "circle" (par défaut) de `TypeBadge`
+    ignore sa prop `label` (seuls "outline"/"pill" la respectent) — contourné par un badge local
+    dédié (`BadgeTypeLeger` dans `ProchainsJoursOffCard.tsx`) plutôt que de corriger le composant
+    partagé, la fusion CPI/DJI ne devant s'appliquer qu'ici.
+  - Chaque jour off listé est devenu sa **propre card** (fond blanc, coins légèrement arrondis,
+    ombre, fond teinté à 3% de la couleur du type — même procédé `color-mix` que les compteurs de
+    solde `SoldeCard`, mais atténué) plutôt qu'une ligne dans une liste à séparateurs `border-b`.
+    Séparateurs de mois (`AOÛT 2026`, etc., `text-[11px] font-semibold text-ink-500 uppercase`,
+    interlignage asymétrique 24px au-dessus/4px en dessous) insérés à chaque changement de mois. Plus
+    de plafond de lignes (`NB_LIGNES` retiré) : liste intégrale, désormais bornée par le filtre
+    d'onglet actif plutôt que par un nombre fixe (voir plus bas). Les demandes "en attente" de
+    validation sont réintégrées dans la liste (exclues à l'origine) avec le badge sablier/orange de
+    `STATUT_CONFIG`.
+  - **Grille calendrier responsive** : `grid-cols-3` remplacé par `flex flex-wrap` (1 carte/ligne sous
+    `sm`, 2 entre `sm`/`lg`, 3 à partir de `lg`) — avec un `grid`, une dernière ligne incomplète (ex.
+    5 mois → 3+2) réservait quand même la 3ᵉ colonne vide, laissant une gouttière béante à droite du
+    dernier mois ; en `flex-wrap` la dernière ligne s'aligne simplement à gauche. Cards mois passées à
+    250×290px avec padding 24px (`p-6`) et gap 24px (`gap-6`) entre elles pour plus d'aération.
+    Chiffres des jours à 16px (`text-base`, nouvelle prop `texteJour` sur `MiniCalendrier`,
+    indépendante de la prop `agrandi` existante), en-têtes L/M/M/J/V à 14px. Les lignes de semaines se
+    répartissent désormais l'espace vertical disponible de la card (`flex-1 content-between` plutôt
+    qu'un `gap-y` fixe) pour mieux remplir la hauteur de 290px quel que soit le nombre de semaines du
+    mois (5 ou 6).
+  - **Nouvelle card FAQ** (`components/dashboard/FaqCard.tsx`) sous l'ensemble calendrier/liste —
+    bord à bord, liste de questions à gauche, réponse de la sélection à droite (empilé sur mobile),
+    contenu provisoire ("on affinera").
+  - **Clic sur un jour du calendrier avec pastille** : fait défiler "Prochains jours off" jusqu'à la
+    card correspondante (recherche par plage de dates, pas par id — les deux composants ne partagent
+    pas le même id) et la surligne brièvement (`ring-2` dans la couleur du type, effacé après 1,5s
+    côté état parent). **Clic sur un jour SANS pastille** : au survol, le chiffre du jour est remplacé
+    par un petit "+" vert (`text-mint`, nouvelle prop `onJourVideClick` sur `MiniCalendrier`) ; au
+    clic, ouvre "Poser un congé" (`PoserDemandeModal`) avec ce jour pré-rempli comme date de début
+    (nouvelle prop `dateInitiale`), date de fin laissée vide.
+  - **Le filtre d'onglet ("Mon Calendrier" — Année en cours / Période de référence CP / Année
+    suivante) chapote désormais aussi "Prochains jours off"**, pas seulement la grille calendrier :
+    nouvelles props `debutPeriode`/`finPeriode` sur `ProchainsJoursOffCard`, alimentées par le même
+    `rangeActive` que la grille. Les deux bornes sont nécessaires (pas seulement la borne haute) : pour
+    l'onglet "Année suivante", le début de la période active est dans le FUTUR (1er janvier de l'année
+    suivante), donc sans borne basse les jours de l'année en cours restaient visibles (ils passaient
+    déjà le filtre générique "à venir"). Titre "Mon Calendrier" + bandeau d'onglets déplacés
+    au-dessus des DEUX colonnes (calé à gauche) plutôt que dans la seule colonne calendrier, pour
+    refléter visuellement que le filtre s'applique aux deux ; le titre propre de
+    "Prochains jours off" a été retiré (le titre commun suffit).
+  - **Bug corrigé** : les congés imposés (CPI/DJI) de l'année suivante apparaissaient dans
+    "Prochains jours off" même quand le calendrier de cette année n'était pas encore publié
+    (`parametrage.valideLe` null) — `useCalendrier` charge ces données dès qu'un paramétrage existe,
+    même en brouillon. La grille calendrier avait déjà cette garde (`anneeVisiblePourCommuns`,
+    `Dashboard2Page.tsx`) mais pas la liste. Corrigé en appliquant la même règle (année en cours
+    toujours visible, année suivante seulement si publiée) — vaut pour tout rôle, y compris
+    Admin/Manager : ce n'est pas un filtre de permission par rôle, juste "ce qui a été formellement
+    publié". Les jours fériés restent affichés dans tous les cas (faits légaux fixes).
 
 ## Décisions prises
 

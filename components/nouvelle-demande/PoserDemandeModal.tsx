@@ -144,6 +144,7 @@ function dateVersIsoLocal(date: Date): string {
 export function PoserDemandeModal({
   onClose,
   onSuccess,
+  dateInitiale,
 }: {
   onClose: () => void;
   /** Appelé juste après l'enregistrement réussi, avant `onClose` — l'appelant
@@ -151,6 +152,14 @@ export function PoserDemandeModal({
    * fait dans l'instance locale de `useDemandes` de cette popin, pas dans
    * celle, distincte, de la page qui l'a ouverte). */
   onSuccess?: () => void;
+  /**
+   * Pré-remplit la date de début (20/08/2026) — ex. clic sur un jour vide du
+   * calendrier côté `Dashboard2Page`. La date de fin reste vide (l'appelant
+   * ne connaît que le jour cliqué, pas la durée souhaitée). Opt-in, sans
+   * effet sur les appelants qui ne le passent pas (ouverture "vierge" via
+   * le bouton "Poser un congé").
+   */
+  dateInitiale?: string;
 }) {
   const { demandes, ajouterDemande } = useDemandes();
   const { soldes } = useSoldes();
@@ -160,7 +169,7 @@ export function PoserDemandeModal({
   const calSuivant = useCalendrier(anneeActuelle + 1);
 
   const [optionKey, setOptionKey] = useState("CP");
-  const [debut, setDebut] = useState("");
+  const [debut, setDebut] = useState(dateInitiale ?? "");
   const [fin, setFin] = useState("");
   const [demiDebut, setDemiDebut] = useState<DemiJournee>("matin");
   const [demiFin, setDemiFin] = useState<DemiJournee>("apres_midi");

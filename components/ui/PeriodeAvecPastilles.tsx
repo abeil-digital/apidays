@@ -11,6 +11,12 @@ interface PeriodeAvecPastillesProps {
    * opt-in pour ne pas changer le format par défaut des autres appelants
    * (`SuiviDemandeRow`, `ActiviteRecenteCard`...). */
   grand?: boolean;
+  /**
+   * Écart pastille → date resserré (`gap-1` au lieu de `gap-2`, 20/08/2026,
+   * `ProchainsJoursOffCard`) — évite un retour à la ligne du suffixe "apm"
+   * dans une colonne étroite. Opt-in, sans effet sur les autres appelants.
+   */
+  compact?: boolean;
 }
 
 /**
@@ -26,6 +32,7 @@ export function PeriodeAvecPastilles({
   demiDebut,
   demiFin,
   grand = false,
+  compact = false,
 }: PeriodeAvecPastillesProps) {
   const estPeriode = debut !== fin;
   const labelDemiJournee = estPeriode
@@ -41,11 +48,12 @@ export function PeriodeAvecPastilles({
   const tailleBadge = grand ? "h-[17px] w-[17px]" : "h-[18px] w-[18px]";
   const texteBadge = grand ? "text-[11px]" : "text-[10px]";
   const texteDate = grand ? "text-sm" : "text-xs";
+  const ecartBadge = compact ? "gap-1" : "gap-2";
 
   if (estPeriode) {
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center ${ecartBadge}`}>
           <JourBadge className={`!text-ink-500 ${tailleBadge} !rounded-[2px] ${texteBadge}`}>
             {nomJourSemaine(debut).slice(0, 2)}
           </JourBadge>
@@ -54,7 +62,7 @@ export function PeriodeAvecPastilles({
             {labelDemiDebut && <span className="text-ink-500"> - {labelDemiDebut}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center ${ecartBadge}`}>
           <JourBadge className={`!text-ink-500 ${tailleBadge} !rounded-[2px] ${texteBadge}`}>
             {nomJourSemaine(fin).slice(0, 2)}
           </JourBadge>
@@ -68,7 +76,7 @@ export function PeriodeAvecPastilles({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={`flex items-center ${ecartBadge}`}>
       <JourBadge className={`!text-ink-500 ${tailleBadge} !rounded-[2px] ${texteBadge}`}>
         {nomJourSemaine(debut).slice(0, 2)}
       </JourBadge>
