@@ -239,6 +239,31 @@ export async function fetchDemandes(): Promise<Demande[]> {
   return (data ?? []).map(mapDemandeDepuisDb);
 }
 
+/**
+ * Une demande par id, avec collaborateur (`DemandeEquipe`) — pour le clic sur
+ * une pill CP/RTT/CPA de `SoldeDetailPanel` (20/08/2026), qui n'a que l'id de
+ * la demande via `MouvementSolde.id` (les mouvements "demande" seulement, pas
+ * "ajustement"/"acquisition" qui n'ont pas de demande associée), pas la
+ * demande entière nécessaire pour `DetailCongePanel`. Pas de filtre RLS
+ * supplémentaire ici : la RLS de `demandes_conges` s'applique déjà (salarié
+ * ne voit que les siennes, manager voit tout).
+ */
+export async function fetchDemandeParId(id: string): Promise<DemandeEquipe> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("demandes_conges")
+    .select(SELECT_DEMANDE_EQUIPE)
+    .eq("id", id)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible de charger le détail de la demande.");
+  }
+
+  return mapDemandeEquipeDepuisDb(data as unknown as DemandeEquipeRow);
+}
+
 export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande> {
   const supabase = createClient();
 

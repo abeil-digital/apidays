@@ -68,6 +68,13 @@
   /* Tiroir latéral (17/08/2026, Activité récente Accueil2) — entrée depuis
      le bord droit de l'écran, voir `@keyframes` plus bas. */
   --animate-drawer-in-right: drawer-in-right 200ms ease-out;
+
+  /* `DetailCongePanel` dans `SoldeDetailPanel` (20/08/2026) — `animation`
+     plutôt que `transition` : rejoue à chaque montage (déclenché par le
+     changement de `key`), y compris quand on passe d'une ligne à l'autre
+     sans jamais démonter le composant entre les deux (une `transition` ne
+     se relance pas sur un remount déjà visible, une `animation` si). */
+  --animate-detail-fade-in: detail-fade-in 200ms ease-out;
 }
 
 @keyframes drawer-in-right {
@@ -76,6 +83,17 @@
   }
   to {
     transform: translateX(0);
+  }
+}
+
+@keyframes detail-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

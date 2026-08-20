@@ -9,6 +9,7 @@ import type {
   SoldeCategorie,
   TypeDemande,
 } from "@/lib/types";
+import { formatPeriodePillNumerique } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
@@ -173,11 +174,6 @@ async function sommeAjustements(
   }
 
   return (data ?? []).reduce((somme, row) => somme + Number(row.delta_jours), 0);
-}
-
-function formatJjMm(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(d);
 }
 
 function formatDateCourte(d: Date): string {
@@ -508,7 +504,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
       id: d.id,
       type: "demande",
       date: d.date_debut,
-      libelle: `CP : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
@@ -577,7 +573,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
         id: d.id,
         type: "demande",
         date: d.date_debut,
-        libelle: `CP : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
         jours: -(Number(d.nb_demi_journees) / 2),
         soldeApres: cumulTheorique,
       };
@@ -694,7 +690,7 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
       id: d.id,
       type: "demande",
       date: d.date_debut,
-      libelle: `RTT : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      libelle: `RTT : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
@@ -749,7 +745,7 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
         id: d.id,
         type: "demande",
         date: d.date_debut,
-        libelle: `RTT : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        libelle: `RTT : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
         jours: -(Number(d.nb_demi_journees) / 2),
         soldeApres: cumulTheorique,
       };
@@ -871,7 +867,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       id: d.id,
       type: "demande",
       date: d.date_debut,
-      libelle: `CPA : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+      libelle: `CPA : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
@@ -904,7 +900,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
         id: d.id,
         type: "demande",
         date: d.date_debut,
-        libelle: `CPA : du ${formatJjMm(d.date_debut)} au ${formatJjMm(d.date_fin)}`,
+        libelle: `CPA : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
         jours: -(Number(d.nb_demi_journees) / 2),
         soldeApres: cumulTheorique,
       };

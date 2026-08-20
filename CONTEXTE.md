@@ -1723,6 +1723,19 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
     `bg-x/40`...) — `--tone-darken`/`--color-mint-hover` etc. n'apparaissaient pas dans le CSS
     généré tant que `.next` n'était pas vidé. Fix systématique : `preview_stop` → `rm -rf .next` →
     `preview_start`.
+- **Refonte "Suivi de solde" (`SoldeDetailPanel`, 18-20/08/2026)** — documentation complète dans
+  [SUIVI-SOLDE.md](SUIVI-SOLDE.md) : dissociation visuelle pill congé vs badge d'info (Solde
+  N-1/Acquisition), popin Accueil unifiée avec `DetailCongePanel` au clic sur une pill (transition
+  de largeur, empilement mobile sous la ligne concernée, animation `detail-fade-in` au changement
+  de ligne), hauteur/largeur proportionnelles à l'écran. **Bug significatif rencontré et corrigé** :
+  une classe Tailwind arbitraire construite avec une interpolation JS à l'intérieur du crochet
+  (`hover:bg-[...${variable}...]`) ne génère jamais de règle CSS — Tailwind scanne le code source
+  littéralement, pas une valeur résolue à l'exécution. La classe s'affichait dans le DOM sans le
+  moindre effet, symptôme identique à un bundle Turbopack en retard mais **aucun rapport avec le
+  cache** — piège à yeux ouverts pour la suite, détail complet et pattern de correction (lookup
+  object figé par valeur) dans SUIVI-SOLDE.md. Le même bug de transition `scale`/`transform` que
+  celui découvert ici existe aussi dans `SoldeCard.tsx`, pas encore corrigé (tâche en arrière-plan
+  proposée).
 
 ## Décisions prises
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
 import type { DemandeEquipe, StatutDemande } from "@/lib/types";
-import { formatJours } from "@/lib/format";
+import { formatJours, formatPeriodePillNumerique } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
 import { useCongesConsommes } from "@/hooks/useCongesConsommes";
 import {
@@ -31,13 +31,8 @@ const LABEL_TYPE: Record<TypeConsomme, string> = {
   CSS: "Congé sans solde",
 };
 
-function formatJjMm(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(d);
-}
-
 function libellePeriodeDemande(d: DemandeEquipe): string {
-  return d.debut === d.fin ? formatJjMm(d.debut) : `${formatJjMm(d.debut)} - ${formatJjMm(d.fin)}`;
+  return formatPeriodePillNumerique(d.debut, d.fin);
 }
 
 interface DatePeriode {

@@ -1,5 +1,10 @@
 import type { Demande, DemandeEquipe } from "@/lib/types";
-import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
+import {
+  formatDateAction,
+  formatJours,
+  formatPeriodeDemande,
+  formatPeriodePillNumerique,
+} from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
@@ -61,7 +66,11 @@ function periodeCourte(debut: string, fin: string): string {
  * Collaborateur en plus par rapport à `HistoriquePage`) : gagne en largeur —
  * type réduit aux initiales déjà utilisées ailleurs dans l'app (`LABEL_COURT`,
  * ex. "CP" au lieu de "Congés Payés") plutôt que le libellé complet, en-tête
- * "Durée" au lieu de "Nbre jours", colonne "Validé le" masquée.
+ * "Durée" au lieu de "Nbre jours", colonne "Validé le" masquée. Colonne
+ * Dates : format numérique jj/mm/aa (`formatPeriodePillNumerique`, 20/08/2026)
+ * au lieu du format texte compact — même règle des 3 cas (jour unique,
+ * période même année, période à cheval sur deux années) que les pills
+ * CP/RTT/CPA de `SoldeDetailPanel`/Export paie.
  */
 export function HistoriqueTable(props: HistoriqueTableProps) {
   const { emptyText = "Aucune demande.", compact = false, onDateClick, selectedId } = props;
@@ -80,7 +89,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             : `bg-surface-app text-ink-900 ${classeBordureTypeBadge(code)}`
         }`}
       >
-        {periodeCourte(demande.debut, demande.fin)}
+        {compact
+          ? formatPeriodePillNumerique(demande.debut, demande.fin)
+          : periodeCourte(demande.debut, demande.fin)}
       </span>
     );
 

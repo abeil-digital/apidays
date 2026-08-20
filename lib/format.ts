@@ -48,6 +48,33 @@ export function formatPeriodeDemande(debut: string, fin: string): string {
   return `${formatJourMois(debut, true)} au ${formatJourMois(fin, true)}`;
 }
 
+/**
+ * Période au format numérique jj/mm/aa — pills type "CP : 16/09/26" ou "CP :
+ * 21/09 au 25/09/26" (distinct de `formatPeriodeDemande`, qui reste en texte
+ * "13 août"). Règle (20/08/2026, cas des périodes à cheval sur deux années
+ * civiles) :
+ *   - 1 jour : jj/mm/aa
+ *   - plusieurs jours, même année : jj/mm au jj/mm/aa
+ *   - plusieurs jours, à cheval sur deux années : jj/mm/aa au jj/mm/aa
+ * Pas de "du" en tête (20/08/2026 — superflu dans une pill, contrairement à
+ * une phrase). À appliquer à tout pill CP/RTT/CPA affichant une période sous
+ * cette forme compacte, partout dans l'app.
+ */
+export function formatPeriodePillNumerique(debut: string, fin: string): string {
+  const d1 = new Date(`${debut}T00:00:00`);
+  const d2 = new Date(`${fin}T00:00:00`);
+  const jjMmAa = (d: Date) =>
+    new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(
+      d,
+    );
+  const jjMm = (d: Date) =>
+    new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(d);
+
+  if (debut === fin) return jjMmAa(d1);
+  if (d1.getFullYear() === d2.getFullYear()) return `${jjMm(d1)} au ${jjMmAa(d2)}`;
+  return `${jjMmAa(d1)} au ${jjMmAa(d2)}`;
+}
+
 const JOURS_SEMAINE = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
 /** Nom du jour de semaine (ex. "Vendredi") — pour la pastille `JourBadge`

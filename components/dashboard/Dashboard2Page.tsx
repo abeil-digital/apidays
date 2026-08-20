@@ -959,19 +959,36 @@ export function Dashboard2Page() {
           manuel plutôt que `Modal` : `SoldeDetailPanel` a déjà son propre
           bandeau coloré plein bord (voir `DetailCongePanel`/`Modal`
           `header`), l'encapsuler dans le `children` par défaut de `Modal`
-          aurait ajouté un double padding. */}
+          aurait ajouté un double padding.
+          `overflow-y-auto` + `py-8` (20/08/2026, demande explicite) — filet
+          de sécurité si la popin (header + tableau plafonné à 45vh + pied)
+          dépasse quand même la hauteur d'un écran très court : elle défile
+          dans le backdrop plutôt que d'être rognée. `items-center` conservé
+          — reste centrée dans le cas normal (popin plus petite que
+          l'écran), le scroll ne prend le relais que si besoin. */}
       {soldeDetailOuvert && (
         <div
-          className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center px-4"
+          className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8"
           onClick={() => setSoldeDetailOuvert(null)}
         >
-          <div className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+          {/* `w-full` sous `sm:` (20/08/2026, "sur mobile c'est inutilisable")
+              — `SoldeDetailPanel` résout ses propres largeurs internes en
+              `w-full` en dessous de `sm:` ; ce wrapper doit donc avoir une
+              largeur DÉFINIE (pas `w-fit`, sans quoi le pourcentage
+              redescend en `auto`/taille intrinsèque au lieu de remplir
+              l'espace dispo). `sm:w-fit` repasse en mode "épouse le
+              contenu" une fois les largeurs fixes en px actives. */}
+          <div className="w-full sm:w-fit sm:max-w-full" onClick={(e) => e.stopPropagation()}>
             <SoldeDetailPanel
               key={soldeDetailOuvert}
               code={soldeDetailOuvert}
               utilisateurId={utilisateur.id}
               nomComplet={`${utilisateur.prenom} ${utilisateur.nom}`}
               onClose={() => setSoldeDetailOuvert(null)}
+              arrondi
+              modeParDefaut="theorique"
+              headerSimplifie
+              avecDetailConge
             />
           </div>
         </div>
