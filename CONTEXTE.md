@@ -1605,7 +1605,11 @@ font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`),
   CSS déclarative. **Vincent : "il va falloir qu'on se pose sur les grilles à un moment, c'est
   n'importe quoi"** — voir Backlog, à reprendre en session dédiée plutôt qu'en itérations rapides.
 - **"Mes demandes" (Accueil, `Dashboard2Page.tsx`) — chantier "vu" + refonte en phrase, en cours
-  d'itération (18/08/2026)**, déclenché par un constat de Vincent : "Validées"/"Refusées" ne sont pas
+  d'itération (18/08/2026)** — **documentation précise et à jour dans
+  [SUIVI-DECISIONS.md](SUIVI-DECISIONS.md)** (règles de gestion, principes d'affichage, composants
+  concernés) ; le résumé chronologique ci-dessous reste comme trace de la genèse/des essais
+  abandonnés, mais SUIVI-DECISIONS.md fait référence en cas de divergence. Déclenché par un constat
+  de Vincent : "Validées"/"Refusées" ne sont pas
   des notions valables dans la durée (ce sont des événements passés, pas un état), contrairement à "en
   attente" (état réel, toujours vrai tant que non traité) — le journal (`ActiviteRecenteFeed`) est le
   bon endroit pour représenter les décisions, pas des compteurs permanents.

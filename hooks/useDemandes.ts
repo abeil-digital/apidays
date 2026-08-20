@@ -4,6 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { Demande, NouvelleDemandeInput } from "@/lib/types";
 import { creerDemande, fetchDemandes, marquerDemandeVue } from "@/lib/data/demandes.repository";
 
+// Clés de stockage pour le principe "vu depuis votre dernière connexion" —
+// voir le commentaire sur l'effet correspondant plus bas.
+const SESSION_FLAG = "apidays_journal_session_started";
+const CARRYOVER_KEY = "apidays_journal_non_vues";
+
 interface UseDemandesResult {
   demandes: Demande[];
   loading: boolean;
@@ -62,6 +67,51 @@ export function useDemandes(): UseDemandesResult {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
+
+  // "Vu" des décisions (validée/refusée) — "depuis votre dernière connexion"
+  // plutôt que "tant que le tiroir journal est fermé" (18/08/2026, retour de
+  // Vincent : perturbant que la mise en avant disparaisse dès qu'on
+  // ouvre/ferme le volet). Principe : une décision reste mise en avant toute
+  // la session en cours (l'onglet reste ouvert), quel que soit le nombre
+  // d'ouvertures/fermetures du journal, et n'est marquée "vu" qu'au tout
+  // début de la session SUIVANTE — pas à la fin de celle-ci (rien ne se
+  // déclenche fiablement à la fermeture d'un onglet).
+  //
+  // Implémentation : la liste des décisions encore non vues est recopiée en
+  // continu dans `localStorage` (survit à la fermeture de l'onglet) ; au tout
+  // premier montage d'une nouvelle session (`sessionStorage`, vidé à la
+  // fermeture de l'onglet — sert de marqueur "déjà traité cette session"),
+  // cette liste précédente est marquée "vu" d'un coup — elle représente ce
+  // qui était déjà resté affiché toute la session précédente.
+  useEffect(() => {
+    if (loading) return;
+    if (sessionStorage.getItem(SESSION_FLAG)) return;
+    sessionStorage.setItem(SESSION_FLAG, "1");
+
+    let precedentes: string[] = [];
+    try {
+      precedentes = JSON.parse(localStorage.getItem(CARRYOVER_KEY) ?? "[]");
+    } catch {
+      precedentes = [];
+    }
+    precedentes.forEach((id) => {
+      setDemandes((prev) => prev.map((d) => (d.id === id ? { ...d, vu: true } : d)));
+      marquerDemandeVue(id).catch(() => {});
+    });
+  }, [loading]);
+
+  // Garde `loading` : sans elle, ce `useEffect` s'exécute dès le tout premier
+  // rendu (`demandes` encore à `[]`, avant la résolution du fetch initial) et
+  // écrase la liste persistée avec un tableau vide — juste avant que l'effet
+  // ci-dessus n'ait la chance de la lire (bug constaté le 18/08/2026 : la
+  // mise en avant ne survivait jamais à un changement de session).
+  useEffect(() => {
+    if (loading) return;
+    const nonVues = demandes
+      .filter((d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu)
+      .map((d) => d.id);
+    localStorage.setItem(CARRYOVER_KEY, JSON.stringify(nonVues));
+  }, [loading, demandes]);
 
   const ajouterDemande = useCallback(async (input: NouvelleDemandeInput) => {
     const demande = await creerDemande(input);

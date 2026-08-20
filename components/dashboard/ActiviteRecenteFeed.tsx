@@ -2,7 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { Newspaper, X } from "lucide-react";
 import type { Demande } from "@/lib/types";
 import { formatDateAction, formatJours } from "@/lib/format";
 import { EmptyRow } from "@/components/ui/EmptyRow";
@@ -181,7 +181,7 @@ function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
             key={e.id}
             href={`/historique?demande=${e.demandeId}`}
             className={`flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 ${
-              e.nonVu ? "bg-status-success-bg/40" : "bg-surface-card"
+              e.nonVu ? "bg-yellow-100/40" : "bg-surface-card"
             } ${HOVER_TEINTE[e.code]}`}
           >
             <span
@@ -225,16 +225,26 @@ export function ActiviteRecenteFeed({
   tiroirOuvert: boolean;
   onFermerTiroir: () => void;
 }) {
-  // Les "posé" de demandes encore en attente sont garantis présents (voir
-  // `EvenementFeed.enAttente`) : on les réserve d'abord, puis on complète
-  // avec les autres événements les plus récents, avant de re-trier
-  // chronologiquement l'ensemble pour l'affichage.
+  // Les "posé" de demandes encore en attente et les décisions pas encore vues
+  // sont garantis présents (voir `EvenementFeed.enAttente`/`nonVu`) — sinon
+  // le compteur de la phrase "Mes demandes" peut annoncer plus de nouveautés
+  // que ce que le journal, plafonné à `NB_LIGNES`, n'en montre réellement
+  // (constaté le 18/08/2026 : "3 nouvelles décisions" alors que 2 seulement
+  // étaient visibles, une 3e décision non vue perdant le tri chronologique
+  // face à des événements plus récents déjà vus). Réservés en premier
+  // (attente, puis non-vu), le reste comblé par les événements les plus
+  // récents, avant de re-trier chronologiquement l'ensemble pour l'affichage.
   const tries = demandes.flatMap(evenementsDeDemande).sort(comparerEvenements);
   const enAttente = tries.filter((e) => e.enAttente).slice(0, NB_LIGNES);
-  const autres = tries
-    .filter((e) => !e.enAttente)
+  const nonVues = tries
+    .filter((e) => !e.enAttente && e.nonVu)
     .slice(0, Math.max(0, NB_LIGNES - enAttente.length));
-  const evenements = [...enAttente, ...autres].sort(comparerEvenements);
+  const prioritaires = [...enAttente, ...nonVues];
+  const idsPrioritaires = new Set(prioritaires.map((e) => e.id));
+  const autres = tries
+    .filter((e) => !idsPrioritaires.has(e.id))
+    .slice(0, Math.max(0, NB_LIGNES - prioritaires.length));
+  const evenements = [...prioritaires, ...autres].sort(comparerEvenements);
 
   useEffect(() => {
     if (!tiroirOuvert) return;
@@ -254,7 +264,10 @@ export function ActiviteRecenteFeed({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-ink-300/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 className="text-ink-900 text-base font-bold">Mon journal</h2>
+          <h2 className="text-ink-900 flex items-center gap-1.5 text-base font-bold">
+            <Newspaper size={16} className="text-ink-500" />
+            Mon journal
+          </h2>
           <button
             type="button"
             onClick={onFermerTiroir}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Eye, PlusCircle, X } from "lucide-react";
+import { ChevronDown, Eye, Newspaper, PlusCircle, X } from "lucide-react";
 import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import { dureeCongeImpose } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
@@ -212,12 +212,7 @@ function SnippetDemande({
 export function Dashboard2Page() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes, refetch: refetchSoldes } = useSoldes();
-  const {
-    demandes,
-    loading: loadingDemandes,
-    refetch: refetchDemandes,
-    marquerVue,
-  } = useDemandes();
+  const { demandes, loading: loadingDemandes, refetch: refetchDemandes } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [reglesOuvertes, setReglesOuvertes] = useState(false);
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
@@ -553,27 +548,69 @@ export function Dashboard2Page() {
     if (demande) setSnippet({ demande, ancre });
   }
 
-  // Phrase "Mes demandes" (18/08/2026, test) — deux compteurs mutuellement
-  // exclusifs en emphase (stabilo) : "en attente" (nécessite une action du
-  // manager, toujours prioritaire si non nul) sinon "nouvelles décisions"
-  // (déjà tranchées, juste pas encore vues). "vu" se marque à la fermeture du
-  // volet journal plutôt qu'à l'ouverture — sinon l'emphase disparaîtrait
-  // avant que le volet n'ait eu le temps de la montrer (voir `fermerJournal`).
+  // Phrase "Mes demandes" (18/08/2026, test) — "en attente" (nécessite une
+  // action du manager) et "nouvelles décisions" (déjà tranchées, pas encore
+  // vues) s'affichent tous les deux en emphase, indépendamment l'un de
+  // l'autre. "vu" ne se marque plus à la fermeture du volet journal (Vincent :
+  // perturbant que la mise en avant disparaisse dès qu'on ouvre/ferme le
+  // tiroir) — voir `useDemandes` pour le nouveau principe "depuis votre
+  // dernière connexion" (mise en avant conservée toute la session en cours,
+  // effacée au début de la session suivante).
   const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
-  const decisionsNonVues = demandes.filter(
+  const nbDecisionsNonVues = demandes.filter(
     (d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu,
-  );
-  const nbDecisionsNonVues = decisionsNonVues.length;
-
-  function fermerJournal() {
-    decisionsNonVues.forEach((d) => marquerVue(d.id));
-    setTiroirActiviteOuvert(false);
-  }
+  ).length;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
       <div className="px-1 pt-5 md:pt-0">
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
+      </div>
+
+      <div className="flex w-fit flex-col gap-1 rounded-xl bg-transparent px-3 py-2">
+        <span className="text-ink-500 text-xs font-semibold">Depuis ma dernière visite</span>
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
+          <span className="flex items-center gap-0.5">
+            <Newspaper size={12} className="text-ink-500" />
+            {nbEnAttente > 0 ? (
+              <span className="bg-status-warning-bg text-status-warning-fg rounded-sm px-1 font-semibold">
+                {nbEnAttente} {nbEnAttente === 1 ? "demande" : "demandes"} en attente
+              </span>
+            ) : (
+              <span className="text-ink-500">0 demande en attente</span>
+            )}
+          </span>
+          <span className="text-ink-500" aria-hidden="true">
+            |
+          </span>
+          {nbDecisionsNonVues > 0 ? (
+            <>
+              <span className="text-ink-900 rounded-sm bg-yellow-100 px-1 font-semibold">
+                {nbDecisionsNonVues}{" "}
+                {nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}
+              </span>
+              <span className="text-ink-500">-</span>
+              <button
+                type="button"
+                onClick={() => setTiroirActiviteOuvert(true)}
+                className="text-mint font-bold underline"
+              >
+                voir le journal
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-ink-500">aucune décision récente -</span>
+              <button
+                type="button"
+                onClick={() => setTiroirActiviteOuvert(true)}
+                className="text-ink-500 underline"
+              >
+                voir le journal
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 rounded-2xl py-4 md:py-5">
@@ -624,57 +661,6 @@ export function Dashboard2Page() {
           </div>
           <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
         </div>
-      </div>
-
-      {/* Même gabarit de grille que la grille Soldes ci-dessus (`max-w-[900px]
-          flex-1 md:grid-cols-[1fr_1fr_1fr_160px]`, colonne fantôme `md:w-72`
-          incluse) — la carte occupe les 2 premières colonnes (`md:col-span-2`),
-          calant ainsi son bord droit sur celui du bloc RTT sans dupliquer de
-          largeur en dur. */}
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
-        <h2 className="text-ink-900 mr-1.5">Mes demandes</h2>
-        {nbEnAttente > 0 ? (
-          <span className="bg-status-warning-bg text-status-warning-fg rounded-sm px-1 font-semibold">
-            {nbEnAttente} {nbEnAttente === 1 ? "demande" : "demandes"} en attente
-          </span>
-        ) : (
-          <span className="text-ink-500">0 demande en attente</span>
-        )}
-        <span className="text-ink-300" aria-hidden="true">
-          |
-        </span>
-        {nbEnAttente === 0 && nbDecisionsNonVues > 0 ? (
-          <>
-            <span className="bg-status-success-bg text-status-success-fg rounded-sm px-1 font-semibold">
-              {nbDecisionsNonVues}{" "}
-              {nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}
-            </span>
-            <span className="text-ink-500">-</span>
-            <button
-              type="button"
-              onClick={() => setTiroirActiviteOuvert(true)}
-              className="text-status-success-fg font-bold underline"
-            >
-              afficher le journal
-            </button>
-          </>
-        ) : (
-          <>
-            <span className="text-ink-500">
-              {nbDecisionsNonVues > 0
-                ? `${nbDecisionsNonVues} ${nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}`
-                : "aucune décision récente"}{" "}
-              -
-            </span>
-            <button
-              type="button"
-              onClick={() => setTiroirActiviteOuvert(true)}
-              className="text-ink-500 underline"
-            >
-              afficher le journal
-            </button>
-          </>
-        )}
       </div>
 
       {/* Carte masquée (18/08/2026, test) — contenu conservé, juste caché
@@ -1053,7 +1039,7 @@ export function Dashboard2Page() {
       <ActiviteRecenteFeed
         demandes={demandes}
         tiroirOuvert={tiroirActiviteOuvert}
-        onFermerTiroir={fermerJournal}
+        onFermerTiroir={() => setTiroirActiviteOuvert(false)}
       />
 
       <ListingTiroir
