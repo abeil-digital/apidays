@@ -175,7 +175,7 @@ export function CongesPaiePage() {
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold">Export paie</h1>
 
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">

@@ -100,7 +100,7 @@ export function SuivreDemandesPage() {
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0 print:pb-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Suivre les demandes</h1>
 
       <div className="hidden px-1 print:block">

@@ -1615,7 +1615,7 @@ font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`),
   bon endroit pour représenter les décisions, pas des compteurs permanents.
   - **Notion de "vu" — migration Supabase durable** (pas un flag client/localStorage, choix explicite
     de Vincent : "je préfère que l'on code un truc pour durer") : colonne `demandes_conges.vu boolean
-    not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `security definer` (la
+not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `security definer` (la
     policy RLS salarié n'autorise l'update que sur une demande `en_attente` ; passer par une fonction
     dédiée évite d'élargir cette policy aux demandes déjà décidées, ce qui aurait aussi exposé les
     autres colonnes — dates, statut... — à une modification côté client). Générique à tout statut
@@ -1677,6 +1677,52 @@ font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`),
   (lucide-react) retiré avec. `SuiviDemandeRow.tsx` avait été identifié à tort comme orphelin par une
   première recherche automatisée — restauré : toujours utilisé par `DetailCongePanel.tsx` et
   `/design-system`.
+- **Audit de grille Accueil/Poser + largeur unifiée à 1180px (18-20/08/2026)** — audit demandé par
+  Vincent avant un refacto des soldes : la grille Soldes (colonnes `1fr`, grandit pour remplir
+  l'espace) et la grille calendrier "Mes Congés" (`auto-fit minmax(170px,1fr)`, pilotée par son
+  contenu) suivent deux logiques différentes qui ne peuvent pas être alignées pixel-perfect sans
+  abandonner l'une des deux philosophies. Décision de Vincent : **1) objectif d'alignement
+  abandonné**, **2) nettoyage** — le hack de "colonne fantôme" (`div` invisible `aria-hidden` servant
+  à caler un `flex-1`) retiré, ainsi qu'un bloc de 3 pills mortes (En attente/Validées/Refusées,
+  jamais affiché, resté `hidden` depuis le 18/08/2026). À la suite de l'audit, largeur de travail du
+  projet unifiée : un seul `max-w-[1180px]` centré porté par `AppShell.tsx`/`HeaderBar.tsx`
+  (remplace l'ancien `1440px` du header + les `md:max-w-6xl`/`max-w-[1152px]` dupliqués
+  individuellement dans 8 pages, retirés — `md:max-w-none` ajouté à la place pour neutraliser le
+  `max-w-md` mobile au-delà du breakpoint `md`). Gouttière rail↔contenu réglée à 16px total
+  (`px-3` sur `AppShell` + `px-1` déjà présent sur chaque page, les deux s'additionnent). Fond de
+  page blanc au-delà de 1180px (`body` dans `globals.css`), le bandeau de travail (1180px) garde
+  `bg-surface-app` porté par `AppShell` (pas par `body`). L'incohérence overlay (Accueil) vs reflow
+  (Historique/Suivre, `DetailCongePanel`) pour afficher un détail complémentaire reste non tranchée
+  — loggée dans Backlog plutôt que corrigée dans la foulée (accord de Vincent : "oui").
+- **Micro-interactions Accueil (20/08/2026)** — suite de l'audit ci-dessus, itéré par petites
+  touches successives sur la carte Soldes :
+  - `SoldeCard` (`components/ui/SoldeCard.tsx`) : cards CP/RTT/CPA plafonnées à 200px de large
+    (grille `minmax(0,200px)` au lieu de `1fr`). Ancienne pastille "i" (ouvrait `SoldeDetailPanel`)
+    remplacée par un lien texte "Suivre" ferré contre le chiffre de solde, puis **la carte entière
+    est devenue cliquable** (`onClick`/`role="button"`/clavier) et le lien "Suivre" a été retiré —
+    `avecInfo`/`onInfoClick` supprimés du composant, remplacés par un simple `onClick`. Chiffre de
+    solde agrandi de 15% au repos (`text-2xl` → `text-[1.725rem]`). Survol : fond teinté qui se fonce
+    de 12% à 30% via une variable CSS `--tone-darken` imbriquée dans deux `color-mix()` (le
+    `background-color` reste une seule propriété transitionnable en CSS malgré l'indirection par
+    variable), ombre `shadow-sm` → `shadow-md`, card entière `scale-105`, chiffre de solde
+    `scale-[1.2]` avec `transform-origin: left` (`origin-left`) pour grossir vers la droite en
+    restant ferré à gauche — le tout `transition-[...] duration-200` pour un rendu fluide.
+  - Bouton "Poser un congé" (dans la même grille que les `SoldeCard`, toujours dans
+    `Dashboard2Page.tsx`) : refondu en picto seul (`PlusCircle` 56px) + libellé en dessous, couleur
+    `text-mint`/`hover:text-mint-hover` (nouveau token `--color-mint-hover`, mint éclairci de 15%
+    vers le blanc), fond blanc à 30% d'opacité (`bg-surface-card/30`), ombre légère
+    `shadow-sm`/`hover:shadow-md`, grossit de 10% au survol (`hover:scale-110`, bouton entier —
+    picto et libellé scalent ensemble, pas de `group-hover` séparé).
+  - Titre de section "Soldes" → "Suivre mes soldes", réduit et grisé (`text-lg text-ink-900` →
+    `text-sm text-ink-500`), interlignage resserré des deux côtés (valeurs arbitraires ad hoc, voir
+    commentaire inline dans `Dashboard2Page.tsx`).
+  - Les deux composants (`SoldeCard`, bouton "Poser un congé") documentés dans `/design-system`
+    (`DesignSystemPage.tsx`) avec le détail du comportement au survol.
+  - Récurrence notable pendant cette session : le bundle dev Turbopack reste régulièrement en
+    retard sur les nouvelles classes Tailwind arbitraires (`hover:[--var:x%]`, `scale-[1.2]`,
+    `bg-x/40`...) — `--tone-darken`/`--color-mint-hover` etc. n'apparaissaient pas dans le CSS
+    généré tant que `.next` n'était pas vidé. Fix systématique : `preview_stop` → `rm -rf .next` →
+    `preview_start`.
 
 ## Décisions prises
 

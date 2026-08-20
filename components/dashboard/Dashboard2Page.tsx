@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { ChevronDown, Eye, Newspaper, PlusCircle, X } from "lucide-react";
 import { formatDate, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import { dureeCongeImpose } from "@/lib/joursFeries";
@@ -562,7 +561,7 @@ export function Dashboard2Page() {
   ).length;
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-6xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
       <div className="px-1 pt-5 md:pt-0">
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
@@ -613,108 +612,50 @@ export function Dashboard2Page() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl py-4 md:py-5">
+      {/* Titre de section réduit + interlignage resserré (20/08/2026, demande
+          explicite) — le h2 passe de text-lg/text-ink-900 à text-sm/text-ink-500
+          (aligné visuellement, plus discret que les autres titres de section) ;
+          `-mt-[12.24px]` compense le `gap-6` du conteneur racine pour un
+          interlignage réduit de ~51% avec le bloc "Depuis ma dernière visite"
+          au-dessus, et `gap-[11px]` (au lieu de `gap-4`) réduit de 30%
+          l'interlignage avec la grille de cards Soldes en dessous. Valeurs
+          arbitraires ad hoc, pas de token dédié. */}
+      <div className="-mt-[12.24px] flex flex-col gap-[11px] rounded-2xl py-4 md:py-5">
         <div className="flex flex-col gap-1 px-1">
-          <h2 className="text-ink-900 text-lg font-bold">Soldes</h2>
+          <h2 className="text-ink-500 text-sm font-bold">Suivre mes soldes</h2>
         </div>
 
-        {/* Colonne fantôme `md:w-72 md:shrink-0` invisible (18/08/2026, test)
-              — même largeur que la colonne légende du calendrier plus bas,
-              pour que ce `flex-1` se calcule identiquement au sien : le bord
-              droit du bouton "Poser un congé" s'aligne alors exactement sur
-              celui du 4ème mois du calendrier, quelle que soit la largeur
-              d'écran, sans dupliquer sa largeur en dur. */}
-        <div className="flex flex-col gap-4 md:flex-row">
-          <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
-            <SoldeCard
-              valeur={soldes.cp.valeurApresAttente}
-              conditionPrefixe={soldes.cp.conditionPrefixe}
-              conditionAccent={soldes.cp.conditionAccent}
-              tone="cp"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("CP")}
-            />
-            <SoldeCard
-              valeur={soldes.rtt.valeurApresAttente}
-              conditionPrefixe={soldes.rtt.conditionPrefixe}
-              conditionAccent={soldes.rtt.conditionAccent}
-              tone="rtt"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("RTT")}
-            />
-            <SoldeCard
-              valeur={soldes.cpa.valeurApresAttente}
-              conditionPrefixe={soldes.cpa.conditionPrefixe}
-              conditionAccent={soldes.cpa.conditionAccent}
-              tone="cpa"
-              avecInfo
-              onInfoClick={() => setSoldeDetailOuvert("CPA")}
-            />
-            <button
-              type="button"
-              onClick={() => setNouvelleDemandeOuverte(true)}
-              className="bg-mint flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 text-white shadow-sm"
-            >
-              <span className="text-sm font-semibold">Poser un congé</span>
-              <PlusCircle size={20} />
-            </button>
-          </div>
-          <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
+        <div className="grid max-w-[900px] grid-cols-2 gap-3 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
+          <SoldeCard
+            valeur={soldes.cp.valeurApresAttente}
+            conditionPrefixe={soldes.cp.conditionPrefixe}
+            conditionAccent={soldes.cp.conditionAccent}
+            tone="cp"
+            onClick={() => setSoldeDetailOuvert("CP")}
+          />
+          <SoldeCard
+            valeur={soldes.rtt.valeurApresAttente}
+            conditionPrefixe={soldes.rtt.conditionPrefixe}
+            conditionAccent={soldes.rtt.conditionAccent}
+            tone="rtt"
+            onClick={() => setSoldeDetailOuvert("RTT")}
+          />
+          <SoldeCard
+            valeur={soldes.cpa.valeurApresAttente}
+            conditionPrefixe={soldes.cpa.conditionPrefixe}
+            conditionAccent={soldes.cpa.conditionAccent}
+            tone="cpa"
+            onClick={() => setSoldeDetailOuvert("CPA")}
+          />
+          <button
+            type="button"
+            onClick={() => setNouvelleDemandeOuverte(true)}
+            className="text-mint hover:text-mint-hover bg-surface-card/30 flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 shadow-sm transition-[transform,color,box-shadow] hover:scale-110 hover:shadow-md"
+          >
+            <PlusCircle size={56} />
+            <span className="text-sm font-semibold">Poser un congé</span>
+          </button>
         </div>
-      </div>
-
-      {/* Carte masquée (18/08/2026, test) — contenu conservé, juste caché
-          (`hidden`) le temps d'itérer sur la ligne au-dessus qui la remplace
-          potentiellement. Voir Backlog.md. */}
-      <div className="hidden flex-col gap-4 md:flex-row">
-        <div className="grid max-w-[900px] flex-1 grid-cols-2 gap-3 md:grid-cols-[1fr_1fr_1fr_160px]">
-          <div className="bg-surface-card col-span-2 flex flex-col gap-4 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex flex-col gap-0">
-                <h2 className="text-ink-900 text-lg font-bold">Mes demandes</h2>
-                <span className="text-ink-500 -mt-1 text-sm">Depuis votre dernière visite</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setTiroirActiviteOuvert(true)}
-                className="text-mint text-sm font-semibold transition-opacity duration-150 hover:opacity-70"
-              >
-                Mon journal
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href="/historique?statut=en_attente"
-                className="bg-status-warning-bg text-status-warning-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
-              >
-                <span className="font-semibold">
-                  {demandes.filter((d) => d.statut === "en attente").length}
-                </span>
-                En attente
-              </Link>
-              <Link
-                href="/historique?statut=valide_non_vu"
-                className="bg-status-success-bg text-status-success-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
-              >
-                <span className="font-semibold">
-                  {demandes.filter((d) => d.statut === "validé" && !d.vu).length}
-                </span>
-                Validées
-              </Link>
-              <Link
-                href="/historique?statut=refuse_non_vu"
-                className="bg-status-danger-bg text-status-danger-fg flex items-center gap-2 rounded-full py-2 pr-4 pl-3.5 text-base shadow-sm transition-shadow duration-150 hover:shadow-lg"
-              >
-                <span className="font-semibold">
-                  {demandes.filter((d) => d.statut === "refusé" && !d.vu).length}
-                </span>
-                Refusées
-              </Link>
-            </div>
-          </div>
-        </div>
-        <div aria-hidden="true" className="hidden md:block md:w-72 md:shrink-0" />
       </div>
 
       <h2 className="text-ink-900 px-1 text-lg font-bold">Mes Congés</h2>

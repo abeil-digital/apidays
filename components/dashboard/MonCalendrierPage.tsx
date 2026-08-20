@@ -512,7 +512,7 @@ export function MonCalendrierPage() {
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <h1 className="text-ink-900 px-1 text-2xl font-semibold">Mon calendrier</h1>
 
       <div className="flex flex-wrap items-center gap-2 px-1">

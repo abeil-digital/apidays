@@ -59,6 +59,7 @@
   --color-ferie: #d4b106; /* or — jour férié (vue calendrier) */
   --color-mint: #4fa893; /* accent secondaire — carte "Poser un congé" */
   --color-mint-tint: #e7f3ef; /* accent-100 — fond du bloc "Soldes" */
+  --color-mint-hover: #69b5a3; /* mint éclairci de 15% — état hover du bouton "Poser un congé" */
 
   /* Rayons de bordure — cartes/tuiles arrondies façon iOS */
   --radius-card: 1.375rem; /* 22px */
@@ -94,7 +95,7 @@
  */
 
 body {
-  background: var(--color-surface-app);
+  background: var(--color-surface-card);
   color: var(--color-ink-900);
 }
 

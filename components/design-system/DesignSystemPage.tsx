@@ -451,25 +451,56 @@ export function DesignSystemPage() {
           </ComponentExample>
 
           <ComponentExample title="SoldeCard">
-            <div className="grid w-full grid-cols-3 gap-3">
-              <SoldeCard
-                valeur={18}
-                conditionPrefixe="À poser avant le"
-                conditionAccent="31/05/2026"
-                tone="cp"
-              />
-              <SoldeCard
-                valeur={3}
-                conditionPrefixe="À poser avant le"
-                conditionAccent="31/12/2026"
-                tone="rtt"
-              />
-              <SoldeCard
-                valeur={2.25}
-                conditionPrefixe="En cours d'acquisition"
-                conditionAccent="juin 2026"
-                tone="cpa"
-              />
+            <div className="flex w-full flex-col gap-2">
+              <p className="text-ink-500 text-xs">
+                Survol (20/08/2026) — fond teinté à 12% qui se fonce jusqu&rsquo;à 30% (dégradé
+                fluide 200ms), légère ombre (<code>shadow-sm</code> → <code>shadow-md</code>), card
+                entière qui grossit de 5% (<code>hover:scale-105</code>), et le chiffre de solde qui
+                grossit de 20% en restant ferré à gauche (<code>origin-left</code>,{" "}
+                <code>group-hover:scale-[1.2]</code>). La card entière est cliquable (
+                <code>onClick</code>, <code>role=&quot;button&quot;</code>, accessible clavier) et
+                ouvre <code>SoldeDetailPanel</code> — remplace l&rsquo;ancien lien &laquo; Suivre
+                &raquo; dédié.
+              </p>
+              <div className="grid w-full grid-cols-3 gap-3">
+                <SoldeCard
+                  valeur={18}
+                  conditionPrefixe="À poser avant le"
+                  conditionAccent="31/05/2026"
+                  tone="cp"
+                />
+                <SoldeCard
+                  valeur={3}
+                  conditionPrefixe="À poser avant le"
+                  conditionAccent="31/12/2026"
+                  tone="rtt"
+                />
+                <SoldeCard
+                  valeur={2.25}
+                  conditionPrefixe="À poser à partir de"
+                  conditionAccent="juin 2026"
+                  tone="cpa"
+                />
+              </div>
+            </div>
+          </ComponentExample>
+
+          <ComponentExample title="Bouton « Poser un congé » (carte Soldes, Accueil)">
+            <div className="flex w-full flex-col gap-2">
+              <p className="text-ink-500 text-xs">
+                Picto seul (pas de libellé à côté, pas de bordure), fond blanc à 30% d&rsquo;opacité
+                (<code>bg-surface-card/30</code>), ombre légère au repos. Survol : couleur{" "}
+                <code>text-mint</code> → <code>text-mint-hover</code> (mint éclairci de 15%), ombre
+                qui s&rsquo;accentue, bouton entier qui grossit de 10% (<code>hover:scale-110</code>
+                ) — picto et libellé scalent ensemble, pas séparément.
+              </p>
+              <button
+                type="button"
+                className="text-mint hover:text-mint-hover bg-surface-card/30 flex h-[120px] w-[160px] flex-col items-center justify-center gap-2 rounded-xl p-4 shadow-sm transition-[transform,color,box-shadow] hover:scale-110 hover:shadow-md"
+              >
+                <PlusCircle size={56} />
+                <span className="text-sm font-semibold">Poser un congé</span>
+              </button>
             </div>
           </ComponentExample>
 

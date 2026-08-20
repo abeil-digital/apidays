@@ -20,7 +20,7 @@ export function HeaderBar() {
   const niveau1Items = getNiveau1Items(utilisateur?.role);
 
   return (
-    <header className="bg-slate mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 shadow-sm md:max-w-[1440px] md:gap-6 md:px-8 print:hidden">
+    <header className="bg-slate mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 shadow-sm md:max-w-[1180px] md:gap-6 md:px-8 print:hidden">
       <span className="text-base font-semibold whitespace-nowrap text-white">Apidays</span>
 
       <nav className="flex shrink-0 items-center gap-1">

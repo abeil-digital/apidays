@@ -1,9 +1,5 @@
 import { formatJours } from "@/lib/format";
-import {
-  classeFondTypeBadge,
-  TypeBadge,
-  type TypeBadgeCode,
-} from "@/components/demandes/TypeBadge";
+import { TypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 
 export type SoldeCardTone = "cp" | "rtt" | "cpa";
 
@@ -32,16 +28,10 @@ interface SoldeCardProps {
    * (`Dashboard3Page`, en cours d'itération), défaut inchangé partout
    * ailleurs. */
   carre?: boolean;
-  /** Pastille "i" (17/08/2026, Accueil) — alignée à droite du solde (41 j /
-   * 1,75 j), pas du `TypeBadge`. Fond teinté de la couleur du type (plus
-   * visible qu'un picto gris neutre, associe directement le picto au congé
-   * concerné), ouvre `SoldeDetailPanel` au clic (`onInfoClick`). Un simple
-   * caractère "i" (pas l'icône `Info` de lucide, qui a son propre contour de
-   * cercle — double contour avec la pastille sinon), sans bordure, avec un
-   * état survol. Opt-in : défaut inchangé partout ailleurs (Accueil2
-   * notamment). */
-  avecInfo?: boolean;
-  onInfoClick?: () => void;
+  /** Ouvre `SoldeDetailPanel` au clic sur la card entière (20/08/2026 —
+   * remplace l'ancien lien "Suivre" dédié). Opt-in : défaut inchangé partout
+   * ailleurs (Accueil2 notamment). */
+  onClick?: () => void;
 }
 
 export function SoldeCard({
@@ -50,31 +40,37 @@ export function SoldeCard({
   conditionAccent,
   tone,
   carre = false,
-  avecInfo = false,
-  onInfoClick,
+  onClick,
 }: SoldeCardProps) {
   const code = TONE_CODE[tone];
   return (
     <div
-      className={`flex h-full w-full flex-col gap-1.5 p-4 shadow-sm ${carre ? "" : "rounded-xl"}`}
-      style={{
-        backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TONE[tone]}) 12%, white)`,
-      }}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      className={`group flex h-full w-full cursor-pointer flex-col gap-1.5 p-4 shadow-sm transition-[background-color,box-shadow,transform] duration-200 hover:scale-105 hover:shadow-md hover:[--tone-darken:30%] ${carre ? "" : "rounded-xl"}`}
+      style={
+        {
+          "--tone-mix": "12%",
+          "--tone-darken": "0%",
+          backgroundColor: `color-mix(in srgb, color-mix(in srgb, var(${VAR_COULEUR_TONE[tone]}) var(--tone-mix), white) calc(100% - var(--tone-darken)), black var(--tone-darken))`,
+        } as React.CSSProperties
+      }
     >
       <TypeBadge code={code} />
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-ink-900 text-2xl font-bold">{formatJours(valeur)} j</span>
-        {avecInfo && (
-          <button
-            type="button"
-            onClick={onInfoClick}
-            aria-label={`Détail du solde ${code}`}
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] leading-none font-bold text-white transition-[filter] duration-150 hover:brightness-110 ${classeFondTypeBadge(code)}`}
-          >
-            i
-          </button>
-        )}
-      </div>
+      <span className="text-ink-900 inline-block origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.2]">
+        {formatJours(valeur)} j
+      </span>
       <span className="text-ink-500 text-xs leading-snug">
         {conditionPrefixe} <span className="text-ink-900 font-bold">{conditionAccent}</span>
       </span>

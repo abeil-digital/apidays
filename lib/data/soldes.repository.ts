@@ -304,7 +304,7 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
     cpa = {
       valeur: soldeCpa,
       valeurApresAttente: soldeCpa - enAttenteCpa,
-      conditionPrefixe: "En cours d'acquisition, à poser à partir de",
+      conditionPrefixe: "À poser à partir de",
       conditionAccent: formatMoisAnnee(periodeSuivante.debut),
     };
   }

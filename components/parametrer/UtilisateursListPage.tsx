@@ -106,7 +106,7 @@ export function UtilisateursListPage() {
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-6xl md:pt-0">
+    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <div className="flex items-center justify-between px-1">
         <h1 className="text-ink-900 text-2xl font-semibold">Utilisateurs</h1>
         <Button
