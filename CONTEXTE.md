@@ -1653,6 +1653,30 @@ font-semibold` (taille des onglets de période plutôt que `text-lg font-bold`),
     2 dans son journal" alors que le compteur affichait 3). Les événements "posé" d'une demande encore
     en attente (`EvenementFeed.enAttente`) sont désormais réservés en priorité, le reste des lignes
     comblé par les événements les plus récents, l'ensemble retrié chronologiquement pour l'affichage.
+- **Accueil2 (`/dashboard3`) supprimé pour de bon (18/08/2026)** — ancienne version de travail
+  utilisée pour itérer sans toucher à `/`, devenue inutile une fois "Mes demandes"/le suivi des
+  décisions stabilisés sur l'Accueil réel. Supprimés : la route `app/(app)/dashboard3/page.tsx`, le
+  composant `components/dashboard/Dashboard3Page.tsx`, l'entrée de nav "Accueil2" dans
+  `components/layout/tabs.ts`. Aucun composant partagé n'est devenu orphelin (`SoldeCard`,
+  `ActiviteRecenteFeed`, `ListingTiroir`, `ReglesCongesModal`, `PoserDemandeModal`,
+  `SoldeDetailPanel` restent tous utilisés par `Dashboard2Page`/ailleurs).
+  - À cette occasion, 5 composants déjà orphelins repérés dans `components/dashboard/` (restes
+    d'essais Accueil2 du 16/08/2026, jamais importés nulle part) : `MesSoldesCard.tsx` (supprimé le
+    18/08/2026), `ProchainsJoursOffCard.tsx`, `ActiviteRecenteTable.tsx`, `ActiviteRecenteListe.tsx`,
+    `ActiviteRecenteCard.tsx` (ces 3 derniers restent en place pour l'instant). Page de test
+    temporaire créée pour les visualiser avant décision : `app/(app)/preview-orphelins/page.tsx`
+    (route `/preview-orphelins`) — **à supprimer une fois Vincent statué**, voir Backlog.
+- **Page "Demandes à traiter" (`/suivre`) supprimée (18/08/2026)** — Vincent : plus utilisée,
+  redondante avec "Suivre les demandes" (`/suivre/demandes`). Supprimés : la route
+  `app/(app)/suivre/page.tsx`, le composant `components/suivre/SuivrePage.tsx`, et les composants
+  devenus orphelins `SalarieRow.tsx`, `CongesConsommesCard.tsx`, `DemandeEquipeRow.tsx`,
+  `HistoriqueSoldeModal.tsx`. **Point d'attention traité** : le lien niveau 1 "Suivre" du header
+  (`components/layout/niveau1.ts`, `getNiveau1Items`) pointait vers `/suivre` — redirigé vers
+  `/suivre/demandes` pour ne pas laisser un 404 au clic sur "Suivre" dans le header. Entrée
+  "Demandes à traiter" retirée de `SUIVRE_TABS` (`components/layout/tabs.ts`), import `ClipboardCheck`
+  (lucide-react) retiré avec. `SuiviDemandeRow.tsx` avait été identifié à tort comme orphelin par une
+  première recherche automatisée — restauré : toujours utilisé par `DetailCongePanel.tsx` et
+  `/design-system`.
 
 ## Décisions prises
 

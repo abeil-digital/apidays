@@ -1,7 +1,6 @@
 import {
   CalendarClock,
   CalendarDays,
-  ClipboardCheck,
   History,
   Home,
   ListChecks,
@@ -19,7 +18,6 @@ export interface NavTab {
 
 const POSER_TABS: NavTab[] = [
   { href: "/", label: "Accueil", Icon: Home },
-  { href: "/dashboard3", label: "Accueil2", Icon: Home },
   { href: "/mon-calendrier", label: "Mon calendrier", Icon: CalendarDays },
   { href: "/historique", label: "Historique", Icon: History },
 ];
@@ -31,7 +29,6 @@ const PARAMETRER_TABS: NavTab[] = [
 ];
 
 const SUIVRE_TABS: NavTab[] = [
-  { href: "/suivre", label: "Demandes à traiter", Icon: ClipboardCheck },
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   { href: "/suivre/soldes", label: "Suivre les soldes", Icon: Wallet },
   { href: "/suivre/paie", label: "Export paie", Icon: Receipt },
