@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { Sheet, type LucideIcon } from "lucide-react";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { formatJours, todayISO } from "@/lib/format";
@@ -303,6 +304,19 @@ export function ProchainsJoursOffCard({
               </div>
             );
           })}
+          {/* Lien "Gérer mes demandes" (21/08/2026, demande explicite) — sticky
+              en bas de la zone scrollable (pas de la card entière), toujours
+              visible pendant le défilement de la liste. Fond opaque
+              (`bg-surface-app`, celui de la page) nécessaire : sans lui, le
+              contenu qui défile serait visible par transparence sous le
+              lien. */}
+          <Link
+            href="/historique"
+            className="bg-surface-app text-mint hover:text-mint-hover sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
+          >
+            <Sheet size={16} />
+            Gérer mes demandes
+          </Link>
         </div>
       )}
     </div>

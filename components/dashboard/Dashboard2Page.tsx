@@ -50,24 +50,38 @@ function formatMoisAnneeCourt(dateIso: string): string {
   return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
 }
 
-/** Sélecteur "Débute : Mois en cours / Début période" — pas un vrai 3e
- * comportement : pilote exactement le même booléen "vue complète" qu'avant
- * (mois en cours = aujourd'hui → fin de la fenêtre), juste un select. Rendu
- * en texte souligné + chevron, volontairement discret (pas la pilule
- * `SelectPille` des popins DJI/CPI, trop visible ici). */
-function SelectAffichage({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+/** Sélecteur "Débute : {mois en cours} / {début de la période}" — pas un vrai
+ * 3e comportement : pilote exactement le même booléen "vue complète"
+ * qu'avant (mois en cours = aujourd'hui → fin de la fenêtre), juste un
+ * select. Libellés personnalisés par appelant (20/08/2026, demande
+ * explicite) — ex. "Août 26"/"Janv. 26" pour l'onglet année civile,
+ * "Août 26"/"Juin 26" pour l'onglet période de référence CP — plutôt que
+ * les génériques "Mois en cours"/"Début période" d'origine. Rendu en texte
+ * souligné + chevron, volontairement discret (pas la pilule `SelectPille`
+ * des popins DJI/CPI, trop visible ici). */
+function SelectAffichage({
+  actif,
+  onChange,
+  labelMoisEnCours,
+  labelDebut,
+}: {
+  actif: boolean;
+  onChange: (v: boolean) => void;
+  labelMoisEnCours: string;
+  labelDebut: string;
+}) {
   return (
     <div className="relative inline-flex w-fit items-center gap-1.5">
       <span className="text-ink-500 text-xs">Débute :</span>
       <select
         value={actif ? "complete" : "mois_en_cours"}
         onChange={(e) => onChange(e.target.value === "complete")}
-        className="text-ink-900 relative appearance-none pr-4 text-xs font-semibold underline underline-offset-2 outline-none"
+        className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
       >
-        <option value="mois_en_cours">Mois en cours</option>
-        <option value="complete">Début période</option>
+        <option value="mois_en_cours">{labelMoisEnCours}</option>
+        <option value="complete">{labelDebut}</option>
       </select>
-      <ChevronDown size={11} className="text-ink-900 pointer-events-none absolute right-0" />
+      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
     </div>
   );
 }
@@ -460,40 +474,50 @@ export function Dashboard2Page() {
             onClick={() => setOnglet("en_cours")}
             className={`rounded-full px-4 py-2 text-sm font-semibold ${
               onglet === "en_cours"
-                ? "bg-brand text-brand-foreground"
-                : "bg-surface-card text-ink-900 shadow-sm"
+                ? "bg-mint/90 text-white"
+                : "border-mint text-mint border bg-transparent"
             }`}
           >
             {anneeActuelle}
           </button>
+          {onglet === "en_cours" && (
+            <SelectAffichage
+              actif={vueCompleteEnCours}
+              onChange={setVueCompleteEnCours}
+              labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+              labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
+            />
+          )}
           <button
             type="button"
             onClick={() => setOnglet("periode_cp")}
             className={`rounded-full px-4 py-2 text-sm font-semibold ${
               onglet === "periode_cp"
-                ? "bg-brand text-brand-foreground"
-                : "bg-surface-card text-ink-900 shadow-sm"
+                ? "bg-mint/90 text-white"
+                : "border-mint text-mint border bg-transparent"
             }`}
           >
             {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
           </button>
+          {onglet === "periode_cp" && (
+            <SelectAffichage
+              actif={vueCompletePeriodeCp}
+              onChange={setVueCompletePeriodeCp}
+              labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+              labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
+            />
+          )}
           <button
             type="button"
             onClick={() => setOnglet("annee_suivante")}
             className={`rounded-full px-4 py-2 text-sm font-semibold ${
               onglet === "annee_suivante"
-                ? "bg-brand text-brand-foreground"
-                : "bg-surface-card text-ink-900 shadow-sm"
+                ? "bg-mint/90 text-white"
+                : "border-mint text-mint border bg-transparent"
             }`}
           >
             {anneeSuivante}
           </button>
-          {onglet === "en_cours" && (
-            <SelectAffichage actif={vueCompleteEnCours} onChange={setVueCompleteEnCours} />
-          )}
-          {onglet === "periode_cp" && (
-            <SelectAffichage actif={vueCompletePeriodeCp} onChange={setVueCompletePeriodeCp} />
-          )}
         </div>
       </div>
 
@@ -531,9 +555,15 @@ export function Dashboard2Page() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-6">
             {onglet === "annee_suivante" && !anneeSuivanteParametree && (
-              <div className="bg-status-neutral-bg text-status-neutral-fg rounded-control px-4 py-3 text-sm font-semibold">
-                {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
-              </div>
+              // Effet "stabilo" (21/08/2026, demande explicite) — même
+              // convention que la phrase "X demandes en attente" plus haut
+              // sur cette page (`bg-status-warning-bg`/`rounded-sm`/`px-1`),
+              // plutôt qu'un encart plein `rounded-control` avec padding.
+              <p className="text-sm font-normal">
+                <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
+                  {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+                </span>
+              </p>
             )}
 
             {/* Responsive (20/08/2026) — 1 carte/ligne sous `sm`, 2 entre `sm`
