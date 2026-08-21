@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface Question {
   id: string;
@@ -38,50 +39,94 @@ const QUESTIONS: Question[] = [
 ];
 
 /**
- * Card FAQ (20/08/2026, premier jet — "pose un principe moderne on
- * affinera") — bord à bord (`w-full`, pas de `max-w` comme la grille
- * calendrier au-dessus), sous "Prochains jours off"/"Mon Calendrier". Liste
- * de questions alignée à gauche, réponse de la question sélectionnée
- * affichée à droite (colonne unique empilée en dessous de `md:`). Contenu
- * des réponses volontairement provisoire, pas encore les vraies règles
- * métier validées.
+ * Card FAQ (20/08/2026, premier jet ; refonte 21/08/2026 sur maquette de
+ * référence fournie, puis 21/08/2026 sur demande explicite) — bords carrés
+ * (pas de `rounded-*`), pas de bordure ni d'ombre. Padding horizontal propre
+ * conservé (`px-8 md:px-12`, comme le padding vertical) — l'essai "sans
+ * gouttière gauche/droite" du même jour a été annulé sur demande explicite.
+ * Titre "Questions fréquentes" même typo que le `<h1>`
+ * "Bonjour, {prénom}" (`text-2xl font-semibold`, pas de soulignement — la
+ * maquette de référence soulignait, mais demande explicite d'aligner sur le
+ * style de titre déjà utilisé ailleurs sur Accueil). Intitulés de question
+ * même typo que les pastilles de sélection de période du calendrier ("2026"
+ * / "Juin 26 → Mai 27" / "2027", `text-sm font-semibold`) — déjà le cas ici,
+ * conservé tel quel. Accordéon de questions à droite (une seule dépliée à la
+ * fois, réponse affichée en dessous de la question elle-même plutôt que dans
+ * un panneau séparé). Empilé en une seule colonne sous `md:`. Contenu des
+ * réponses volontairement provisoire, pas encore les vraies règles métier
+ * validées.
+ *
+ * Débordement à droite jusqu'au bord de l'écran, bord gauche collé au rail
+ * `SideNav` replié sans la gouttière `px-3` habituelle (21/08/2026, demande
+ * explicite — le premier essai laissait 12px d'écart entre le rail et la
+ * card, pas voulu ; un essai antérieur d'étendre aussi le bord gauche
+ * jusqu'à 0 sous le rail a lui été annulé). Repère stable : l'espaceur
+ * invisible du rail (`data-sidenav-spacer` dans `SideNav.tsx`, largeur fixe
+ * même si la nav elle-même s'élargit au survol en `absolute`) — son bord
+ * droit donne la position exacte à coller. Calculé à partir du PARENT de
+ * cette card (pas d'elle-même) : mesurer `conteneurRef` directement une
+ * fois son propre `marginLeft` appliqué aurait re-mesuré une position déjà
+ * décalée par nous, faussant tout recalcul suivant (piège rencontré sur un
+ * essai précédent). Le parent, lui, n'est jamais modifié, donc stable et
+ * rejouable au resize sans boucle de rétroaction.
  */
 export function FaqCard() {
   const [selectionId, setSelectionId] = useState<string>(QUESTIONS[0].id);
-  const selection = QUESTIONS.find((q) => q.id === selectionId);
+  const conteneurRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ margeGauche: 0, largeur: 0 });
+
+  useEffect(() => {
+    function recalculer() {
+      const parent = conteneurRef.current?.parentElement;
+      const spacer = document.querySelector("[data-sidenav-spacer]");
+      if (!parent) return;
+      const naturelGauche = parent.getBoundingClientRect().left;
+      const railDroite = spacer ? spacer.getBoundingClientRect().right : naturelGauche;
+      setDimensions({
+        margeGauche: railDroite - naturelGauche,
+        largeur: window.innerWidth - railDroite,
+      });
+    }
+    recalculer();
+    window.addEventListener("resize", recalculer);
+    return () => window.removeEventListener("resize", recalculer);
+  }, []);
 
   return (
-    <div className="bg-surface-card w-full overflow-hidden rounded-2xl shadow-sm">
-      <h2 className="text-ink-500 px-4 pt-4 pb-2 text-sm font-bold">FAQ</h2>
-      <div className="border-ink-300/60 flex flex-col border-t md:flex-row">
-        <div className="border-ink-300/60 flex flex-col border-b md:w-72 md:shrink-0 md:border-r md:border-b-0">
+    <div
+      ref={conteneurRef}
+      className="bg-surface-card overflow-hidden px-8 py-8 md:px-12 md:py-12"
+      style={{ width: dimensions.largeur || "100%", marginLeft: dimensions.margeGauche }}
+    >
+      <div className="flex flex-col gap-8 md:flex-row md:gap-16">
+        <div className="shrink-0 md:w-72">
+          <h2 className="text-ink-900 text-2xl font-semibold">Questions fréquentes</h2>
+          <p className="text-ink-500 mt-2 text-sm">
+            Comprendre les quelques principes qui encadrent les congés chez Abeil
+          </p>
+        </div>
+        <div className="divide-ink-300/60 flex min-w-0 flex-col divide-y md:w-[400px]">
           {QUESTIONS.map((q) => {
             const active = q.id === selectionId;
             return (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => setSelectionId(q.id)}
-                className={`px-4 py-3 text-left text-sm transition-colors duration-150 ${
-                  active
-                    ? "bg-mint-tint text-ink-900 font-semibold"
-                    : "text-ink-500 hover:bg-surface-app"
-                }`}
-              >
-                {q.question}
-              </button>
+              <div key={q.id} className="py-4 first:pt-0 last:pb-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectionId(active ? "" : q.id)}
+                  className="text-ink-900 flex w-full items-center justify-between gap-3 text-left text-sm font-semibold"
+                >
+                  {q.question}
+                  {active ? (
+                    <ChevronUp size={16} className="text-ink-500 shrink-0" />
+                  ) : (
+                    <ChevronDown size={16} className="text-ink-500 shrink-0" />
+                  )}
+                </button>
+                {active && <p className="text-ink-500 mt-2 text-sm leading-relaxed">{q.reponse}</p>}
+              </div>
             );
           })}
         </div>
-        <div className="text-ink-900 flex-1 p-4 text-sm">
-          {selection ? selection.reponse : null}
-        </div>
-      </div>
-      {/* Pied de card (20/08/2026, provisoire) — pas de vrai canal de contact
-          branché pour l'instant, juste le principe posé. */}
-      <div className="border-ink-300/60 text-ink-500 border-t px-4 py-3 text-xs">
-        Vous ne trouvez pas votre réponse ?{" "}
-        <span className="text-mint font-semibold">Contactez les RH</span>
       </div>
     </div>
   );

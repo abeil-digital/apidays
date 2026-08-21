@@ -1798,6 +1798,33 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
     toujours visible, année suivante seulement si publiée) — vaut pour tout rôle, y compris
     Admin/Manager : ce n'est pas un filtre de permission par rôle, juste "ce qui a été formellement
     publié". Les jours fériés restent affichés dans tous les cas (faits légaux fixes).
+- **Card FAQ (`components/dashboard/FaqCard.tsx`, 20-21/08/2026)** — sous "Prochains jours
+  off"/"Mon Calendrier" sur Accueil. Contenu en dur (4 questions provisoires, "on affinera" —
+  réponses pas encore validées côté métier), voir Backlog pour l'administration à construire et la
+  rédaction définitive.
+  - **Structure** : titre "Questions fréquentes" (même typo que le `<h1>` "Bonjour, {prénom}" —
+    `text-2xl font-semibold`, pas de soulignement) + sous-texte ("Comprendre les quelques principes
+    qui encadrent les congés chez Abeil") dans une colonne fixe `md:w-72` à gauche ; accordéon de
+    questions dans une colonne `md:w-[400px]` à droite (une seule dépliée à la fois, réponse affichée
+    juste sous la question, chevron haut/bas selon l'état — pas de panneau séparé). Empilé en une
+    seule colonne sous `md:`.
+  - **Carte "à plat"** : coins carrés, pas de bordure ni d'ombre, fond blanc (`bg-surface-card`).
+    Padding horizontal propre conservé (`px-8`/`md:px-12`) — un essai "sans gouttière gauche/droite"
+    a été annulé le jour même.
+  - **Débordement horizontal bord à bord** (cassant pour la première fois la largeur de travail
+    unique `max-w-[1180px]` décidée le 18/08/2026, voir plus haut) : bord droit jusqu'au bord réel du
+    viewport, bord gauche collé au rail `SideNav` replié (aucune gouttière `px-3`) — mesuré au
+    runtime (pas de solution CSS pure fiable, le cadre 1180px étant centré par `mx-auto` dans un
+    `flex` contenant aussi `SideNav`). Repère stable ajouté pour ça : attribut
+    `data-sidenav-spacer` sur l'espaceur invisible du rail (`SideNav.tsx`) — son bord droit donne la
+    position exacte à coller, indépendante de l'expansion de la nav elle-même au survol (qui reste en
+    `position: absolute`, ne bouge pas cet espaceur). Calcul basé sur le PARENT de la card (jamais
+    modifié) plutôt que sur elle-même, pour éviter une boucle de rétroaction : mesurer l'élément
+    après lui avoir déjà appliqué un `marginLeft` mesure une position faussée, un piège rencontré en
+    cours de route (aggravé par le Strict Mode de React qui invoque l'effet deux fois au montage en
+    dev, doublant l'erreur si on ne s'en protège pas). Un essai intermédiaire d'étendre aussi le bord
+    gauche jusqu'à 0 (sous le rail, recouvert par son `z-40`) a été tenté puis annulé — le padding
+    interne de la card ne suffisait pas à dégager le texte du titre, resté partiellement masqué.
 
 ## Décisions prises
 

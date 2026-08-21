@@ -25,7 +25,11 @@ export function SideNav() {
 
   return (
     <>
-      <div className="hidden w-16 shrink-0 md:block print:hidden" aria-hidden="true" />
+      <div
+        data-sidenav-spacer
+        className="hidden w-16 shrink-0 md:block print:hidden"
+        aria-hidden="true"
+      />
 
       <nav className="bg-surface-card group/nav absolute top-0 bottom-0 left-0 z-40 hidden w-16 flex-col overflow-hidden py-6 shadow-sm transition-[width] duration-200 ease-out hover:w-56 hover:shadow-lg md:flex print:hidden">
         <div className="flex flex-col gap-1 px-2">

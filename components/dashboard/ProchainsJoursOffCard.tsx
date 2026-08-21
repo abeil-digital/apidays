@@ -274,12 +274,11 @@ export function ProchainsJoursOffCard({
                     if (el) lignesRef.current.set(j.id, el);
                     else lignesRef.current.delete(j.id);
                   }}
-                  className={`flex items-center gap-3 rounded-sm px-[14.4px] py-3 shadow-sm transition-shadow duration-500 ${
+                  className={`bg-surface-card flex items-center gap-3 rounded-sm px-[14.4px] py-3 transition-shadow duration-500 ${
                     j.id === idSurligne ? "ring-2" : ""
                   }`}
                   style={
                     {
-                      backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[j.code]}) 3%, white)`,
                       "--tw-ring-color": `var(${VAR_COULEUR_TYPE[j.code]})`,
                     } as React.CSSProperties
                   }

@@ -520,7 +520,7 @@ export function Dashboard2Page() {
             parent) — au-delà de 2 lignes équivalentes de contenu, la liste
             scrolle en interne (`overflow-y-auto` dans `ProchainsJoursOffCard`)
             au lieu de continuer à grandir. */}
-        <div className="bg-surface-card p-2 md:h-[604px] md:w-72 md:shrink-0">
+        <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
           <ProchainsJoursOffCard
             jourSurligne={jourSurligne}
             debutPeriode={rangeActive.debut}
