@@ -26,6 +26,9 @@ const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/utilisateurs", label: "Utilisateurs", Icon: Users },
   { href: "/parametrer/conges-rtt", label: "Congés & RTT", Icon: CalendarClock },
   { href: "/parametrer/calendrier2", label: "Calendrier", Icon: CalendarDays },
+  // Lien temporaire (21/08/2026) — prototype de refonte, à retirer une fois
+  // la décision prise de remplacer /parametrer/calendrier2 ou d'abandonner.
+  { href: "/parametrer/calendrier3", label: "Calendrier (v2)", Icon: CalendarDays },
 ];
 
 const SUIVRE_TABS: NavTab[] = [

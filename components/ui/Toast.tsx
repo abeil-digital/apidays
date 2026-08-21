@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Check } from "lucide-react";
+import { Check, TriangleAlert } from "lucide-react";
 
 interface ToastProps {
   message: string;
@@ -10,6 +10,10 @@ interface ToastProps {
   onClose: () => void;
   /** Durée d'affichage avant fermeture automatique, en ms. */
   duree?: number;
+  /** Icône/couleur (22/08/2026) — "error" pour une confirmation a posteriori
+   * d'échec (ex. suppression qui échoue côté serveur), sans bloquer l'UI par
+   * une popup. Défaut inchangé : succès (check vert). */
+  tone?: "success" | "error";
 }
 
 /**
@@ -20,7 +24,14 @@ interface ToastProps {
  * à la fermeture) : `CongesPaiePage`/`SuivreDemandesPage` gèrent leur propre
  * état de toast et rendent ce composant.
  */
-export function Toast({ message, actionLabel, onAction, onClose, duree = 5000 }: ToastProps) {
+export function Toast({
+  message,
+  actionLabel,
+  onAction,
+  onClose,
+  duree = 5000,
+  tone = "success",
+}: ToastProps) {
   useEffect(() => {
     const timer = setTimeout(onClose, duree);
     return () => clearTimeout(timer);
@@ -29,7 +40,11 @@ export function Toast({ message, actionLabel, onAction, onClose, duree = 5000 }:
   return (
     <div className="fixed inset-x-0 top-4 z-50 flex justify-center px-4">
       <div className="bg-ink-900 flex items-center gap-3 rounded-full py-2.5 pr-3 pl-4 text-white shadow-lg">
-        <Check size={16} className="text-status-success-fg shrink-0" />
+        {tone === "error" ? (
+          <TriangleAlert size={16} className="text-status-danger-fg shrink-0" />
+        ) : (
+          <Check size={16} className="text-status-success-fg shrink-0" />
+        )}
         <span className="text-xs font-semibold">{message}</span>
         {actionLabel && onAction && (
           <button

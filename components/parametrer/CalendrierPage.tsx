@@ -1,42 +1,22 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Check, Eye, PlusCircle, TriangleAlert, Trash2 } from "lucide-react";
-import type {
-  CongeImpose,
-  CongeImposeInput,
-  DemiJournee,
-  DjImposee,
-  DjImposeeInput,
-  JourFerie,
-} from "@/lib/types";
-import {
-  formatDateAction,
-  formatJourMois,
-  formatJours,
-  nombreJours,
-  nomJourSemaine,
-} from "@/lib/format";
-import {
-  datesDuJourDeLaSemaine,
-  dureeCongeImpose,
-  estJourOuvre,
-  joursFeriesLegaux,
-  joursOuvres,
-} from "@/lib/joursFeries";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PlusCircle, TriangleAlert, X } from "lucide-react";
+import type { CongeImpose, DemandeEquipe, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
+import { formatJourMois, formatJours, nombreJours } from "@/lib/format";
+import { dureeCongeImpose, joursFeriesLegaux } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
+import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { DatePicker } from "@/components/ui/DatePicker";
-import { EmptyRow } from "@/components/ui/EmptyRow";
-import { FieldLabel } from "@/components/ui/FieldLabel";
-import { JourBadge } from "@/components/ui/JourBadge";
 import { MiniCalendrier, MOIS_FR, type PastilleJour } from "@/components/ui/MiniCalendrier";
-import { Modal } from "@/components/ui/Modal";
-import { SectionLabel } from "@/components/ui/SectionLabel";
-import { SelectPille } from "@/components/ui/SelectPille";
+import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
+import { STATUT_CONFIG } from "@/components/ui/StatusBadge";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
+import { demiCouvertePeriode } from "@/components/demandes/DetailPeriodeConges";
+import { ModalPoserJourImpose, type Mode } from "@/components/parametrer/ModalPoserJourImpose";
+import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
 
 const LABEL_TAG_DEMI_JOURNEE: Record<DemiJournee, string> = {
   matin: "Matin",
@@ -59,56 +39,6 @@ function formatJourMoisComplet(iso: string): string {
 // continuité de groupe).
 // ------------------------------------------------------------
 
-interface ModalCongesImposesProps {
-  annee: number;
-  congesImposes: CongeImpose[];
-  joursFeries: JourFerie[];
-  djImposees: DjImposee[];
-  cibleJoursCpi: number;
-  onAjouter: (input: CongeImposeInput) => Promise<CongeImpose>;
-  onSupprimer: (id: string) => Promise<void>;
-  onClose: () => void;
-}
-
-function moisDeIso(iso: string): { annee: number; moisIndex: number } {
-  const [annee, mois] = iso.split("-").map(Number);
-  return { annee, moisIndex: mois - 1 };
-}
-
-/** Index de semaine (0-based) d'un jour dans son mois, même logique que le
- * placement des cellules dans `MiniCalendrier` (semaines de L à V) — pour
- * cropper l'aperçu ("demi-calendrier") sur la semaine pertinente. */
-function semaineIndexDeJour(iso: string): number {
-  const [annee, mois, jourCible] = iso.split("-").map(Number);
-  let offset = -1;
-  let compte = 0;
-  let index = -1;
-  for (let jour = 1; jour <= jourCible; jour++) {
-    const jourSemaine = new Date(Date.UTC(annee, mois - 1, jour)).getUTCDay();
-    if (jourSemaine === 0 || jourSemaine === 6) continue;
-    if (offset === -1) offset = jourSemaine - 1;
-    compte += 1;
-    index = offset + compte - 1;
-  }
-  return Math.floor(index / 5);
-}
-
-/** Variante pour `DayPicker` (`disabled`), qui fournit un `Date` en fuseau
- * local du navigateur plutôt qu'une chaîne ISO — comparaison en local pour
- * ne jamais décaler d'un jour par rapport à ce que l'utilisateur clique. */
-function estJourDesactiveCalendrier(date: Date, joursFeries: JourFerie[]): boolean {
-  const jourSemaine = date.getDay(); // 0=dimanche..6=samedi
-  if (jourSemaine === 0 || jourSemaine === 6) return true;
-  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-  return joursFeries.some((f) => f.date === iso);
-}
-
-function congesImposesInclut(congesImposes: CongeImpose[], iso: string): boolean {
-  return congesImposes.some((c) => iso >= c.debut && iso <= c.fin);
-}
-
 /** Couleur de la pastille de volume selon l'avancement vers une cible —
  * gris = rien posé, orange = entamé, vert = cible atteinte ou dépassée. */
 function classesPastilleVolume(valeur: number, cible: number): string {
@@ -116,489 +46,6 @@ function classesPastilleVolume(valeur: number, cible: number): string {
   if (valeur > cible) return "bg-status-danger-bg text-status-danger-fg";
   if (valeur >= cible) return "bg-status-success-bg text-status-success-fg";
   return "bg-status-warning-bg text-status-warning-fg";
-}
-
-/** Variante DJ de `estJourDesactiveCalendrier` — exclut en plus les jours déjà
- * couverts par une période de congés imposés. */
-function estJourDesactiveDj(
-  date: Date,
-  joursFeries: JourFerie[],
-  congesImposes: CongeImpose[],
-): boolean {
-  if (estJourDesactiveCalendrier(date, joursFeries)) return true;
-  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-  return congesImposesInclut(congesImposes, iso);
-}
-
-/**
- * Popin CPI — calquée sur le gabarit de la popin DJI : à gauche la colonne
- * "Sélection" (Du/Au empilés verticalement, chacun avec son créneau) ; à
- * droite (le "cœur") le référentiel des périodes déjà posées, survolables
- * pour un aperçu calendrier en contexte (comme le hover DJI). Deux gabarits
- * de ligne dans la liste : un jour/demi-journée isolé reprend le gabarit DJI
- * (encart jour + date + durée) ; une période affiche deux mini-repères date
- * reliés par "au", suivis de "soit N jours".
- *
- * Les DATES d'une période déjà posée ne sont PAS modifiables (décision
- * produit — changer les dates reviendrait à un delete+recreate silencieux
- * qu'on ne veut pas exposer comme une "vraie" édition) : les lignes ne sont
- * plus cliquables pour recharger le formulaire, et le snippet calendrier
- * (`SnippetConge`) ne propose plus que Supprimer. Le CRÉNEAU (demi-journée)
- * de chaque ligne reste ajustable directement via son `SelectPille` — même
- * mécanique delete+recreate en interne, mais gardée comme un simple réglage
- * de créneau plutôt qu'une édition complète, avec gestion d'erreur.
- */
-function ModalCongesImposes({
-  congesImposes,
-  joursFeries,
-  djImposees,
-  cibleJoursCpi,
-  onAjouter,
-  onSupprimer,
-  onClose,
-}: ModalCongesImposesProps) {
-  const [debut, setDebut] = useState("");
-  const [fin, setFin] = useState("");
-  // Gestion demi-journée alignée sur PoserDemandeModal (popin "Nouvelle
-  // demande") : un seul jour → matin/après-midi/journée entière ; une période
-  // → seulement "après-midi au premier jour" et "matin au dernier jour" (une
-  // période ne commence/finit jamais à moitié dans l'autre sens).
-  const [demiDebut, setDemiDebut] = useState<DemiJournee>("matin");
-  const [demiFin, setDemiFin] = useState<DemiJournee>("apres_midi");
-  const [erreur, setErreur] = useState("");
-  const [envoi, setEnvoi] = useState(false);
-  const [survolConge, setSurvolConge] = useState<{ conge: CongeImpose; ancre: DOMRect } | null>(
-    null,
-  );
-
-  function reinitialiser() {
-    setDebut("");
-    setFin("");
-    setDemiDebut("matin");
-    setDemiFin("apres_midi");
-    setErreur("");
-  }
-
-  function handleDebutChange(valeur: string) {
-    if (valeur && !estJourOuvre(valeur, joursFeries)) {
-      setErreur(
-        "Ce jour n'est pas un jour ouvré (week-end ou jour férié) — choisis un autre jour.",
-      );
-      return;
-    }
-    setErreur("");
-    setDebut(valeur);
-    setDemiDebut("matin");
-    setDemiFin("apres_midi");
-  }
-
-  function handleFinChange(valeur: string) {
-    if (valeur && !estJourOuvre(valeur, joursFeries)) {
-      setErreur(
-        "Ce jour n'est pas un jour ouvré (week-end ou jour férié) — choisis un autre jour.",
-      );
-      return;
-    }
-    setErreur("");
-    setFin(valeur);
-    setDemiDebut("matin");
-    setDemiFin("apres_midi");
-  }
-
-  // Un seul jour → un seul sélecteur (celui du bas) à 3 options, qui pilote
-  // demiDebut ET demiFin ensemble pour éviter la combinaison contradictoire
-  // (ex. après-midi au Du + matin au Au sur le même jour).
-  const unSeulJour = Boolean(debut && fin && debut === fin);
-  const dureeUnJour: DureeDj =
-    demiDebut === "matin" && demiFin === "apres_midi"
-      ? "entiere"
-      : demiDebut === "matin"
-        ? "matin"
-        : "apres_midi";
-
-  function handleDureeDjChange(valeur: DureeDj) {
-    if (valeur === "entiere") {
-      setDemiDebut("matin");
-      setDemiFin("apres_midi");
-    } else if (valeur === "matin") {
-      setDemiDebut("matin");
-      setDemiFin("matin");
-    } else {
-      setDemiDebut("apres_midi");
-      setDemiFin("apres_midi");
-    }
-  }
-
-  let nbJours: number | null = null;
-  if (debut && fin && fin >= debut) {
-    // Jours ouvrés uniquement (L-V, jours fériés exclus) — pas le nombre de
-    // jours calendaires.
-    const base = joursOuvres(debut, fin, joursFeries, djImposees);
-    const ajustDebut = demiDebut === "apres_midi" ? 0.5 : 0;
-    const ajustFin = demiFin === "matin" ? 0.5 : 0;
-    nbJours = base - ajustDebut - ajustFin;
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!debut || !fin || fin < debut) {
-      setErreur("Merci d'indiquer une date de début et de fin valides.");
-      return;
-    }
-    setErreur("");
-    setEnvoi(true);
-    try {
-      await onAjouter({ debut, fin, demiDebut, demiFin });
-      reinitialiser();
-    } catch {
-      setErreur("Impossible d'ajouter cette période.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
-
-  // Les dates d'une période posée ne se modifient plus (voir JSDoc plus
-  // haut), mais le créneau (demi-journée) reste ajustable directement depuis
-  // la liste — même logique delete+recreate que DJI, avec gestion d'erreur.
-  async function changerDureeUnJour(c: CongeImpose, valeur: DureeDj) {
-    setErreur("");
-    const [demiDebutNouveau, demiFinNouveau]: [DemiJournee, DemiJournee] =
-      valeur === "entiere"
-        ? ["matin", "apres_midi"]
-        : valeur === "matin"
-          ? ["matin", "matin"]
-          : ["apres_midi", "apres_midi"];
-    try {
-      await onSupprimer(c.id);
-      await onAjouter({
-        debut: c.debut,
-        fin: c.fin,
-        demiDebut: demiDebutNouveau,
-        demiFin: demiFinNouveau,
-      });
-    } catch {
-      setErreur("Impossible de modifier ce créneau.");
-    }
-  }
-
-  // Idem pour une période : changer indépendamment le créneau de début ou
-  // de fin, sans toucher à l'autre borne (ni aux dates).
-  async function changerDemiDebut(c: CongeImpose, demiDebut: DemiJournee) {
-    setErreur("");
-    try {
-      await onSupprimer(c.id);
-      await onAjouter({ debut: c.debut, fin: c.fin, demiDebut, demiFin: c.demiFin });
-    } catch {
-      setErreur("Impossible de modifier ce créneau.");
-    }
-  }
-
-  async function changerDemiFin(c: CongeImpose, demiFin: DemiJournee) {
-    setErreur("");
-    try {
-      await onSupprimer(c.id);
-      await onAjouter({ debut: c.debut, fin: c.fin, demiDebut: c.demiDebut, demiFin });
-    } catch {
-      setErreur("Impossible de modifier ce créneau.");
-    }
-  }
-
-  function tipoApercuSurvol(iso: string): PastilleJour | null {
-    if (joursFeries.some((f) => f.date === iso)) return { classeFond: "bg-ferie" };
-    const dj = djImposees.find((d) => d.date === iso);
-    const enConge = congesImposesInclut(congesImposes, iso);
-    if (enConge && dj) {
-      return dj.demiJournee === "matin"
-        ? { partage: { gauche: "var(--color-dji)", droite: "var(--color-cp)" } }
-        : { partage: { gauche: "var(--color-cp)", droite: "var(--color-dji)" } };
-    }
-    if (enConge) return { classeFond: "bg-cp" };
-    if (dj) {
-      return {
-        moitie: {
-          couleur: "var(--color-dji)",
-          cote: dj.demiJournee === "matin" ? "gauche" : "droite",
-        },
-      };
-    }
-    return null;
-  }
-  function estEnGroupeApercuSurvol(isoA: string, isoB: string): boolean {
-    return congesImposesInclut(congesImposes, isoA) && congesImposesInclut(congesImposes, isoB);
-  }
-
-  const totalJoursCpiModal = congesImposes.reduce(
-    (somme, c) => somme + dureeCongeImpose(c, joursFeries),
-    0,
-  );
-
-  return (
-    <Modal
-      title={
-        <span className="flex w-full flex-col items-center gap-1.5">
-          <TypeBadge code="CPI" />
-          <span
-            className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleVolume(totalJoursCpiModal, cibleJoursCpi)}`}
-          >
-            {formatJours(totalJoursCpiModal)}/{cibleJoursCpi} jours
-          </span>
-        </span>
-      }
-      onClose={onClose}
-      className="max-w-4xl"
-      align="top"
-    >
-      <div className="flex flex-col gap-4 md:flex-row">
-        <form
-          onSubmit={handleSubmit}
-          className="bg-surface-app flex flex-col gap-3 p-3 md:w-64 md:shrink-0"
-        >
-          <SectionLabel>Sélection</SectionLabel>
-
-          <div className="bg-mint-tint flex flex-col gap-3 p-3">
-            <div>
-              <FieldLabel htmlFor="modal-conge-debut">Du</FieldLabel>
-              <div className="mt-0.5">
-                <DatePicker
-                  id="modal-conge-debut"
-                  value={debut}
-                  onChange={handleDebutChange}
-                  disabled={(date) => estJourDesactiveCalendrier(date, joursFeries)}
-                />
-              </div>
-            </div>
-            {debut !== fin && (
-              <div className="self-start">
-                <SelectPille
-                  value={demiDebut}
-                  onChange={(e) => setDemiDebut(e.target.value as DemiJournee)}
-                >
-                  <option value="matin">Journée</option>
-                  <option value="apres_midi">A. midi</option>
-                </SelectPille>
-              </div>
-            )}
-
-            <div>
-              <FieldLabel htmlFor="modal-conge-fin">Au</FieldLabel>
-              <div className="mt-0.5">
-                <DatePicker
-                  id="modal-conge-fin"
-                  value={fin}
-                  onChange={handleFinChange}
-                  disabled={(date) => estJourDesactiveCalendrier(date, joursFeries)}
-                />
-              </div>
-            </div>
-            <div className="self-start">
-              {unSeulJour ? (
-                <SelectPille
-                  value={dureeUnJour}
-                  onChange={(e) => handleDureeDjChange(e.target.value as DureeDj)}
-                >
-                  <option value="entiere">Journée</option>
-                  <option value="matin">Matin</option>
-                  <option value="apres_midi">A. midi</option>
-                </SelectPille>
-              ) : (
-                <SelectPille
-                  value={demiFin}
-                  onChange={(e) => setDemiFin(e.target.value as DemiJournee)}
-                >
-                  <option value="apres_midi">Journée</option>
-                  <option value="matin">Matin</option>
-                </SelectPille>
-              )}
-            </div>
-
-            {nbJours !== null && (
-              <p className="text-ink-500 text-xs">
-                soit{" "}
-                <span className="text-ink-900 font-bold">
-                  {formatJours(nbJours)} {nbJours === 1 ? "jour" : "jours"}
-                </span>
-              </p>
-            )}
-          </div>
-          {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-
-          <div className="mt-1 flex items-center gap-3">
-            <Button
-              type="submit"
-              disabled={envoi}
-              className="w-fit rounded-full px-4 py-2.5 text-xs transition-opacity duration-150 enabled:hover:opacity-80"
-            >
-              <PlusCircle size={16} />
-              Ajouter
-            </Button>
-          </div>
-        </form>
-
-        <div className="flex flex-col gap-3 md:w-80 md:shrink-0">
-          <SectionLabel>Congés imposés ({congesImposes.length})</SectionLabel>
-
-          {congesImposes.length === 0 ? (
-            <EmptyRow text="Aucune période de congés imposés pour cette année." />
-          ) : (
-            <div className="rounded-card bg-surface-card max-h-96 overflow-y-auto">
-              {congesImposes.map((c, i) => {
-                const unJour = c.debut === c.fin;
-                const bordure = i === congesImposes.length - 1 ? "" : "border-ink-300/60 border-b";
-                return (
-                  <div
-                    key={c.id}
-                    onMouseEnter={(e) =>
-                      setSurvolConge({
-                        conge: c,
-                        ancre: (
-                          e.currentTarget.parentElement as HTMLElement
-                        ).getBoundingClientRect(),
-                      })
-                    }
-                    onMouseLeave={() => setSurvolConge(null)}
-                    className={`flex items-center gap-3 px-5 py-4 ${bordure}`}
-                  >
-                    {unJour ? (
-                      <>
-                        <JourBadge>{nomJourSemaine(c.debut).slice(0, 2)}</JourBadge>
-                        <div className="w-28 shrink-0">
-                          <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
-                            {formatJourMoisComplet(c.debut)}
-                          </div>
-                          <div className="text-ink-500 text-xs">
-                            {c.demiDebut === "matin" && c.demiFin === "apres_midi"
-                              ? "1 jour"
-                              : "0,5 jour"}
-                          </div>
-                        </div>
-                        <SelectPille
-                          value={
-                            c.demiDebut === "matin" && c.demiFin === "apres_midi"
-                              ? "entiere"
-                              : c.demiDebut === "matin"
-                                ? "matin"
-                                : "apres_midi"
-                          }
-                          onChange={(e) => changerDureeUnJour(c, e.target.value as DureeDj)}
-                        >
-                          <option value="entiere">Journée</option>
-                          <option value="matin">Matin</option>
-                          <option value="apres_midi">A. midi</option>
-                        </SelectPille>
-                      </>
-                    ) : (
-                      // Gros composant période : deux snippets "jour" (Du/Au)
-                      // empilés et reliés par un connecteur vertical — les
-                      // dates ne se modifient pas, seul le créneau de chaque
-                      // borne reste ajustable via son propre SelectPille.
-                      <div className="relative flex flex-1 flex-col gap-3 py-1">
-                        <div
-                          aria-hidden
-                          className="bg-ink-300 absolute top-9 bottom-9 left-[18px] w-px"
-                        />
-                        <div className="flex items-center gap-3">
-                          <JourBadge className="relative z-10">
-                            {nomJourSemaine(c.debut).slice(0, 2)}
-                          </JourBadge>
-                          <span className="text-ink-900 w-28 shrink-0 text-sm font-bold whitespace-nowrap">
-                            {formatJourMoisComplet(c.debut)}
-                          </span>
-                          <SelectPille
-                            value={c.demiDebut}
-                            onChange={(e) => changerDemiDebut(c, e.target.value as DemiJournee)}
-                            className="ml-auto"
-                          >
-                            <option value="matin">Journée</option>
-                            <option value="apres_midi">A. midi</option>
-                          </SelectPille>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <JourBadge className="relative z-10">
-                            {nomJourSemaine(c.fin).slice(0, 2)}
-                          </JourBadge>
-                          <div className="w-28 shrink-0">
-                            <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
-                              {formatJourMoisComplet(c.fin)}
-                            </div>
-                            <div className="text-ink-500 text-xs">
-                              {nombreJours(c.debut, c.fin)} jours
-                            </div>
-                          </div>
-                          <SelectPille
-                            value={c.demiFin}
-                            onChange={(e) => changerDemiFin(c, e.target.value as DemiJournee)}
-                            className="ml-auto"
-                          >
-                            <option value="apres_midi">Journée</option>
-                            <option value="matin">Matin</option>
-                          </SelectPille>
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onSupprimer(c.id)}
-                      aria-label="Supprimer cette période de congés imposés"
-                      className="text-status-danger-fg ml-auto shrink-0 transition-transform duration-150 hover:scale-125"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {survolConge &&
-        (() => {
-          const { conge, ancre } = survolConge;
-          const debutMois = moisDeIso(conge.debut);
-          const finMois = moisDeIso(conge.fin);
-          const memesMois =
-            debutMois.annee === finMois.annee && debutMois.moisIndex === finMois.moisIndex;
-          // Période à cheval sur deux mois → "demi-calendrier" : le mois de
-          // début n'affiche que ses semaines à partir de la période, le mois
-          // de fin que ses semaines jusqu'à la période (MiniCalendrier garde
-          // toujours l'en-tête jours de la semaine).
-          const mois = memesMois
-            ? [{ ...debutMois, premiereSemaine: undefined, derniereSemaine: undefined }]
-            : [
-                {
-                  ...debutMois,
-                  premiereSemaine: semaineIndexDeJour(conge.debut),
-                  derniereSemaine: undefined,
-                },
-                {
-                  ...finMois,
-                  premiereSemaine: undefined,
-                  derniereSemaine: semaineIndexDeJour(conge.fin),
-                },
-              ];
-          return (
-            <div
-              style={{ position: "fixed", top: ancre.top, left: ancre.right + 12 }}
-              className="pointer-events-none z-30 flex flex-col gap-3"
-            >
-              {mois.map((m) => (
-                <MiniCalendrier
-                  key={`${m.annee}-${m.moisIndex}`}
-                  annee={m.annee}
-                  moisIndex={m.moisIndex}
-                  tipoDuJour={tipoApercuSurvol}
-                  estEnGroupe={estEnGroupeApercuSurvol}
-                  premiereSemaine={m.premiereSemaine}
-                  derniereSemaine={m.derniereSemaine}
-                />
-              ))}
-            </div>
-          );
-        })()}
-    </Modal>
-  );
 }
 
 interface SnippetCongeProps {
@@ -687,404 +134,6 @@ function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps
   );
 }
 
-type DureeDj = "matin" | "apres_midi" | "entiere";
-
-interface ModalDjImposeesProps {
-  annee: number;
-  djImposees: DjImposee[];
-  joursFeries: JourFerie[];
-  congesImposes: CongeImpose[];
-  cibleDemiJourneesDji: number;
-  onAjouter: (input: DjImposeeInput) => Promise<DjImposee>;
-  onSupprimer: (id: string) => Promise<void>;
-  onClose: () => void;
-}
-
-/**
- * Popin "référentiel" des demi-journées imposées de l'année — à gauche la
- * sélection (onglet Vendredis : liste des 52 vendredis avec ajout ligne à
- * ligne ; onglet Autre date : date picker + créneau), à droite la liste des
- * demi-journées déjà imposées (suppression uniquement, pas d'édition — pour
- * changer un créneau, on supprime puis on rajoute). Chaque ajout/suppression
- * est commis immédiatement (pas de brouillon local à valider en bloc).
- */
-function ModalDjImposees({
-  annee,
-  djImposees,
-  joursFeries,
-  congesImposes,
-  cibleDemiJourneesDji,
-  onAjouter,
-  onSupprimer,
-  onClose,
-}: ModalDjImposeesProps) {
-  const [onglet, setOnglet] = useState<"vendredis" | "autre_date">("vendredis");
-  const [creneauxParDate, setCreneauxParDate] = useState<Record<string, DureeDj>>({});
-  const [dateAutre, setDateAutre] = useState("");
-  const [creneauAutre, setCreneauAutre] = useState<DureeDj>("apres_midi");
-  const [erreur, setErreur] = useState("");
-  const [envoi, setEnvoi] = useState(false);
-  const [survolDj, setSurvolDj] = useState<{ dj: DjImposee; ancre: DOMRect } | null>(null);
-  // Retour visuel après un ajout — flash mint qui s'estompe, pour que
-  // l'admin retrouve la ligne qu'il vient de cocher sur une liste longue.
-  const [dateFlash, setDateFlash] = useState<string | null>(null);
-  useEffect(() => {
-    if (!dateFlash) return;
-    const timer = setTimeout(() => setDateFlash(null), 1200);
-    return () => clearTimeout(timer);
-  }, [dateFlash]);
-
-  const vendredis = useMemo(() => datesDuJourDeLaSemaine(annee, 5), [annee]);
-  const datesAjoutees = new Set(djImposees.map((dj) => dj.date));
-
-  // Aperçu au survol d'une DJI déjà posée — même logique de priorité que le
-  // calendrier principal (férié > partage CPI+DJI > CPI > DJI), pour donner
-  // du contexte visuel sans quitter le popin.
-  function tipoApercuSurvol(iso: string): PastilleJour | null {
-    if (joursFeries.some((f) => f.date === iso)) return { classeFond: "bg-ferie" };
-    const dj = djImposees.find((d) => d.date === iso);
-    const enConge = congesImposesInclut(congesImposes, iso);
-    if (enConge && dj) {
-      return dj.demiJournee === "matin"
-        ? { partage: { gauche: "var(--color-dji)", droite: "var(--color-cp)" } }
-        : { partage: { gauche: "var(--color-cp)", droite: "var(--color-dji)" } };
-    }
-    if (enConge) return { classeFond: "bg-cp" };
-    if (dj) {
-      return {
-        moitie: {
-          couleur: "var(--color-dji)",
-          cote: dj.demiJournee === "matin" ? "gauche" : "droite",
-        },
-      };
-    }
-    return null;
-  }
-  function estEnGroupeApercuSurvol(isoA: string, isoB: string): boolean {
-    return congesImposesInclut(congesImposes, isoA) && congesImposesInclut(congesImposes, isoB);
-  }
-
-  async function ajouterDate(date: string, creneau: DureeDj) {
-    setErreur("");
-    setEnvoi(true);
-    try {
-      if (creneau === "entiere") {
-        await onAjouter({ date, demiJournee: "matin" });
-        await onAjouter({ date, demiJournee: "apres_midi" });
-      } else {
-        await onAjouter({ date, demiJournee: creneau });
-      }
-      setDateAutre("");
-      setCreneauAutre("apres_midi");
-      setDateFlash(date);
-    } catch {
-      setErreur("Impossible d'ajouter cette demi-journée.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
-
-  // Pas de fonction de mise à jour côté repository — changer le créneau d'une
-  // DJI déjà posée revient à la supprimer puis en recréer une avec le nouveau
-  // créneau (même logique que la modification d'un CPI). Choisir "Journée"
-  // complète la demi-journée manquante plutôt que de remplacer celle-ci (les
-  // deux demi-journées du jour restent deux lignes distinctes dans la liste).
-  async function changerCreneau(dj: DjImposee, valeur: DureeDj) {
-    setErreur("");
-    setEnvoi(true);
-    try {
-      if (valeur === "entiere") {
-        const autre: DemiJournee = dj.demiJournee === "matin" ? "apres_midi" : "matin";
-        const existeDeja = djImposees.some((d) => d.date === dj.date && d.demiJournee === autre);
-        if (!existeDeja) await onAjouter({ date: dj.date, demiJournee: autre });
-      } else if (valeur !== dj.demiJournee) {
-        await onSupprimer(dj.id);
-        await onAjouter({ date: dj.date, demiJournee: valeur });
-      }
-    } catch {
-      setErreur("Impossible de modifier ce créneau.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
-
-  async function supprimerDate(date: string) {
-    setErreur("");
-    setEnvoi(true);
-    try {
-      const aSupprimer = djImposees.filter((dj) => dj.date === date);
-      await Promise.all(aSupprimer.map((dj) => onSupprimer(dj.id)));
-    } catch {
-      setErreur("Impossible de supprimer cette demi-journée.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
-
-  return (
-    <Modal
-      title={
-        <span className="flex w-full flex-col items-center gap-1.5">
-          <TypeBadge code="DJI" />
-          Demi-journées imposées {annee}
-        </span>
-      }
-      onClose={onClose}
-      className="max-w-4xl"
-      align="top"
-    >
-      <div className="flex flex-col gap-6 md:flex-row">
-        <div className="bg-surface-app relative flex flex-col gap-3 p-3 md:w-64 md:shrink-0">
-          <div
-            aria-hidden
-            className="border-l-surface-app pointer-events-none absolute top-1/2 left-full hidden -translate-y-1/2 border-y-16 border-l-16 border-y-transparent md:block"
-          />
-          <SectionLabel>Sélection</SectionLabel>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setOnglet("vendredis")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                onglet === "vendredis"
-                  ? "bg-brand text-brand-foreground"
-                  : "bg-surface-card text-ink-500"
-              }`}
-            >
-              Vendredis
-            </button>
-            <button
-              type="button"
-              onClick={() => setOnglet("autre_date")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                onglet === "autre_date"
-                  ? "bg-brand text-brand-foreground"
-                  : "bg-surface-card text-ink-500"
-              }`}
-            >
-              Autre date
-            </button>
-          </div>
-
-          {onglet === "vendredis" ? (
-            <div className="bg-surface-card max-h-80 overflow-x-hidden overflow-y-auto">
-              {vendredis.map((date, i) => {
-                const ajoute = datesAjoutees.has(date);
-                const creneauxAjoutes = new Set(
-                  djImposees.filter((dj) => dj.date === date).map((dj) => dj.demiJournee),
-                );
-                const valeurAjoutee: DureeDj =
-                  creneauxAjoutes.has("matin") && creneauxAjoutes.has("apres_midi")
-                    ? "entiere"
-                    : creneauxAjoutes.has("matin")
-                      ? "matin"
-                      : "apres_midi";
-                const estFerie = joursFeries.some((f) => f.date === date);
-                const estCpi = congesImposesInclut(congesImposes, date);
-                const desactive = !ajoute && (estFerie || estCpi);
-                const bordure = i === vendredis.length - 1 ? "" : "border-ink-300/60 border-b";
-                const moisCourant = new Date(`${date}T00:00:00Z`).getUTCMonth();
-                const nouveauMois =
-                  i === 0 ||
-                  new Date(`${vendredis[i - 1]}T00:00:00Z`).getUTCMonth() !== moisCourant;
-                return (
-                  <Fragment key={date}>
-                    {nouveauMois && (
-                      <div className="bg-surface-app text-ink-500 px-4 py-1 text-xs font-semibold">
-                        {MOIS_FR[moisCourant]}
-                      </div>
-                    )}
-                    <div
-                      className={`flex items-center justify-between px-4 py-2.5 text-sm transition-colors duration-700 ${bordure} ${
-                        dateFlash === date ? "bg-mint-tint" : ""
-                      }`}
-                    >
-                      <span
-                        className={`text-xs ${ajoute || desactive ? "text-ink-500" : "text-ink-900"}`}
-                      >
-                        <span className="font-bold">
-                          {new Date(`${date}T00:00:00Z`).getUTCDate()}
-                        </span>{" "}
-                        {new Intl.DateTimeFormat("fr-FR", {
-                          month: "long",
-                          timeZone: "UTC",
-                        }).format(new Date(`${date}T00:00:00Z`))}
-                      </span>
-                      {desactive ? (
-                        <TypeBadge code={estFerie ? "FERIE" : "CPI"} variant="pill" />
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <SelectPille
-                            value={ajoute ? valeurAjoutee : (creneauxParDate[date] ?? "apres_midi")}
-                            disabled={ajoute}
-                            onChange={(e) =>
-                              setCreneauxParDate((prev) => ({
-                                ...prev,
-                                [date]: e.target.value as DureeDj,
-                              }))
-                            }
-                          >
-                            <option value="matin">Matin</option>
-                            <option value="apres_midi">A. midi</option>
-                            <option value="entiere">Journée</option>
-                          </SelectPille>
-                          {ajoute ? (
-                            <button
-                              type="button"
-                              onClick={() => supprimerDate(date)}
-                              disabled={envoi}
-                              aria-label="Supprimer cette demi-journée"
-                              className="group/dj relative size-[18px] shrink-0"
-                            >
-                              <Check size={18} className="text-mint block group-hover/dj:hidden" />
-                              <Trash2
-                                size={18}
-                                className="text-status-danger-fg hidden group-hover/dj:block"
-                              />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                ajouterDate(date, creneauxParDate[date] ?? "apres_midi")
-                              }
-                              disabled={envoi}
-                              aria-label="Ajouter cette demi-journée"
-                              className="text-mint shrink-0 transition-transform duration-150 hover:scale-125"
-                            >
-                              <PlusCircle size={18} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </Fragment>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bg-mint-tint flex flex-col gap-3 p-3">
-              <div>
-                <FieldLabel htmlFor="modal-dj-date">Date</FieldLabel>
-                <div className="mt-0.5">
-                  <DatePicker
-                    id="modal-dj-date"
-                    value={dateAutre}
-                    onChange={setDateAutre}
-                    disabled={(date) => estJourDesactiveDj(date, joursFeries, congesImposes)}
-                  />
-                </div>
-              </div>
-              <div className="self-start">
-                <SelectPille
-                  value={creneauAutre}
-                  onChange={(e) => setCreneauAutre(e.target.value as DureeDj)}
-                >
-                  <option value="matin">Matin</option>
-                  <option value="apres_midi">A. midi</option>
-                  <option value="entiere">Journée</option>
-                </SelectPille>
-              </div>
-              <Button
-                type="button"
-                disabled={!dateAutre || envoi}
-                onClick={() => ajouterDate(dateAutre, creneauAutre)}
-                className="w-fit rounded-full px-4 py-2.5 text-xs transition-opacity duration-150 enabled:hover:opacity-80"
-              >
-                Ajouter
-              </Button>
-            </div>
-          )}
-          {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-        </div>
-
-        <div className="flex flex-col gap-3 md:w-80 md:shrink-0">
-          <span
-            className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleVolume(djImposees.length, cibleDemiJourneesDji)}`}
-          >
-            {djImposees.length}/{cibleDemiJourneesDji} demi-journées
-          </span>
-          {djImposees.length === 0 ? (
-            <EmptyRow text="Aucune demi-journée imposée pour cette année." />
-          ) : (
-            <div className="rounded-card bg-surface-card max-h-96 overflow-y-auto">
-              {djImposees.map((dj, i) => {
-                const creneauxMemeDate = new Set(
-                  djImposees.filter((d) => d.date === dj.date).map((d) => d.demiJournee),
-                );
-                const valeurSelect: DureeDj =
-                  creneauxMemeDate.has("matin") && creneauxMemeDate.has("apres_midi")
-                    ? "entiere"
-                    : dj.demiJournee;
-                return (
-                  <div
-                    key={dj.id}
-                    onMouseEnter={(e) =>
-                      setSurvolDj({
-                        dj,
-                        ancre: (
-                          e.currentTarget.parentElement as HTMLElement
-                        ).getBoundingClientRect(),
-                      })
-                    }
-                    onMouseLeave={() => setSurvolDj(null)}
-                    className={`flex items-center gap-4 px-5 py-4 ${
-                      i === djImposees.length - 1 ? "" : "border-ink-300/60 border-b"
-                    }`}
-                  >
-                    <JourBadge>{nomJourSemaine(dj.date).slice(0, 2)}</JourBadge>
-                    <div className="w-28 shrink-0">
-                      <div className="text-ink-900 text-sm font-bold whitespace-nowrap">
-                        {formatJourMoisComplet(dj.date)}
-                      </div>
-                      <div className="text-ink-500 text-xs">0,5 jour</div>
-                    </div>
-                    <SelectPille
-                      value={valeurSelect}
-                      disabled={envoi}
-                      onChange={(e) => changerCreneau(dj, e.target.value as DureeDj)}
-                    >
-                      <option value="matin">Matin</option>
-                      <option value="apres_midi">A. midi</option>
-                      <option value="entiere">Journée</option>
-                    </SelectPille>
-                    <button
-                      type="button"
-                      onClick={() => onSupprimer(dj.id)}
-                      aria-label="Supprimer cette demi-journée imposée"
-                      className="text-status-danger-fg ml-auto shrink-0 transition-transform duration-150 hover:scale-125"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {survolDj &&
-        (() => {
-          const { ancre } = survolDj;
-          const { annee: a, moisIndex } = moisDeIso(survolDj.dj.date);
-          return (
-            <div
-              style={{ position: "fixed", top: ancre.top, left: ancre.right + 12 }}
-              className="bg-surface-card pointer-events-none z-30 rounded-xl p-3 shadow-lg"
-            >
-              <MiniCalendrier
-                annee={a}
-                moisIndex={moisIndex}
-                tipoDuJour={tipoApercuSurvol}
-                estEnGroupe={estEnGroupeApercuSurvol}
-              />
-            </div>
-          );
-        })()}
-    </Modal>
-  );
-}
-
 interface SnippetDjiProps {
   dj: DjImposee;
   ancre: DOMRect;
@@ -1164,166 +213,6 @@ function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
   );
 }
 
-interface ModalJoursFeriesProps {
-  annee: number;
-  joursFeries: JourFerie[];
-  onAjouter: (input: { date: string; libelle: string }) => Promise<JourFerie>;
-  onSupprimer: (id: string) => Promise<void>;
-  onPreRemplir: () => Promise<JourFerie[]>;
-  onClose: () => void;
-}
-
-/**
- * Popin "référentiel" des jours fériés — sur le même gabarit que la popin DJI
- * (encart jour + date + libellé), sans ajout/suppression manuels : les jours
- * fériés légaux sont fixes et non négociables, à une exception près, le lundi
- * de Pentecôte (journée de solidarité), seule vraie décision annuelle de
- * l'employeur — d'où la case à cocher dédiée. Persisté en réutilisant
- * ajouter/supprimerFerie existants (pas de colonne "travaillé" en base :
- * "Pentecôte travaillée" = pas de ligne pour ce jour dans `jours_feries`) —
- * les 11 lignes sont toujours affichées en s'appuyant sur `joursFeriesLegaux`
- * comme référentiel, pour garder la ligne Pentecôte visible même absente.
- */
-function ModalJoursFeries({
-  annee,
-  joursFeries,
-  onAjouter,
-  onSupprimer,
-  onPreRemplir,
-  onClose,
-}: ModalJoursFeriesProps) {
-  const [preRemplissage, setPreRemplissage] = useState(false);
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState("");
-
-  const referentiel = useMemo(() => joursFeriesLegaux(annee), [annee]);
-  const pentecoteRef = referentiel.find((f) => f.libelle === "Lundi de Pentecôte");
-  const pentecoteEnBase = joursFeries.find((f) => f.libelle === "Lundi de Pentecôte");
-  const pentecoteTravaillee = !pentecoteEnBase;
-
-  async function handleTogglePentecote(travaillee: boolean) {
-    if (!pentecoteRef) return;
-    setErreur("");
-    setEnCours(true);
-    try {
-      if (travaillee) {
-        if (pentecoteEnBase) await onSupprimer(pentecoteEnBase.id);
-      } else {
-        await onAjouter({ date: pentecoteRef.date, libelle: pentecoteRef.libelle });
-      }
-    } catch {
-      setErreur("Impossible de mettre à jour le lundi de Pentecôte.");
-    } finally {
-      setEnCours(false);
-    }
-  }
-
-  async function handlePreRemplir() {
-    setPreRemplissage(true);
-    try {
-      await onPreRemplir();
-    } finally {
-      setPreRemplissage(false);
-    }
-  }
-
-  return (
-    <Modal
-      title={
-        <span className="flex w-full flex-col items-center gap-1.5">
-          <TypeBadge code="FERIE" />
-          Jours fériés {annee}
-        </span>
-      }
-      onClose={onClose}
-      className="max-w-md"
-    >
-      <div className="flex flex-col gap-3">
-        <div className="bg-mint-tint flex items-center gap-4 p-3 text-sm">
-          <span className="text-ink-900 font-semibold">Lundi de Pentecôte</span>
-          <label className="flex cursor-pointer items-center gap-1.5 has-[:disabled]:cursor-not-allowed">
-            <input
-              type="radio"
-              name="pentecote"
-              checked={pentecoteTravaillee}
-              disabled={enCours || joursFeries.length === 0}
-              onChange={() => handleTogglePentecote(true)}
-            />
-            <span className="text-ink-900">Travaillé</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5 has-[:disabled]:cursor-not-allowed">
-            <input
-              type="radio"
-              name="pentecote"
-              checked={!pentecoteTravaillee}
-              disabled={enCours || joursFeries.length === 0}
-              onChange={() => handleTogglePentecote(false)}
-            />
-            <span className="text-ink-900">Férié</span>
-          </label>
-        </div>
-        <span
-          className={`w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${
-            joursFeries.length > 0
-              ? "bg-status-success-bg text-status-success-fg"
-              : "bg-surface-app text-ink-500"
-          }`}
-        >
-          {joursFeries.length} {joursFeries.length === 1 ? "jour" : "jours"}
-        </span>
-        {erreur && <p className="text-status-danger-fg px-1 text-xs">{erreur}</p>}
-
-        {joursFeries.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-6">
-            <EmptyRow text="Aucun jour férié renseigné pour cette année." />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={preRemplissage}
-              onClick={handlePreRemplir}
-              className="rounded-full px-4 py-2 text-xs"
-            >
-              {preRemplissage ? "…" : "Pré-remplir les jours fériés légaux"}
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-card bg-surface-card max-h-96 overflow-y-auto">
-            {referentiel.map((f, i) => {
-              const estPentecote = f.libelle === "Lundi de Pentecôte";
-              const neutralise = estPentecote && pentecoteTravaillee;
-              return (
-                <div
-                  key={f.date}
-                  className={`flex items-center gap-4 px-5 py-4 ${
-                    i === referentiel.length - 1 ? "" : "border-ink-300/60 border-b"
-                  }`}
-                >
-                  <JourBadge muted={neutralise}>{nomJourSemaine(f.date).slice(0, 2)}</JourBadge>
-                  <div className="w-28 shrink-0">
-                    <div
-                      className={`text-sm font-bold whitespace-nowrap ${
-                        neutralise ? "text-ink-500 line-through" : "text-ink-900"
-                      }`}
-                    >
-                      {formatJourMoisComplet(f.date)}
-                    </div>
-                    <div className="text-ink-500 text-xs">{f.libelle}</div>
-                  </div>
-                  {neutralise && (
-                    <Badge tone="warning" className="ml-auto">
-                      Travaillé
-                    </Badge>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </Modal>
-  );
-}
-
 interface SnippetFerieProps {
   ferie: JourFerie;
   ancre: DOMRect;
@@ -1356,10 +245,152 @@ function SnippetFerie({ ferie, ancre, onFermer }: SnippetFerieProps) {
   );
 }
 
+interface ConflitAgenda {
+  /** Id de l'entrée CPI/DJI concernée — indispensable pour distinguer deux
+   * DJI du même jour (matin/après-midi), sinon dupliquées vues comme une
+   * seule entrée (même `debut`/`fin`) et provoquant des clés React en
+   * doublon (bug constaté 22/08/2026). */
+  id: string;
+  code: "CPI" | "DJI";
+  debut: string;
+  fin: string;
+  demande: DemandeEquipe;
+}
+
+interface TiroirConflitsAgendaProps {
+  conflits: ConflitAgenda[];
+}
+
+/**
+ * Tiroir "Conflit d'agenda" (22/08/2026) — même traitement que les tiroirs
+ * DJI/CPI/Fériés de la légende (calé sous son déclencheur, croix de
+ * fermeture, pas de popup centrée) : liste des CPI/DJI paramétrés qui
+ * recouvrent une demande personnelle déjà existante (voir `conflitsAgenda`
+ * dans `VueCalendrierGrille`) — une ligne par couple (entrée CPI/DJI,
+ * demande) : un même jour posé par deux collaborateurs différents produit
+ * deux lignes. Le "composant congé" concerné est joint tel quel, en
+ * reprenant le gabarit `TypeBadge`/`PeriodeAvecPastilles`/`Badge` déjà
+ * utilisé pour une demande partout ailleurs (`ActiviteRecenteCard`,
+ * `SuiviDemandeRow`) — purement informatif, aucune action de résolution ici
+ * (arbitrage manuel par Delphine).
+ */
+function TiroirConflitsAgenda({ conflits }: TiroirConflitsAgendaProps) {
+  return (
+    <div className="flex h-full flex-col gap-[3px] overflow-y-auto">
+      {conflits.map((c) => {
+        const unJour = c.debut === c.fin;
+        const libellePeriode = unJour
+          ? formatJourMois(c.debut, false)
+          : `Du ${formatJourMois(c.debut, false)} au ${formatJourMois(c.fin, false)}`;
+        const jours = c.demande.nbDemiJournees / 2;
+        const codeDemande =
+          c.demande.type === "CP" && c.demande.isAnticipation ? "CPA" : c.demande.type;
+        const { tone, Icon } = STATUT_CONFIG[c.demande.statut];
+        return (
+          <div key={`${c.id}-${c.demande.id}`} className="flex flex-col gap-2 rounded-sm px-0 py-3">
+            <div className="text-ink-500 text-xs">
+              <span
+                className="rounded px-1"
+                style={{
+                  backgroundColor: `color-mix(in srgb, var(--color-${c.code.toLowerCase()}) 30%, white)`,
+                }}
+              >
+                {c.code}
+              </span>
+              {` - ${libellePeriode}`}
+            </div>
+            <div className="text-ink-900 text-xs font-semibold">
+              {`${c.demande.demandeur.prenom} ${c.demande.demandeur.nom}`}
+            </div>
+            <div className="bg-surface-card flex items-center gap-3 rounded-xl p-2">
+              <TypeBadge code={codeDemande} />
+              <div className="min-w-0 flex-1">
+                <PeriodeAvecPastilles
+                  debut={c.demande.debut}
+                  fin={c.demande.fin}
+                  demiDebut={c.demande.demiDebut}
+                  demiFin={c.demande.demiFin}
+                />
+              </div>
+              <span className="shrink-0 origin-right scale-90">
+                <Badge tone={tone}>
+                  <Icon size={12} strokeWidth={2.5} />
+                  <span className="text-[14.4px]">{formatJours(jours)} j</span>
+                </Badge>
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function VueCalendrierGrille({ annee }: { annee: number }) {
   const estAnneeLive = annee === new Date().getFullYear();
   const calendrier = useCalendrier(annee);
   const { objectifs } = useObjectifsCalendrier();
+  const { demandes: demandesEquipe } = useDemandesEquipe();
+
+  // Conflits d'agenda (22/08/2026) — un CPI/DJI paramétré qui recouvre une
+  // demande personnelle déjà existante (validée ou en attente, peu importe le
+  // collaborateur) : transparence plutôt que blocage, une alerte pour que
+  // Delphine arbitre manuellement avant publication. Une ligne par couple
+  // (entrée CPI/DJI, demande) — un même jour posé par deux collaborateurs
+  // produit deux lignes, dédupliquées par id de demande (une demande qui
+  // chevauche plusieurs jours d'un même CPI ne compte qu'une fois pour ce
+  // CPI).
+  const conflitsAgenda = useMemo<ConflitAgenda[]>(() => {
+    const demandesActives = demandesEquipe.filter(
+      (d) => d.statut !== "refusé" && d.statut !== "annulé",
+    );
+    function demiEnConflit(iso: string, demi: DemiJournee): DemandeEquipe[] {
+      return demandesActives.filter((d) =>
+        demiCouvertePeriode(iso, demi, d.debut, d.fin, d.demiDebut, d.demiFin),
+      );
+    }
+
+    const conflits: ConflitAgenda[] = [];
+    for (const c of calendrier.congesImposes) {
+      const idsVus = new Set<string>();
+      const curseur = new Date(`${c.debut}T00:00:00Z`);
+      const borne = new Date(`${c.fin}T00:00:00Z`);
+      while (curseur <= borne) {
+        const iso = curseur.toISOString().slice(0, 10);
+        const jourSemaine = curseur.getUTCDay();
+        if (jourSemaine !== 0 && jourSemaine !== 6) {
+          for (const d of [...demiEnConflit(iso, "matin"), ...demiEnConflit(iso, "apres_midi")]) {
+            if (!idsVus.has(d.id)) {
+              idsVus.add(d.id);
+              conflits.push({ id: c.id, code: "CPI", debut: c.debut, fin: c.fin, demande: d });
+            }
+          }
+        }
+        curseur.setUTCDate(curseur.getUTCDate() + 1);
+      }
+    }
+    for (const dj of calendrier.djImposees) {
+      for (const d of demiEnConflit(dj.date, dj.demiJournee)) {
+        conflits.push({ id: dj.id, code: "DJI", debut: dj.date, fin: dj.date, demande: d });
+      }
+    }
+    return conflits.sort((a, b) => a.debut.localeCompare(b.debut));
+  }, [demandesEquipe, calendrier.congesImposes, calendrier.djImposees]);
+  // Tiroir Conflits d'agenda (22/08/2026) — même principe que les tiroirs
+  // DJI/CPI/Fériés ci-dessus.
+  const [tiroirConflitsOuvert, setTiroirConflitsOuvert] = useState(false);
+  const carteConflitsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tiroirConflitsOuvert) return;
+    function handleClicExterieur(e: MouseEvent) {
+      if (carteConflitsRef.current && !carteConflitsRef.current.contains(e.target as Node)) {
+        setTiroirConflitsOuvert(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClicExterieur);
+    return () => window.removeEventListener("mousedown", handleClicExterieur);
+  }, [tiroirConflitsOuvert]);
 
   // Compteurs de volume affichés sur les cartes légende — pas de cible ni de
   // jauge, juste ce qui est déjà posé, pour un état "en un coup d'œil".
@@ -1391,16 +422,103 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
     totalJoursCpi === cibleJoursCpi &&
     totalDemiJourneesDji === cibleDemiJourneesDji &&
     totalJoursFeries > 0;
-  const [modalCongesOuvert, setModalCongesOuvert] = useState(false);
   const [snippetConge, setSnippetConge] = useState<{ conge: CongeImpose; ancre: DOMRect } | null>(
     null,
   );
-  const [modalDjOuvert, setModalDjOuvert] = useState(false);
   const [snippetDji, setSnippetDji] = useState<{ dj: DjImposee; ancre: DOMRect } | null>(null);
-  const [modalFeriesOuvert, setModalFeriesOuvert] = useState(false);
+  // Tiroir DJI (22/08/2026) — clic sur la pill "N demi-journées" de la
+  // légende : ouvre un tiroir calé sous la carte, reprenant tel quel le
+  // composant liste avec suppression au survol déjà utilisé sur
+  // `/parametrer/calendrier3` (`ProchainsJoursOffCard`, `filtreCode="DJI"`).
+  // La carte elle-même n'ouvre plus l'ancienne modale "référentiel"
+  // (22/08/2026, retirée — voir plus bas).
+  const [tiroirDjiOuvert, setTiroirDjiOuvert] = useState(false);
+  const carteDjiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tiroirDjiOuvert) return;
+    function handleClicExterieur(e: MouseEvent) {
+      if (carteDjiRef.current && !carteDjiRef.current.contains(e.target as Node)) {
+        setTiroirDjiOuvert(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClicExterieur);
+    return () => window.removeEventListener("mousedown", handleClicExterieur);
+  }, [tiroirDjiOuvert]);
+
+  // Tiroir CPI (22/08/2026) — même principe que le tiroir DJI ci-dessus.
+  const [tiroirCpiOuvert, setTiroirCpiOuvert] = useState(false);
+  const carteCpiRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tiroirCpiOuvert) return;
+    function handleClicExterieur(e: MouseEvent) {
+      if (carteCpiRef.current && !carteCpiRef.current.contains(e.target as Node)) {
+        setTiroirCpiOuvert(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClicExterieur);
+    return () => window.removeEventListener("mousedown", handleClicExterieur);
+  }, [tiroirCpiOuvert]);
+
+  // Tiroir Fériés (22/08/2026) — même principe, sans suppression (jours
+  // fériés légaux non supprimables depuis le calendrier).
+  const [tiroirFerieOuvert, setTiroirFerieOuvert] = useState(false);
+  const carteFerieRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tiroirFerieOuvert) return;
+    function handleClicExterieur(e: MouseEvent) {
+      if (carteFerieRef.current && !carteFerieRef.current.contains(e.target as Node)) {
+        setTiroirFerieOuvert(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClicExterieur);
+    return () => window.removeEventListener("mousedown", handleClicExterieur);
+  }, [tiroirFerieOuvert]);
+
+  // Toggle Lundi de Pentecôte (22/08/2026) — repris en intro du tiroir
+  // Fériés, même logique que `ModalJoursFeries` (pas de colonne "travaillé"
+  // en base : "travaillée" = pas de ligne pour ce jour dans `jours_feries`).
+  const referentielFeries = useMemo(() => joursFeriesLegaux(annee), [annee]);
+  const pentecoteRef = referentielFeries.find((f) => f.libelle === "Lundi de Pentecôte");
+  const pentecoteEnBase = calendrier.joursFeries.find((f) => f.libelle === "Lundi de Pentecôte");
+  const pentecoteTravaillee = !pentecoteEnBase;
+  const [pentecoteEnCours, setPentecoteEnCours] = useState(false);
+
+  async function handleTogglePentecote() {
+    if (!pentecoteRef) return;
+    setPentecoteEnCours(true);
+    try {
+      if (pentecoteTravaillee) {
+        await calendrier.ajouterFerie({ date: pentecoteRef.date, libelle: pentecoteRef.libelle });
+      } else if (pentecoteEnBase) {
+        await calendrier.supprimerFerie(pentecoteEnBase.id);
+      }
+    } finally {
+      setPentecoteEnCours(false);
+    }
+  }
   const [snippetFerie, setSnippetFerie] = useState<{ ferie: JourFerie; ancre: DOMRect } | null>(
     null,
   );
+  // "+" au survol d'un jour vide (22/08/2026) — ouvre la nouvelle popin
+  // unifiée CPI/DJI (`ModalPoserJourImpose`, calquée sur Calendrier (v2))
+  // sans toucher aux légendes/modales existantes, qui restent le moyen de
+  // parcourir/gérer en lot. Mode par défaut DJI : un clic sur un seul jour
+  // est statistiquement plus souvent une demi-journée qu'une période CPI.
+  const [modaleCreation, setModaleCreation] = useState<Mode | null>(null);
+  const [dateInitialeCreation, setDateInitialeCreation] = useState<string | undefined>(undefined);
+
+  function handleJourVideClick(iso: string) {
+    setDateInitialeCreation(iso);
+    setModaleCreation("DJI");
+  }
+
+  function fermerModaleCreation() {
+    setModaleCreation(null);
+    setDateInitialeCreation(undefined);
+  }
   const [publicationEnCours, setPublicationEnCours] = useState(false);
   const [erreurPublication, setErreurPublication] = useState("");
 
@@ -1512,88 +630,296 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
             tipoDuJour={tipoDuJour}
             estEnGroupe={estEnGroupe}
             onJourClick={handleJourClick}
+            onJourVideClick={handleJourVideClick}
           />
         ))}
       </div>
 
       <div className="flex w-full flex-col gap-3 md:w-64 md:shrink-0">
-        <button
-          type="button"
-          onClick={() => setModalCongesOuvert(true)}
-          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
-        >
-          <TypeBadge code="CPI" />
-          <div className="flex flex-1 flex-col">
-            <span className="text-ink-900 text-sm">Congés imposés</span>
+        <div ref={carteDjiRef} className="relative">
+          <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
+            <TypeBadge code="DJI" />
+            <div className="flex flex-1 flex-col">
+              <span className="text-ink-900 text-sm">Demi-journées imposées</span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTiroirDjiOuvert((v) => !v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setTiroirDjiOuvert((v) => !v);
+                  }
+                }}
+                className={`mt-1 w-fit cursor-pointer rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap transition-[filter] duration-150 hover:brightness-90 ${classesPastilleDji}`}
+              >
+                {totalDemiJourneesDji}{" "}
+                {totalDemiJourneesDji === 1 ? "demi-journée" : "demi-journées"}
+              </span>
+            </div>
             <span
-              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleCpi}`}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDateInitialeCreation(undefined);
+                setModaleCreation("DJI");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setDateInitialeCreation(undefined);
+                  setModaleCreation("DJI");
+                }
+              }}
+              className="shrink-0 cursor-pointer self-center"
             >
-              {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
+              <PlusCircle
+                size={18}
+                className="text-mint transition-transform duration-150 hover:scale-125"
+              />
             </span>
           </div>
-          {estAnneeLive ? (
-            <Eye
-              size={18}
-              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
-            />
-          ) : (
-            <PlusCircle
-              size={18}
-              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
-            />
+
+          {tiroirDjiOuvert && (
+            <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setTiroirDjiOuvert(false)}
+                aria-label="Fermer"
+                className="text-ink-500 hover:text-ink-900 mb-1 self-end"
+              >
+                <X size={16} />
+              </button>
+              <div className="min-h-0 flex-1">
+                <ProchainsJoursOffCard
+                  debutPeriode={`${annee}-01-01`}
+                  finPeriode={`${annee}-12-31`}
+                  masquerDemandesPerso
+                  separerCpiDji
+                  filtreCode="DJI"
+                  avecSuppression
+                  toutAfficher
+                  donneesInjectees={{
+                    congesImposes: calendrier.congesImposes,
+                    djImposees: calendrier.djImposees,
+                    joursFeries: calendrier.joursFeries,
+                    supprimerConge: calendrier.supprimerConge,
+                    supprimerDj: calendrier.supprimerDj,
+                    ajouterConge: calendrier.ajouterConge,
+                    ajouterDj: calendrier.ajouterDj,
+                  }}
+                />
+              </div>
+            </div>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setModalDjOuvert(true)}
-          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
-        >
-          <TypeBadge code="DJI" />
-          <div className="flex flex-1 flex-col">
-            <span className="text-ink-900 text-sm">Demi-journées imposées</span>
+        </div>
+        <div ref={carteCpiRef} className="relative">
+          <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
+            <TypeBadge code="CPI" />
+            <div className="flex flex-1 flex-col">
+              <span className="text-ink-900 text-sm">Congés imposés</span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTiroirCpiOuvert((v) => !v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setTiroirCpiOuvert((v) => !v);
+                  }
+                }}
+                className={`mt-1 w-fit cursor-pointer rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap transition-[filter] duration-150 hover:brightness-90 ${classesPastilleCpi}`}
+              >
+                {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
+              </span>
+            </div>
             <span
-              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleDji}`}
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDateInitialeCreation(undefined);
+                setModaleCreation("CPI");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setDateInitialeCreation(undefined);
+                  setModaleCreation("CPI");
+                }
+              }}
+              className="shrink-0 cursor-pointer self-center"
             >
-              {totalDemiJourneesDji} {totalDemiJourneesDji === 1 ? "demi-journée" : "demi-journées"}
+              <PlusCircle
+                size={18}
+                className="text-mint transition-transform duration-150 hover:scale-125"
+              />
             </span>
           </div>
-          {estAnneeLive ? (
-            <Eye
-              size={18}
-              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
-            />
-          ) : (
-            <PlusCircle
-              size={18}
-              className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
-            />
+
+          {tiroirCpiOuvert && (
+            <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setTiroirCpiOuvert(false)}
+                aria-label="Fermer"
+                className="text-ink-500 hover:text-ink-900 mb-1 self-end"
+              >
+                <X size={16} />
+              </button>
+              <div className="min-h-0 flex-1">
+                <ProchainsJoursOffCard
+                  debutPeriode={`${annee}-01-01`}
+                  finPeriode={`${annee}-12-31`}
+                  masquerDemandesPerso
+                  separerCpiDji
+                  filtreCode="CPI"
+                  avecSuppression
+                  toutAfficher
+                  donneesInjectees={{
+                    congesImposes: calendrier.congesImposes,
+                    djImposees: calendrier.djImposees,
+                    joursFeries: calendrier.joursFeries,
+                    supprimerConge: calendrier.supprimerConge,
+                    supprimerDj: calendrier.supprimerDj,
+                    ajouterConge: calendrier.ajouterConge,
+                    ajouterDj: calendrier.ajouterDj,
+                  }}
+                />
+              </div>
+            </div>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={() => setModalFeriesOuvert(true)}
-          className="bg-surface-card group flex items-start gap-2.5 rounded-xl p-4 text-left shadow-sm"
-        >
-          <TypeBadge code="FERIE" />
-          <div className="flex flex-1 flex-col">
-            <span className="text-ink-900 text-sm">Jours fériés</span>
-            <span
-              className={`mt-1 w-fit rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${classesPastilleFeries}`}
-            >
-              {totalJoursFeries} {totalJoursFeries === 1 ? "jour" : "jours"}
-            </span>
+        </div>
+        <div ref={carteFerieRef} className="relative">
+          <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
+            <TypeBadge code="FERIE" />
+            <div className="flex flex-1 flex-col">
+              <span className="text-ink-900 text-sm">Jours fériés</span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTiroirFerieOuvert((v) => !v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setTiroirFerieOuvert((v) => !v);
+                  }
+                }}
+                className={`mt-1 w-fit cursor-pointer rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap transition-[filter] duration-150 hover:brightness-90 ${classesPastilleFeries}`}
+              >
+                {totalJoursFeries} {totalJoursFeries === 1 ? "jour" : "jours"}
+              </span>
+            </div>
           </div>
-          <Eye
-            size={18}
-            className="text-mint shrink-0 self-center transition-transform duration-150 group-hover:scale-125"
-          />
-        </button>
+
+          {tiroirFerieOuvert && (
+            <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
+              <button
+                type="button"
+                onClick={() => setTiroirFerieOuvert(false)}
+                aria-label="Fermer"
+                className="text-ink-500 hover:text-ink-900 mb-1 self-end"
+              >
+                <X size={16} />
+              </button>
+              <div className="bg-mint-tint mb-2 flex shrink-0 items-center justify-between rounded-xl px-3 py-2">
+                <span className="text-ink-900 text-xs font-semibold">Lundi de Pentecôte</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-ink-500 text-xs">
+                    {pentecoteTravaillee ? "Travaillé" : "Férié"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!pentecoteTravaillee}
+                    aria-label="Lundi de Pentecôte férié"
+                    disabled={pentecoteEnCours || calendrier.joursFeries.length === 0}
+                    onClick={handleTogglePentecote}
+                    className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150 disabled:opacity-50 ${
+                      pentecoteTravaillee ? "bg-ink-300" : "bg-mint"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[left] duration-150 ${
+                        pentecoteTravaillee ? "left-0.5" : "left-4"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ProchainsJoursOffCard
+                  debutPeriode={`${annee}-01-01`}
+                  finPeriode={`${annee}-12-31`}
+                  masquerDemandesPerso
+                  separerCpiDji
+                  filtreCode="FERIE"
+                  toutAfficher
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {conflitsAgenda.length > 0 && (
+          <div ref={carteConflitsRef} className="relative my-2">
+            <button
+              type="button"
+              onClick={() => setTiroirConflitsOuvert((v) => !v)}
+              className="flex w-fit items-center gap-1.5 px-1 text-left"
+            >
+              <TriangleAlert size={14} className="text-status-warning-fg shrink-0" />
+              <span className="bg-status-warning-bg text-status-warning-fg rounded px-1 text-[11px] font-semibold hover:underline">
+                {`Conflit d'agenda (${conflitsAgenda.length})`}
+              </span>
+            </button>
+
+            {tiroirConflitsOuvert && (
+              <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setTiroirConflitsOuvert(false)}
+                  aria-label="Fermer"
+                  className="text-ink-500 hover:text-ink-900 mb-1 self-end"
+                >
+                  <X size={16} />
+                </button>
+                <div className="min-h-0 flex-1">
+                  <TiroirConflitsAgenda conflits={conflitsAgenda} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {estAnneeLive && (
+          <p className="text-ink-500 px-1 text-sm">
+            <span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce
+            calendrier est visible par les collaborateurs
+          </p>
+        )}
 
         {!estAnneeLive &&
           (calendrier.parametrage?.valideLe ? (
             <div className="flex flex-col gap-1 px-1">
               <p className="text-ink-500 text-sm">
-                {`Publié le ${formatDateAction(calendrier.parametrage.valideLe.slice(0, 10))} — visible par les collaborateurs`}
+                <span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce
+                calendrier est visible par les collaborateurs
               </p>
               <button
                 type="button"
@@ -1641,19 +967,6 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
         />
       )}
 
-      {modalCongesOuvert && (
-        <ModalCongesImposes
-          annee={annee}
-          congesImposes={calendrier.congesImposes}
-          joursFeries={calendrier.joursFeries}
-          djImposees={calendrier.djImposees}
-          cibleJoursCpi={cibleJoursCpi}
-          onAjouter={calendrier.ajouterConge}
-          onSupprimer={calendrier.supprimerConge}
-          onClose={() => setModalCongesOuvert(false)}
-        />
-      )}
-
       {snippetDji && (
         <SnippetDji
           dj={snippetDji.dj}
@@ -1674,27 +987,16 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
         />
       )}
 
-      {modalDjOuvert && (
-        <ModalDjImposees
-          annee={annee}
-          djImposees={calendrier.djImposees}
+      {modaleCreation && (
+        <ModalPoserJourImpose
           joursFeries={calendrier.joursFeries}
           congesImposes={calendrier.congesImposes}
-          cibleDemiJourneesDji={cibleDemiJourneesDji}
-          onAjouter={calendrier.ajouterDj}
-          onSupprimer={calendrier.supprimerDj}
-          onClose={() => setModalDjOuvert(false)}
-        />
-      )}
-
-      {modalFeriesOuvert && (
-        <ModalJoursFeries
-          annee={annee}
-          joursFeries={calendrier.joursFeries}
-          onAjouter={calendrier.ajouterFerie}
-          onSupprimer={calendrier.supprimerFerie}
-          onPreRemplir={calendrier.preRemplirFeries}
-          onClose={() => setModalFeriesOuvert(false)}
+          djImposees={calendrier.djImposees}
+          onAjouterCongeImpose={calendrier.ajouterConge}
+          onAjouterDj={calendrier.ajouterDj}
+          onClose={fermerModaleCreation}
+          modeInitial={modaleCreation}
+          dateInitiale={dateInitialeCreation}
         />
       )}
     </div>

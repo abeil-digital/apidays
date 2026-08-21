@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 /**
  * MiniCalendrier — vue mensuelle compacte (grille L-V, week-ends masqués)
@@ -172,6 +172,7 @@ function JourPastille({
   onSurvol,
   onJourClick,
   onJourVideClick,
+  onJourSupprimerClick,
 }: {
   jour: number;
   iso: string;
@@ -184,6 +185,7 @@ function JourPastille({
   texteJour?: string;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
+  onJourSupprimerClick?: (iso: string, ancre: DOMRect) => void;
   /**
    * Clic sur un jour SANS congé (20/08/2026) — distinct d'`onJourClick`
    * (jours porteurs d'une pastille) : sémantique différente, ouvrir "Poser
@@ -219,6 +221,33 @@ function JourPastille({
       </span>
     ) : (
       jour
+    );
+  }
+
+  // Poubelle en sur-impression (21/08/2026) — crossfade avec le chiffre au
+  // survol de la case, même principe que le "+" des jours vides plus bas
+  // (`group`/`group-hover`) : aucun changement de taille de case, la case
+  // reste `relative` et les deux contenus (chiffre, poubelle) se superposent
+  // exactement. `stopPropagation` : la poubelle est nichée dans l'élément qui
+  // porte `onJourClick`, sans quoi un clic déclencherait les deux handlers.
+  function contenuJour(couleurContour: string) {
+    const chiffre = chiffreAujourdhui(couleurContour);
+    if (!onJourSupprimerClick) return chiffre;
+    return (
+      <span className="relative flex h-full w-full items-center justify-center">
+        <span className="transition-opacity duration-150 group-hover:opacity-0">{chiffre}</span>
+        <button
+          type="button"
+          onClick={(e: MouseEvent<HTMLButtonElement>) => {
+            e.stopPropagation();
+            onJourSupprimerClick(iso, e.currentTarget.getBoundingClientRect());
+          }}
+          aria-label="Supprimer"
+          className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        >
+          <Trash2 size={agrandi ? 16 : 12} />
+        </button>
+      </span>
     );
   }
 
@@ -263,7 +292,7 @@ function JourPastille({
   // d'une barre groupée.
   const survol = isHovered ? "brightness-110" : "";
   const curseur = onJourClick ? "cursor-pointer" : "";
-  const base = `flex ${taille} items-center justify-center ${forme} ${texte} font-bold transition-[filter] duration-150 ${survol} ${curseur}`;
+  const base = `group flex ${taille} items-center justify-center ${forme} ${texte} font-bold transition-[filter] duration-150 ${survol} ${curseur}`;
   const evenements = {
     onMouseEnter: () => onSurvol(true),
     onMouseLeave: () => onSurvol(false),
@@ -278,7 +307,7 @@ function JourPastille({
     const gradient = `linear-gradient(to right, ${gauche} 50%, ${droite} 50%)`;
     return (
       <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
-        {chiffreAujourdhui("ring-white")}
+        {contenuJour("ring-white")}
       </span>
     );
   }
@@ -286,7 +315,7 @@ function JourPastille({
   if (!pastille.moitie) {
     return (
       <span className={`${base} ${pastille.classeFond} text-white`} {...evenements}>
-        {chiffreAujourdhui("ring-white")}
+        {contenuJour("ring-white")}
       </span>
     );
   }
@@ -300,7 +329,7 @@ function JourPastille({
 
   return (
     <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
-      {chiffreAujourdhui("ring-white")}
+      {contenuJour("ring-white")}
     </span>
   );
 }
@@ -325,6 +354,7 @@ function PeriodeSegment({
   texteJour,
   onSurvol,
   onJourClick,
+  onJourSupprimerClick,
 }: {
   jours: number[];
   isos: string[];
@@ -338,6 +368,7 @@ function PeriodeSegment({
   texteJour?: string;
   onSurvol: (survole: boolean) => void;
   onJourClick?: (iso: string, ancre: DOMRect) => void;
+  onJourSupprimerClick?: (iso: string, ancre: DOMRect) => void;
 }) {
   const forme = agrandi
     ? "rounded-none"
@@ -356,7 +387,7 @@ function PeriodeSegment({
 
   return (
     <div
-      className={`grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
@@ -371,18 +402,40 @@ function PeriodeSegment({
           : undefined
       }
     >
-      {jours.map((j, idx) =>
-        estAujourdhui?.(isos[idx]) ? (
-          <span key={j} className="flex h-full items-center justify-center">
-            <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
+      {/* `contents` (21/08/2026) — laisse les chiffres directement enfants
+          de la grille (alignement sur les sous-colonnes inchangé) tout en
+          appliquant un fondu commun au survol, en crossfade avec la
+          poubelle en sur-impression sur toute la barre (une seule, centrée,
+          pas une par jour — la barre entière représente UNE période). */}
+      <span
+        className={`contents ${onJourSupprimerClick ? "transition-opacity duration-150 group-hover:opacity-0" : ""}`}
+      >
+        {jours.map((j, idx) =>
+          estAujourdhui?.(isos[idx]) ? (
+            <span key={j} className="flex h-full items-center justify-center">
+              <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
+                {j}
+              </span>
+            </span>
+          ) : (
+            <span key={j} className="flex h-full items-center justify-center">
               {j}
             </span>
-          </span>
-        ) : (
-          <span key={j} className="flex h-full items-center justify-center">
-            {j}
-          </span>
-        ),
+          ),
+        )}
+      </span>
+      {onJourSupprimerClick && (
+        <button
+          type="button"
+          onClick={(e: MouseEvent<HTMLButtonElement>) => {
+            e.stopPropagation();
+            onJourSupprimerClick(isoPremierJour, e.currentTarget.getBoundingClientRect());
+          }}
+          aria-label="Supprimer"
+          className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+        >
+          <Trash2 size={agrandi ? 18 : 14} />
+        </button>
       )}
     </div>
   );
@@ -564,6 +617,22 @@ export interface MiniCalendrierProps {
    */
   onJourVideClick?: (iso: string, ancre: DOMRect) => void;
   /**
+   * Poubelle en sur-impression au survol d'un jour PORTEUR d'une pastille
+   * (21/08/2026) — crossfade avec le chiffre du jour (ou, pour une période
+   * fusionnée en une seule barre, un seul pictogramme centré sur toute la
+   * barre), sans changer la taille de la case. `ancre` = position de
+   * l'élément survolé, comme `onJourClick`. Opt-in, sans effet sur les
+   * appelants qui ne le passent pas.
+   */
+  onJourSupprimerClick?: (iso: string, ancre: DOMRect) => void;
+  /**
+   * Restreint `onJourSupprimerClick` à certains jours (21/08/2026) — ex.
+   * exclure les jours fériés d'une suppression possible depuis le
+   * calendrier. `undefined`/absent : tout jour porteur d'une pastille est
+   * supprimable dès que `onJourSupprimerClick` est fourni.
+   */
+  estJourSupprimable?: (iso: string) => boolean;
+  /**
    * Ne rend qu'un sous-ensemble des semaines du mois (index 0-based,
    * inclusif) — "demi-calendrier" pour un aperçu de période à cheval sur
    * deux mois (ex. ne montrer que la fin du mois de début). L'en-tête
@@ -633,6 +702,8 @@ export function MiniCalendrier({
   estEnGroupe,
   onJourClick,
   onJourVideClick,
+  onJourSupprimerClick,
+  estJourSupprimable,
   premiereSemaine,
   derniereSemaine,
   estMisEnAvant,
@@ -742,6 +813,11 @@ export function MiniCalendrier({
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
                   onJourClick={item.pastille ? onJourClick : undefined}
                   onJourVideClick={item.pastille ? undefined : onJourVideClick}
+                  onJourSupprimerClick={
+                    item.pastille && (estJourSupprimable?.(item.iso) ?? true)
+                      ? onJourSupprimerClick
+                      : undefined
+                  }
                 />
               </div>
             );
@@ -764,6 +840,11 @@ export function MiniCalendrier({
               texteJour={texteJour}
               onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
               onJourClick={onJourClick}
+              onJourSupprimerClick={
+                (estJourSupprimable?.(item.isoPremierJour) ?? true)
+                  ? onJourSupprimerClick
+                  : undefined
+              }
             />
           );
         })}

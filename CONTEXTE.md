@@ -1845,7 +1845,7 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
     pas le 1er du mois, le nouveau taux s'applique à partir du 1er du mois **suivant** (le mois de
     la date d'effet finit sur l'ancien taux). Fonction pure `moisEffet()` (`lib/format.ts`,
     partagée moteur de calcul + affichage) et `resolverTauxActiviteEffectif(historique, tauxActuel,
-    anneeMoisIso)` (`soldes.repository.ts`) : résout le taux en vigueur pour un mois cible ; sans
+anneeMoisIso)` (`soldes.repository.ts`) : résout le taux en vigueur pour un mois cible ; sans
     historique (ou mois antérieur à la 1ère entrée), retombe sur `tauxActuel`/`ancienneValeur` — un
     profil sans changement calcule un solde identique à avant cette fonctionnalité (non-régression
     vérifiée). Les 5 fonctions de calcul (`fetchSoldes`, `fetchSoldeAnticipe`, `fetchHistoriqueCp`,
@@ -1887,7 +1887,7 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
   reconstituer. Le moteur de calcul supposait jusqu'ici que l'app avait toute la donnée depuis le
   début de la période en cours — faux pour un profil fraîchement créé avec de l'ancienneté réelle.
   - **Schéma** : nouvelle table `soldes_initiaux` — **une ligne par utilisateur** (`utilisateur_id
-    unique`), `date_reference`, `cp`/`rtt`/`cpa` (numeric), `auteur_id`, `created_at`. RLS identique
+unique`), `date_reference`, `cp`/`rtt`/`cpa` (numeric), `auteur_id`, `created_at`. RLS identique
     à `historique_utilisateur` (lecture manager/admin + soi-même, écriture admin). Saisie possible à
     la création du profil, et **corrigeable ensuite** (upsert `on conflict (utilisateur_id)`,
     décision de Vincent après la 1ère version du plan qui la voulait création-only) — pas de
@@ -1948,6 +1948,68 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
       revérifiée en conditions réelles (connexion effective en tant que salarié) que sur
       `historique_utilisateur`/`ajustements_solde` via le compte "Salarie Test" — pas
       spécifiquement re-testée pour `soldes_initiaux` après le nettoyage des données de test.
+
+**Refonte Paramétrer > Calendrier (`/parametrer/calendrier2`, 22/08/2026)** — répond à l'item
+Backlog "Refonte du système de définition des CPI/DJI/Fériés côté admin" (18/08/2026, voir
+Backlog.md) : les trois anciennes modales référentielles (`ModalCongesImposes`/`ModalDjImposees`/
+`ModalJoursFeries`, `CalendrierPage.tsx`) et leurs points d'entrée sur les cartes légende sont
+**retirés** (code mort supprimé, pas juste débranché) ; les cartes légende CPI/DJI/Fériés gardent
+leur pastille de volume mais ne sont plus elles-mêmes un bouton :
+
+- **Chaque carte légende porte deux zones cliquables indépendantes** (`stopPropagation`, plus de
+  clic "carte entière") :
+  - La **pill** (nombre de jours/demi-journées) ouvre un **tiroir** calé sous la carte (même
+    gabarit que celui décrit ci-dessous pour "Conflit d'agenda") : liste des entrées via
+    `ProchainsJoursOffCard` (déjà existant, Accueil), avec un nouveau prop **`toutAfficher`**
+    (retire le filtre "à venir"/`fin >= aujourd'hui` et le masquage année-non-publiée — pertinent
+    ici puisque Delphine doit voir TOUT ce qu'elle a paramétré, passé ou futur, publié ou non) et
+    un nouveau prop **`donneesInjectees`** (bypass complet des deux `useCalendrier` internes
+    `calActuel`/`calSuivant` par les données/callbacks déjà chargés par l'appelant) — **corrige un
+    bug réel** : `ProchainsJoursOffCard` et `VueCalendrierGrille` tenaient chacun leur propre
+    instance `useCalendrier`, non synchronisées ; supprimer un CPI/DJI depuis le tiroir laissait la
+    grille et les pastilles de légende périmées jusqu'au rechargement. Le tiroir Fériés n'a pas de
+    suppression (fériés légaux non supprimables) mais gagne en intro le **toggle Lundi de
+    Pentecôte** (repris de l'ancienne `ModalJoursFeries`, même logique "travaillée = pas de ligne
+    en base").
+  - Le **"+"** (DJI/CPI uniquement, retiré de la carte Fériés) ouvre `ModalPoserJourImpose`
+    (nouveau composant, `components/parametrer/ModalPoserJourImpose.tsx`) — popin unifiée reprenant
+    le gabarit de `PoserDemandeModal.tsx` (verrouillage du sélecteur de demi-journée sur une DJI
+    déjà posée, `DatePicker` bloqué sur jours non ouvrés/fériés, lien "voir" + aperçu
+    `DetailPeriodeConges`) plutôt que les deux anciennes modales divergentes. Un clic sur un jour
+    vide du calendrier ouvre la même popin (mode DJI par défaut — un clic sur un seul jour est
+    statistiquement plus souvent une demi-journée qu'une période). Simplifiée ensuite en mode
+    DJI : Date + créneau (défaut Après-midi, verrouillé si l'autre créneau est déjà pris) + "Soit
+    N jours" + bouton Ajouter, sans bloc "Objectif annuel" (retiré des deux modes CPI/DJI) ni
+    "voir"/aperçu détaillé (retiré du mode DJI seulement, gardé en CPI).
+  - Suppression d'un jour depuis un tiroir : **toast de confirmation** (`components/ui/Toast.tsx`
+    gagne une prop `tone` "success"/"error", inchangée par défaut pour les appelants existants)
+    avec bouton **"Annuler"** (undo — recrée l'entrée via `ajouterConge`/`ajouterDj`, nouvel id,
+    pas une vraie restauration mais fonctionnellement équivalent).
+- **"Conflit d'agenda"** (nouveau, remplace l'ancienne notion "Scan de chevauchement CPI/DJI" du
+  Backlog) — implémente la règle actée le 18/08/2026 : transparence plutôt que blocage. Calcule
+  (`useDemandesEquipe()`, toute l'entreprise) les CPI/DJI paramétrés qui recouvrent une demande
+  personnelle active (validée/en attente, tous collaborateurs) d'au moins une demi-journée — une
+  ligne par couple (entrée CPI/DJI, demande), dédupliquée par id (une demande qui chevauche
+  plusieurs jours d'un même CPI ne compte qu'une fois pour ce CPI). Affiché en texte stabiloté
+  orange (`text-[11px] font-semibold text-status-warning-fg`, fond `bg-status-warning-bg`) entre
+  les cartes légende et le message Publié/Brouillon ; ouvre un tiroir (même gabarit que les
+  tiroirs légende, pas de popup centrée) listant pour chaque conflit : `CODE - date` (discret) +
+  **nom du collaborateur** (mis en avant, `text-xs font-semibold text-ink-900`) + la demande
+  personnelle elle-même en pièce jointe, dans son gabarit habituel
+  (`TypeBadge`/`PeriodeAvecPastilles`/`Badge`, comme `ActiviteRecenteCard`/`SuiviDemandeRow`) —
+  purement informatif, aucune action de résolution (arbitrage manuel par Delphine). Piège
+  rencontré : la clé de ligne doit inclure l'id réel de l'entrée CPI/DJI (`c.id`/`dj.id`), pas
+  seulement `debut`/`fin` — deux DJI du même jour (matin ET après-midi) partagent la même date et
+  produisaient une clé React dupliquée.
+- **Message "Publié"** : l'année en cours (`estAnneeLive`, jamais de bouton Publier/Dépublier) et
+  l'année à venir une fois publiée affichent désormais le même message —
+  `<span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce calendrier
+est visible par les collaborateurs` — au lieu de l'ancien texte `Publié le JJ/MM/AAAA` réservé à
+  l'année à venir (la date de publication n'est plus affichée).
+- **`/parametrer/calendrier3`** (prototype parallèle créé le 21/08/2026 pour scénariser cette
+  refonte sans toucher à `calendrier2`) reste en place — lien nav "Calendrier (v2)" toujours
+  temporaire, décision à prendre : le remplacer par `calendrier2` (déjà refondu ci-dessus) ou
+  l'abandonner (voir Backlog.md).
 
 ## Décisions prises
 

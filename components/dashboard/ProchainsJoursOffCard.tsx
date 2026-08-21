@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Sheet, type LucideIcon } from "lucide-react";
+import { Sheet, Trash2, type LucideIcon } from "lucide-react";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
-import { formatJours, todayISO } from "@/lib/format";
+import { formatJourMois, formatJours, todayISO } from "@/lib/format";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { ListCard } from "@/components/ui/ListCard";
 import { MOIS_FR } from "@/components/ui/MiniCalendrier";
 import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
 import { STATUT_CONFIG } from "@/components/ui/StatusBadge";
+import { Toast } from "@/components/ui/Toast";
 import {
   LABEL_COURT,
   classeFondTypeBadge,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { dureeCongeImpose } from "@/lib/joursFeries";
-import type { Demande, DemiJournee, JourFerie } from "@/lib/types";
+import type { CongeImpose, Demande, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
 
 const TEXTE_VIDE = "Aucun jour off à venir.";
 
@@ -131,20 +132,143 @@ interface ProchainsJoursOffCardProps {
   jourSurligne?: string | null;
   debutPeriode?: string;
   finPeriode?: string;
+  /** Masque les demandes personnelles de l'utilisateur courant et le lien
+   * "Gérer mes demandes" (21/08/2026) — pour un usage côté paramétrage
+   * Calendrier (`/parametrer/calendrier3`) où seules les données de
+   * paramétrage (CPI/DJI/Fériés) ont du sens, pas les congés perso de
+   * l'admin connecté. Défaut : comportement inchangé (demandes incluses). */
+  masquerDemandesPerso?: boolean;
+  /** Distingue CPI et DJI (21/08/2026) au lieu de les fusionner sous "CI" —
+   * pour le contexte paramétrage Calendrier, où la distinction reste
+   * pertinente (contrairement à l'usage collaborateur d'origine). Défaut :
+   * comportement inchangé (fusion "CI"). */
+  separerCpiDji?: boolean;
+  /** Filtre la liste à un seul code (21/08/2026) — ex. "DJI" pour ne montrer
+   * que les demi-journées imposées. `undefined`/absent : liste complète
+   * (comportement inchangé). */
+  filtreCode?: TypeBadgeCode;
+  /** Affiche une poubelle au survol des lignes CPI/DJI, pour les supprimer
+   * directement depuis la liste (21/08/2026) — scopé au contexte
+   * paramétrage Calendrier, jamais affiché côté collaborateur (qui ne gère
+   * pas ces entrées). Défaut : pas de suppression possible depuis la liste. */
+  avecSuppression?: boolean;
+  /** Retire le filtre "à venir" (`fin >= aujourd'hui`) et le masquage de
+   * l'année suivante tant qu'elle n'est pas publiée (22/08/2026) — pour un
+   * tiroir de paramétrage (ex. clic sur la pill DJI de la légende
+   * `/parametrer/calendrier2`) qui doit montrer TOUT ce qui est paramétré
+   * pour l'année demandée (`debutPeriode`/`finPeriode`), passé ou futur,
+   * publié ou non — Delphine gère ses propres entrées avant publication.
+   * Défaut : comportement inchangé (liste "à venir" uniquement). */
+  toutAfficher?: boolean;
+  /** Injecte les données CPI/DJI/Fériés (et leurs suppressions) d'une année
+   * précise depuis l'instance `useCalendrier` déjà en place chez l'appelant
+   * (22/08/2026) — remplace complètement le double-fetch interne
+   * (`calActuel`/`calSuivant`) plutôt que de le compléter, pour un tiroir de
+   * paramétrage Calendrier (`/parametrer/calendrier2`) qui doit rester en
+   * phase avec la grille/les pills de légende, qui lisent cette même
+   * instance. Sans ce prop, l'ancien comportement (fetch interne
+   * indépendant) est inchangé — mais deux instances distinctes ne se
+   * notifient pas entre elles : supprimer depuis une liste qui fait son
+   * propre fetch laisse la grille et les pills d'une AUTRE instance
+   * périmées jusqu'au rechargement (bug constaté 22/08/2026). */
+  donneesInjectees?: {
+    congesImposes: CongeImpose[];
+    djImposees: DjImposee[];
+    joursFeries: JourFerie[];
+    supprimerConge: (id: string) => Promise<void>;
+    supprimerDj: (id: string) => Promise<void>;
+    ajouterConge: (input: {
+      debut: string;
+      fin: string;
+      demiDebut: DemiJournee;
+      demiFin: DemiJournee;
+    }) => Promise<CongeImpose>;
+    ajouterDj: (input: { date: string; demiJournee: DemiJournee }) => Promise<DjImposee>;
+  };
 }
 
 export function ProchainsJoursOffCard({
   jourSurligne,
   debutPeriode,
   finPeriode,
+  masquerDemandesPerso = false,
+  separerCpiDji = false,
+  filtreCode,
+  avecSuppression = false,
+  toutAfficher = false,
+  donneesInjectees,
 }: ProchainsJoursOffCardProps = {}) {
   const anneeActuelle = new Date().getFullYear();
   const calActuel = useCalendrier(anneeActuelle);
   const calSuivant = useCalendrier(anneeActuelle + 1);
   const { demandes, loading: loadingDemandes } = useDemandes();
   const lignesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null);
+  // Confirmation a posteriori de la suppression (22/08/2026) — toaster plutôt
+  // qu'une popup bloquante, y compris pour l'échec (le jour reste alors dans
+  // la liste, seule l'erreur diffère du succès). "Annuler" (undo) recrée
+  // l'entrée avec les mêmes données — un nouvel id, pas une restauration de
+  // l'ancien, suffisant fonctionnellement.
+  const [toastSuppression, setToastSuppression] = useState<{
+    message: string;
+    tone: "success" | "error";
+    actionLabel?: string;
+    onAction?: () => void;
+  } | null>(null);
 
-  const chargement = calActuel.loading || calSuivant.loading || loadingDemandes;
+  // Supprime un CPI/DJI directement depuis la liste (21/08/2026) — utilise
+  // l'instance `useCalendrier` de l'année réelle de l'entrée (courante ou
+  // suivante), pas un id fixe, pour que la liste (dérivée de ce même état)
+  // se mette à jour immédiatement.
+  async function handleSupprimer(j: JourOff) {
+    setSuppressionEnCours(j.id);
+    const libelleJour = `${j.code === "CPI" && j.debut !== j.fin ? "la période du " : "le "}${formatJourMois(j.debut, true)}${j.code === "CPI" && j.debut !== j.fin ? ` au ${formatJourMois(j.fin, true)}` : ""}`;
+    const cal = Number(j.debut.slice(0, 4)) === anneeActuelle ? calActuel : calSuivant;
+    const ajouterConge = donneesInjectees ? donneesInjectees.ajouterConge : cal.ajouterConge;
+    const ajouterDj = donneesInjectees ? donneesInjectees.ajouterDj : cal.ajouterDj;
+
+    async function handleAnnuler() {
+      try {
+        if (j.code === "CPI") {
+          await ajouterConge({
+            debut: j.debut,
+            fin: j.fin,
+            demiDebut: j.demiDebut,
+            demiFin: j.demiFin,
+          });
+        } else if (j.code === "DJI") {
+          await ajouterDj({ date: j.debut, demiJournee: j.demiDebut });
+        }
+        setToastSuppression({ message: `Suppression annulée.`, tone: "success" });
+      } catch {
+        setToastSuppression({ message: `Impossible d'annuler la suppression.`, tone: "error" });
+      }
+    }
+
+    try {
+      if (donneesInjectees) {
+        if (j.code === "CPI") await donneesInjectees.supprimerConge(j.id);
+        else if (j.code === "DJI") await donneesInjectees.supprimerDj(j.id);
+      } else {
+        if (j.code === "CPI") await cal.supprimerConge(j.id);
+        else if (j.code === "DJI") await cal.supprimerDj(j.id);
+      }
+      setToastSuppression({
+        message: `Vous avez supprimé ${libelleJour}.`,
+        tone: "success",
+        actionLabel: "Annuler",
+        onAction: handleAnnuler,
+      });
+    } catch {
+      setToastSuppression({ message: `Impossible de supprimer ${libelleJour}.`, tone: "error" });
+    } finally {
+      setSuppressionEnCours(null);
+    }
+  }
+
+  const chargement = donneesInjectees
+    ? loadingDemandes
+    : calActuel.loading || calSuivant.loading || loadingDemandes;
 
   // CI/DJI de l'année suivante masqués tant que son calendrier n'est pas
   // publié (20/08/2026, demande explicite — même garde que
@@ -155,23 +279,20 @@ export function ProchainsJoursOffCard({
   // ne doit pas non plus voir un brouillon non publié ici. L'année en cours
   // reste toujours visible. Les fériés restent affichés dans tous les cas
   // (faits légaux fixes, connus à l'avance — même convention qu'ailleurs).
-  const anneeSuivanteVisible = Boolean(calSuivant.parametrage?.valideLe);
+  const anneeSuivanteVisible = toutAfficher || Boolean(calSuivant.parametrage?.valideLe);
 
   const today = todayISO();
-  const joursFeriesToutesAnnees: JourFerie[] = [
-    ...calActuel.joursFeries,
-    ...calSuivant.joursFeries,
-  ];
-  const congesImposesTous = [
-    ...calActuel.congesImposes,
-    ...(anneeSuivanteVisible ? calSuivant.congesImposes : []),
-  ];
-  const djImposeesTous = [
-    ...calActuel.djImposees,
-    ...(anneeSuivanteVisible ? calSuivant.djImposees : []),
-  ];
+  const joursFeriesToutesAnnees: JourFerie[] = donneesInjectees
+    ? donneesInjectees.joursFeries
+    : [...calActuel.joursFeries, ...calSuivant.joursFeries];
+  const congesImposesTous = donneesInjectees
+    ? donneesInjectees.congesImposes
+    : [...calActuel.congesImposes, ...(anneeSuivanteVisible ? calSuivant.congesImposes : [])];
+  const djImposeesTous = donneesInjectees
+    ? donneesInjectees.djImposees
+    : [...calActuel.djImposees, ...(anneeSuivanteVisible ? calSuivant.djImposees : [])];
 
-  const demandesPerso = demandes
+  const demandesPerso = (masquerDemandesPerso ? [] : demandes)
     .filter((d) => (d.statut === "validé" || d.statut === "en attente") && d.fin >= today)
     .map((d) => ({
       id: d.id,
@@ -220,7 +341,7 @@ export function ProchainsJoursOffCard({
       fin: d.date,
       demiDebut: d.demiJournee,
       demiFin: d.demiJournee,
-      code: "CPI" as const,
+      code: (separerCpiDji ? "DJI" : "CPI") as TypeBadgeCode,
       jours: 0.5,
       tone: "success" as BadgeTone,
       Icon: null,
@@ -230,9 +351,10 @@ export function ProchainsJoursOffCard({
   const prochains = jours
     .filter(
       (j) =>
-        j.fin >= today &&
+        (toutAfficher || j.fin >= today) &&
         (!finPeriode || j.debut <= finPeriode) &&
-        (!debutPeriode || j.fin >= debutPeriode),
+        (!debutPeriode || j.fin >= debutPeriode) &&
+        (!filtreCode || j.code === filtreCode),
     )
     .sort((a, b) => a.debut.localeCompare(b.debut));
 
@@ -275,7 +397,7 @@ export function ProchainsJoursOffCard({
                     if (el) lignesRef.current.set(j.id, el);
                     else lignesRef.current.delete(j.id);
                   }}
-                  className={`bg-surface-card flex items-center gap-3 rounded-sm px-[14.4px] py-3 transition-shadow duration-500 ${
+                  className={`bg-surface-card group flex items-center gap-3 rounded-sm px-[14.4px] py-3 transition-shadow duration-500 ${
                     j.id === idSurligne ? "ring-2" : ""
                   }`}
                   style={
@@ -284,7 +406,10 @@ export function ProchainsJoursOffCard({
                     } as React.CSSProperties
                   }
                 >
-                  <BadgeTypeLeger code={j.code} label={j.code === "CPI" ? "CI" : undefined} />
+                  <BadgeTypeLeger
+                    code={j.code}
+                    label={j.code === "CPI" && !separerCpiDji ? "CI" : undefined}
+                  />
                   <div className="min-w-0 flex-1">
                     <PeriodeAvecPastilles
                       debut={j.debut}
@@ -294,11 +419,35 @@ export function ProchainsJoursOffCard({
                       compact
                     />
                   </div>
-                  <span className="origin-right scale-90">
-                    <Badge tone={j.tone}>
+                  {/* Poubelle en sur-impression (21/08/2026) — plutôt qu'un
+                      bouton en plus dans la ligne (qui réservait sa place et
+                      compressait le reste), la poubelle occupe exactement la
+                      même position que le badge "N j" : `relative`/`absolute
+                      inset-0`, crossfade au survol (le badge s'efface, la
+                      poubelle apparaît), aucun décalage de mise en page. */}
+                  <span className="relative origin-right scale-90">
+                    <Badge
+                      tone={j.tone}
+                      className={
+                        avecSuppression && (j.code === "CPI" || j.code === "DJI")
+                          ? "transition-opacity duration-150 group-hover:opacity-0"
+                          : ""
+                      }
+                    >
                       {j.Icon && <j.Icon size={12} strokeWidth={2.5} />}
                       <span className="text-[14.4px]">{formatJours(j.jours)} j</span>
                     </Badge>
+                    {avecSuppression && (j.code === "CPI" || j.code === "DJI") && (
+                      <button
+                        type="button"
+                        onClick={() => handleSupprimer(j)}
+                        disabled={suppressionEnCours === j.id}
+                        aria-label="Supprimer"
+                        className="text-status-danger-fg absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </span>
                 </div>
               </div>
@@ -310,14 +459,26 @@ export function ProchainsJoursOffCard({
               (`bg-surface-app`, celui de la page) nécessaire : sans lui, le
               contenu qui défile serait visible par transparence sous le
               lien. */}
-          <Link
-            href="/historique"
-            className="bg-surface-app text-mint hover:text-mint-hover sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
-          >
-            <Sheet size={16} />
-            Gérer mes demandes
-          </Link>
+          {!masquerDemandesPerso && (
+            <Link
+              href="/historique"
+              className="bg-surface-app text-mint hover:text-mint-hover sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
+            >
+              <Sheet size={16} />
+              Gérer mes demandes
+            </Link>
+          )}
         </div>
+      )}
+
+      {toastSuppression && (
+        <Toast
+          message={toastSuppression.message}
+          tone={toastSuppression.tone}
+          actionLabel={toastSuppression.actionLabel}
+          onAction={toastSuppression.onAction}
+          onClose={() => setToastSuppression(null)}
+        />
       )}
     </div>
   );
