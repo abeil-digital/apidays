@@ -1825,6 +1825,129 @@ not null default false` + fonction `marquer_demande_vue(p_demande_id)` en `secur
     dev, doublant l'erreur si on ne s'en protège pas). Un essai intermédiaire d'étendre aussi le bord
     gauche jusqu'à 0 (sous le rail, recouvert par son `z-40`) a été tenté puis annulé — le padding
     interne de la card ne suffisait pas à dégager le texte du titre, resté partiellement masqué.
+- **Historisation "Durée de travail"/"Nature du contrat" (21/08/2026)** — jusqu'ici,
+  `utilisateurs.taux_activite` était une colonne scalaire relue "fraîche" par les 5 fonctions de
+  calcul de solde (`soldes.repository.ts`), appliquée en multiplicateur plat (`prorata`) à toute la
+  période de référence : un changement de taux en cours de période (ex. 100% → 80% à mi-parcours)
+  recalculait rétroactivement TOUTE la période comme si le nouveau taux avait toujours été en
+  vigueur, faussant le solde CP/RTT affiché. Décision (Vincent) : proratiser le changement **mois
+  par mois**, sans recalcul rétroactif, et empêcher la modification libre par menu déroulant sur
+  une fiche déjà créée.
+  - **Schéma** : nouvelle table `historique_utilisateur` (`utilisateur_id`, `champ` ∈
+    `{taux_activite, nature_contrat}`, `ancienne_valeur`/`nouvelle_valeur` en `text`, `date_effet`,
+    `auteur_id`, `created_at`) — même esprit que `ajustements_solde` (une ligne par changement,
+    RLS lecture manager/admin **+ le salarié concerné** (`utilisateur_id = my_utilisateur_id()`,
+    ajouté après coup, voir plus bas), écriture admin uniquement). Colonne `utilisateurs.cree_par_id`
+    (uuid, nullable, auto-référence sur `utilisateurs`) ajoutée en parallèle — `null` sur tous les
+    profils existants (pas de backfill rétroactif), renseignée à la création pour les nouveaux
+    profils.
+  - **Règle de granularité** : un changement s'applique au **mois entier** — si `date_effet` n'est
+    pas le 1er du mois, le nouveau taux s'applique à partir du 1er du mois **suivant** (le mois de
+    la date d'effet finit sur l'ancien taux). Fonction pure `moisEffet()` (`lib/format.ts`,
+    partagée moteur de calcul + affichage) et `resolverTauxActiviteEffectif(historique, tauxActuel,
+    anneeMoisIso)` (`soldes.repository.ts`) : résout le taux en vigueur pour un mois cible ; sans
+    historique (ou mois antérieur à la 1ère entrée), retombe sur `tauxActuel`/`ancienneValeur` — un
+    profil sans changement calcule un solde identique à avant cette fonctionnalité (non-régression
+    vérifiée). Les 5 fonctions de calcul (`fetchSoldes`, `fetchSoldeAnticipe`, `fetchHistoriqueCp`,
+    `fetchHistoriqueRtt`, `fetchHistoriqueCpa`) appellent ce résolveur mois par mois plutôt qu'un
+    `prorata` unique. `nature_contrat` n'entre dans aucun calcul (purement informatif/RH), même
+    historisation mais aucune modification du moteur.
+  - **UI (`UtilisateurFichePage.tsx`)** : sur une fiche **existante**, "Durée de travail"/"Nature du
+    contrat" passent en lecture seule + bouton "Modifier" ouvrant une popin (sélecteur de valeur +
+    "Date d'effet" + Valider) — en **création**, ces deux champs restent des `Select` simples (pas
+    encore d'historique possible). Deux tableaux récap sous le formulaire ("Période du mm/aa au
+    mm/aa : valeur"), et une colonne latérale "Suivi des modifications" (dot + date + phrase,
+    convention `ActiviteRecenteFeed`) : "Fiche créée par {créateur}" en 1ère entrée synthétique,
+    puis chaque changement, les deux champs mélangés, du plus récent au plus ancien.
+  - **Bug découvert et corrigé le jour même — RLS bloquait la propre lecture du salarié** :
+    `historique_utilisateur` avait, comme `ajustements_solde`, une policy `select` restreinte à
+    `manager`/`admin`. Un salarié consultant SON PROPRE solde sur Accueil (`fetchSoldes()` sans
+    `utilisateurId`) ne pouvait donc pas lire son propre historique de taux — RLS filtre
+    silencieusement à 0 ligne (pas d'erreur), le calcul retombait sur `tauxActuel` (flat), donnant
+    un solde **différent de celui vu par un manager/admin pour la même personne** sur "Suivre les
+    soldes" : exactement le bug qu'on voulait corriger, côté collaborateur cette fois. Policy
+    élargie à `my_role() in ('manager','admin') or utilisateur_id = my_utilisateur_id()` — même
+    correctif appliqué à `soldes_initiaux` (voir entrée suivante) et à `ajustements_solde`
+    (préexistante, même trou, corrigée par cohérence).
+  - **Second bug découvert et corrigé — `cree_par_id` affichait le mauvais nom** : la requête de
+    lecture embarquait `cree_par:utilisateurs!cree_par_id(prenom, nom)` (jointure sur
+    l'auto-référence `utilisateurs → utilisateurs`). PostgREST a résolu cette jointure dans le
+    **mauvais sens** en pratique (la ligne qui RÉFÉRENCE celle-ci via `cree_par_id`, plutôt que
+    celle qu'elle référence) : la fiche de Delphine (compte admin de 2020, `cree_par_id` réellement
+    `null` en base, vérifié par requête directe) affichait "Fiche créée par Test SoldeInit" (un
+    compte de test créé ce jour-là PAR Delphine). Nommer explicitement la contrainte FK
+    (`utilisateurs!utilisateurs_cree_par_id_fkey`) n'a pas résolu le problème (PostgREST renvoyait
+    "relationship not found", `NOTIFY pgrst, 'reload schema'` sans effet non plus). **Solution
+    retenue** : abandon de l'embed PostgREST pour ce cas d'auto-référence, `creeParNom` résolu par
+    une requête séparée (`fetchNomUtilisateur`, `utilisateurs.repository.ts`) uniquement là où
+    affiché (fiche détail) — plus robuste, vérifié correct dans les deux sens après correctif.
+- **Solde initial à la création d'un salarié — report fiche de paie (21/08/2026)** — pour le
+  lancement en production, les salariés déjà en poste ont un capital CP et des soldes RTT/CPA
+  antérieurs à l'app (suivi papier/fiche de paie), qu'aucune donnée `demandes_conges` ne permet de
+  reconstituer. Le moteur de calcul supposait jusqu'ici que l'app avait toute la donnée depuis le
+  début de la période en cours — faux pour un profil fraîchement créé avec de l'ancienneté réelle.
+  - **Schéma** : nouvelle table `soldes_initiaux` — **une ligne par utilisateur** (`utilisateur_id
+    unique`), `date_reference`, `cp`/`rtt`/`cpa` (numeric), `auteur_id`, `created_at`. RLS identique
+    à `historique_utilisateur` (lecture manager/admin + soi-même, écriture admin). Saisie possible à
+    la création du profil, et **corrigeable ensuite** (upsert `on conflict (utilisateur_id)`,
+    décision de Vincent après la 1ère version du plan qui la voulait création-only) — pas de
+    notion de date d'effet ni d'historique pour cette table : une correction écrase simplement la
+    valeur précédente (pas de ligne dans "Suivi des modifications").
+  - **Mécanique CP** (décidée avec Vincent après un premier essai incorrect, voir plus bas) : la
+    valeur CP saisie **remplace entièrement** `capitalBase + report` (pas seulement le report) —
+    le CP est un capital figé, acquis en une fois pour toute la période en cours (1er juin → 31 mai
+    par ex., pas recalculé mois par mois), donc "15 jours au 01/06/26" représente le capital total
+    restant pour l'année en cours jusqu'à la fin de période, pas un simple reliquat auquel il
+    faudrait encore ajouter un nouveau capital calculé par l'app. Condition d'activation :
+    `periodePrecedente.fin <= soldeInitial.dateReference` (la période précédente s'est terminée
+    avant/à la référence → pas de donnée fiable pour un calcul automatique). Une fois cette
+    condition fausse (période suivante entamée), le calcul automatique reprend seul.
+  - **Mécanique RTT/CPA** : pas de notion de report (accrual mensuel pur) — quand la date de
+    référence tombe dans la période en cours, le point de départ de l'accrual devient le 1er du
+    mois **suivant** la référence (`premierJourMoisSuivant`, toujours le mois d'après même si la
+    référence est déjà un 1er — le solde saisi est supposé inclure l'acquisition du mois en cours),
+    avec le solde saisi comme base au lieu de 0.
+  - **Bug découvert et corrigé en cours de route — double comptage de la consommation** : les
+    requêtes de consommation (`demandes_conges` validées/en attente, `ajustements_solde`) restaient
+    bornées à la période ENTIÈRE (`periodeEnCours`/`periodeRtt`), pas à la fenêtre "depuis la
+    référence" — un salarié ayant déjà de la vraie consommation enregistrée dans l'app AVANT la
+    date de référence (ex. Olivier Test, compte de test ancien avec historique réel) voyait cette
+    consommation déduite une seconde fois (une fois implicitement via le solde déclaré, qui est
+    déjà net de cette consommation ; une fois explicitement via la requête), donnant un solde
+    faussement négatif (-16j observé). Corrigé en bornant la fenêtre de consommation à
+    `max(periode.debut, dateReference)` quand le solde initial s'applique
+    (`periodeConsommationCp`/`periodeConsommationAccrual`).
+  - **UI** : section "Soldes actuels (report de la dernière fiche de paie, facultatif)" sur le
+    formulaire de création (Date de référence + CP/RTT/CPA, rien créé si la date est laissée
+    vide) ; sur une fiche existante, affichage lecture seule + bouton "Modifier" ouvrant une popin
+    minimale (Date + CP/RTT/CPA + Valider, pas de tableau récap ni de date d'effet — juste une
+    correction directe).
+  - **Nettoyage** : les 3 lignes de test posées pendant la mise au point (Delphine, Olivier Test,
+    Test SoldeInit) ont été supprimées (`delete from soldes_initiaux;`) une fois les deux bugs
+    ci-dessus corrigés et vérifiés — base repartie propre, à retester profil par profil.
+  - **Questions encore ouvertes / non tranchées formellement** :
+    - La sémantique "remplace tout" n'a été validée par Vincent QUE pour le CP. Pour RTT/CPA,
+      le modèle "point de départ décalé + base additive" n'a pas fait l'objet de la même
+      discussion explicite (par analogie avec la décision CP, mais pas reconfirmé mot pour mot).
+    - Le correctif de fenêtre de consommation (double comptage) est une déduction du principe
+      "pas de double comptage" posé pour le CP, étendue par cohérence à RTT/CPA — pas non plus
+      explicitement revalidé avec Vincent au moment de l'écrire.
+    - **Cas Olivier Test à -16j (avant nettoyage) — expliqué, pas un bug** : Vincent lui avait saisi
+      un solde initial CP volontairement bas (20j) sur un profil ayant déjà, dans l'app, un vrai
+      volume de congés posés — le solde saisi (censé représenter le total restant à cette date)
+      était donc inférieur à la consommation réellement enregistrée après la date de référence,
+      d'où le négatif : un résultat mathématiquement cohérent, pas un défaut du correctif de
+      fenêtre de consommation. Cas jugé "à la marge, assez peu réaliste" par Vincent — une vraie
+      saisie de report suit en pratique un volume de conso réel après la référence, pas l'inverse.
+      Pas d'action de code prévue pour ce cas ; à garder en tête si un admin saisit un solde
+      initial visiblement trop bas par rapport à la conso déjà connue de l'app.
+    - Pas de reflet du solde initial (création ou correction) dans un quelconque flux d'audit
+      global — seul `auteur_id` sur la ligne elle-même trace qui a écrit la dernière valeur, sans
+      historique des valeurs précédentes.
+    - Self-service salarié : la policy élargie (`or utilisateur_id = my_utilisateur_id()`) n'a été
+      revérifiée en conditions réelles (connexion effective en tant que salarié) que sur
+      `historique_utilisateur`/`ajustements_solde` via le compte "Salarie Test" — pas
+      spécifiquement re-testée pour `soldes_initiaux` après le nettoyage des données de test.
 
 ## Décisions prises
 

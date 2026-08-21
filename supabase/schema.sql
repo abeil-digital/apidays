@@ -43,6 +43,12 @@ create table utilisateurs (
   anciennete_date_reference date, -- si différente de date_entree, à préciser avec Abeil
   statut statut_utilisateur not null default 'actif',
   date_archivage date,
+  -- Auteur de la création du profil (21/08/2026, migration additive) — nullable :
+  -- absent sur tous les profils créés avant cette colonne, pas de backfill
+  -- rétroactif possible (l'info n'existait pas). Alimenté à la création pour
+  -- les nouveaux profils, affiché dans le "Suivi des modifications" de la
+  -- fiche utilisateur.
+  cree_par_id uuid references utilisateurs(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -283,6 +289,51 @@ create table ajustements_solde (
   created_at timestamptz not null default now()
 );
 
+-- Historique des changements de durée de travail (taux_activite) et de
+-- nature du contrat (21/08/2026) — même esprit qu'ajustements_solde : une
+-- ligne par changement, avec date d'effet (distincte de created_at) pour
+-- reconstruire la valeur en vigueur à une date passée sans recalcul
+-- rétroactif du solde. `champ` distingue les deux dimensions dans une seule
+-- table plutôt que deux, pour alimenter un seul flux "Suivi des
+-- modifications" sur la fiche utilisateur (voir CONTEXTE.md 21/08/2026).
+-- `ancienne_valeur`/`nouvelle_valeur` en text : accueille aussi bien un
+-- nombre (taux_activite, ex. "80.00") qu'un enum (nature_contrat, ex.
+-- "cdd"), formatés à l'affichage selon `champ`. Seul `taux_activite` entre
+-- dans le calcul du solde (`soldes.repository.ts`,
+-- `resolverTauxActiviteEffectif`) — `nature_contrat` est purement
+-- informatif/RH ici.
+create table historique_utilisateur (
+  id uuid primary key default gen_random_uuid(),
+  utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
+  champ text not null check (champ in ('taux_activite', 'nature_contrat')),
+  ancienne_valeur text,
+  nouvelle_valeur text not null,
+  date_effet date not null,
+  auteur_id uuid references utilisateurs(id),
+  created_at timestamptz not null default now()
+);
+
+-- Solde de départ (21/08/2026, lancement en production) — une seule ligne par
+-- utilisateur (`unique`), saisie à la création du profil et corrigeable
+-- ensuite (upsert, `enregistrerSoldeInitial`) : report CP/RTT/CPA de la
+-- dernière fiche de paie à `date_reference`, pour les salariés déjà en poste
+-- avant l'app (pas de `demandes_conges` antérieures pour recalculer un
+-- report/accrual fiable). Remplace le report/accrual automatique tant que la
+-- période en cours est celle de `date_reference` — voir
+-- `soldes.repository.ts`. Pas de notion de date d'effet/historique ici (à la
+-- différence de `historique_utilisateur`) : une correction écrase simplement
+-- la valeur précédente, pas de "Suivi des modifications".
+create table soldes_initiaux (
+  id uuid primary key default gen_random_uuid(),
+  utilisateur_id uuid not null unique references utilisateurs(id) on delete cascade,
+  date_reference date not null,
+  cp numeric not null default 0,
+  rtt numeric not null default 0,
+  cpa numeric not null default 0,
+  auteur_id uuid references utilisateurs(id),
+  created_at timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- INDEX UTILES
 -- ------------------------------------------------------------
@@ -293,6 +344,8 @@ create index idx_soldes_utilisateur on soldes(utilisateur_id);
 create index idx_manager_salaries_salarie on manager_salaries(salarie_id);
 create index idx_manager_salaries_manager on manager_salaries(manager_id);
 create index idx_ajustements_solde_utilisateur on ajustements_solde(utilisateur_id);
+create index historique_utilisateur_utilisateur_id_champ_idx
+  on historique_utilisateur (utilisateur_id, champ, date_effet);
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -316,6 +369,8 @@ alter table demi_journees_imposees enable row level security;
 alter table conges_imposes enable row level security;
 alter table regles_acquisition enable row level security;
 alter table ajustements_solde enable row level security;
+alter table historique_utilisateur enable row level security;
+alter table soldes_initiaux enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table regles_anciennete enable row level security;
 
@@ -612,12 +667,42 @@ create policy "regles_anciennete: manager et admin modifient"
 -- ------------------------------------------------------------
 -- POLICIES — ajustements_solde (régulation manuelle, Delphine uniquement)
 -- ------------------------------------------------------------
-create policy "ajustements_solde: lecture manager et admin"
+-- Lecture élargie au salarié concerné (21/08/2026) — sans ce OR,
+-- `fetchSoldes()` en libre-service (Accueil, sans utilisateurId) ne peut pas
+-- lire ses propres ajustements : RLS filtre silencieusement à 0 ligne (pas
+-- d'erreur), donnant un solde différent (et faux) de celui vu par
+-- Delphine/un manager sur "Suivre les soldes" pour la même personne. Même
+-- correctif appliqué à historique_utilisateur/soldes_initiaux ci-dessous.
+create policy "ajustements_solde: lecture manager, admin ou soi-même"
   on ajustements_solde for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
 
 create policy "ajustements_solde: admin gère tout"
   on ajustements_solde for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+-- ------------------------------------------------------------
+-- POLICIES — historique_utilisateur (durée de travail / nature du contrat)
+-- ------------------------------------------------------------
+create policy "historique_utilisateur: lecture manager, admin ou soi-même"
+  on historique_utilisateur for select
+  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
+
+create policy "historique_utilisateur: admin gère tout"
+  on historique_utilisateur for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+-- ------------------------------------------------------------
+-- POLICIES — soldes_initiaux (report fiche de paie, lancement en prod)
+-- ------------------------------------------------------------
+create policy "soldes_initiaux: lecture manager, admin ou soi-même"
+  on soldes_initiaux for select
+  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
+
+create policy "soldes_initiaux: admin gère tout"
+  on soldes_initiaux for all
   using (my_role() = 'admin')
   with check (my_role() = 'admin');
 
@@ -645,5 +730,7 @@ grant select, insert, update, delete on
   regles_acquisition,
   regles_anciennete,
   objectifs_calendrier,
-  ajustements_solde
+  ajustements_solde,
+  historique_utilisateur,
+  soldes_initiaux
 to authenticated;

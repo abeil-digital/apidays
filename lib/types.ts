@@ -89,6 +89,12 @@ export interface HistoriqueSolde {
   periodeDebut: string; // date ISO
   periodeFin: string; // date ISO
   soldeDepart: number;
+  // Date affichée en face de "Solde N-1"/"Solde initial" (21/08/2026) — égale
+  // à `periodeDebut` par défaut, mais à la date de référence du solde
+  // initial quand celui-ci remplace le calcul automatique (sinon la ligne
+  // affichait le 1er jour de la période, sans rapport avec la date
+  // réellement saisie par l'admin).
+  soldeDepartDate: string;
   mois: MoisHistoriqueSolde[]; // du 1er mois de la période jusqu'au mois en cours
   soldeActuel: number;
   // Congés CP non validés sur la période de référence — solde "théorique" =
@@ -143,6 +149,9 @@ export interface UtilisateurAdmin {
   role: RoleUtilisateur;
   statut: StatutUtilisateur;
   dateArchivage: string | null; // date ISO, renseignée si statut = "archive"
+  creeParId: string | null; // null sur les profils créés avant ce champ (21/08/2026)
+  creeParNom?: string;
+  createdAt: string; // timestamptz ISO
 }
 
 export interface UtilisateurAdminInput {
@@ -154,6 +163,41 @@ export interface UtilisateurAdminInput {
   tauxActivite: number;
   ancienneteDateReference: string | null;
   role: RoleUtilisateur;
+}
+
+// --- Historique "durée de travail" / "nature du contrat" (21/08/2026) ---
+// Prorata mensuel des changements de taux_activite/nature_contrat plutôt qu'un
+// recalcul rétroactif plat — voir `resolverTauxActiviteEffectif` dans
+// `soldes.repository.ts` et le tableau récap sur la fiche utilisateur.
+
+export type ChampHistoriqueUtilisateur = "taux_activite" | "nature_contrat";
+
+export interface HistoriqueUtilisateurEntry {
+  id: string;
+  champ: ChampHistoriqueUtilisateur;
+  ancienneValeur: string | null;
+  nouvelleValeur: string;
+  dateEffet: string; // date ISO
+  auteurId: string | null;
+  auteurNom?: string;
+  createdAt: string; // timestamptz ISO
+}
+
+export interface ChangerChampInput {
+  valeur: string;
+  dateEffet: string; // date ISO
+}
+
+// --- Solde initial (report fiche de paie, lancement en prod, 21/08/2026) ---
+// Saisi à la création d'un profil (corrigeable ensuite) — remplace le
+// report CP / point de départ RTT-CPA calculés automatiquement tant que la
+// période en cours est celle de `dateReference`. Voir `soldes.repository.ts`.
+
+export interface SoldeInitial {
+  dateReference: string; // date ISO
+  cp: number;
+  rtt: number;
+  cpa: number;
 }
 
 // --- Espace Paramétrer > Congés & RTT ---

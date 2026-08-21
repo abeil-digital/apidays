@@ -31,6 +31,8 @@ Abeil, signalés plus bas.
 | `conges_imposes`         | Périodes de congés imposés (ex. semaine du 15 août) pour une période donnée — indépendant du solde CP calculé dans Congés & RTT                                                                                                                           |
 | `regles_acquisition`     | Moteur de calcul générique CP/RTT — période de référence, taux d'acquisition/mois, report, anticipation (une ligne par type d'absence)                                                                                                                    |
 | `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)                                                                                                                     |
+| `historique_utilisateur` | Historique des changements de `taux_activite`/`nature_contrat` (21/08/2026) — une ligne par changement avec `date_effet`, pour prorater le calcul de solde mois par mois sans recalcul rétroactif |
+| `soldes_initiaux`        | Report de la dernière fiche de paie à la création d'un salarié (21/08/2026) — une ligne par utilisateur (upsert), remplace le report/accrual automatique tant que la période en cours est celle de la date de référence saisie |
 
 ## Points de modélisation notables
 
@@ -96,6 +98,27 @@ Abeil, signalés plus bas.
   `demandes_conges.is_anticipation = true`, qui consomme `soldes.solde_theorique` au lieu de
   `solde_reel` — affiché côté UI avec un badge "CPT" pour le distinguer visuellement d'un CP
   classique (voir `components/demandes/TypeBadge.tsx`).
+- **Historisation `taux_activite`/`nature_contrat` + solde initial (21/08/2026)** — deux tables
+  additives, détail complet (mécanique de calcul, bugs découverts/corrigés, questions encore
+  ouvertes) dans CONTEXTE.md à cette date :
+  - `historique_utilisateur` (une ligne par changement, `date_effet` distincte de `created_at`) —
+    remplace le recalcul rétroactif plat par une proratisation **mois par mois** du calcul de
+    solde (`resolverTauxActiviteEffectif`, `soldes.repository.ts`). `utilisateurs.cree_par_id`
+    (auto-référence, nullable) ajoutée en parallèle, `null` sur les profils existants.
+  - `soldes_initiaux` (une ligne par utilisateur, `unique(utilisateur_id)`, upsert) — report de la
+    dernière fiche de paie à la création d'un profil, corrigeable ensuite ; remplace le
+    report/accrual automatiquement calculé tant que la période en cours est celle de la date de
+    référence saisie.
+  - **RLS des deux tables** (et de `ajustements_solde`, préexistante) élargie à
+    `my_role() in ('manager','admin') or utilisateur_id = my_utilisateur_id()` — sans ce `or`, un
+    salarié consultant SON PROPRE solde (Accueil, self-service) ne peut pas lire ses propres lignes
+    (RLS filtre silencieusement, pas d'erreur), et voit un solde différent de celui affiché à un
+    manager/admin pour la même personne sur "Suivre les soldes".
+  - **Piège PostgREST à retenir** : un embed de jointure sur une **auto-référence** (`utilisateurs`
+    référençant `utilisateurs` via `cree_par_id`) peut se résoudre dans le mauvais sens (l'enfant
+    qui référence la ligne plutôt que la ligne référencée), y compris en nommant explicitement la
+    contrainte FK en hint. Contournement retenu : requête séparée plutôt qu'embed pour ce cas
+    précis (`fetchNomUtilisateur`, `utilisateurs.repository.ts`).
 
 ## Rôles & sécurité (RLS)
 

@@ -98,3 +98,43 @@ export function todayISO(): string {
 export function formatJours(valeur: number): string {
   return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(valeur);
 }
+
+export function formatDateHeureAction(iso: string): string {
+  const d = new Date(iso);
+  const date = new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(d);
+  const heure = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(d);
+  return `${date} à ${heure}`;
+}
+
+/**
+ * Mois (YYYY-MM) à partir duquel un changement à date d'effet donnée prend
+ * effet — granularité mensuelle (décidé le 21/08/2026, historisation
+ * taux_activite/nature_contrat) : si `dateEffet` n'est pas le 1er du mois, le
+ * changement s'applique à partir du 1er du mois suivant (le mois de la date
+ * d'effet finit sur l'ancienne valeur). Utilisé à la fois par le moteur de
+ * calcul (`soldes.repository.ts`) et par l'affichage des tableaux récap
+ * (fiche utilisateur) — une seule définition pour éviter toute dérive entre
+ * calcul et affichage.
+ */
+export function moisEffet(dateEffetIso: string): string {
+  const d = new Date(`${dateEffetIso}T00:00:00Z`);
+  let annee = d.getUTCFullYear();
+  let mois = d.getUTCMonth();
+  if (d.getUTCDate() !== 1) {
+    mois += 1;
+    if (mois > 11) {
+      mois = 0;
+      annee += 1;
+    }
+  }
+  return `${annee}-${String(mois + 1).padStart(2, "0")}`;
+}
+
+export function formatMoisAnneeCourt(anneeMoisIso: string): string {
+  const [annee, mois] = anneeMoisIso.split("-");
+  return `${mois}/${annee.slice(2)}`;
+}

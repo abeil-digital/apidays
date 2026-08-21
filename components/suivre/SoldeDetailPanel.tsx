@@ -272,7 +272,7 @@ export function SoldeDetailPanel({
                   <span
                     className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white ${classeFondTypeBadge(code)}`}
                   >
-                    {`${libelleDepart} - ${formatJjMmAa(historique.periodeDebut)}`}
+                    {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
                   </span>
                 </td>
                 <td className="text-ink-500 px-4 py-3 text-center">—</td>

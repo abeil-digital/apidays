@@ -118,105 +118,116 @@ export function UtilisateursListPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-1">
-        <InputFiltrePill
-          type="search"
-          value={recherche}
-          onChange={(e) => setRecherche(e.target.value)}
-          placeholder="Rechercher un nom ou un email…"
-          className="min-w-48 flex-1"
-        />
-        <SelectFiltrePill
-          value={role}
-          onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}
-        >
-          <option value="tous">Tous les rôles</option>
-          <option value="salarie">Salarié·e</option>
-          <option value="manager">Manager</option>
-          <option value="admin">Admin</option>
-        </SelectFiltrePill>
-        <SelectFiltrePill
-          value={statut}
-          onChange={(e) => setStatut(e.target.value as StatutUtilisateur | "tous")}
-        >
-          <option value="actif">Actifs</option>
-          <option value="archive">Archivés</option>
-          <option value="tous">Tous les statuts</option>
-        </SelectFiltrePill>
-        <SelectFiltrePill
-          value={natureFiltre}
-          onChange={(e) => setNatureFiltre(e.target.value as NatureContrat | "tous")}
-        >
-          <option value="tous">Tous les contrats</option>
-          <option value="cdi">CDI</option>
-          <option value="cdd">CDD</option>
-          <option value="alternance">Alternance</option>
-          <option value="stage">Stage</option>
-        </SelectFiltrePill>
-      </div>
-
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
           {error}
         </div>
       )}
 
-      {loading ? (
-        <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
-      ) : filtres.length === 0 ? (
-        <EmptyRow text="Aucun utilisateur ne correspond à ces filtres." />
-      ) : (
-        <div className="bg-surface-card overflow-x-auto shadow-sm">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead>
-              <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
-                <th className="px-4 py-3">Nom</th>
-                <th className="px-4 py-3">Prénom</th>
-                <th className="px-4 py-3">Email</th>
-                <ThTriable
-                  label="Date d'entrée"
-                  champ="dateEntree"
-                  triActif={tri}
-                  direction={direction}
-                  onClick={trierPar}
-                />
-                <th className="px-4 py-3">Contrat</th>
-                <th className="px-4 py-3">Rôle</th>
-                <th className="px-4 py-3">Statut</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtres.map((u) => (
-                <tr
-                  key={u.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => allerALaFiche(u)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") allerALaFiche(u);
-                  }}
-                  className="border-ink-300/60 hover:bg-surface-app cursor-pointer border-b last:border-b-0"
-                >
-                  <td className="text-ink-900 px-4 py-3 font-semibold">{u.nom}</td>
-                  <td className="px-4 py-3">{u.prenom}</td>
-                  <td className="text-ink-500 px-4 py-3">{u.email}</td>
-                  <td className="px-4 py-3">{formatDate(u.dateEntree)}</td>
-                  <td className="px-4 py-3">
-                    {u.natureContrat ? NATURE_CONTRAT_LABEL[u.natureContrat] : "Non précisé"} ·{" "}
-                    {formatTauxActivite(u.tauxActivite)}
-                  </td>
-                  <td className="px-4 py-3">{ROLE_LABEL[u.role]}</td>
-                  <td className="px-4 py-3">
-                    <Badge tone={u.statut === "actif" ? "success" : "neutral"}>
-                      {u.statut === "actif" ? "Actif" : "Archivé"}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Filtres + tableau réunis dans une seule card (21/08/2026, mise en
+          cohérence DS) — même convention que `HistoriquePage`/
+          `SuivreDemandesPage` (`bg-surface-card` unique, filtres en
+          `px-4 py-3`, séparateur `border-ink-300/60 border-t` avant le
+          contenu) plutôt que des filtres nus au-dessus d'une card
+          `shadow-sm` séparée pour le seul tableau. */}
+      <div className="bg-surface-card w-full">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+          <InputFiltrePill
+            type="search"
+            avecIcone
+            value={recherche}
+            onChange={(e) => setRecherche(e.target.value)}
+            placeholder="Rechercher…"
+            className="w-48"
+          />
+          <SelectFiltrePill
+            value={role}
+            onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}
+          >
+            <option value="tous">Tous les rôles</option>
+            <option value="salarie">Salarié·e</option>
+            <option value="manager">Manager</option>
+            <option value="admin">Admin</option>
+          </SelectFiltrePill>
+          <SelectFiltrePill
+            value={statut}
+            onChange={(e) => setStatut(e.target.value as StatutUtilisateur | "tous")}
+          >
+            <option value="actif">Actifs</option>
+            <option value="archive">Archivés</option>
+            <option value="tous">Tous les statuts</option>
+          </SelectFiltrePill>
+          <SelectFiltrePill
+            value={natureFiltre}
+            onChange={(e) => setNatureFiltre(e.target.value as NatureContrat | "tous")}
+          >
+            <option value="tous">Tous les contrats</option>
+            <option value="cdi">CDI</option>
+            <option value="cdd">CDD</option>
+            <option value="alternance">Alternance</option>
+            <option value="stage">Stage</option>
+          </SelectFiltrePill>
         </div>
-      )}
+
+        <div className="border-ink-300/60 border-t">
+          {loading ? (
+            <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
+          ) : filtres.length === 0 ? (
+            <EmptyRow text="Aucun utilisateur ne correspond à ces filtres." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm md:min-w-[760px]">
+                <thead>
+                  <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+                    <th className="px-4 py-3">Nom</th>
+                    <th className="px-4 py-3">Prénom</th>
+                    <th className="px-4 py-3">Email</th>
+                    <ThTriable
+                      label="Date d'entrée"
+                      champ="dateEntree"
+                      triActif={tri}
+                      direction={direction}
+                      onClick={trierPar}
+                    />
+                    <th className="px-4 py-3">Contrat</th>
+                    <th className="px-4 py-3">Rôle</th>
+                    <th className="px-4 py-3">Statut</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtres.map((u) => (
+                    <tr
+                      key={u.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => allerALaFiche(u)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") allerALaFiche(u);
+                      }}
+                      className="border-ink-300/60 hover:bg-surface-app cursor-pointer border-b last:border-b-0"
+                    >
+                      <td className="text-ink-900 px-4 py-3 font-semibold">{u.nom}</td>
+                      <td className="px-4 py-3">{u.prenom}</td>
+                      <td className="text-ink-500 px-4 py-3">{u.email}</td>
+                      <td className="px-4 py-3">{formatDate(u.dateEntree)}</td>
+                      <td className="px-4 py-3">
+                        {u.natureContrat ? NATURE_CONTRAT_LABEL[u.natureContrat] : "Non précisé"} ·{" "}
+                        {formatTauxActivite(u.tauxActivite)}
+                      </td>
+                      <td className="px-4 py-3">{ROLE_LABEL[u.role]}</td>
+                      <td className="px-4 py-3">
+                        <Badge tone={u.statut === "actif" ? "success" : "neutral"}>
+                          {u.statut === "actif" ? "Actif" : "Archivé"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

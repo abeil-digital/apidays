@@ -7,12 +7,14 @@ import type {
   RegleAnciennete,
   Soldes,
   SoldeCategorie,
+  SoldeInitial,
   TypeDemande,
 } from "@/lib/types";
-import { formatPeriodePillNumerique } from "@/lib/format";
+import { formatPeriodePillNumerique, moisEffet } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
+import { fetchHistoriqueUtilisateur, fetchSoldeInitial } from "@/lib/data/utilisateurs.repository";
 
 /**
  * Repository des soldes de congés/RTT — calculé à la volée à partir de
@@ -112,6 +114,183 @@ function bonusAnciennete(regles: RegleAnciennete[], ans: number): number {
   return Math.max(...eligibles.map((r) => r.joursSupplementaires));
 }
 
+interface EntreeTauxActivite {
+  ancienneValeur: string | null;
+  nouvelleValeur: string;
+  dateEffet: string;
+}
+
+async function fetchHistoriqueTauxActivite(utilisateurId: string): Promise<EntreeTauxActivite[]> {
+  const historique = await fetchHistoriqueUtilisateur(utilisateurId);
+  return historique
+    .filter((h) => h.champ === "taux_activite")
+    .map((h) => ({
+      ancienneValeur: h.ancienneValeur,
+      nouvelleValeur: h.nouvelleValeur,
+      dateEffet: h.dateEffet,
+    }));
+}
+
+/**
+ * Résout le taux d'activité en vigueur pour un mois donné (`anneeMoisIso`,
+ * format YYYY-MM) — prorata mensuel plutôt que recalcul rétroactif plat, voir
+ * CONTEXTE.md (21/08/2026). Sans historique (ou pour un mois antérieur à la
+ * première entrée), retombe sur `tauxActuel`/`ancienneValeur` : un profil sans
+ * changement de taux calcule un solde identique à avant cette fonctionnalité.
+ */
+function resolverTauxActiviteEffectif(
+  historique: EntreeTauxActivite[],
+  tauxActuel: number,
+  anneeMoisIso: string,
+): number {
+  if (historique.length === 0) return tauxActuel;
+
+  const trie = [...historique].sort((a, b) => a.dateEffet.localeCompare(b.dateEffet));
+  let resultat: number | null = null;
+  for (const entree of trie) {
+    if (moisEffet(entree.dateEffet) <= anneeMoisIso) {
+      resultat = Number(entree.nouvelleValeur);
+    } else {
+      break;
+    }
+  }
+  if (resultat !== null) return resultat;
+
+  const premiere = trie[0];
+  return premiere.ancienneValeur !== null ? Number(premiere.ancienneValeur) : tauxActuel;
+}
+
+/** Somme, mois par mois depuis `periodeDebut`, de l'acquisition mensuelle
+ * (`tauxAcquisitionMensuel * tauxEffectif/100`) sur `nbMois` mois — remplace
+ * la multiplication plate `nbMois * tauxAcquisitionMensuel * prorata` pour ne
+ * pas recalculer rétroactivement un mois déjà acquis à l'ancien taux. */
+function accrualMensuelSomme(
+  tauxAcquisitionMensuel: number,
+  historique: EntreeTauxActivite[],
+  tauxActuel: number,
+  periodeDebut: Date,
+  nbMois: number,
+): number {
+  let total = 0;
+  for (let i = 0; i < nbMois; i++) {
+    const dateMois = new Date(
+      Date.UTC(periodeDebut.getUTCFullYear(), periodeDebut.getUTCMonth() + i, 1),
+    );
+    const cle = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
+    total +=
+      tauxAcquisitionMensuel * (resolverTauxActiviteEffectif(historique, tauxActuel, cle) / 100);
+  }
+  return total;
+}
+
+/** 1er jour du mois suivant `dateIsoRef` — toujours le mois d'après, même si
+ * `dateIsoRef` est déjà un 1er (le solde saisi "à date" est supposé inclure
+ * l'acquisition du mois en cours, l'accrual ne doit repartir qu'au mois
+ * suivant). Utilisé par `resolverPointDepartAccrual` (solde initial). */
+function premierJourMoisSuivant(dateIsoRef: string): Date {
+  const d = new Date(`${dateIsoRef}T00:00:00Z`);
+  let annee = d.getUTCFullYear();
+  let mois = d.getUTCMonth() + 1;
+  if (mois > 11) {
+    mois = 0;
+    annee += 1;
+  }
+  return new Date(Date.UTC(annee, mois, 1));
+}
+
+/**
+ * Point de départ et base de l'accrual RTT/CPA (21/08/2026, solde initial
+ * lancement en prod) — si un solde initial existe et que sa date de
+ * référence tombe dans la période en cours de calcul, l'accrual ne repart
+ * plus du 1er jour de la période mais du mois suivant la référence, avec le
+ * solde saisi comme base (au lieu de 0) : le report/accrual automatique
+ * n'aurait aucune donnée fiable avant la référence (pas de `demandes_conges`
+ * antérieures à l'usage de l'app). Une fois la référence dans une période
+ * antérieure (période suivante entamée), l'app a tout suivi elle-même :
+ * comportement normal repris (retombe sur `{ debut: periode.debut, base: 0 }`).
+ */
+function resolverPointDepartAccrual(
+  periode: Periode,
+  soldeInitial: SoldeInitial | null,
+  champ: "rtt" | "cpa",
+): { debut: Date; base: number; dateAffichage: string } {
+  if (
+    soldeInitial &&
+    soldeInitial.dateReference >= dateIso(periode.debut) &&
+    soldeInitial.dateReference <= dateIso(periode.fin)
+  ) {
+    return {
+      debut: premierJourMoisSuivant(soldeInitial.dateReference),
+      base: soldeInitial[champ],
+      dateAffichage: soldeInitial.dateReference,
+    };
+  }
+  return { debut: periode.debut, base: 0, dateAffichage: dateIso(periode.debut) };
+}
+
+/**
+ * Capital CP total effectif pour la période en cours (21/08/2026, solde
+ * initial) — le CP est un capital figé, acquis en une fois pour toute la
+ * période (1er juin au 31 mai par ex.), pas recalculé mois par mois (décision
+ * Vincent, 21/08/2026). Si un solde initial existe et que la période
+ * précédente s'est terminée avant ou à sa date de référence, la valeur CP
+ * saisie **remplace entièrement** `capitalBase + reportAutomatique` — pas
+ * uniquement le report : la fiche de paie donne un solde total à cette date,
+ * pas un simple reliquat auquel il faudrait encore ajouter un nouveau capital
+ * calculé par l'app (qui ferait double emploi avec l'historique réel déjà
+ * incorporé dans la valeur saisie). Sinon (référence plus ancienne qu'une
+ * période déjà entièrement suivie par l'app, ou pas de solde initial) :
+ * calcul automatique inchangé.
+ */
+function resolverCapitalCpTotal(
+  capitalBase: number,
+  periodePrecedente: Periode,
+  soldeInitial: SoldeInitial | null,
+  reportAutomatique: number,
+): number {
+  if (soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference) {
+    return soldeInitial.cp;
+  }
+  return capitalBase + reportAutomatique;
+}
+
+/**
+ * Restreint la borne basse d'une période de CONSOMMATION (validée, en
+ * attente, ajustements) à la date de référence du solde initial quand celui-
+ * ci s'applique (21/08/2026, correctif) — sans ça, la consommation déjà
+ * comptée dans le solde saisi (une fiche de paie donne un solde déjà net de
+ * ce qui a été pris) se retrouvait déduite une seconde fois via les
+ * `demandes_conges` réellement enregistrées dans l'app avant la date de
+ * référence, faisant apparaître un solde faussement négatif. Utilisée pour le
+ * remplacement complet côté CP (`resolverCapitalCpTotal`, condition sur
+ * `periodePrecedente`) — la fenêtre de conso CPA restant sur la période
+ * SUIVANTE n'a pas besoin de ce correctif, la référence n'y tombe jamais.
+ */
+function periodeConsommationCp(
+  periodeEnCours: Periode,
+  periodePrecedente: Periode,
+  soldeInitial: SoldeInitial | null,
+): Periode {
+  if (soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference) {
+    return { debut: new Date(`${soldeInitial.dateReference}T00:00:00Z`), fin: periodeEnCours.fin };
+  }
+  return periodeEnCours;
+}
+
+/** Même principe que `periodeConsommationCp`, pour la fenêtre de conso
+ * RTT/CPA (accrual mensuel, condition sur l'appartenance à la période plutôt
+ * que sur `periodePrecedente` — voir `resolverPointDepartAccrual`). */
+function periodeConsommationAccrual(periode: Periode, soldeInitial: SoldeInitial | null): Periode {
+  if (
+    soldeInitial &&
+    soldeInitial.dateReference >= dateIso(periode.debut) &&
+    soldeInitial.dateReference <= dateIso(periode.fin)
+  ) {
+    return { debut: new Date(`${soldeInitial.dateReference}T00:00:00Z`), fin: periode.fin };
+  }
+  return periode;
+}
+
 async function getUtilisateurIdCourant(supabase: SupabaseClient): Promise<string> {
   const { data, error } = await supabase.rpc("my_utilisateur_id");
   if (error || !data) {
@@ -196,22 +375,29 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
   const supabase = createClient();
   const id = utilisateurId ?? (await getUtilisateurIdCourant(supabase));
 
-  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition, reglesAnciennete] =
-    await Promise.all([
-      supabase
-        .from("utilisateurs")
-        .select("date_entree, anciennete_date_reference, taux_activite")
-        .eq("id", id)
-        .single(),
-      fetchReglesAcquisition(),
-      fetchReglesAnciennete(),
-    ]);
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    reglesAnciennete,
+    historiqueTaux,
+    soldeInitial,
+  ] = await Promise.all([
+    supabase
+      .from("utilisateurs")
+      .select("date_entree, anciennete_date_reference, taux_activite")
+      .eq("id", id)
+      .single(),
+    fetchReglesAcquisition(),
+    fetchReglesAnciennete(),
+    fetchHistoriqueTauxActivite(id),
+    fetchSoldeInitial(id),
+  ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
     throw new Error("Impossible de charger le profil pour le calcul du solde.");
   }
 
-  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const dateReferenceAnciennete: string =
     utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
   const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
@@ -245,7 +431,14 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
     const periodePrecedente = decalerPeriode(periodeEnCours, -1);
     const periodeSuivante = decalerPeriode(periodeEnCours, 1);
 
-    const capitalBase = 12 * regleCP.tauxAcquisitionMensuel * prorata + bonus;
+    const capitalBase =
+      accrualMensuelSomme(
+        regleCP.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        periodeEnCours.debut,
+        12,
+      ) + bonus;
     const consommePeriodePrecedente = await sommeJours(
       supabase,
       id,
@@ -254,9 +447,16 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       false,
       periodePrecedente,
     );
-    const report = regleCP.reportAutorise
+    const reportAutomatique = regleCP.reportAutorise
       ? Math.max(0, capitalBase - consommePeriodePrecedente)
       : 0;
+    const capitalCpTotal = resolverCapitalCpTotal(
+      capitalBase,
+      periodePrecedente,
+      soldeInitial,
+      reportAutomatique,
+    );
+    const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
 
     const consommeEnCours = await sommeJours(
       supabase,
@@ -264,7 +464,7 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       "CP",
       ["validee"],
       false,
-      periodeEnCours,
+      periodeConsoCp,
     );
     const enAttenteEnCours = await sommeJours(
       supabase,
@@ -272,10 +472,10 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       "CP",
       ["en_attente"],
       false,
-      periodeEnCours,
+      periodeConsoCp,
     );
-    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeEnCours);
-    const soldeCp = capitalBase + report - consommeEnCours + ajustementsEnCours;
+    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp);
+    const soldeCp = capitalCpTotal - consommeEnCours + ajustementsEnCours;
 
     cp = {
       valeur: soldeCp,
@@ -284,8 +484,21 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       conditionAccent: formatDateCourte(periodeEnCours.fin),
     };
 
-    const moisEcoulesCpa = moisEntiersEcoules(periodeEnCours.debut, aujourdhui);
-    const accrualCpa = moisEcoulesCpa * regleCP.tauxAcquisitionMensuel * prorata;
+    const { debut: debutCpa, base: baseCpa } = resolverPointDepartAccrual(
+      periodeEnCours,
+      soldeInitial,
+      "cpa",
+    );
+    const moisEcoulesCpa = moisEntiersEcoules(debutCpa, aujourdhui);
+    const accrualCpa =
+      baseCpa +
+      accrualMensuelSomme(
+        regleCP.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        debutCpa,
+        moisEcoulesCpa,
+      );
     const consommeCpa = await sommeJours(supabase, id, "CP", ["validee"], true, periodeSuivante);
     const enAttenteCpa = await sommeJours(
       supabase,
@@ -318,10 +531,24 @@ export async function fetchSoldes(utilisateurId?: string): Promise<Soldes> {
       regleRTT.periodeDebutMois,
       regleRTT.periodeDebutJour,
     );
-    const moisEcoules = moisEntiersEcoules(periodeRtt.debut, aujourdhui);
-    const accrual = moisEcoules * regleRTT.tauxAcquisitionMensuel * prorata;
-    const consomme = await sommeJours(supabase, id, "RTT", ["validee"], null, periodeRtt);
-    const enAttente = await sommeJours(supabase, id, "RTT", ["en_attente"], null, periodeRtt);
+    const { debut: debutRtt, base: baseRtt } = resolverPointDepartAccrual(
+      periodeRtt,
+      soldeInitial,
+      "rtt",
+    );
+    const moisEcoules = moisEntiersEcoules(debutRtt, aujourdhui);
+    const accrual =
+      baseRtt +
+      accrualMensuelSomme(
+        regleRTT.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        debutRtt,
+        moisEcoules,
+      );
+    const periodeConsoRtt = periodeConsommationAccrual(periodeRtt, soldeInitial);
+    const consomme = await sommeJours(supabase, id, "RTT", ["validee"], null, periodeConsoRtt);
+    const enAttente = await sommeJours(supabase, id, "RTT", ["en_attente"], null, periodeConsoRtt);
     const solde = Math.max(0, accrual - consomme);
 
     rtt = {
@@ -352,16 +579,21 @@ export async function fetchSoldeAnticipe(
   const id = await getUtilisateurIdCourant(supabase);
   const reference = new Date(`${dateReference}T00:00:00Z`);
 
-  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
-    [
-      supabase.from("utilisateurs").select("taux_activite").eq("id", id).single(),
-      fetchReglesAcquisition(),
-    ],
-  );
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    historiqueTaux,
+    soldeInitial,
+  ] = await Promise.all([
+    supabase.from("utilisateurs").select("taux_activite").eq("id", id).single(),
+    fetchReglesAcquisition(),
+    fetchHistoriqueTauxActivite(id),
+    fetchSoldeInitial(id),
+  ]);
   if (erreurUtilisateur || !utilisateurRow) {
     throw new Error("Impossible de charger le profil pour le calcul du solde anticipé.");
   }
-  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
 
   if (type === "RTT") {
     const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
@@ -371,9 +603,23 @@ export async function fetchSoldeAnticipe(
       regleRTT.periodeDebutMois,
       regleRTT.periodeDebutJour,
     );
-    const moisEcoules = moisEntiersEcoules(periodeRtt.debut, reference);
-    const accrual = moisEcoules * regleRTT.tauxAcquisitionMensuel * prorata;
-    const consomme = await sommeJours(supabase, id, "RTT", ["validee"], null, periodeRtt);
+    const { debut: debutRtt, base: baseRtt } = resolverPointDepartAccrual(
+      periodeRtt,
+      soldeInitial,
+      "rtt",
+    );
+    const moisEcoules = moisEntiersEcoules(debutRtt, reference);
+    const accrual =
+      baseRtt +
+      accrualMensuelSomme(
+        regleRTT.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        debutRtt,
+        moisEcoules,
+      );
+    const periodeConsoRtt = periodeConsommationAccrual(periodeRtt, soldeInitial);
+    const consomme = await sommeJours(supabase, id, "RTT", ["validee"], null, periodeConsoRtt);
     return Math.max(0, accrual - consomme);
   }
 
@@ -388,8 +634,21 @@ export async function fetchSoldeAnticipe(
     regleCP.periodeDebutJour,
   );
   const periodeSuivante = decalerPeriode(periodeEnCours, 1);
-  const moisEcoulesCpa = moisEntiersEcoules(periodeEnCours.debut, reference);
-  const accrualCpa = moisEcoulesCpa * regleCP.tauxAcquisitionMensuel * prorata;
+  const { debut: debutCpa, base: baseCpa } = resolverPointDepartAccrual(
+    periodeEnCours,
+    soldeInitial,
+    "cpa",
+  );
+  const moisEcoulesCpa = moisEntiersEcoules(debutCpa, reference);
+  const accrualCpa =
+    baseCpa +
+    accrualMensuelSomme(
+      regleCP.tauxAcquisitionMensuel,
+      historiqueTaux,
+      tauxActuel,
+      debutCpa,
+      moisEcoulesCpa,
+    );
   const consommeCpa = await sommeJours(supabase, id, "CP", ["validee"], true, periodeSuivante);
   return Math.max(0, accrualCpa - consommeCpa);
 }
@@ -404,16 +663,23 @@ export async function fetchSoldeAnticipe(
 export async function fetchHistoriqueCp(utilisateurId: string): Promise<HistoriqueSolde> {
   const supabase = createClient();
 
-  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition, reglesAnciennete] =
-    await Promise.all([
-      supabase
-        .from("utilisateurs")
-        .select("date_entree, anciennete_date_reference, taux_activite")
-        .eq("id", utilisateurId)
-        .single(),
-      fetchReglesAcquisition(),
-      fetchReglesAnciennete(),
-    ]);
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    reglesAnciennete,
+    historiqueTaux,
+    soldeInitial,
+  ] = await Promise.all([
+    supabase
+      .from("utilisateurs")
+      .select("date_entree, anciennete_date_reference, taux_activite")
+      .eq("id", utilisateurId)
+      .single(),
+    fetchReglesAcquisition(),
+    fetchReglesAnciennete(),
+    fetchHistoriqueTauxActivite(utilisateurId),
+    fetchSoldeInitial(utilisateurId),
+  ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
     throw new Error("Impossible de charger le profil pour l'historique du solde.");
@@ -424,7 +690,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
     throw new Error("Aucune règle d'acquisition CP paramétrée.");
   }
 
-  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const dateReferenceAnciennete: string =
     utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
   const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
@@ -440,7 +706,14 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
   );
   const periodePrecedente = decalerPeriode(periodeEnCours, -1);
 
-  const capitalBase = 12 * regleCP.tauxAcquisitionMensuel * prorata + bonus;
+  const capitalBase =
+    accrualMensuelSomme(
+      regleCP.tauxAcquisitionMensuel,
+      historiqueTaux,
+      tauxActuel,
+      periodeEnCours.debut,
+      12,
+    ) + bonus;
   const consommePeriodePrecedente = await sommeJours(
     supabase,
     utilisateurId,
@@ -449,8 +722,20 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
     false,
     periodePrecedente,
   );
-  const report = regleCP.reportAutorise ? Math.max(0, capitalBase - consommePeriodePrecedente) : 0;
-  const soldeDepart = capitalBase + report;
+  const reportAutomatique = regleCP.reportAutorise
+    ? Math.max(0, capitalBase - consommePeriodePrecedente)
+    : 0;
+  const soldeDepart = resolverCapitalCpTotal(
+    capitalBase,
+    periodePrecedente,
+    soldeInitial,
+    reportAutomatique,
+  );
+  const soldeDepartDate =
+    soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference
+      ? soldeInitial.dateReference
+      : dateIso(periodeEnCours.debut);
+  const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
@@ -466,14 +751,14 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", false)
       .eq("statut", "validee")
-      .gte("date_debut", dateIso(periodeEnCours.debut))
+      .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
     supabase
       .from("ajustements_solde")
       .select("id, delta_jours, motif, created_at")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
-      .gte("created_at", periodeEnCours.debut.toISOString())
+      .gte("created_at", periodeConsoCp.debut.toISOString())
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
     supabase
       .from("demandes_conges")
@@ -482,7 +767,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", false)
       .eq("statut", "en_attente")
-      .gte("date_debut", dateIso(periodeEnCours.debut))
+      .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
 
@@ -583,6 +868,7 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
     soldeDepart,
+    soldeDepartDate,
     mois: moisListe,
     soldeActuel: cumul,
     enAttente,
@@ -605,12 +891,17 @@ export async function fetchHistoriqueCp(utilisateurId: string): Promise<Historiq
 export async function fetchHistoriqueRtt(utilisateurId: string): Promise<HistoriqueSolde> {
   const supabase = createClient();
 
-  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
-    [
-      supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
-      fetchReglesAcquisition(),
-    ],
-  );
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    historiqueTaux,
+    soldeInitial,
+  ] = await Promise.all([
+    supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
+    fetchReglesAcquisition(),
+    fetchHistoriqueTauxActivite(utilisateurId),
+    fetchSoldeInitial(utilisateurId),
+  ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
     throw new Error("Impossible de charger le profil pour l'historique du solde.");
@@ -621,14 +912,24 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
     throw new Error("Aucune règle d'acquisition RTT paramétrée.");
   }
 
-  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
   const periodeRtt = periodeContenant(
     aujourdhui,
     regleRTT.periodeDebutMois,
     regleRTT.periodeDebutJour,
   );
-  const moisEcoules = moisEntiersEcoules(periodeRtt.debut, aujourdhui);
+  const {
+    debut: debutRtt,
+    base: baseRtt,
+    dateAffichage: soldeDepartDate,
+  } = resolverPointDepartAccrual(
+    periodeRtt,
+    soldeInitial,
+    "rtt",
+  );
+  const moisEcoules = moisEntiersEcoules(debutRtt, aujourdhui);
+  const periodeConsoRtt = periodeConsommationAccrual(periodeRtt, soldeInitial);
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "RTT");
 
@@ -642,7 +943,7 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("statut", "validee")
-      .gte("date_debut", dateIso(periodeRtt.debut))
+      .gte("date_debut", dateIso(periodeConsoRtt.debut))
       .lte("date_debut", dateIso(periodeRtt.fin)),
     supabase
       .from("demandes_conges")
@@ -650,7 +951,7 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("statut", "en_attente")
-      .gte("date_debut", dateIso(periodeRtt.debut))
+      .gte("date_debut", dateIso(periodeConsoRtt.debut))
       .lte("date_debut", dateIso(periodeRtt.fin)),
   ]);
 
@@ -666,21 +967,18 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
     jours: number;
   }
 
-  const accrualMensuel = regleRTT.tauxAcquisitionMensuel * prorata;
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
     const dateMois = new Date(
-      Date.UTC(
-        periodeRtt.debut.getUTCFullYear(),
-        periodeRtt.debut.getUTCMonth() + i,
-        periodeRtt.debut.getUTCDate(),
-      ),
+      Date.UTC(debutRtt.getUTCFullYear(), debutRtt.getUTCMonth() + i, debutRtt.getUTCDate()),
     );
+    const cleMois = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
+    const tauxEffectif = resolverTauxActiviteEffectif(historiqueTaux, tauxActuel, cleMois);
     return {
       id: `acquisition-${dateIso(dateMois)}`,
       type: "acquisition",
       date: dateIso(dateMois),
       libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
-      jours: accrualMensuel,
+      jours: regleRTT.tauxAcquisitionMensuel * (tauxEffectif / 100),
     };
   });
 
@@ -719,7 +1017,7 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
     }
   }
 
-  let cumul = 0;
+  let cumul = baseRtt;
   const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
     const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
       .filter((m) => m.date.slice(0, 7) === cle)
@@ -754,7 +1052,8 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
   return {
     periodeDebut: dateIso(periodeRtt.debut),
     periodeFin: dateIso(periodeRtt.fin),
-    soldeDepart: 0,
+    soldeDepart: baseRtt,
+    soldeDepartDate,
     mois: moisListe,
     soldeActuel: Math.max(0, cumul),
     enAttente,
@@ -779,12 +1078,17 @@ export async function fetchHistoriqueRtt(utilisateurId: string): Promise<Histori
 export async function fetchHistoriqueCpa(utilisateurId: string): Promise<HistoriqueSolde> {
   const supabase = createClient();
 
-  const [{ data: utilisateurRow, error: erreurUtilisateur }, reglesAcquisition] = await Promise.all(
-    [
-      supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
-      fetchReglesAcquisition(),
-    ],
-  );
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    historiqueTaux,
+    soldeInitial,
+  ] = await Promise.all([
+    supabase.from("utilisateurs").select("taux_activite").eq("id", utilisateurId).single(),
+    fetchReglesAcquisition(),
+    fetchHistoriqueTauxActivite(utilisateurId),
+    fetchSoldeInitial(utilisateurId),
+  ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
     throw new Error("Impossible de charger le profil pour l'historique du solde.");
@@ -795,7 +1099,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     throw new Error("Aucune règle d'acquisition CP paramétrée.");
   }
 
-  const prorata = Number(utilisateurRow.taux_activite ?? 100) / 100;
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
   const periodeEnCours = periodeContenant(
     aujourdhui,
@@ -803,7 +1107,12 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     regleCP.periodeDebutJour,
   );
   const periodeSuivante = decalerPeriode(periodeEnCours, 1);
-  const moisEcoules = moisEntiersEcoules(periodeEnCours.debut, aujourdhui);
+  const {
+    debut: debutCpa,
+    base: baseCpa,
+    dateAffichage: soldeDepartDate,
+  } = resolverPointDepartAccrual(periodeEnCours, soldeInitial, "cpa");
+  const moisEcoules = moisEntiersEcoules(debutCpa, aujourdhui);
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
@@ -843,21 +1152,18 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     jours: number;
   }
 
-  const accrualMensuel = regleCP.tauxAcquisitionMensuel * prorata;
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
     const dateMois = new Date(
-      Date.UTC(
-        periodeEnCours.debut.getUTCFullYear(),
-        periodeEnCours.debut.getUTCMonth() + i,
-        periodeEnCours.debut.getUTCDate(),
-      ),
+      Date.UTC(debutCpa.getUTCFullYear(), debutCpa.getUTCMonth() + i, debutCpa.getUTCDate()),
     );
+    const cleMois = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
+    const tauxEffectif = resolverTauxActiviteEffectif(historiqueTaux, tauxActuel, cleMois);
     return {
       id: `acquisition-${dateIso(dateMois)}`,
       type: "acquisition",
       date: dateIso(dateMois),
       libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
-      jours: accrualMensuel,
+      jours: regleCP.tauxAcquisitionMensuel * (tauxEffectif / 100),
     };
   });
 
@@ -874,7 +1180,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
 
-  let cumul = 0;
+  let cumul = baseCpa;
   const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
     const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
       .filter((m) => m.date.slice(0, 7) === cle)
@@ -909,7 +1215,8 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
-    soldeDepart: 0,
+    soldeDepart: baseCpa,
+    soldeDepartDate,
     mois: moisListe,
     soldeActuel: Math.max(0, cumul),
     enAttente,

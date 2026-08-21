@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import type { InputHTMLAttributes, SelectHTMLAttributes } from "react";
 
 /**
@@ -33,8 +33,25 @@ export function SelectFiltrePill(props: SelectHTMLAttributes<HTMLSelectElement>)
   );
 }
 
-/** Variante `<input>` (date, texte, recherche…) — même pill, sans chevron. */
-export function InputFiltrePill(props: InputHTMLAttributes<HTMLInputElement>) {
-  const { className, ...rest } = props;
-  return <input {...rest} className={`${CLASSE_FILTRE_PILL} ${className ?? ""}`} />;
+/** Variante `<input>` (date, texte, recherche…) — même pill, sans chevron.
+ * `avecIcone` (21/08/2026, opt-in) : superpose un picto loupe à gauche, même
+ * principe que le chevron de `SelectFiltrePill` — réservé aux champs de
+ * recherche (`type="search"`), les autres usages (date…) ne le passent pas
+ * et gardent le rendu d'origine. */
+export function InputFiltrePill(
+  props: InputHTMLAttributes<HTMLInputElement> & { avecIcone?: boolean },
+) {
+  const { className, avecIcone, ...rest } = props;
+  if (!avecIcone) {
+    return <input {...rest} className={`${CLASSE_FILTRE_PILL} ${className ?? ""}`} />;
+  }
+  return (
+    <div className="relative inline-block">
+      <Search
+        size={12}
+        className="text-mint pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2"
+      />
+      <input {...rest} className={`${CLASSE_FILTRE_PILL} pl-7 ${className ?? ""}`} />
+    </div>
+  );
 }
