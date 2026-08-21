@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { Demande, DemandeEquipe } from "@/lib/types";
 import {
   formatDateAction,
@@ -72,8 +74,27 @@ function periodeCourte(debut: string, fin: string): string {
  * période même année, période à cheval sur deux années) que les pills
  * CP/RTT/CPA de `SoldeDetailPanel`/Export paie.
  */
+// Tri "Posé le" (22/08/2026, demande explicite) — cliquer l'en-tête bascule
+// plus récent → moins récent → (retour à l'ordre transmis par l'appelant,
+// ex. tri par date de congé). `null` = pas de tri actif, ordre de `demandes`
+// inchangé.
+type TriPoseLe = "recent" | "ancien" | null;
+
+function trierParPoseLe<T extends Demande>(demandes: T[], tri: TriPoseLe): T[] {
+  if (!tri) return demandes;
+  return [...demandes].sort((a, b) =>
+    tri === "recent" ? b.datePose.localeCompare(a.datePose) : a.datePose.localeCompare(b.datePose),
+  );
+}
+
 export function HistoriqueTable(props: HistoriqueTableProps) {
   const { emptyText = "Aucune demande.", compact = false, onDateClick, selectedId } = props;
+  const [triPoseLe, setTriPoseLe] = useState<TriPoseLe>(null);
+
+  function handleToggleTriPoseLe() {
+    setTriPoseLe((prev) => (prev === "recent" ? "ancien" : prev === "ancien" ? null : "recent"));
+  }
+
   if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
 
   function cellulesCommunes(demande: Demande) {
@@ -141,14 +162,29 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">Dates</th>
             <th className="px-4 py-3">{compact ? "Durée" : "Nbre jours"}</th>
-            <th className="hidden px-4 py-3 md:table-cell">Posé le</th>
+            <th className="hidden px-4 py-3 md:table-cell">
+              <button
+                type="button"
+                onClick={handleToggleTriPoseLe}
+                className="hover:text-ink-900 flex items-center gap-1"
+              >
+                Posé le
+                {triPoseLe === "recent" ? (
+                  <ArrowDown size={12} />
+                ) : triPoseLe === "ancien" ? (
+                  <ArrowUp size={12} />
+                ) : (
+                  <ArrowUpDown size={12} />
+                )}
+              </button>
+            </th>
             {!compact && <th className="hidden px-4 py-3 md:table-cell">Validé le</th>}
             <th className="px-4 py-3">Statut</th>
           </tr>
         </thead>
         <tbody>
           {props.avecCollaborateur
-            ? props.demandes.map((demande) => (
+            ? trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
                 <tr key={demande.id}>
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-1.5">
@@ -163,7 +199,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                   {cellulesCommunes(demande)}
                 </tr>
               ))
-            : props.demandes.map((demande) => (
+            : trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
                 <tr key={demande.id}>{cellulesCommunes(demande)}</tr>
               ))}
         </tbody>

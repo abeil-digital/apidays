@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import type { StatutDemande } from "@/lib/types";
 import { useCalendrier } from "@/hooks/useCalendrier";
@@ -14,7 +15,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
-type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
+type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
 
 const FILTRES: Filtre[] = ["Tous les statuts", "En validation", "Validés", "Refusés"];
 
@@ -25,6 +26,7 @@ const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
 };
 
 const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
+  toutes_dates: "Toutes les dates",
   annee_en_cours: "Année en cours",
   periode_reference: "Période de référence",
   personnalisee: "Sélectionner une période",
@@ -33,6 +35,16 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
 // Types de congés sélectionnables — mêmes codes que la colonne Type du
 // tableau (CPA dérivé de CP + isAnticipation, voir HistoriqueTable).
 const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
+
+// `?statut=`/`?periode=` → filtres pré-sélectionnés (22/08/2026) — lien
+// depuis l'encart "Demandes à étudier" d'Accueil (manager), même principe
+// que `?statut=`/`?demande=` sur `HistoriquePage`.
+const FILTRE_PAR_PARAM_STATUT: Record<string, Filtre> = {
+  en_attente: "En validation",
+};
+const PERIODE_PAR_PARAM: Record<string, PeriodeFiltre> = {
+  toutes_dates: "toutes_dates",
+};
 
 /**
  * "Suivre les demandes" (`/suivre/demandes`) — reprend exactement
@@ -46,6 +58,7 @@ export function SuivreDemandesPage() {
   const { demandes, valider, refuser, regulariser, remettreEnAttente } = useDemandesEquipe();
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const { reglesAcquisition } = useReglesConges();
+  const searchParams = useSearchParams();
 
   // Données calendrier (courant + suivant) pour le lien "Voir" du panneau de
   // détail (`DetailCongePanel`) sur une demande "en attente" — mêmes données
@@ -56,8 +69,12 @@ export function SuivreDemandesPage() {
   const joursFeries = [...calActuel.joursFeries, ...calSuivant.joursFeries];
   const congesImposes = [...calActuel.congesImposes, ...calSuivant.congesImposes];
   const djImposees = [...calActuel.djImposees, ...calSuivant.djImposees];
-  const [filtre, setFiltre] = useState<Filtre>("Tous les statuts");
-  const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
+  const [filtre, setFiltre] = useState<Filtre>(
+    FILTRE_PAR_PARAM_STATUT[searchParams.get("statut") ?? ""] ?? "Tous les statuts",
+  );
+  const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>(
+    PERIODE_PAR_PARAM[searchParams.get("periode") ?? ""] ?? "annee_en_cours",
+  );
   const [debutPerso, setDebutPerso] = useState("");
   const [finPerso, setFinPerso] = useState("");
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
@@ -68,11 +85,13 @@ export function SuivreDemandesPage() {
   const periodeReference = periodeReferenceCp(regleCp);
 
   const { debut, fin } =
-    periodeFiltre === "annee_en_cours"
-      ? { debut: `${anneeActuelle}-01-01`, fin: `${anneeActuelle}-12-31` }
-      : periodeFiltre === "periode_reference"
-        ? periodeReference
-        : { debut: debutPerso, fin: finPerso };
+    periodeFiltre === "toutes_dates"
+      ? { debut: "", fin: "" }
+      : periodeFiltre === "annee_en_cours"
+        ? { debut: `${anneeActuelle}-01-01`, fin: `${anneeActuelle}-12-31` }
+        : periodeFiltre === "periode_reference"
+          ? periodeReference
+          : { debut: debutPerso, fin: finPerso };
 
   // Collaborateurs réellement présents dans les demandes chargées, triés par
   // nom — pas une liste figée en dur (nouveaux profils, départs...).

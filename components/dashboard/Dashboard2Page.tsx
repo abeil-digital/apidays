@@ -18,6 +18,7 @@ import {
 } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
+import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
 import { FaqCard } from "@/components/dashboard/FaqCard";
 import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
 import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
@@ -414,6 +415,8 @@ export function Dashboard2Page() {
           )}
         </div>
       </div>
+
+      {utilisateur.role === "manager" && <DemandesAEtudierCard />}
 
       {/* Titre de section réduit + interlignage resserré (20/08/2026, demande
           explicite) — le h2 passe de text-lg/text-ink-900 à text-sm/text-ink-500

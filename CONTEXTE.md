@@ -2006,10 +2006,41 @@ leur pastille de volume mais ne sont plus elles-mêmes un bouton :
   `<span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce calendrier
 est visible par les collaborateurs` — au lieu de l'ancien texte `Publié le JJ/MM/AAAA` réservé à
   l'année à venir (la date de publication n'est plus affichée).
-- **`/parametrer/calendrier3`** (prototype parallèle créé le 21/08/2026 pour scénariser cette
-  refonte sans toucher à `calendrier2`) reste en place — lien nav "Calendrier (v2)" toujours
-  temporaire, décision à prendre : le remplacer par `calendrier2` (déjà refondu ci-dessus) ou
-  l'abandonner (voir Backlog.md).
+- **`/parametrer/calendrier3` abandonné (22/08/2026)** : prototype créé le 21/08/2026 pour
+  scénariser la refonte ci-dessus sans toucher à `calendrier2` — décision tranchée le jour même une
+  fois `calendrier2` refondu en pratique : route (`app/(app)/parametrer/calendrier3/`),
+  `Calendrier3Page.tsx` et le lien nav temporaire "Calendrier (v2)" (`components/layout/tabs.ts`)
+  supprimés. `/parametrer/calendrier2` reste le seul écran Calendrier.
+
+**Encart "Demandes à étudier" (Accueil, 22/08/2026)** — à destination du profil manager, signale
+les demandes de congés de l'équipe en attente de décision :
+
+- **`DemandesAEtudierCard`** (nouveau, `components/dashboard/DemandesAEtudierCard.tsx`) — fond
+  `bg-status-warning-bg`, gros chiffre à gauche (même taille que la valeur d'une `SoldeCard`,
+  `text-[1.725rem] font-bold`) + libellé "Demande(s) à étudier" sur deux lignes (`text-xs
+font-bold`, taille alignée sur le sous-texte "à poser avant" de `SoldeCard`) + `ChevronRight` à
+  droite. Largeur `md:max-w-[160px]` (proche d'une `SoldeCard`, après plusieurs itérations à
+  600px/450px/200px/180px). Hover `hover:scale-[1.02] hover:shadow` avec `origin-left` — ancrer le
+  point de transformation à gauche (au lieu du centre par défaut) empêche la carte de déborder à
+  gauche de l'écran au survol, l'ancien `hover:scale-105` faisait déborder visiblement. Compte les
+  demandes `en attente` via `useDemandesEquipe()` (toute l'entreprise, pas `useDemandes()` qui ne
+  donne que les demandes du profil connecté) ; masqué si 0. Rendu conditionnel dans
+  `Dashboard2Page.tsx` (`utilisateur.role === "manager"`).
+- **Lien vers `/suivre/demandes`** avec `?statut=en_attente&periode=toutes_dates` — même
+  principe que `?statut=`/`?demande=` déjà utilisé par `HistoriquePage` (`FILTRE_PAR_PARAM_STATUT`,
+  lu via `useSearchParams` dans un `useState` initializer). **Piège rencontré** : `useSearchParams`
+  exige un `<Suspense>` autour de la page en prod (`next build` échouait avec "should be wrapped in
+  a suspense boundary") — `app/(app)/suivre/demandes/page.tsx` ne l'avait pas (contrairement à
+  `app/(app)/historique/page.tsx`, qui l'a déjà pour son propre usage de `useSearchParams`).
+- **`SuivreDemandesPage`** gagne une option de filtre Période **"Toutes les dates"**
+  (`toutes_dates`, `debut`/`fin` vides = pas de restriction) — le tri par défaut restait par date de
+  congé (`debut`) ; reste inchangé ici (pas de demande de le changer), seul le tri de la colonne
+  "Posé le" (voir plus bas) trie explicitement par date de dépôt.
+- **`HistoriqueTable`** (partagé avec `/historique`) : l'en-tête de la colonne **"Posé le" devient
+  cliquable** — bascule plus récent → moins récent → (retour à l'ordre transmis par l'appelant),
+  icône `ArrowUpDown`/`ArrowUp`/`ArrowDown` selon l'état. Tri interne au composant
+  (`trierParPoseLe`, générique sur `T extends Demande`), n'affecte pas l'ordre par défaut tant que
+  l'utilisateur n'a pas cliqué.
 
 ## Décisions prises
 
