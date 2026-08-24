@@ -186,7 +186,7 @@ export function TypeBadge({ code, variant = "circle", label }: TypeBadgeProps) {
   if (variant === "outline") {
     return (
       <span
-        className={`rounded-full border bg-transparent px-2.5 py-1 text-xs font-bold whitespace-nowrap ${CODE_STYLES_OUTLINE[code]}`}
+        className={`rounded-full border bg-white px-2.5 py-1 text-xs font-bold whitespace-nowrap ${CODE_STYLES_OUTLINE[code]}`}
       >
         {label ?? LABEL_COURT[code]}
       </span>

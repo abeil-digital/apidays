@@ -2098,6 +2098,50 @@ variant="pill"` reliées par une flèche, centrées, libellées "Actuel"/"Après
   des `Record<TypeBadgeCode, string>` (même contrainte que `classeFondAttenueTypeBadge` — une
   classe construite par concaténation à l'exécution n'est jamais scannée par le compilateur).
 
+**Refacto tableaux — Suivre les soldes (24/08/2026)** : même chantier, deuxième écran
+(`SuivreSoldesPage.tsx`) :
+
+- **Largeur du tableau verrouillée**, même solution CSS Grid que "Suivre les demandes" —
+  `xl:grid-cols-[minmax(0,900px)_24rem]` (24rem = largeur fixe de `SoldeDetailPanel`, `xl:w-96`)
+  remplace `flex` + largeur conditionnelle (`xl:flex-1` si un solde est ouvert). Vérifié sans
+  débordement à 1024/1280px, largeur du tableau identique avant/après ouverture du panneau
+  (mesuré 688px à 1280px dans les deux cas).
+- **Chargement des soldes remonté au parent** (rupture avec le commentaire d'origine du fichier,
+  qui assumait explicitement "chaque ligne fait son propre appel") — nécessaire pour trier par
+  CP/RTT/CPA : l'ordre d'affichage doit connaître les 3 valeurs de **toutes** les lignes à la
+  fois, ce qu'un `useSoldes` local à chaque `LigneSolde` ne permet pas. `SuivreSoldesPage` fait
+  désormais un seul `Promise.all` sur `fetchSoldes(id)` (repository, pas le hook) pour tous les
+  collaborateurs actifs filtrés, stocké dans `soldesParId: Record<string, Soldes>`, transmis en
+  prop à `LigneSolde`.
+- **En-têtes Collaborateur/CP/RTT/CPA cliquables** — même cycle desc → asc → aucun tri que "Posé
+  le" dans `HistoriqueTable` (`ArrowUpDown`/`ArrowDown`/`ArrowUp`), un seul `ColonneTri` actif à la
+  fois. Tri Collaborateur = alphabétique sur `prénom nom` ; tri CP/RTT/CPA = numérique sur
+  `soldes.<type>.valeur`, valeur manquante traitée comme `0` (collaborateur dont le fetch n'est
+  pas encore résolu).
+- **Colonnes CP/RTT/CPA centrées** (`text-center` sur les `<th>`/`<td>`, `mx-auto` sur le bouton
+  d'en-tête pour centrer le texte + l'icône de tri ensemble) — la colonne Collaborateur reste
+  alignée à gauche (avatar + nom).
+- **Export CSV** (bouton "Exporter (CSV)", coin supérieur droit du filtre, même gabarit que
+  `CongesPaiePage` — `Blob` + lien de téléchargement côté client, BOM UTF-8, séparateur `;`) :
+  exporte les lignes **actuellement affichées**, dans l'ordre affiché (filtre collaborateur + tri
+  actif compris), pas un export brut de toute la base.
+- **Popin de détail démarre sur "Théorique"** (`modeParDefaut="theorique"` passé à
+  `SoldeDetailPanel`) — remplace l'ancien défaut "Réel" documenté comme décision explicite le
+  20/08/2026 ; l'écran collaborateur (Accueil, "mon solde") restait déjà sur "Théorique".
+- **Pill "on" (`variant="outline"` de `TypeBadge`) passe de fond transparent à fond blanc** — les
+  lignes du tableau ayant désormais une teinte permanente à l'ouverture du panneau
+  (`classeFondActifTypeBadge`, même mécanique que `HistoriqueTable` ci-dessus, mais ici calée sur
+  le type effectivement consulté puisqu'une ligne "Suivre les soldes" porte 3 pills CP/RTT/CPA et
+  non un type unique), la pill outline (contour coloré, fond transparent) perdait tout contraste
+  sur ce fond teinté. Fond blanc appliqué globalement dans `TypeBadge.tsx` (seul autre usage :
+  `/design-system`, sur fond blanc — aucun changement visuel là-bas).
+
+**`DemandesAEtudierCard` — état "0" affiché plutôt que masqué (24/08/2026)** : l'encart Accueil
+manager ne disparaît plus quand aucune demande n'est en attente (comportement d'origine du
+22/08/2026) — reste visible avec les teintes `status-success` (vert, `bg-status-success-bg`/
+`text-status-success-fg`) au lieu de `status-warning` (orange), pour signaler explicitement un
+état "à jour" plutôt que de laisser un vide dans la grille Accueil.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

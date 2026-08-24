@@ -50,8 +50,9 @@ interface SoldeDetailPanelProps {
    * soldes" (vue manager, bords carrés contre le bord de l'écran). */
   arrondi?: boolean;
   /** Mode de solde initial (20/08/2026) — Accueil (vue salarié) démarre sur
-   * "théorique" (compte les demandes en attente), "Suivre les soldes" (vue
-   * manager) reste sur "réel" par défaut. */
+   * "théorique" (compte les demandes en attente). "Suivre les soldes" (vue
+   * manager) démarre aussi sur "théorique" depuis le 24/08/2026 (décision
+   * explicite — passait par "réel" par défaut jusque-là). */
   modeParDefaut?: ModeSolde;
   /** En-tête simplifié (20/08/2026) — opt-in : Accueil (vue salarié, "mon
    * solde") remplace l'avatar + nom du collaborateur par le `TypeBadge` du
