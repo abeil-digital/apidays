@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Sheet, Trash2, type LucideIcon } from "lucide-react";
 import { useCalendrier } from "@/hooks/useCalendrier";
@@ -22,25 +22,6 @@ import { dureeCongeImpose } from "@/lib/joursFeries";
 import type { CongeImpose, Demande, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
 
 const TEXTE_VIDE = "Aucun jour off à venir.";
-
-// Nom de la variable CSS du token couleur du type — même procédé `color-mix`
-// que les compteurs de solde (`SoldeCard.tsx`, `VAR_COULEUR_TONE`, 12%),
-// mais à 3% ici (20/08/2026 — 12% puis 6% jugés trop marqués, préférence
-// pour une suggestion très subtile) pour teinter légèrement le fond de
-// chaque card jour selon son type. Couvre tous les `TypeBadgeCode`
-// (`SoldeCard` ne couvre que CP/RTT/CPA).
-const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
-  CP: "--color-cp",
-  RTT: "--color-rtt",
-  CPA: "--color-cpa",
-  CSS: "--color-css",
-  CE: "--color-ce",
-  RECUP: "--color-recup",
-  EVT_FAM: "--color-evtfam",
-  DJI: "--color-dji",
-  CPI: "--color-cpi",
-  FERIE: "--color-ferie",
-};
 
 interface JourOff {
   id: string;
@@ -113,11 +94,28 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
  * "Mon Calendrier" chapote aussi cette liste, demande explicite). Liste
  * intégrale sous cette borne (sans plafond de nombre de lignes, 20/08/2026),
  * triée par date.
- * `jourSurligne` (20/08/2026) — clic sur un jour du calendrier côté
- * `Dashboard2Page` : fait défiler la liste (interne, `overflow-y-auto`)
- * jusqu'à la card correspondante et la surligne brièvement (le parent efface
- * `jourSurligne` après un court délai, ce qui fait disparaître le surlignage
- * via la transition CSS plutôt qu'un minuteur local ici).
+ * Fond "pas vraiment blanc" signalé à plusieurs reprises (21/08/2026 puis
+ * 24/08/2026) malgré un `background-color` vérifié pur `#ffffff` en
+ * inspection (`bg-surface-card`, aucun `box-shadow`/`opacity`/`color-mix`
+ * trouvé en cause à quelque niveau de la hiérarchie, vérifié jusqu'à la
+ * racine de page). Plusieurs pistes testées le 24/08/2026 — bordure
+ * `border-ink-300/40`, gap élargi à 8px, `rounded-xl`/`shadow-sm` calqué sur
+ * les cards `MiniCalendrier` — **aucune n'a changé quoi que ce soit au
+ * rendu perçu par Vincent**, toutes annulées, retour à l'habillage
+ * d'origine (`rounded-sm`, `gap-[3px]`, pas de bordure/ombre). Un test de
+ * diagnostic (fond temporairement rouge vif) faisait suspecter la variante
+ * `lab()` grand-gamut de `--color-red-500` (Tailwind v4, écrans P3) — mais
+ * ce mécanisme ne s'applique pas à `--color-surface-card` (`#fff` unique,
+ * aucune variante `lab()`/`oklch()` dans le CSS compilé), donc sans lien
+ * avéré avec ce fond blanc. **Cause toujours non identifiée** — l'écart de
+ * rendu ne se vérifie pas de façon fiable dans cet environnement automatisé
+ * (même limite que le halo de focus de `SelectPille`), un vrai retour
+ * visuel humain reste nécessaire avant de retenter quoi que ce soit ici.
+ * Le surlignage/scroll auto vers la card d'un jour cliqué sur le calendrier
+ * (`jourSurligne`, introduit le 20/08/2026) a été retiré le 24/08/2026 —
+ * décision explicite de supprimer l'interaction entre le clic sur le
+ * calendrier et cette liste, au profit d'un overlay unique (voir
+ * `SnippetJourCalendrier`, `Dashboard2Page`/`CalendrierCollaborateur`).
  * `finPeriode`/`debutPeriode` (20/08/2026, demande explicite) — le filtre de
  * "Mon Calendrier" (onglets Année en cours / Période de référence CP /
  * Année suivante) chapote aussi cette liste : bornes de la période active
@@ -129,7 +127,6 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
  * aucun filtre de période (comportement d'origine).
  */
 interface ProchainsJoursOffCardProps {
-  jourSurligne?: string | null;
   debutPeriode?: string;
   finPeriode?: string;
   /** Masque les demandes personnelles de l'utilisateur courant et le lien
@@ -185,10 +182,17 @@ interface ProchainsJoursOffCardProps {
     }) => Promise<CongeImpose>;
     ajouterDj: (input: { date: string; demiJournee: DemiJournee }) => Promise<DjImposee>;
   };
+  /** Consulter les jours off d'un AUTRE collaborateur plutôt que ceux de
+   * l'utilisateur connecté (24/08/2026, `/suivre/calendrier` — manager/admin)
+   * — passé à `useDemandes`. Masque aussi le lien "Gérer mes demandes" (mène
+   * à `/historique`, propre à l'utilisateur connecté, non pertinent en
+   * consultant quelqu'un d'autre) indépendamment de `masquerDemandesPerso`
+   * (qui masque les demandes elles-mêmes, pas seulement ce lien). Défaut :
+   * comportement d'origine, l'utilisateur connecté. */
+  utilisateurId?: string;
 }
 
 export function ProchainsJoursOffCard({
-  jourSurligne,
   debutPeriode,
   finPeriode,
   masquerDemandesPerso = false,
@@ -197,12 +201,12 @@ export function ProchainsJoursOffCard({
   avecSuppression = false,
   toutAfficher = false,
   donneesInjectees,
+  utilisateurId,
 }: ProchainsJoursOffCardProps = {}) {
   const anneeActuelle = new Date().getFullYear();
   const calActuel = useCalendrier(anneeActuelle);
   const calSuivant = useCalendrier(anneeActuelle + 1);
-  const { demandes, loading: loadingDemandes } = useDemandes();
-  const lignesRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const { demandes, loading: loadingDemandes } = useDemandes(utilisateurId);
   const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null);
   // Confirmation a posteriori de la suppression (22/08/2026) — toaster plutôt
   // qu'une popup bloquante, y compris pour l'échec (le jour reste alors dans
@@ -358,15 +362,6 @@ export function ProchainsJoursOffCard({
     )
     .sort((a, b) => a.debut.localeCompare(b.debut));
 
-  const idSurligne = jourSurligne
-    ? prochains.find((j) => jourSurligne >= j.debut && jourSurligne <= j.fin)?.id
-    : undefined;
-
-  useEffect(() => {
-    if (!idSurligne) return;
-    lignesRef.current.get(idSurligne)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [idSurligne]);
-
   return (
     <div className="flex h-full w-full flex-col lg:max-w-[300px] lg:shrink-0">
       {chargement ? (
@@ -392,20 +387,7 @@ export function ProchainsJoursOffCard({
                     {`${MOIS_FR[mois - 1]} ${annee}`}
                   </div>
                 )}
-                <div
-                  ref={(el) => {
-                    if (el) lignesRef.current.set(j.id, el);
-                    else lignesRef.current.delete(j.id);
-                  }}
-                  className={`bg-surface-card group flex items-center gap-3 rounded-sm px-[14.4px] py-3 transition-shadow duration-500 ${
-                    j.id === idSurligne ? "ring-2" : ""
-                  }`}
-                  style={
-                    {
-                      "--tw-ring-color": `var(${VAR_COULEUR_TYPE[j.code]})`,
-                    } as React.CSSProperties
-                  }
-                >
+                <div className="bg-surface-card group flex items-center gap-3 rounded-sm px-[14.4px] py-3">
                   <BadgeTypeLeger
                     code={j.code}
                     label={j.code === "CPI" && !separerCpiDji ? "CI" : undefined}
@@ -459,7 +441,7 @@ export function ProchainsJoursOffCard({
               (`bg-surface-app`, celui de la page) nécessaire : sans lui, le
               contenu qui défile serait visible par transparence sous le
               lien. */}
-          {!masquerDemandesPerso && (
+          {!masquerDemandesPerso && !utilisateurId && (
             <Link
               href="/historique"
               className="bg-surface-app text-mint hover:text-mint-hover sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"

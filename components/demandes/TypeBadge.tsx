@@ -207,7 +207,7 @@ export function TypeBadge({ code, variant = "circle", label }: TypeBadgeProps) {
     <div
       className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${CODE_STYLES[code]}`}
     >
-      {LABEL_COURT[code]}
+      {label ?? LABEL_COURT[code]}
     </div>
   );
 }

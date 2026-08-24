@@ -2142,6 +2142,98 @@ manager ne disparaît plus quand aucune demande n'est en attente (comportement d
 `text-status-success-fg`) au lieu de `status-warning` (orange), pour signaler explicitement un
 état "à jour" plutôt que de laisser un vide dans la grille Accueil.
 
+**Calendrier admin — `/suivre/calendrier` (24/08/2026)** : nouvel écran manager/admin, permet de
+consulter le calendrier d'un collaborateur. Chantier mené en plusieurs passes le même jour, toutes
+détaillées ci-dessous.
+
+- **Route + sélection du collaborateur** : `app/(app)/suivre/calendrier/page.tsx` →
+  `SuivreCalendrierPage.tsx` (nouveau, `components/suivre/`) — un `SelectFiltrePill` (même
+  convention que `SuivreDemandesPage`/`SuivreSoldesPage`, liste dérivée des utilisateurs actifs
+  chargés via `useUtilisateursAdmin`, triée alphabétiquement), aucune présélection par défaut (état
+  vide explicite tant qu'aucun collaborateur n'est choisi — contrairement à Suivre les
+  demandes/soldes qui affichent d'emblée toute l'équipe, un calendrier individuel n'a pas de choix
+  "évident"). Protégée comme le reste de `/suivre/*` par le préfixe déjà géré dans `proxy.ts`, rien
+  à ajouter côté middleware. Onglet "Calendrier" ajouté dans `components/layout/tabs.ts`
+  (`SUIVRE_TABS`, entre "Suivre les soldes" et "Export paie").
+- **Mauvais gabarit repris puis corrigé en cours de route** : la première version réutilisait
+  `MonCalendrierPage.tsx` (l'écran `/mon-calendrier` existant — onglets `bg-brand`, colonne légende
+  CPI/DJI/Fériés cliquable). Vincent a explicitement écarté ce choix : c'est le calendrier "nouvelle
+  version" d'Accueil (`Dashboard2Page`, section "Mon Calendrier" — onglets `bg-mint/90`, colonne
+  "Prochains jours off", grille `MiniCalendrier` 3 mois/ligne) qui devait servir de gabarit. Les
+  props ajoutées à `MonCalendrierPage.tsx` pour la première tentative ont été intégralement
+  annulées (`git checkout`) plutôt que laissées en code mort.
+- **`CalendrierCollaborateur.tsx`** (nouveau, `components/suivre/`) — réplique le bloc "Mon
+  Calendrier" de `Dashboard2Page` (onglets Année en cours/Période de référence CP/Année suivante,
+  colonne "Prochains jours off" + grille `MiniCalendrier`), adapté : pas de bouton "+"/clic sur jour
+  vide pour poser un congé (un manager ne pose pas à la place d'un collaborateur depuis cet écran,
+  hors scope), pas de cartes Soldes/FAQ/activité récente — uniquement le bloc calendrier, piloté par
+  un `utilisateurId` obligatoire. Duplication de code assumée avec `Dashboard2Page` (mêmes
+  `isoDate`/`moisEntre`/`tipoDuJour`/etc. qu'à l'accoutumée dans ce projet entre les variantes de
+  calendrier — voir le hook partagé encore non fait, `hooks/usePeriodesCalendrier.ts`, noté dans le
+  plan de refonte Calendrier gardé de côté) plutôt qu'une abstraction prématurée pour un 3ᵉ écran.
+- **`useDemandes`/`fetchDemandes` gagnent un `utilisateurId` optionnel** (même principe que
+  `useSoldes`) — sans argument, l'utilisateur connecté ; avec, les demandes d'un autre collaborateur.
+  **Piège évité** : le mécanisme "vu"/journal de `useDemandes` (clés `sessionStorage`/`localStorage`
+  globales au navigateur, pas scopées par utilisateur consulté) est **désactivé** dès qu'un
+  `utilisateurId` est passé — sinon la simple consultation du calendrier d'un collaborateur par le
+  manager aurait marqué les demandes de CE collaborateur comme "vues" en se basant sur l'état de
+  session du manager, corrompant son propre journal. Vérifié : aucun appel RPC
+  `marquer_demande_vue` déclenché en consultant le calendrier d'un collaborateur.
+- **`ProchainsJoursOffCard` gagne le même `utilisateurId` optionnel** — passé à son propre
+  `useDemandes` interne ; masque aussi le lien "Gérer mes demandes" (mène à `/historique`, propre à
+  l'utilisateur connecté, non pertinent en consultant quelqu'un d'autre) indépendamment de
+  `masquerDemandesPerso` (qui masque les demandes elles-mêmes, usage différent côté paramétrage
+  Calendrier).
+- **Overlay "typologie de congé" unifié au clic sur un jour** (`SnippetJourCalendrier.tsx`, nouveau,
+  `components/demandes/`) — remplace le `SnippetDemande` dupliqué dans `Dashboard2Page`/
+  `CalendrierCollaborateur` (qui ne réagissait qu'aux demandes personnelles). Un seul composant,
+  réutilisé par les deux écrans, gère 4 cas (`JourCalendrierClique`, union discriminée) :
+  - `demande` : badge coloré par type + période + "X jour(s)" + `StatusBadge` (seul cas avec un
+    statut de décision à afficher).
+  - `cpi` : badge CPI + période + durée (`dureeCongeImpose`, jours ouvrés moins fériés).
+  - `dji` : badge + date + "Matin"/"Après-midi" — **badge affiché "CI" (pas "DJI"), couleur CPI**
+    (24/08/2026, demande explicite) : même fusion visuelle CPI/DJI sous "Congés imposés" que
+    `ProchainsJoursOffCard`/le compteur par typologie (voir plus bas), pour ne pas afficher "DJI"
+    isolément dans cet overlay alors que le reste de l'écran parle de "CI". Nécessite que la
+    variante `circle` (par défaut) de `TypeBadge` respecte enfin la prop `label` — jusque-là
+    seules les variantes `outline`/`pill` le faisaient, `circle` ignorait silencieusement tout
+    `label` passé et retombait toujours sur `LABEL_COURT[code]` ; corrigé dans `TypeBadge.tsx`,
+    sans impact sur les appelants existants (aucun ne passait `label` avec la variante par défaut).
+  - `ferie` (24/08/2026, ajouté après coup — absent de la version initiale de l'overlay) : badge FE
+    - date + **nom du jour férié** (`JourFerie.libelle`, ex. "Armistice").
+  - Priorité au clic = même ordre que la couleur des pastilles (`tipoDuJour`/`communDuJour`) :
+    demande perso > férié > CPI > DJI. Un jour sans occupant ne déclenche rien (comportement
+    d'origine, inchangé).
+- **Interaction retirée : clic sur le calendrier → surlignage/scroll de "Prochains jours off"**
+  (`jourSurligne`, initialement introduit le 20/08/2026) — décision explicite de la supprimer
+  maintenant que l'overlay ci-dessus est le seul mécanisme de rappel au clic. Code entièrement
+  retiré de `Dashboard2Page`/`CalendrierCollaborateur` (état, prop) et de `ProchainsJoursOffCard`
+  lui-même (prop, `useRef`/`useEffect` de scroll, classe `ring-2` + variable CSS `--tw-ring-color`
+  associée) plutôt que laissé en dead code — plus aucun appelant ne le consommait.
+- **Compteur par typologie** (`compterTypologies.ts` + `CompteurTypologies.tsx`, nouveaux,
+  `components/demandes/`) — sur la même ligne que les onglets de période, poussé à droite
+  (`justify-between`), aligné sur le bas des onglets (`items-end`, pas `items-center` — demande
+  explicite, les pilules d'onglet étant plus hautes que le texte du compteur). Une puce de couleur
+  - libellé + total entre parenthèses par typologie réellement présente sur la période active
+    (`text-[11px] font-semibold text-ink-500`) : Congés payés, RTT, Congés en acquisition, Congés
+    imposés (CPI+DJI fusionnés sous le code "CPI", même convention que l'overlay et
+    `ProchainsJoursOffCard"), Jours fériés, puis CSS/CE/Récupération/Événement familial si présents.
+    **Libellés abrégés** (24/08/2026, demande explicite) : "Congé(s)" → "C.", "Jours" → "J." — "C.
+    payés", "C. en acquisition", "C. sans solde", "C. exceptionnel", "C. imposés", "J. fériés" (RTT/
+    Récupération/Événement familial inchangés, aucun des deux mots à abréger). Rien affiché si aucune
+    typologie sur la période (pas de rangée vide).
+  * Fichier nommé `compterTypologies.ts` (verbe, minuscule) et non `compteurTypologies.ts` —
+    **piège de casse rencontré** : ce nom entrait en collision avec `CompteurTypologies.tsx` (le
+    composant) sur un système de fichiers insensible à la casse, cassant la résolution de module
+    TypeScript ("File name differs... only in casing"). Renommé côté logique de calcul, le
+    composant garde son nom PascalCase standard.
+- **États hover sur les 3 onglets de période** (24/08/2026, demande explicite) — absents jusque-là
+  sur `Dashboard2Page`/`CalendrierCollaborateur` (contrairement au reste de l'app, cf. la
+  généralisation des hover de `Button.tsx` le même jour sur un autre écran). Onglet actif
+  (`bg-mint/90`) : `hover:bg-mint-hover` (token déjà existant, réutilisé). Onglet inactif
+  (`border-mint text-mint bg-transparent`) : `hover:bg-mint-tint` (token déjà existant, utilisé
+  jusque-là pour le fond du bloc "Soldes"). `transition-colors duration-150` ajouté aux deux.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

@@ -31,6 +31,7 @@ const PARAMETRER_TABS: NavTab[] = [
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   { href: "/suivre/soldes", label: "Suivre les soldes", Icon: Wallet },
+  { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/paie", label: "Export paie", Icon: Receipt },
 ];
 

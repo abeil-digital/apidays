@@ -219,16 +219,21 @@ async function calculerNbDemiJournees(
  * s'ajoute en OR à celle du salarié sur ses propres demandes, donc un
  * manager sans ce filtre récupérerait aussi les demandes de toute
  * l'entreprise et les verrait affichées comme les siennes.
+ *
+ * `utilisateurId` optionnel (24/08/2026, même principe que `fetchSoldes`) :
+ * sans argument, l'utilisateur connecté ; avec, n'importe quel collaborateur
+ * — utilisé par `/suivre/calendrier` (manager/admin consultant le calendrier
+ * d'un collaborateur), la RLS élargie manager/admin l'autorise déjà.
  */
-export async function fetchDemandes(): Promise<Demande[]> {
+export async function fetchDemandes(utilisateurId?: string): Promise<Demande[]> {
   const supabase = createClient();
 
-  const utilisateurId = await getUtilisateurId(supabase);
+  const id = utilisateurId ?? (await getUtilisateurId(supabase));
 
   const { data, error } = await supabase
     .from("demandes_conges")
     .select(SELECT_DEMANDE)
-    .eq("utilisateur_id", utilisateurId)
+    .eq("utilisateur_id", id)
     .neq("statut", "annulee")
     .order("date_debut", { ascending: false });
 

@@ -2,20 +2,24 @@
 
 import { useState } from "react";
 import { ChevronDown, Newspaper, PlusCircle } from "lucide-react";
-import { formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
+import { todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { SoldeCard } from "@/components/ui/SoldeCard";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
-  TypeBadge,
   classeFondAttenueTypeBadge,
   classeFondTypeBadge,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
+import {
+  SnippetJourCalendrier,
+  type JourCalendrierClique,
+} from "@/components/demandes/SnippetJourCalendrier";
+import { CompteurTypologies } from "@/components/demandes/CompteurTypologies";
+import { compterTypologies } from "@/components/demandes/compterTypologies";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
 import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
@@ -114,37 +118,6 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
-function SnippetDemande({
-  demande,
-  ancre,
-  onFermer,
-}: {
-  demande: Demande;
-  ancre: DOMRect;
-  onFermer: () => void;
-}) {
-  return (
-    <>
-      <div className="fixed inset-0 z-20" onClick={onFermer} />
-      <div
-        style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
-        className="bg-surface-card z-30 flex w-56 flex-col gap-2 rounded-xl p-3 shadow-lg"
-      >
-        <div className="flex items-center gap-2">
-          <TypeBadge code={codeBadgeDemande(demande)} />
-          <div className="text-ink-900 text-sm font-bold">
-            {formatPeriodeDemande(demande.debut, demande.fin)}
-          </div>
-        </div>
-        <div className="text-ink-500 text-xs">
-          {formatJours(demande.nbDemiJournees / 2)} jour{demande.nbDemiJournees / 2 > 1 ? "s" : ""}
-        </div>
-        <StatusBadge statut={demande.statut} />
-      </div>
-    </>
-  );
-}
-
 /**
  * Accueil collaborateur — écran unique, route `/` (14/08/2026 : remplace
  * l'ancien `DashboardPage`, supprimé ; le nom de fichier/composant
@@ -180,8 +153,9 @@ export function Dashboard2Page() {
   // uniquement quand ouverte via un clic sur un jour vide du calendrier ;
   // reste `null` pour une ouverture "vierge" via le bouton dédié.
   const [dateNouvelleDemande, setDateNouvelleDemande] = useState<string | null>(null);
-  const [snippet, setSnippet] = useState<{ demande: Demande; ancre: DOMRect } | null>(null);
-  const [jourSurligne, setJourSurligne] = useState<string | null>(null);
+  const [snippet, setSnippet] = useState<{ jour: JourCalendrierClique; ancre: DOMRect } | null>(
+    null,
+  );
   const [onglet, setOnglet] = useState<Onglet>("en_cours");
   const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
   const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
@@ -257,6 +231,35 @@ export function Dashboard2Page() {
     return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
+  // Listes fusionnées des 3 années potentiellement pertinentes, filtrées aux
+  // années effectivement visibles (même règle que les pastilles du
+  // calendrier, `anneeVisiblePourCommuns` — les fériés restent toujours
+  // visibles) — alimente le compteur par typologie (`compterTypologies`) sur
+  // la période active.
+  const joursFeriesToutesAnnees = [
+    ...calendrierAnneePrecedente.joursFeries,
+    ...calendrierAnneeA.joursFeries,
+    ...calendrierAnneeB.joursFeries,
+  ];
+  const congesImposesVisibles = [
+    ...calendrierAnneePrecedente.congesImposes,
+    ...calendrierAnneeA.congesImposes,
+    ...calendrierAnneeB.congesImposes,
+  ].filter((c) => anneeVisiblePourCommuns(Number(c.debut.slice(0, 4))));
+  const djImposeesVisibles = [
+    ...calendrierAnneePrecedente.djImposees,
+    ...calendrierAnneeA.djImposees,
+    ...calendrierAnneeB.djImposees,
+  ].filter((d) => anneeVisiblePourCommuns(Number(d.date.slice(0, 4))));
+  const typologies = compterTypologies({
+    demandes,
+    rangeActive,
+    congesImposes: congesImposesVisibles,
+    djImposees: djImposeesVisibles,
+    joursFeries: joursFeriesToutesAnnees,
+    joursFeriesPourDuree: joursFeriesToutesAnnees,
+  });
+
   function demandeDuJour(iso: string): Demande | undefined {
     return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
   }
@@ -328,19 +331,31 @@ export function Dashboard2Page() {
     return Boolean(cpiA && cpiB && cpiA.id === cpiB.id);
   }
 
-  function handleJourClick(iso: string, ancre: DOMRect) {
+  // Ce qui occupe un jour cliqué, dans l'ordre de priorité d'affichage —
+  // demande perso > férié > CPI > DJI, même priorité que `communDuJour`
+  // (24/08/2026 : les fériés ouvrent désormais aussi l'overlay, avec leur
+  // nom — `SnippetJourCalendrier`). Même gating que `communDuJour` pour
+  // CPI/DJI (`anneeVisiblePourCommuns`, les fériés y échappent) : pas
+  // d'overlay pour une entrée qui n'est de toute façon pas affichée sur la
+  // pastille (année à venir non publiée).
+  function occupantDuJour(iso: string): JourCalendrierClique | null {
     const demande = demandeDuJour(iso);
-    if (demande) setSnippet({ demande, ancre });
+    if (demande) return { kind: "demande", demande };
+    const annee = Number(iso.slice(0, 4));
+    const cal = calendrierPourAnnee(annee);
+    const ferie = cal.joursFeries.find((f) => f.date === iso);
+    if (ferie) return { kind: "ferie", ferie };
+    if (!anneeVisiblePourCommuns(annee)) return null;
+    const cpi = cal.congesImposes.find((c) => iso >= c.debut && iso <= c.fin);
+    if (cpi) return { kind: "cpi", cpi };
+    const dji = cal.djImposees.find((d) => d.date === iso);
+    if (dji) return { kind: "dji", dji };
+    return null;
+  }
 
-    // Fait défiler "Prochains jours off" jusqu'à la card du jour cliqué et la
-    // surligne brièvement (20/08/2026, demande explicite) — sur tout clic,
-    // pas seulement une `demande` perso : un jour CI/férié n'a pas de
-    // `demande` mais peut avoir une card dans la liste. Le composant enfant
-    // ignore silencieusement si aucune card ne correspond. Auto-effacé après
-    // 1,5s plutôt qu'un état "actif jusqu'au prochain clic" — un simple flash
-    // de confirmation, pas un état sélectionné persistant.
-    setJourSurligne(iso);
-    setTimeout(() => setJourSurligne(null), 1500);
+  function handleJourClick(iso: string, ancre: DOMRect) {
+    const jour = occupantDuJour(iso);
+    if (jour) setSnippet({ jour, ancre });
   }
 
   // Clic sur un jour SANS congé (20/08/2026, demande explicite) — ouvre
@@ -471,56 +486,64 @@ export function Dashboard2Page() {
           au-dessus des deux colonnes le rend visuellement plus clair. */}
       <div>
         <h2 className="text-ink-500 mb-[14px] px-1 text-sm font-bold">Mon Calendrier</h2>
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          <button
-            type="button"
-            onClick={() => setOnglet("en_cours")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              onglet === "en_cours"
-                ? "bg-mint/90 text-white"
-                : "border-mint text-mint border bg-transparent"
-            }`}
-          >
-            {anneeActuelle}
-          </button>
-          {onglet === "en_cours" && (
-            <SelectAffichage
-              actif={vueCompleteEnCours}
-              onChange={setVueCompleteEnCours}
-              labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-              labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => setOnglet("periode_cp")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              onglet === "periode_cp"
-                ? "bg-mint/90 text-white"
-                : "border-mint text-mint border bg-transparent"
-            }`}
-          >
-            {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-          </button>
-          {onglet === "periode_cp" && (
-            <SelectAffichage
-              actif={vueCompletePeriodeCp}
-              onChange={setVueCompletePeriodeCp}
-              labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-              labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
-            />
-          )}
-          <button
-            type="button"
-            onClick={() => setOnglet("annee_suivante")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold ${
-              onglet === "annee_suivante"
-                ? "bg-mint/90 text-white"
-                : "border-mint text-mint border bg-transparent"
-            }`}
-          >
-            {anneeSuivante}
-          </button>
+        {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
+            même ligne que les onglets de sélection de période, poussé à
+            droite (`justify-between`) : un total par typologie de "day off"
+            réellement présente sur la période active. */}
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setOnglet("en_cours")}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+                onglet === "en_cours"
+                  ? "bg-mint/90 hover:bg-mint-hover text-white"
+                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+              }`}
+            >
+              {anneeActuelle}
+            </button>
+            {onglet === "en_cours" && (
+              <SelectAffichage
+                actif={vueCompleteEnCours}
+                onChange={setVueCompleteEnCours}
+                labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+                labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setOnglet("periode_cp")}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+                onglet === "periode_cp"
+                  ? "bg-mint/90 hover:bg-mint-hover text-white"
+                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+              }`}
+            >
+              {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
+            </button>
+            {onglet === "periode_cp" && (
+              <SelectAffichage
+                actif={vueCompletePeriodeCp}
+                onChange={setVueCompletePeriodeCp}
+                labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+                labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => setOnglet("annee_suivante")}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+                onglet === "annee_suivante"
+                  ? "bg-mint/90 hover:bg-mint-hover text-white"
+                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+              }`}
+            >
+              {anneeSuivante}
+            </button>
+          </div>
+
+          <CompteurTypologies typologies={typologies} />
         </div>
       </div>
 
@@ -548,11 +571,7 @@ export function Dashboard2Page() {
             scrolle en interne (`overflow-y-auto` dans `ProchainsJoursOffCard`)
             au lieu de continuer à grandir. */}
         <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
-          <ProchainsJoursOffCard
-            jourSurligne={jourSurligne}
-            debutPeriode={rangeActive.debut}
-            finPeriode={rangeActive.fin}
-          />
+          <ProchainsJoursOffCard debutPeriode={rangeActive.debut} finPeriode={rangeActive.fin} />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -606,9 +625,10 @@ export function Dashboard2Page() {
       <FaqCard />
 
       {snippet && (
-        <SnippetDemande
-          demande={snippet.demande}
+        <SnippetJourCalendrier
+          jour={snippet.jour}
           ancre={snippet.ancre}
+          joursFeries={joursFeriesToutesAnnees}
           onFermer={() => setSnippet(null)}
         />
       )}

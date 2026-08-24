@@ -29,8 +29,17 @@ interface UseDemandesResult {
  * redéclenchait. Pas de polling continu (pas d'infra temps réel ici), juste
  * ce déclencheur ponctuel au moment le plus probable où l'utilisateur
  * s'attend à voir du nouveau.
+ *
+ * `utilisateurId` optionnel (24/08/2026, même principe que `useSoldes`) :
+ * sans argument, l'utilisateur connecté ; avec, les demandes d'un autre
+ * collaborateur (`/suivre/calendrier`, manager/admin). Dans ce cas, tout le
+ * mécanisme "vu"/journal ci-dessous est désactivé — il est scopé par des
+ * clés `sessionStorage`/`localStorage` globales au NAVIGATEUR, pas par
+ * utilisateur consulté : le laisser tourner marquerait les demandes du
+ * collaborateur regardé comme "vues" en se basant sur l'état de session du
+ * manager, corrompant son propre journal.
  */
-export function useDemandes(): UseDemandesResult {
+export function useDemandes(utilisateurId?: string): UseDemandesResult {
   const [demandes, setDemandes] = useState<Demande[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +48,7 @@ export function useDemandes(): UseDemandesResult {
   useEffect(() => {
     let cancelled = false;
 
-    fetchDemandes()
+    fetchDemandes(utilisateurId)
       .then((data) => {
         if (!cancelled) {
           setDemandes(data);
@@ -56,7 +65,7 @@ export function useDemandes(): UseDemandesResult {
     return () => {
       cancelled = true;
     };
-  }, [version]);
+  }, [version, utilisateurId]);
 
   useEffect(() => {
     function handleVisibility() {
@@ -84,6 +93,7 @@ export function useDemandes(): UseDemandesResult {
   // cette liste précédente est marquée "vu" d'un coup — elle représente ce
   // qui était déjà resté affiché toute la session précédente.
   useEffect(() => {
+    if (utilisateurId) return;
     if (loading) return;
     if (sessionStorage.getItem(SESSION_FLAG)) return;
     sessionStorage.setItem(SESSION_FLAG, "1");
@@ -98,7 +108,7 @@ export function useDemandes(): UseDemandesResult {
       setDemandes((prev) => prev.map((d) => (d.id === id ? { ...d, vu: true } : d)));
       marquerDemandeVue(id).catch(() => {});
     });
-  }, [loading]);
+  }, [loading, utilisateurId]);
 
   // Garde `loading` : sans elle, ce `useEffect` s'exécute dès le tout premier
   // rendu (`demandes` encore à `[]`, avant la résolution du fetch initial) et
@@ -106,12 +116,13 @@ export function useDemandes(): UseDemandesResult {
   // ci-dessus n'ait la chance de la lire (bug constaté le 18/08/2026 : la
   // mise en avant ne survivait jamais à un changement de session).
   useEffect(() => {
+    if (utilisateurId) return;
     if (loading) return;
     const nonVues = demandes
       .filter((d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu)
       .map((d) => d.id);
     localStorage.setItem(CARRYOVER_KEY, JSON.stringify(nonVues));
-  }, [loading, demandes]);
+  }, [loading, demandes, utilisateurId]);
 
   const ajouterDemande = useCallback(async (input: NouvelleDemandeInput) => {
     const demande = await creerDemande(input);
