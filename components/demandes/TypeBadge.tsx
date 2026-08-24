@@ -126,6 +126,55 @@ export function classeFondAttenueTypeBadge(code: TypeBadgeCode): string {
   return CODE_STYLES_ATTENUE[code];
 }
 
+// Fond teinté par le type au survol (opacité 15%, plus discrète que la
+// variante 50% ci-dessus, pensée pour une ligne de tableau pleine largeur
+// plutôt qu'une pastille) — même mécanique de couleur que le pill Dates
+// (`classeFondTypeBadge`), appliquée à `HistoriqueTable` (24/08/2026, l'état
+// hover neutre `bg-surface-app` n'était pas assez visible). Distincte de
+// l'état "on" permanent (`classeFondActifTypeBadge`, 30%) d'une ligne dont
+// le détail est ouvert — le survol doit rester plus discret que le "on".
+const CODE_STYLES_HOVER: Record<TypeBadgeCode, string> = {
+  CP: "hover:bg-cp/15",
+  RTT: "hover:bg-rtt/15",
+  CPA: "hover:bg-cpa/15",
+  CSS: "hover:bg-css/15",
+  CE: "hover:bg-ce/15",
+  RECUP: "hover:bg-recup/15",
+  EVT_FAM: "hover:bg-evtfam/15",
+  DJI: "hover:bg-dji/15",
+  CPI: "hover:bg-cpi/15",
+  FERIE: "hover:bg-ferie/15",
+};
+
+/** Classe Tailwind `hover:bg-…/15` d'un code — teinte une ligne/zone entière
+ * au survol avec la couleur du type, sans attendre une sélection. */
+export function classeFondSurvolTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES_HOVER[code];
+}
+
+// Teinte plus marquée que le survol (30% contre 15%) et permanente — état
+// "on" d'une ligne consultée (panneau de détail ouvert dessus,
+// `HistoriqueTable`, 24/08/2026), à distinguer du simple survol passager.
+const CODE_STYLES_ACTIF: Record<TypeBadgeCode, string> = {
+  CP: "bg-cp/30",
+  RTT: "bg-rtt/30",
+  CPA: "bg-cpa/30",
+  CSS: "bg-css/30",
+  CE: "bg-ce/30",
+  RECUP: "bg-recup/30",
+  EVT_FAM: "bg-evtfam/30",
+  DJI: "bg-dji/30",
+  CPI: "bg-cpi/30",
+  FERIE: "bg-ferie/30",
+};
+
+/** Classe Tailwind `bg-…/30` (sans `hover:`) d'un code — même teinte que
+ * `classeFondSurvolTypeBadge` mais appliquée en permanence, pour marquer
+ * une ligne comme "active"/sélectionnée plutôt que simplement survolée. */
+export function classeFondActifTypeBadge(code: TypeBadgeCode): string {
+  return CODE_STYLES_ACTIF[code];
+}
+
 interface TypeBadgeProps {
   code: TypeBadgeCode;
   variant?: "circle" | "outline" | "pill";

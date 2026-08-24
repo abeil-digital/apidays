@@ -4,13 +4,13 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 export type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
-  primary: "bg-mint text-brand-foreground",
-  secondary: "bg-surface-card text-ink-900 border-ink-300 border",
-  ghost: "text-ink-900",
+  primary: "bg-mint text-brand-foreground enabled:hover:bg-mint-hover",
+  secondary: "bg-surface-card text-ink-900 border-ink-300 border enabled:hover:bg-surface-app",
+  ghost: "text-ink-900 enabled:hover:opacity-70",
 };
 
 const BASE_STYLES =
-  "inline-flex items-center justify-center gap-2 text-sm font-semibold disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ink-300 disabled:text-ink-500";
+  "inline-flex items-center justify-center gap-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ink-300 disabled:text-ink-500";
 
 interface ButtonOwnProps {
   variant?: ButtonVariant;

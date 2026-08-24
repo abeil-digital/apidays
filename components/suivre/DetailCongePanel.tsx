@@ -10,6 +10,7 @@ import type {
   JourFerie,
   StatutDemande,
 } from "@/lib/types";
+import { useSoldes } from "@/hooks/useSoldes";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
   classeBordureTypeBadge,
@@ -167,6 +168,14 @@ export function DetailCongePanel({
 
   const code = selection.type === "CP" && selection.isAnticipation ? "CPA" : selection.type;
   const jours = selection.nbDemiJournees / 2;
+  // Solde avant/après (17/08/2026 → 24/08/2026, ajout demandé) — uniquement
+  // pour les 3 types suivis par `useSoldes` (mêmes que "Suivre les soldes"),
+  // pas de notion de solde pour CSS/CE/RECUP/EVT_FAM. `valeurApresAttente`
+  // (déjà calculé par `fetchSoldes`) tient compte de TOUTES les demandes en
+  // attente de ce type, pas seulement celle-ci — approximation acceptée,
+  // cohérente avec son usage existant (`Dashboard2Page`).
+  const codeSolde = code === "CP" || code === "RTT" || code === "CPA" ? code : null;
+  const { soldes: soldesDemandeur } = useSoldes(selection.demandeur?.id);
   const { tone: toneStatut, Icon: IconStatut } = STATUT_CONFIG[selection.statut];
   // Uniquement utile pour le toast/la modale de confirmation, tous deux
   // absents en lecture seule (pas de `demandeur` dans ce cas) — préfixe nom
@@ -503,7 +512,7 @@ export function DetailCongePanel({
                 )
               }
               disabled={enCours}
-              className="text-status-danger-fg border-status-danger-fg justify-center rounded-full bg-white/50 px-4 py-2 text-xs"
+              className="text-status-danger-fg border-status-danger-fg enabled:hover:bg-status-danger-bg! justify-center rounded-full bg-white px-4 py-2 text-xs"
             >
               Refuser
             </Button>
@@ -533,6 +542,27 @@ export function DetailCongePanel({
 
           {voirDetail && (
             <div className="bg-surface-card w-full px-4 pb-3">
+              {codeSolde && soldesDemandeur && (
+                <div className="mt-3 mb-3 flex items-center justify-center gap-3 text-xs">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-ink-500">Actuel</span>
+                    <TypeBadge
+                      variant="pill"
+                      code={codeSolde}
+                      label={`${formatJours(soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"].valeur)} j`}
+                    />
+                  </div>
+                  <span className="text-ink-500">→</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-ink-500">Après</span>
+                    <TypeBadge
+                      variant="pill"
+                      code={codeSolde}
+                      label={`${formatJours(soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"].valeurApresAttente)} j`}
+                    />
+                  </div>
+                </div>
+              )}
               <DetailPeriodeConges
                 debut={selection.debut}
                 fin={selection.fin}

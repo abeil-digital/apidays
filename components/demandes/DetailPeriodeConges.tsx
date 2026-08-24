@@ -6,6 +6,19 @@ import { MOIS_FR } from "@/components/ui/MiniCalendrier";
 // là-bas) — semaine L-V, jamais de week-end.
 const JOURS_SEMAINE_COURT = ["L", "M", "M", "J", "V"];
 
+function lundiDeLaSemaine(date: Date): Date {
+  const d = new Date(date);
+  const jour = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + (jour === 0 ? -6 : 1 - jour));
+  return d;
+}
+
+function vendrediDeLaSemaine(date: Date): Date {
+  const d = lundiDeLaSemaine(date);
+  d.setUTCDate(d.getUTCDate() + 4);
+  return d;
+}
+
 /**
  * Une demi-journée donnée (`demi`) d'un jour (`iso`) fait-elle partie d'une
  * période [debutP, finP] ? Vrai sur toute la période SAUF sur la demi-
@@ -131,8 +144,15 @@ export function DetailPeriodeConges({
     jours: { iso: string; jour: number; jourSemaine: number }[];
   }[] = [];
   let semaineCourante: { iso: string; jour: number; jourSemaine: number; mois: number }[] = [];
-  const curseurDetail = new Date(`${debut}T00:00:00Z`);
-  const finDetail = new Date(`${fin}T00:00:00Z`);
+  // Une semaine de contexte avant/après la période elle-même (demande
+  // explicite, 24/08/2026) — permet de voir d'un coup d'œil ce qui entoure
+  // le congé (jours déjà occupés, fériés...). `demiCouvertePeriode` renvoie
+  // déjà `false` hors [debut, fin], donc ces jours de contexte s'affichent
+  // simplement sans la couleur du type demandé (occupant ou gris neutre).
+  const curseurDetail = lundiDeLaSemaine(new Date(`${debut}T00:00:00Z`));
+  curseurDetail.setUTCDate(curseurDetail.getUTCDate() - 7);
+  const finDetail = vendrediDeLaSemaine(new Date(`${fin}T00:00:00Z`));
+  finDetail.setUTCDate(finDetail.getUTCDate() + 7);
   while (curseurDetail <= finDetail) {
     const iso = curseurDetail.toISOString().slice(0, 10);
     const jourSemaine = curseurDetail.getUTCDay();

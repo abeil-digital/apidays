@@ -2042,6 +2042,62 @@ font-bold`, taille alignée sur le sous-texte "à poser avant" de `SoldeCard`) +
   (`trierParPoseLe`, générique sur `T extends Demande`), n'affecte pas l'ordre par défaut tant que
   l'utilisateur n'a pas cliqué.
 
+**Refacto tableaux — Suivre les demandes (24/08/2026)** : premier écran du chantier "refacto
+tableaux", `SuivreDemandesPage`/`DetailCongePanel`/`HistoriqueTable`/`DetailPeriodeConges` :
+
+- **Largeur du tableau verrouillée** (`SuivreDemandesPage.tsx`) : la ligne tableau + panneau de
+  détail passe de `flex` (`xl:flex-row`, largeur du tableau conditionnelle à la présence du
+  panneau) à **CSS Grid** (`grid-cols-1` en dessous de `xl:`, `xl:grid-cols-[minmax(0,900px)_16rem]`
+  au-delà) — la colonne du panneau (16rem, largeur fixe de `DetailCongePanel`) est réservée dans le
+  gabarit **qu'elle soit occupée ou non**, contrairement à `flex-1`/`shrink` qui recalcule selon la
+  présence réelle du panneau. Le tableau ne bouge donc plus quand on ouvre/ferme le détail d'une
+  demande. Trois tentatives intermédiaires en largeur fixe px (`xl:w-[900px]`, puis `780px`, puis
+  `858px` pour caler une gouttière à 20px pile à 1280px) ont toutes échoué d'une manière ou d'une
+  autre (débordement horizontal à l'ouverture du panneau, ou fragile à toute largeur de fenêtre
+  différente de celle testée) avant ce passage à Grid — **leçon retenue : verrouiller une largeur
+  de ligne responsive nécessite de réserver l'espace dans le gabarit, pas de calculer une valeur en
+  pixels pour un viewport précis**. Vérifié sans débordement à 1024/1280/1920px. Écart entre les
+  deux colonnes : `gap-5` (20px) par défaut (row-gap en pile mobile), réduit à `xl:gap-x-2.5`
+  (10px) pour le column-gap desktop.
+- **États hover généralisés au composant `Button`** (`components/ui/Button.tsx`) — aucune variante
+  (primary/secondary/ghost) n'avait d'état `:hover`, nulle part dans l'app (pas propre à un bouton
+  en particulier). Ajout `enabled:hover:bg-mint-hover`/`enabled:hover:bg-surface-app`/
+  `enabled:hover:opacity-70` + `transition-colors duration-150` dans `BASE_STYLES` — token
+  `--color-mint-hover` déjà défini dans `app/globals.css` mais jamais branché jusqu'ici. Bouton
+  Refuser (`DetailCongePanel.tsx`) : fond passé de `bg-white/50` à `bg-white` opaque, et hover
+  propre en `enabled:hover:bg-status-danger-bg!` (modificateur `!important` Tailwind v4) — la
+  variante `secondary` du Button écrase sinon ce hover local, la règle `enabled:hover:bg-surface-app`
+  du variant arrivant après dans la feuille de style compilée peu importe l'ordre des classes dans
+  le JSX (confirmé en inspectant le CSS Tailwind compilé, `document.styleSheets` s'étant révélé peu
+  fiable dans cet environnement — préférer un `curl` sur le chunk `.css` compilé + `grep` du
+  sélecteur attendu).
+- **Solde avant/après dans "Informations complémentaires"** (`DetailCongePanel.tsx`) — pour une
+  demande "en attente" de type CP/RTT/CPA (les 3 seuls types suivis par `useSoldes`), affiche le
+  solde actuel (`soldes.<type>.valeur`) et le solde après décision (`soldes.<type>.valeurApresAttente`,
+  déjà calculé par `fetchSoldes` mais jamais affiché jusqu'ici) sous forme de deux pills `TypeBadge
+variant="pill"` reliées par une flèche, centrées, libellées "Actuel"/"Après" — même brique que la
+  colonne CP/RTT/CPA du tableau "Suivre les soldes" (`SuivreSoldesPage`/`LigneSolde`), placé juste
+  au-dessus du mini-calendrier de la période. `valeurApresAttente` tient compte de TOUTES les
+  demandes en attente de ce type pour ce salarié, pas uniquement celle affichée — approximation
+  acceptée (cohérente avec son seul autre usage, `Dashboard2Page`).
+- **Semaine de contexte avant/après dans le mini-calendrier de période** (`DetailPeriodeConges.tsx`,
+  composant partagé avec le lien "Voir" de `PoserDemandeModal`) — la grille n'affichait que les
+  semaines couvertes par `[debut, fin]` ; elle inclut désormais systématiquement une semaine
+  complète avant et après (`lundiDeLaSemaine`/`vendrediDeLaSemaine`, nouveaux helpers locaux), pour
+  voir d'un coup d'œil ce qui entoure la demande (fériés, autres demandes déjà posées...). Les
+  jours de contexte restent non colorés par le type demandé (`demiCouvertePeriode` renvoie déjà
+  `false` hors période), seul un éventuel occupant s'affiche dessus.
+- **États hover/actif des lignes de `HistoriqueTable`** — remplace le `hover:bg-surface-app`
+  générique initial (jugé quasi invisible, `--color-surface-app` étant à `#fafbfc`, presque blanc)
+  par une teinte de la couleur du **type de la ligne**, même mécanique que le pill Dates
+  (`classeFondTypeBadge`) : deux nouveaux exports dans `TypeBadge.tsx`,
+  `classeFondSurvolTypeBadge` (`hover:bg-<type>/15`, passager) et `classeFondActifTypeBadge`
+  (`bg-<type>/30`, permanent). La ligne dont le détail est ouvert (`demande.id === selectedId`,
+  déjà utilisé pour l'état du pill Dates) reçoit la variante "actif" (30%, plus marquée) ; les
+  autres lignes gardent le survol passager (15%). Classes Tailwind écrites en toutes lettres dans
+  des `Record<TypeBadgeCode, string>` (même contrainte que `classeFondAttenueTypeBadge` — une
+  classe construite par concaténation à l'exécution n'est jamais scannée par le compilateur).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

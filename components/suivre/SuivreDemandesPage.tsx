@@ -128,10 +128,8 @@ export function SuivreDemandesPage() {
         </h1>
       </div>
 
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start print:block">
-        <div
-          className={`bg-surface-card w-full xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
-        >
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block">
+        <div className="bg-surface-card w-full min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
             <div className="flex flex-wrap items-end gap-2">
               <SelectFiltrePill

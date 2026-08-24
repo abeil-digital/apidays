@@ -9,6 +9,8 @@ import {
 } from "@/lib/format";
 import {
   classeBordureTypeBadge,
+  classeFondActifTypeBadge,
+  classeFondSurvolTypeBadge,
   classeFondTypeBadge,
   LABEL_COURT,
   LABEL_LONG,
@@ -97,8 +99,23 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
 
   if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
 
+  function codeDemande(demande: Demande) {
+    return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
+  }
+
+  // État "on" permanent (`classeFondActifTypeBadge`) sur la ligne dont le
+  // panneau de détail est ouvert, sinon simple survol passager
+  // (`classeFondSurvolTypeBadge`) — même teinte 30%, l'un persiste, l'autre
+  // s'efface au départ du curseur.
+  function classeLigne(demande: Demande) {
+    const code = codeDemande(demande);
+    return demande.id === selectedId
+      ? classeFondActifTypeBadge(code)
+      : classeFondSurvolTypeBadge(code);
+  }
+
   function cellulesCommunes(demande: Demande) {
-    const code = demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
+    const code = codeDemande(demande);
     const jours = demande.nbDemiJournees / 2;
     const libelleType = compact ? LABEL_COURT[code] : LABEL_LONG[code];
     const selectionnee = demande.id === selectedId;
@@ -185,7 +202,10 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         <tbody>
           {props.avecCollaborateur
             ? trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
-                <tr key={demande.id}>
+                <tr
+                  key={demande.id}
+                  className={`transition-colors duration-150 ${classeLigne(demande)}`}
+                >
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-1.5">
                       <Avatar
@@ -200,7 +220,12 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 </tr>
               ))
             : trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
-                <tr key={demande.id}>{cellulesCommunes(demande)}</tr>
+                <tr
+                  key={demande.id}
+                  className={`transition-colors duration-150 ${classeLigne(demande)}`}
+                >
+                  {cellulesCommunes(demande)}
+                </tr>
               ))}
         </tbody>
       </table>
