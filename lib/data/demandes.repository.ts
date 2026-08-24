@@ -47,7 +47,9 @@ interface DemandeRow {
 const SELECT_DEMANDE =
   "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, vu, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
 
-interface DemandeEquipeRow extends DemandeRow {
+// Exporté pour `exportsPaie.repository.ts` (étend ce type localement avec
+// `export_paie_lignes`).
+export interface DemandeEquipeRow extends DemandeRow {
   utilisateur_id: string;
   utilisateurs:
     | { id: string; prenom: string; nom: string }
@@ -59,7 +61,9 @@ interface DemandeEquipeRow extends DemandeRow {
 // devalidee_par) — PostgREST refuse d'embarquer sans préciser laquelle
 // désambiguïser via `!utilisateur_id` (le `validateur` est déjà dans
 // `SELECT_DEMANDE`, voir plus haut).
-const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
+// Exporté pour `exportsPaie.repository.ts`, qui a besoin du même embed de
+// base + `export_paie_lignes` en plus.
+export const SELECT_DEMANDE_EQUIPE = `${SELECT_DEMANDE}, utilisateur_id, utilisateurs!utilisateur_id(id, prenom, nom)`;
 
 const STATUT_DEPUIS_DB: Record<string, StatutDemande> = {
   en_attente: "en attente",
@@ -93,7 +97,9 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
   };
 }
 
-async function getUtilisateurId(supabase: SupabaseClient): Promise<string> {
+// Exporté pour `exportsPaie.repository.ts` (génération de l'export paie —
+// besoin du même id que "qui a créé/décidé la demande").
+export async function getUtilisateurId(supabase: SupabaseClient): Promise<string> {
   const { data, error } = await supabase.rpc("my_utilisateur_id");
   if (error || !data) {
     throw new Error("Utilisateur non identifié.");
@@ -138,7 +144,10 @@ function demiCouvertePeriode(
  * chevauchant 5 jours de CPI enregistrée pour 7j au lieu des 2j réellement
  * disponibles).
  */
-async function calculerNbDemiJournees(
+// Exporté pour `exportsPaie.repository.ts` (`genererExportPaie` doit compter
+// les jours d'une demande qui tombent dans l'intersection avec la période
+// exportée — même calcul, bornes différentes).
+export async function calculerNbDemiJournees(
   supabase: SupabaseClient,
   debut: string,
   fin: string,
@@ -327,7 +336,8 @@ export async function annulerDemande(id: string): Promise<void> {
   }
 }
 
-function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
+// Exporté pour `exportsPaie.repository.ts`.
+export function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
   const demandeur = Array.isArray(row.utilisateurs) ? row.utilisateurs[0] : row.utilisateurs;
 
   // `validateur` est déjà mappé par `mapDemandeDepuisDb` (présent dans

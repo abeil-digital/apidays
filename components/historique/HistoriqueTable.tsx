@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
-import type { Demande, DemandeEquipe } from "@/lib/types";
+import { useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, TriangleAlert } from "lucide-react";
+import type { Demande, DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import {
   formatDateAction,
   formatJours,
@@ -16,8 +16,41 @@ import {
   LABEL_LONG,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { Badge } from "@/components/ui/Badge";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+
+// Statut de paie le plus significatif d'une demande, quand elle a plusieurs
+// lignes de transmission (congé à cheval) — un écart sur une seule tranche
+// doit rester visible même si les autres tranches sont en paye.
+function statutTransmissionAgrege(lignes: LigneExportPaie[]): LigneExportPaie["statut"] | null {
+  if (lignes.length === 0) return null;
+  if (lignes.some((l) => l.statut === "ecart")) return "ecart";
+  if (lignes.every((l) => l.statut === "en_paye")) return "en_paye";
+  return "transmis";
+}
+
+function BadgeTransmission({ lignes }: { lignes: LigneExportPaie[] }) {
+  const statut = statutTransmissionAgrege(lignes);
+  if (!statut) return <span className="text-ink-500">—</span>;
+  if (statut === "ecart") {
+    return (
+      <Badge tone="danger">
+        <TriangleAlert size={12} strokeWidth={2.5} />
+        <span>Écart</span>
+      </Badge>
+    );
+  }
+  if (statut === "en_paye") {
+    return (
+      <Badge tone="success">
+        <Check size={12} strokeWidth={2.5} />
+        <span>En paye</span>
+      </Badge>
+    );
+  }
+  return <Badge tone="warning">Transmis</Badge>;
+}
 
 interface HistoriqueTablePropsCommunes {
   emptyText?: string;
@@ -30,6 +63,16 @@ interface HistoriqueTablePropsCommunes {
    * pill (même convention que les pills de solde de `SuivreSoldesPage`) pour
    * la relier visuellement au panneau ouvert. */
   selectedId?: string | null;
+  /** Contenu de la colonne Durée — par défaut `{jours} j`. Utilisé par
+   * "Quels congés transmettre" (Clôture paie, 24/08/2026) pour afficher
+   * "X/Y j" sur un congé partiellement transmis (à cheval sur deux
+   * périodes de paie). */
+  renderDuree?: (demande: Demande) => ReactNode;
+  /** Lignes de transmission paie (`export_paie_lignes`) par demande — ajoute
+   * une colonne "Paie" (Transmis/En paye/Écart) quand fourni (24/08/2026,
+   * "Suivre les demandes"). Absent = pas de colonne, comportement inchangé
+   * ailleurs. */
+  lignesTransmissionParDemande?: Record<string, LigneExportPaie[]>;
 }
 
 type HistoriqueTableProps =
@@ -76,25 +119,55 @@ function periodeCourte(debut: string, fin: string): string {
  * période même année, période à cheval sur deux années) que les pills
  * CP/RTT/CPA de `SoldeDetailPanel`/Export paie.
  */
-// Tri "Posé le" (22/08/2026, demande explicite) — cliquer l'en-tête bascule
-// plus récent → moins récent → (retour à l'ordre transmis par l'appelant,
-// ex. tri par date de congé). `null` = pas de tri actif, ordre de `demandes`
-// inchangé.
-type TriPoseLe = "recent" | "ancien" | null;
+// Tri "Posé le"/"Dates" (22/08/2026, étendu aux dates de congé le 24/08/2026,
+// demande explicite) — cliquer un en-tête triable bascule plus récent →
+// moins récent → (retour à l'ordre transmis par l'appelant). Un seul tri
+// actif à la fois : cliquer une autre colonne remplace le tri en cours
+// plutôt que de les cumuler — cliquer une colonne déjà triée reprend le même
+// cycle recent → ancien → aucun.
+type ColonneTriable = "posele" | "dates";
+type DirectionTri = "recent" | "ancien";
+interface TriTable {
+  colonne: ColonneTriable;
+  direction: DirectionTri;
+}
 
-function trierParPoseLe<T extends Demande>(demandes: T[], tri: TriPoseLe): T[] {
+function champTri(colonne: ColonneTriable): "datePose" | "debut" {
+  return colonne === "posele" ? "datePose" : "debut";
+}
+
+function trierDemandes<T extends Demande>(demandes: T[], tri: TriTable | null): T[] {
   if (!tri) return demandes;
+  const champ = champTri(tri.colonne);
   return [...demandes].sort((a, b) =>
-    tri === "recent" ? b.datePose.localeCompare(a.datePose) : a.datePose.localeCompare(b.datePose),
+    tri.direction === "recent"
+      ? b[champ].localeCompare(a[champ])
+      : a[champ].localeCompare(b[champ]),
   );
 }
 
 export function HistoriqueTable(props: HistoriqueTableProps) {
-  const { emptyText = "Aucune demande.", compact = false, onDateClick, selectedId } = props;
-  const [triPoseLe, setTriPoseLe] = useState<TriPoseLe>(null);
+  const {
+    emptyText = "Aucune demande.",
+    compact = false,
+    onDateClick,
+    selectedId,
+    renderDuree,
+    lignesTransmissionParDemande,
+  } = props;
+  const [tri, setTri] = useState<TriTable | null>(null);
 
-  function handleToggleTriPoseLe() {
-    setTriPoseLe((prev) => (prev === "recent" ? "ancien" : prev === "ancien" ? null : "recent"));
+  function handleToggleTri(colonne: ColonneTriable) {
+    setTri((prev) => {
+      if (!prev || prev.colonne !== colonne) return { colonne, direction: "recent" };
+      if (prev.direction === "recent") return { colonne, direction: "ancien" };
+      return null;
+    });
+  }
+
+  function iconeTri(colonne: ColonneTriable) {
+    if (tri?.colonne !== colonne) return <ArrowUpDown size={12} />;
+    return tri.direction === "recent" ? <ArrowDown size={12} /> : <ArrowUp size={12} />;
   }
 
   if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
@@ -154,7 +227,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             pillDates
           )}
         </td>
-        <td className="text-ink-500 px-4 py-3">{formatJours(jours)} j</td>
+        <td className="text-ink-500 px-4 py-3">
+          {renderDuree ? renderDuree(demande) : `${formatJours(jours)} j`}
+        </td>
         <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
           {formatDateAction(demande.datePose)}
         </td>
@@ -166,6 +241,11 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         <td className="px-4 py-3">
           <StatusBadge statut={demande.statut} />
         </td>
+        {lignesTransmissionParDemande && (
+          <td className="px-4 py-3">
+            <BadgeTransmission lignes={lignesTransmissionParDemande[demande.id] ?? []} />
+          </td>
+        )}
       </>
     );
   }
@@ -177,31 +257,35 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
           <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
             {props.avecCollaborateur && <th className="px-4 py-3">Collaborateur</th>}
             <th className="px-4 py-3">Type</th>
-            <th className="px-4 py-3">Dates</th>
+            <th className="px-4 py-3">
+              <button
+                type="button"
+                onClick={() => handleToggleTri("dates")}
+                className="hover:text-ink-900 flex items-center gap-1"
+              >
+                Dates
+                {iconeTri("dates")}
+              </button>
+            </th>
             <th className="px-4 py-3">{compact ? "Durée" : "Nbre jours"}</th>
             <th className="hidden px-4 py-3 md:table-cell">
               <button
                 type="button"
-                onClick={handleToggleTriPoseLe}
+                onClick={() => handleToggleTri("posele")}
                 className="hover:text-ink-900 flex items-center gap-1"
               >
                 Posé le
-                {triPoseLe === "recent" ? (
-                  <ArrowDown size={12} />
-                ) : triPoseLe === "ancien" ? (
-                  <ArrowUp size={12} />
-                ) : (
-                  <ArrowUpDown size={12} />
-                )}
+                {iconeTri("posele")}
               </button>
             </th>
             {!compact && <th className="hidden px-4 py-3 md:table-cell">Validé le</th>}
             <th className="px-4 py-3">Statut</th>
+            {lignesTransmissionParDemande && <th className="px-4 py-3">Paie</th>}
           </tr>
         </thead>
         <tbody>
           {props.avecCollaborateur
-            ? trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
+            ? trierDemandes(props.demandes, tri).map((demande) => (
                 <tr
                   key={demande.id}
                   className={`transition-colors duration-150 ${classeLigne(demande)}`}
@@ -219,7 +303,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                   {cellulesCommunes(demande)}
                 </tr>
               ))
-            : trierParPoseLe(props.demandes, triPoseLe).map((demande) => (
+            : trierDemandes(props.demandes, tri).map((demande) => (
                 <tr
                   key={demande.id}
                   className={`transition-colors duration-150 ${classeLigne(demande)}`}

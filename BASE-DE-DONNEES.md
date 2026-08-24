@@ -33,6 +33,8 @@ Abeil, signalés plus bas.
 | `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)                                                                                                                     |
 | `historique_utilisateur` | Historique des changements de `taux_activite`/`nature_contrat` (21/08/2026) — une ligne par changement avec `date_effet`, pour prorater le calcul de solde mois par mois sans recalcul rétroactif |
 | `soldes_initiaux`        | Report de la dernière fiche de paie à la création d'un salarié (21/08/2026) — une ligne par utilisateur (upsert), remplace le report/accrual automatique tant que la période en cours est celle de la date de référence saisie |
+| `exports_paie`           | Transmission paie (Suivre > Clôture paie, 24/08/2026) — un enregistrement par clic sur "Transmettre", une seule transmission par période (`exports_paie_periode_unique`)                                                       |
+| `export_paie_lignes`     | Ledger de transmission (24/08/2026) — combien de jours d'une demande sont partis dans quel export, avec son propre statut (`transmis`/`en_paye`/`ecart`) ; `jours_inclus` peut être négatif (ligne de correction)              |
 
 ## Points de modélisation notables
 
@@ -119,6 +121,56 @@ Abeil, signalés plus bas.
     qui référence la ligne plutôt que la ligne référencée), y compris en nommant explicitement la
     contrainte FK en hint. Contournement retenu : requête séparée plutôt qu'embed pour ce cas
     précis (`fetchNomUtilisateur`, `utilisateurs.repository.ts`).
+- **Transmission paie — deux statuts orthogonaux, jamais confondus** (24/08/2026, `exports_paie`/
+  `export_paie_lignes`, écran Suivre > Clôture paie) :
+  - **Statut de décision** (`demandes_conges.statut` : `en_attente`/`validee`/`refusee`/`annulee`)
+    — répond à "ce congé a-t-il été accordé ?". Inchangé, c'est le statut historique de l'app.
+  - **Statut de transmission** — répond à "ce congé a-t-il été envoyé à la paie, et le comptable
+    l'a-t-il confirmé ?". Ne vit **pas** sur `demandes_conges` (pas de colonne `statut_transmission`
+    dessus) mais sur une table de ledger séparée, `export_paie_lignes`, une ligne par "tranche"
+    envoyée. Raison : un congé à cheval sur deux périodes de paie (ex. 26/08 → 03/09) peut être
+    transmis **en plusieurs fois** — 2 jours sur l'export d'août, les 4 restants sur celui de
+    septembre — chaque tranche évoluant ensuite indépendamment (`transmis` → `en_paye`/`ecart`). Un
+    champ unique sur la demande ne peut pas porter deux statuts différents pour la même demande en
+    même temps.
+  - **"Solde de transmission" d'une demande** = somme de tous ses `export_paie_lignes.jours_inclus`
+    (toutes tranches confondues). Pour une demande validée, `nb_demi_journees/2 - solde_transmission`
+    donne le reliquat encore à transmettre (0 = intégralement transmise). C'est ce calcul, **sans
+    aucun filtre de date**, qui pilote l'onglet "Quels congés transmettre" — un congé validé un mois
+    donné mais jamais transmis remonte automatiquement le mois suivant, quelle que soit sa date de
+    prise (corrige un bug de la première version de l'écran, qui filtrait par `date_debut` dans la
+    période et perdait les congés à cheval/de période précédente).
+  - **Génération d'un export** (`genererExportPaie`, `lib/data/exportsPaie.repository.ts`) : pour
+    chaque congé validé avec un reliquat, si sa date de fin tombe **avant ou dans** la période
+    exportée, tout le reliquat part d'un coup (rattrapage complet — aucun futur export ne le
+    réclamerait sinon) ; s'il déborde sur le mois suivant, seule la portion jusqu'à la fin de la
+    période part maintenant, le reste attend le prochain export. Un congé dont la date de début est
+    **après** la fin de la période exportée n'est jamais inclus (pas encore dû) — évite qu'un congé
+    déjà validé pour un mois futur soit transmis en avance.
+  - **Correction après transmission** : régulariser (annuler) une demande déjà transmise ne modifie
+    **jamais** les lignes déjà créées (trace d'audit immuable — un export généré reflète exactement
+    ce qui a été envoyé au comptable à l'époque). À la place, le prochain export généré ajoute une
+    **ligne négative** (`jours_inclus = -solde_transmission`) qui ramène son solde de transmission à
+    0, matérialisée dans le récap comme une correction distincte.
+  - **Aucun impact sur les soldes CP/RTT/CPA** — volontaire. Le calcul du solde (`soldes.repository.ts`)
+    filtre uniquement sur `demandes_conges.statut = 'validee'`, jamais sur `export_paie_lignes` : un
+    congé décompte le solde du salarié dès sa validation, indépendamment de son statut de
+    transmission. "Transmis"/"En paye"/"Écart" ne sont que le suivi de la communication avec le
+    comptable (est-ce que ce qui est sur la fiche de paie correspond à ce qui a été validé dans
+    l'app), pas un second decompte de solde.
+  - **3 statuts de transmission possibles** sur une ligne (`statut_transmission` enum) :
+    - `transmis` — valeur par défaut à la création de la ligne, posée par le clic "Transmettre".
+    - `en_paye` — une fois la fiche de paie reçue vérifiée conforme (`validerCheckPaie`, action "Ça
+      matche"/"OK" dans l'onglet "Vérifier les fiches de paie").
+    - `ecart` — si la fiche de paie ne correspond pas (`signalerEcart`, avec `motif_ecart`
+      obligatoire) ; reste visible/traçable, ne bloque rien côté solde.
+  - **"Poser pour un collaborateur"** (`poserCongePourCollaborateur`) : seule façon de créer une
+    demande déjà `validee` sans passer par le circuit normal (salarié pose → manager décide) — pour
+    un oubli de saisie ou une correction ponctuelle repérée par Delphine. `commentaire_decision`
+    trace "Ajouté par {prénom} {nom}", visible dans l'historique du salarié concerné (transparence
+    voulue, pas de ligne cachée). N'affecte pas la mécanique de transmission différemment d'une
+    demande posée normalement — une fois `validee`, elle entre dans le même calcul de solde de
+    transmission que n'importe quelle autre.
 
 ## Rôles & sécurité (RLS)
 

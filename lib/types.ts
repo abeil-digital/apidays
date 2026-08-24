@@ -299,3 +299,34 @@ export interface CongeImposeInput {
   demiDebut: DemiJournee;
   demiFin: DemiJournee;
 }
+
+// --- Espace Suivre > Clôture paie (transmission paie, 24/08/2026) ---
+// Voir BASE-DE-DONNEES.md (`exports_paie`/`export_paie_lignes`) : le statut
+// de transmission vit sur une ligne de ledger, pas sur la demande elle-même
+// — une demande peut être transmise en plusieurs tranches (congé à cheval
+// sur deux périodes de paie).
+
+export type StatutTransmission = "transmis" | "en_paye" | "ecart";
+
+export interface LigneExportPaie {
+  id: string;
+  demandeId: string;
+  joursInclus: number; // signé : négatif = ligne de correction
+  statut: StatutTransmission;
+  motifEcart: string | null;
+  verifieLe: string | null;
+  genereLe: string; // timestamptz ISO — date de l'export auquel cette ligne appartient
+  periodeDebut: string; // date ISO — période de l'export auquel cette ligne appartient
+  periodeFin: string;
+}
+
+// Une demande à transmettre (onglet "Quels congés transmettre") — `Demande`
+// enrichie du solde de transmission calculé côté client (somme des
+// `export_paie_lignes.jours_inclus` déjà existantes pour cette demande).
+export interface CongeATransmettre extends DemandeEquipe {
+  // Positif = jours encore à transmettre (demande validée). Négatif = ligne
+  // de correction à venir (demande annulée après avoir déjà été transmise).
+  joursRestants: number;
+  // Jours déjà transmis lors d'exports précédents — sert à l'affichage "X/Y".
+  joursDejaTransmis: number;
+}

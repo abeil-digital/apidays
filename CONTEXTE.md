@@ -2247,6 +2247,97 @@ restent utilisés ailleurs — rien d'autre à nettoyer. `/mon-calendrier` renvo
 ce fichier sont volontairement conservées, à titre de contexte historique — même convention que les
 écrans Calendrier/`calendrier3` déjà retirés plus haut.
 
+**Clôture paie — construction de l'écran (24/08/2026)** : nouvel item de nav séparé sous Suivre
+(`components/layout/tabs.ts`, `SUIVRE_TABS`, icône `ClipboardCheck`, après "Export paie" — coexiste
+avec `/suivre/paie`, qui n'est pas retiré). Chantier mené en plusieurs passes le même jour :
+
+- **Page liste `/suivre/cloture-paie`** (`ListeCloturePaiePage.tsx`, nouveau,
+  `components/suivre/`) : une carte "Mois en cours" (`periodePaieParDefaut()`) + une section
+  Archives listant les 12 périodes précédentes (`periodesPrecedentes`, nouvelle fonction dans
+  `lib/periodePaie.ts`, avec `finDePeriode`/`libellePeriode`), chaque carte menant à
+  `/suivre/cloture-paie/[debut]` (`debut` = 25 du mois, clé de période dans l'URL).
+- **Page par période `/suivre/cloture-paie/[debut]`** (`app/(app)/suivre/cloture-paie/[debut]/page.tsx`,
+  `params: Promise<{ debut: string }>` — convention Next.js 16 déjà en place ailleurs, ex.
+  `/parametrer/utilisateurs/[id]`) → `CloturePaiePage.tsx`, 3 onglets :
+  - **"Quels congés transmettre"** — branché sur `fetchCongesATransmettre` (nouveau repository
+    `lib/data/exportsPaie.repository.ts`, hook `hooks/useCongesATransmettre.ts`), tableau
+    `HistoriqueTable` (largeur verrouillée via CSS Grid, même pattern que "Suivre les demandes"),
+    colonne Durée personnalisée via la nouvelle prop `renderDuree` de `HistoriqueTable` (affiche
+    "X/Y j" sur un congé partiellement transmis). Les lignes ouvrent le `DetailCongePanel` complet
+    (actions Valider/Refuser/Régulariser), même composant que "Suivre les demandes"/l'ancien "Export
+    paie". Bouton "Poser pour un collaborateur" en tête de tableau.
+  - **"Générer l'export"** — reprend `CongesPaiePage` telle quelle (`masquerTitre`,
+    `periodeInitiale`, props ajoutées à ce composant existant) pour l'export CSV, complété d'un
+    bandeau avec le bouton "Transmettre" (`genererExportPaie`) au-dessus — affiche "Période transmise
+    le …" et désactive le bouton une fois l'export généré (`fetchExportPaie`, contrainte unique SQL
+    `exports_paie_periode_unique` en filet de sécurité côté base).
+  - **"Vérifier les fiches de paie"** — nouveau composant `VerifierFichesPaiePage.tsx`
+    (`components/suivre/`), alimenté par `fetchCheckFichesPaie(exportId)` : une carte par
+    collaborateur (total de jours transmis + action "Ça matche" en bloc), dépliable vers le détail
+    par congé (action "OK"/"Écart" par ligne, `validerCheckPaie`/`signalerEcart`). Désactivé
+    (message "Aucun export généré...") tant qu'aucun export n'existe pour la période.
+- **`PoserCongePourCollaborateurModal.tsx`** (nouveau, `components/suivre/`) — dérivé de
+  `PoserDemandeModal.tsx` (mêmes mécaniques `DatePicker`/demi-journées/DJI), avec un sélecteur de
+  collaborateur en tête (`SelectFiltrePill`, même liste que `SuivreCalendrierPage`) ; `useDemandes`/
+  `useSoldes` pointés sur ce collaborateur plutôt que l'utilisateur connecté ; pas de projection
+  "solde à la date de la demande" (RTT/CPA anticipé, simplifié en Actuel/Après) ; appelle
+  `poserCongePourCollaborateur` (statut `validee` direct) plutôt que `useDemandes().ajouterDemande`.
+- **`DetailCongePanel.tsx` — feed étendu** : nouvelle prop optionnelle `lignesTransmission`, ajoute
+  une entrée "Transmis le … : X j" par ligne `export_paie_lignes` de la demande (copie du pattern
+  dot+connecteur existant du feed "Posé le"/"Validé le", pas de refactor en boucle générique — le
+  fichier n'utilise pas ce pattern ailleurs), puis "En paye le …"/"Écart signalé le … " + motif selon
+  le statut de chaque ligne.
+- **"Suivre les demandes" — colonne "Paie"** (`HistoriqueTable.tsx`, nouvelle prop
+  `lignesTransmissionParDemande`) : badge Transmis/En paye/Écart (agrégé — un écart sur une seule
+  tranche prime sur les autres, tout en_paye seulement si TOUTES les tranches le sont) ou "—" si
+  jamais transmis. `fetchLignesTransmissionParDemande(demandeIds)` (nouveau, fetch groupé en un
+  aller-retour) alimente à la fois cette colonne et `DetailCongePanel.lignesTransmission` du panneau
+  ouvert.
+- **Schéma** : enum `statut_transmission` (`transmis`/`en_paye`/`ecart`), tables `exports_paie`
+  (`genere_par`, unique sur `periode_debut`/`periode_fin`) et `export_paie_lignes` (`jours_inclus`
+  signé, `statut`, `motif_ecart`, `verifie_le`/`verifie_par`) — RLS manager+admin lecture/écriture,
+  admin `for all`, même pattern que `demandes_conges`. Détail complet et rationale dans
+  [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md#points-de-modélisation-notables).
+
+**Clôture paie — règles métier de la transmission (24/08/2026)** : refonte du parcours "export
+paie" en un vrai suivi de transmission, nouvel écran `/suivre/cloture-paie` (coexiste avec
+l'ancien `/suivre/paie`, qui n'est pas retiré). Détail technique (schéma, calcul, code) dans
+[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md#points-de-modélisation-notables) — ici, les règles métier
+actées avec Vincent qui ont guidé cette conception :
+
+- **Le statut "transmis" est distinct du statut "validé"**. Un congé validé n'est plus un état
+  terminal côté paie : il traverse ensuite Transmis → En paye (ou Écart). Décidé après plusieurs
+  itérations sur le bug "congés de période précédente non pris en compte"/"congés à cheval sur deux
+  mois" — la vraie cause n'était pas un problème de bornes de dates, mais l'absence de ce statut.
+- **"Quels congés transmettre" n'est jamais borné par une date de début de période** — seule règle :
+  le congé est validé (ou annulé-après-transmission) et pas encore intégralement transmis, et sa
+  date de début n'est pas dans le futur par rapport à la fin de la période. Ainsi un congé posé et
+  validé en juin mais jamais transmis remonte automatiquement en août sans action manuelle — c'est
+  le mécanisme de rattrapage voulu, plutôt qu'un filtre de date que Delphine devrait penser à
+  élargir elle-même chaque mois.
+- **Un congé à cheval sur deux périodes de paie se transmet en plusieurs fois** (notation actée avec
+  Vincent : "2/6" = 2 jours transmis sur ce mois, 4 restent pour le suivant). Génération d'un
+  export : le reliquat d'un congé qui se termine avant ou pendant la période part intégralement
+  (rattrapage complet, pas de fragmentation inutile) ; un congé qui déborde sur le mois suivant ne
+  transmet que sa portion jusqu'à la fin de la période en cours.
+- **Une correction après transmission ne réécrit jamais l'historique** — choisi explicitement face à
+  l'alternative "modifier la ligne déjà transmise" : régulariser un congé déjà transmis crée une
+  **ligne de correction négative** au prochain export généré, jamais une modification des lignes
+  d'origine. Un export généré reste la trace exacte, immuable, de ce qui a réellement été envoyé au
+  comptable à l'époque.
+- **La transmission n'a aucun effet sur le solde CP/RTT/CPA du salarié** — le solde est décompté dès
+  la validation de la demande (comme avant cette refonte), pas à sa transmission. "Transmis"/"En
+  paye"/"Écart" documentent uniquement le dialogue avec le comptable, ce n'est pas un second
+  décompte.
+- **Vérification des fiches de paie en mode détail** : décidé après discussion ("il faut passer en
+  mode détail") — un résumé par collaborateur (solde + total transmis, ce qui est littéralement
+  imprimé sur la fiche de paie) avec un drill-down par congé individuel pour isoler un écart précis,
+  plutôt qu'une validation en bloc sans détail.
+- **"Poser pour un collaborateur"** couvre l'oubli de saisie du salarié et la correction ponctuelle
+  repérée par Delphine — **la maladie est explicitement hors scope** pour l'instant (confirmé par
+  Vincent). Le congé ajouté doit être visible dans l'historique du salarié concerné (transparence
+  totale actée — pas de ligne cachée, même si c'est Delphine qui l'a créée à sa place).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
@@ -2283,3 +2374,14 @@ ce fichier sont volontairement conservées, à titre de contexte historique — 
    brancher `soldes.repository.ts`
 3. Suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de solde), puis
    Espace Manager
+4. Clôture paie (24/08/2026, points restés ouverts, non bloquants) :
+   - CSV existant vs bouton "Transmettre" sur l'onglet "Générer l'export" : les deux coexistent
+     aujourd'hui (décision provisoire) — à confirmer avec Vincent si le CSV doit à terme disparaître
+     au profit du seul "Transmettre", ou s'ils ont chacun leur usage (CSV = document à envoyer,
+     Transmettre = mise à jour du statut interne).
+   - Rejouer "Générer l'export" sur une période déjà transmise : bloqué par la contrainte unique SQL
+     (`exports_paie_periode_unique`) + bouton désactivé côté UI une fois un export détecté — pas de
+     message d'erreur dédié si l'action était malgré tout tentée en direct (ex. appel API hors UI).
+   - "Poser pour un collaborateur" n'a qu'un seul point d'entrée pour l'instant (onglet "Quels congés
+     transmettre" de Clôture paie) — à voir si un second point d'entrée depuis "Suivre les demandes"
+     est utile.

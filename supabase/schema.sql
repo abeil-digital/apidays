@@ -20,6 +20,7 @@ create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
 create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM', 'DJ_IMPOSEE', 'CP_IMPOSE');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
+create type statut_transmission as enum ('transmis', 'en_paye', 'ecart');
 
 -- ------------------------------------------------------------
 -- UTILISATEURS
@@ -334,6 +335,42 @@ create table soldes_initiaux (
   created_at timestamptz not null default now()
 );
 
+-- Transmission paie (24/08/2026) — un enregistrement par clic sur
+-- "Transmettre" (Suivre > Clôture paie). Une seule transmission par période
+-- (`exports_paie_periode_unique`) : évite un doublon si l'action est rejouée
+-- sur la même période (double-clic/rechargement).
+create table exports_paie (
+  id uuid primary key default gen_random_uuid(),
+  periode_debut date not null,
+  periode_fin date not null,
+  genere_le timestamptz not null default now(),
+  genere_par uuid not null references utilisateurs(id)
+);
+
+create unique index exports_paie_periode_unique on exports_paie (periode_debut, periode_fin);
+
+-- Ledger de transmission (24/08/2026) — combien de jours d'une demande sont
+-- partis dans quel export, avec son propre statut de transmission
+-- (transmis/en_paye/ecart). Porté ici plutôt que sur `demandes_conges`
+-- elle-même : un congé à cheval sur deux périodes de paie peut être transmis
+-- en plusieurs fois (une tranche par export), chaque tranche évoluant
+-- ensuite indépendamment (`en_paye` une fois vérifiée sur la fiche de paie
+-- reçue, `ecart` si ça ne correspond pas). `jours_inclus` peut être négatif
+-- (ligne de correction, quand une demande déjà transmise est régularisée
+-- après coup — voir `regulariserDemande`) : la somme des `jours_inclus`
+-- d'une demande sur toutes ses lignes est son "solde de transmission".
+create table export_paie_lignes (
+  id uuid primary key default gen_random_uuid(),
+  export_paie_id uuid not null references exports_paie(id) on delete cascade,
+  demande_id uuid not null references demandes_conges(id) on delete cascade,
+  jours_inclus numeric(5,1) not null,
+  statut statut_transmission not null default 'transmis',
+  motif_ecart text,
+  verifie_le timestamptz,
+  verifie_par uuid references utilisateurs(id),
+  created_at timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- INDEX UTILES
 -- ------------------------------------------------------------
@@ -346,6 +383,8 @@ create index idx_manager_salaries_manager on manager_salaries(manager_id);
 create index idx_ajustements_solde_utilisateur on ajustements_solde(utilisateur_id);
 create index historique_utilisateur_utilisateur_id_champ_idx
   on historique_utilisateur (utilisateur_id, champ, date_effet);
+create index export_paie_lignes_demande_idx on export_paie_lignes(demande_id);
+create index export_paie_lignes_export_idx on export_paie_lignes(export_paie_id);
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -373,6 +412,8 @@ alter table historique_utilisateur enable row level security;
 alter table soldes_initiaux enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table regles_anciennete enable row level security;
+alter table exports_paie enable row level security;
+alter table export_paie_lignes enable row level security;
 
 -- ------------------------------------------------------------
 -- PROFILS DE TEST (Phase 0) — liés aux comptes Supabase Auth
@@ -707,6 +748,39 @@ create policy "soldes_initiaux: admin gère tout"
   with check (my_role() = 'admin');
 
 -- ------------------------------------------------------------
+-- POLICIES — exports_paie / export_paie_lignes (Suivre > Clôture paie)
+-- ------------------------------------------------------------
+create policy "exports_paie: manager et admin lisent tout"
+  on exports_paie for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "exports_paie: manager et admin créent"
+  on exports_paie for insert
+  with check (my_role() in ('manager', 'admin'));
+
+create policy "exports_paie: admin gère tout"
+  on exports_paie for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+create policy "export_paie_lignes: manager et admin lisent tout"
+  on export_paie_lignes for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "export_paie_lignes: manager et admin créent/modifient (check paie)"
+  on export_paie_lignes for insert
+  with check (my_role() in ('manager', 'admin'));
+
+create policy "export_paie_lignes: manager et admin mettent à jour le statut"
+  on export_paie_lignes for update
+  using (my_role() in ('manager', 'admin'));
+
+create policy "export_paie_lignes: admin gère tout"
+  on export_paie_lignes for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+-- ------------------------------------------------------------
 -- GRANTS — nécessaires en complément de RLS : RLS filtre les
 -- LIGNES visibles, mais Postgres exige aussi les droits de base
 -- sur la table pour le rôle. Sans ce GRANT, la requête est
@@ -732,5 +806,7 @@ grant select, insert, update, delete on
   objectifs_calendrier,
   ajustements_solde,
   historique_utilisateur,
-  soldes_initiaux
+  soldes_initiaux,
+  exports_paie,
+  export_paie_lignes
 to authenticated;

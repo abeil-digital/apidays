@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
-import type { StatutDemande } from "@/lib/types";
+import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
+import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
@@ -80,6 +81,27 @@ export function SuivreDemandesPage() {
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
   const [selectionId, setSelectionId] = useState<string | null>(null);
+  const [lignesTransmissionParDemande, setLignesTransmissionParDemande] = useState<
+    Record<string, LigneExportPaie[]>
+  >({});
+
+  // Statut de transmission paie par demande (Clôture paie, 24/08/2026) —
+  // seules les demandes validées/annulées peuvent avoir des lignes
+  // `export_paie_lignes` (en attente/refusé n'en ont jamais).
+  useEffect(() => {
+    let cancelled = false;
+    const ids = demandes
+      .filter((d) => d.statut === "validé" || d.statut === "annulé")
+      .map((d) => d.id);
+    fetchLignesTransmissionParDemande(ids)
+      .then((data) => {
+        if (!cancelled) setLignesTransmissionParDemande(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [demandes]);
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const periodeReference = periodeReferenceCp(regleCp);
@@ -208,6 +230,7 @@ export function SuivreDemandesPage() {
               compact
               onDateClick={setSelectionId}
               selectedId={selectionId}
+              lignesTransmissionParDemande={lignesTransmissionParDemande}
             />
           </div>
         </div>
@@ -227,6 +250,7 @@ export function SuivreDemandesPage() {
             autresDemandes={demandes.filter(
               (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
             )}
+            lignesTransmission={lignesTransmissionParDemande[selection.id]}
           />
         )}
       </div>

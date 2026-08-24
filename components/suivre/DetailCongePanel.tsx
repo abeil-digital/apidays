@@ -8,7 +8,9 @@ import type {
   DemandeEquipe,
   DjImposee,
   JourFerie,
+  LigneExportPaie,
   StatutDemande,
+  StatutTransmission,
 } from "@/lib/types";
 import { useSoldes } from "@/hooks/useSoldes";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
@@ -80,6 +82,12 @@ interface DetailCongePanelProps {
    * "Listing" d'Accueil (`ListingTiroir`, 18/08/2026) : le fond coloré + le
    * texte suffisent déjà à identifier le type sur ces cartes empilées. */
   masquerTypeBadgeBandeau?: boolean;
+  /** Lignes de transmission paie de cette demande (`export_paie_lignes`,
+   * 24/08/2026) — optionnel, absent partout sauf depuis "Clôture paie".
+   * Ajoute une entrée "Transmis le"/"En paye le"/"Écart" au feed pour
+   * chaque ligne (une demande à cheval sur deux périodes peut en avoir
+   * plusieurs). */
+  lignesTransmission?: LigneExportPaie[];
 }
 
 function formatJjMmAa(iso: string): string {
@@ -104,6 +112,18 @@ const TEXTE_DECISION: Record<StatutDemande, string> = {
   validé: "text-status-success-fg",
   refusé: "text-status-danger-fg",
   annulé: "text-status-danger-fg",
+};
+
+const LIBELLE_TRANSMISSION: Record<StatutTransmission, string> = {
+  transmis: "Transmis",
+  en_paye: "En paye",
+  ecart: "Écart signalé",
+};
+
+const TEXTE_TRANSMISSION: Record<StatutTransmission, string> = {
+  transmis: "text-status-warning-fg",
+  en_paye: "text-status-success-fg",
+  ecart: "text-status-danger-fg",
 };
 
 // Nom de la variable CSS du token couleur du type — pour teinter un fond via
@@ -156,6 +176,7 @@ export function DetailCongePanel({
   masquerBandeau = false,
   masquerFermer = false,
   masquerTypeBadgeBandeau = false,
+  lignesTransmission,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
   const [regularisationOuverte, setRegularisationOuverte] = useState(false);
@@ -366,6 +387,52 @@ export function DetailCongePanel({
               </span>
             </div>
           )}
+          {lignesTransmission
+            ?.slice()
+            .sort((a, b) => a.genereLe.localeCompare(b.genereLe))
+            .map((ligne) => (
+              <div key={ligne.id}>
+                <div className="flex gap-2">
+                  <div className="flex w-1.5 shrink-0 justify-center">
+                    <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+                  <span className="text-[10px]">
+                    <span className="font-semibold text-status-warning-fg">
+                      Transmis le {formatJjMmAa(ligne.genereLe.slice(0, 10))}
+                    </span>
+                    <span className="text-ink-500">
+                      {" "}
+                      : {formatJours(Math.abs(ligne.joursInclus))} j{ligne.joursInclus < 0 ? " (correction)" : ""}
+                    </span>
+                  </span>
+                </div>
+                {ligne.statut !== "transmis" && ligne.verifieLe && (
+                  <>
+                    <div className="flex gap-2">
+                      <div className="flex w-1.5 shrink-0 justify-center">
+                        <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+                      <span className="text-[10px]">
+                        <span className={`font-semibold ${TEXTE_TRANSMISSION[ligne.statut]}`}>
+                          {LIBELLE_TRANSMISSION[ligne.statut]} le {formatJjMmAa(ligne.verifieLe.slice(0, 10))}
+                        </span>
+                      </span>
+                    </div>
+                    {ligne.statut === "ecart" && ligne.motifEcart && (
+                      <div className="text-ink-500 pt-1 pb-2 pl-[0.875rem] text-[10px] italic">
+                        {ligne.motifEcart}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
         </div>
 
         {selection.commentaireManager && (

@@ -1,0 +1,472 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  CongeATransmettre,
+  DemandeEquipe,
+  LigneExportPaie,
+  NouvelleDemandeInput,
+  StatutTransmission,
+} from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
+import {
+  calculerNbDemiJournees,
+  getUtilisateurId,
+  mapDemandeEquipeDepuisDb,
+  SELECT_DEMANDE_EQUIPE,
+  type DemandeEquipeRow,
+} from "@/lib/data/demandes.repository";
+
+/**
+ * Repository "Clôture paie" — transmission des congés vers la comptable
+ * (`exports_paie`/`export_paie_lignes`, voir BASE-DE-DONNEES.md). Le statut
+ * de transmission vit sur une ligne de ledger, pas sur `demandes_conges` :
+ * une demande peut être transmise en plusieurs tranches (congé à cheval sur
+ * deux périodes de paie, voir `genererExportPaie`).
+ */
+
+interface LigneExportPaieRow {
+  jours_inclus: number;
+  statut: StatutTransmission;
+}
+
+interface DemandeAvecLignesRow extends DemandeEquipeRow {
+  export_paie_lignes: LigneExportPaieRow[] | null;
+}
+
+function soldeTransmission(row: DemandeAvecLignesRow): number {
+  return (row.export_paie_lignes ?? []).reduce((total, l) => total + Number(l.jours_inclus), 0);
+}
+
+/**
+ * Demandes validées ou annulées (CP/RTT/CSS), avec leur solde de
+ * transmission déjà calculé (`export_paie_lignes` embarqué) — brique
+ * partagée par `fetchCongesATransmettre` (affichage) et `genererExportPaie`
+ * (calcul des lignes à créer), aucun filtre de date : le principe même de
+ * cet écran est de faire remonter aussi les congés d'une période antérieure
+ * jamais transmis (voir discussion du 24/08/2026).
+ */
+async function fetchDemandesAvecSoldeTransmission(
+  supabase: SupabaseClient,
+): Promise<{ demande: DemandeEquipe; soldeTransmission: number }[]> {
+  const { data, error } = await supabase
+    .from("demandes_conges")
+    .select(`${SELECT_DEMANDE_EQUIPE}, export_paie_lignes(jours_inclus)`)
+    .in("statut", ["validee", "annulee"])
+    .order("date_debut", { ascending: true });
+
+  if (error) {
+    throw new Error("Impossible de charger les congés validés/annulés.");
+  }
+
+  return ((data ?? []) as unknown as DemandeAvecLignesRow[])
+    .map((row) => ({
+      demande: mapDemandeEquipeDepuisDb(row),
+      soldeTransmission: soldeTransmission(row),
+    }))
+    .filter(({ demande }) => demande.type === "CP" || demande.type === "RTT" || demande.type === "CSS");
+}
+
+/**
+ * Congés en attente chevauchant la période — même logique de chevauchement
+ * que `MonCalendrierPage` (`d.debut <= fin && d.fin >= debut`), pas
+ * `date_debut` seul : un congé en attente à cheval doit apparaître dès qu'il
+ * touche la période, anticipation demandée par Vincent.
+ */
+async function fetchDemandesEnAttenteChevauchantes(
+  supabase: SupabaseClient,
+  debut: string,
+  fin: string,
+): Promise<DemandeEquipe[]> {
+  const { data, error } = await supabase
+    .from("demandes_conges")
+    .select(SELECT_DEMANDE_EQUIPE)
+    .eq("statut", "en_attente")
+    .lte("date_debut", fin)
+    .gte("date_fin", debut)
+    .order("date_debut", { ascending: true });
+
+  if (error) {
+    throw new Error("Impossible de charger les congés en attente.");
+  }
+
+  return ((data ?? []) as unknown as DemandeEquipeRow[])
+    .map(mapDemandeEquipeDepuisDb)
+    .filter((d) => d.type === "CP" || d.type === "RTT" || d.type === "CSS");
+}
+
+/**
+ * Onglet "Quels congés transmettre" — trois catégories fusionnées côté
+ * client (pas de filtre de date sur les validés/annulés, c'est tout
+ * l'intérêt : un congé de juin jamais transmis doit remonter en août) :
+ * - Validés dont il reste des jours à transmettre (`joursRestants > 0`).
+ * - Annulés dont le solde de transmission n'a pas encore été corrigé
+ *   (`joursRestants < 0` — ligne de correction à venir).
+ * - En attente chevauchant la période (anticipation).
+ */
+export async function fetchCongesATransmettre(periode: {
+  debut: string;
+  fin: string;
+}): Promise<CongeATransmettre[]> {
+  const supabase = createClient();
+
+  const [avecSolde, enAttente] = await Promise.all([
+    fetchDemandesAvecSoldeTransmission(supabase),
+    fetchDemandesEnAttenteChevauchantes(supabase, periode.debut, periode.fin),
+  ]);
+
+  const resultat: CongeATransmettre[] = [];
+
+  for (const { demande, soldeTransmission: solde } of avecSolde) {
+    // Un congé qui démarre après la fin de la période n'est pas encore dû —
+    // il remontera à son tour (décision actée : le récap ne montre que la
+    // période courante + le backlog jamais transmis, pas les congés déjà
+    // validés pour un mois futur).
+    if (demande.debut > periode.fin) continue;
+    if (demande.statut === "validé") {
+      const joursRestants = demande.nbDemiJournees / 2 - solde;
+      if (joursRestants > 0) {
+        resultat.push({ ...demande, joursRestants, joursDejaTransmis: solde });
+      }
+    } else if (demande.statut === "annulé" && solde > 0) {
+      resultat.push({ ...demande, joursRestants: -solde, joursDejaTransmis: solde });
+    }
+  }
+
+  for (const demande of enAttente) {
+    resultat.push({ ...demande, joursRestants: demande.nbDemiJournees / 2, joursDejaTransmis: 0 });
+  }
+
+  return resultat.sort((a, b) => a.debut.localeCompare(b.debut));
+}
+
+/**
+ * Jours d'une demande qui tombent entre son début et la fin de la période
+ * exportée — même calcul que `calculerNbDemiJournees`, borné à
+ * `[max(demande.debut, periode.debut), periode.fin]`. Utilisé uniquement
+ * pour un congé qui déborde SUR le mois suivant (à cheval, `demande.fin >
+ * periode.fin`) : découpe alors la tranche à transmettre maintenant de
+ * celle qui attendra un futur export (notation "2/6" de Vincent). Un congé
+ * du backlog (déjà entièrement passé, `demande.fin <= periode.fin`) n'a pas
+ * besoin de ce découpage — voir `genererExportPaie`, qui transmet directement
+ * tout son reliquat dans ce cas (rattrapage complet, pas de fragmentation
+ * supplémentaire).
+ */
+async function joursDansPeriode(
+  supabase: SupabaseClient,
+  demande: DemandeEquipe,
+  periode: { debut: string; fin: string },
+): Promise<number> {
+  const debut = demande.debut > periode.debut ? demande.debut : periode.debut;
+  const fin = periode.fin;
+  if (debut > fin) return 0;
+
+  const demiDebut = debut === demande.debut ? demande.demiDebut : "matin";
+  const demiJournees = await calculerNbDemiJournees(supabase, debut, fin, demiDebut, "apres_midi");
+  return demiJournees / 2;
+}
+
+/**
+ * L'export déjà généré pour une période, s'il existe — pour savoir si le
+ * bouton "Transmettre" doit être désactivé et pour alimenter l'onglet
+ * "Vérifier les fiches de paie" (qui a besoin de l'id de l'export).
+ */
+export async function fetchExportPaie(periode: {
+  debut: string;
+  fin: string;
+}): Promise<{ id: string; genereLe: string } | null> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("exports_paie")
+    .select("id, genere_le")
+    .eq("periode_debut", periode.debut)
+    .eq("periode_fin", periode.fin)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Impossible de vérifier si cette période a déjà été transmise.");
+  }
+
+  return data ? { id: data.id, genereLe: data.genere_le } : null;
+}
+
+/**
+ * Action "Transmettre" — crée l'export puis ses lignes :
+ * - Congés validés avec un reliquat : seule la portion tombant dans la
+ *   période est transmise maintenant (`joursDansPeriode`), plafonnée au
+ *   reliquat réel (`joursRestants`) pour ne jamais transmettre plus que ce
+ *   qui reste. Le reliquat hors période n'est pas touché, repris par un
+ *   futur export.
+ * - Congés annulés avec un solde de transmission positif : une seule ligne
+ *   de correction négative (`-soldeTransmission`), qui ramène leur solde à
+ *   0 d'un coup — les lignes de l'export d'origine ne sont jamais modifiées
+ *   (décision actée avec Vincent : pas de réécriture de l'historique).
+ *
+ * La contrainte unique `exports_paie_periode_unique` empêche un doublon si
+ * l'action est rejouée sur une période déjà transmise (erreur Postgres
+ * 23505, remontée telle quelle à l'appelant).
+ */
+export async function genererExportPaie(periode: {
+  debut: string;
+  fin: string;
+}): Promise<{ exportId: string; nbLignes: number }> {
+  const supabase = createClient();
+  const utilisateurId = await getUtilisateurId(supabase);
+
+  const { data: exportPaie, error: errorExport } = await supabase
+    .from("exports_paie")
+    .insert({ periode_debut: periode.debut, periode_fin: periode.fin, genere_par: utilisateurId })
+    .select("id")
+    .single();
+
+  if (errorExport || !exportPaie) {
+    if (errorExport?.code === "23505") {
+      throw new Error("Un export a déjà été généré pour cette période.");
+    }
+    throw new Error("Impossible de créer l'export.");
+  }
+
+  const avecSolde = await fetchDemandesAvecSoldeTransmission(supabase);
+  const lignes: { export_paie_id: string; demande_id: string; jours_inclus: number }[] = [];
+
+  for (const { demande, soldeTransmission: solde } of avecSolde) {
+    // Congé pas encore dû (démarre après cette période) — laissé de côté
+    // pour un futur export, voir `fetchCongesATransmettre`.
+    if (demande.debut > periode.fin) continue;
+
+    if (demande.statut === "validé") {
+      const joursRestants = demande.nbDemiJournees / 2 - solde;
+      if (joursRestants <= 0) continue;
+      // Backlog ou congé entièrement dans la période : rattrapage complet
+      // du reliquat, pas de fragmentation (aucun futur export ne le
+      // réclamerait sinon). À cheval sur le mois suivant : seule la
+      // tranche jusqu'à `periode.fin` part maintenant.
+      const joursCettePeriode =
+        demande.fin <= periode.fin
+          ? joursRestants
+          : Math.min(await joursDansPeriode(supabase, demande, periode), joursRestants);
+      if (joursCettePeriode > 0) {
+        lignes.push({ export_paie_id: exportPaie.id, demande_id: demande.id, jours_inclus: joursCettePeriode });
+      }
+    } else if (demande.statut === "annulé" && solde > 0) {
+      lignes.push({ export_paie_id: exportPaie.id, demande_id: demande.id, jours_inclus: -solde });
+    }
+  }
+
+  if (lignes.length > 0) {
+    const { error: errorLignes } = await supabase.from("export_paie_lignes").insert(lignes);
+    if (errorLignes) {
+      throw new Error("Export créé, mais impossible d'enregistrer les lignes transmises.");
+    }
+  }
+
+  return { exportId: exportPaie.id, nbLignes: lignes.length };
+}
+
+export interface CheckFichePaieCollaborateur {
+  utilisateur: { id: string; prenom: string; nom: string };
+  totalJours: number;
+  lignes: { ligne: LigneExportPaie; demande: DemandeEquipe }[];
+}
+
+interface LigneCheckRow extends LigneExportPaieRow {
+  id: string;
+  demande_id: string;
+  motif_ecart: string | null;
+  verifie_le: string | null;
+  demandes_conges: DemandeEquipeRow | DemandeEquipeRow[] | null;
+}
+
+/**
+ * Onglet "Vérifier les fiches de paie" — les lignes d'un export, groupées
+ * par collaborateur (solde + total transmis, ce qui est littéralement
+ * imprimé sur la fiche de paie), avec le détail par congé pour isoler un
+ * écart précis (décision actée : "il faut passer en mode détail").
+ */
+export async function fetchCheckFichesPaie(exportId: string): Promise<CheckFichePaieCollaborateur[]> {
+  const supabase = createClient();
+
+  const { data: exportPaie, error: errorExport } = await supabase
+    .from("exports_paie")
+    .select("genere_le, periode_debut, periode_fin")
+    .eq("id", exportId)
+    .single();
+
+  if (errorExport || !exportPaie) {
+    throw new Error("Export introuvable.");
+  }
+
+  const { data, error } = await supabase
+    .from("export_paie_lignes")
+    .select(`id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, demandes_conges(${SELECT_DEMANDE_EQUIPE})`)
+    .eq("export_paie_id", exportId);
+
+  if (error) {
+    throw new Error("Impossible de charger les lignes de cet export.");
+  }
+
+  const parCollaborateur = new Map<string, CheckFichePaieCollaborateur>();
+
+  for (const row of (data ?? []) as unknown as LigneCheckRow[]) {
+    const demandeRow = Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges;
+    if (!demandeRow) continue;
+    const demande = mapDemandeEquipeDepuisDb(demandeRow);
+
+    const ligne: LigneExportPaie = {
+      id: row.id,
+      demandeId: row.demande_id,
+      joursInclus: Number(row.jours_inclus),
+      statut: row.statut,
+      motifEcart: row.motif_ecart,
+      verifieLe: row.verifie_le,
+      genereLe: exportPaie.genere_le,
+      periodeDebut: exportPaie.periode_debut,
+      periodeFin: exportPaie.periode_fin,
+    };
+
+    const existant = parCollaborateur.get(demande.demandeur.id);
+    if (existant) {
+      existant.totalJours += ligne.joursInclus;
+      existant.lignes.push({ ligne, demande });
+    } else {
+      parCollaborateur.set(demande.demandeur.id, {
+        utilisateur: demande.demandeur,
+        totalJours: ligne.joursInclus,
+        lignes: [{ ligne, demande }],
+      });
+    }
+  }
+
+  return Array.from(parCollaborateur.values()).sort((a, b) =>
+    a.utilisateur.nom.localeCompare(b.utilisateur.nom),
+  );
+}
+
+interface LigneTransmissionRow {
+  id: string;
+  demande_id: string;
+  jours_inclus: number;
+  statut: StatutTransmission;
+  motif_ecart: string | null;
+  verifie_le: string | null;
+  exports_paie: { genere_le: string; periode_debut: string; periode_fin: string } | { genere_le: string; periode_debut: string; periode_fin: string }[] | null;
+}
+
+/**
+ * Lignes de transmission de plusieurs demandes en un seul aller-retour,
+ * groupées par `demande_id` — pour afficher le statut "Transmis"/"En paye"/
+ * "Écart" dans "Suivre les demandes" (badge par ligne du tableau) et pour
+ * alimenter `DetailCongePanel.lignesTransmission` sans un fetch par demande.
+ */
+export async function fetchLignesTransmissionParDemande(
+  demandeIds: string[],
+): Promise<Record<string, LigneExportPaie[]>> {
+  if (demandeIds.length === 0) return {};
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("export_paie_lignes")
+    .select("id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, exports_paie(genere_le, periode_debut, periode_fin)")
+    .in("demande_id", demandeIds);
+
+  if (error) {
+    throw new Error("Impossible de charger les lignes de transmission.");
+  }
+
+  const parDemande: Record<string, LigneExportPaie[]> = {};
+  for (const row of (data ?? []) as unknown as LigneTransmissionRow[]) {
+    const exportPaie = Array.isArray(row.exports_paie) ? row.exports_paie[0] : row.exports_paie;
+    if (!exportPaie) continue;
+    const ligne: LigneExportPaie = {
+      id: row.id,
+      demandeId: row.demande_id,
+      joursInclus: Number(row.jours_inclus),
+      statut: row.statut,
+      motifEcart: row.motif_ecart,
+      verifieLe: row.verifie_le,
+      genereLe: exportPaie.genere_le,
+      periodeDebut: exportPaie.periode_debut,
+      periodeFin: exportPaie.periode_fin,
+    };
+    (parDemande[row.demande_id] ??= []).push(ligne);
+  }
+  return parDemande;
+}
+
+export async function validerCheckPaie(ligneIds: string[]): Promise<void> {
+  if (ligneIds.length === 0) return;
+  const supabase = createClient();
+  const utilisateurId = await getUtilisateurId(supabase);
+
+  const { error } = await supabase
+    .from("export_paie_lignes")
+    .update({ statut: "en_paye", verifie_le: new Date().toISOString(), verifie_par: utilisateurId })
+    .in("id", ligneIds);
+
+  if (error) {
+    throw new Error("Impossible de valider ces lignes.");
+  }
+}
+
+export async function signalerEcart(ligneId: string, motif: string): Promise<void> {
+  const supabase = createClient();
+  const utilisateurId = await getUtilisateurId(supabase);
+
+  const { error } = await supabase
+    .from("export_paie_lignes")
+    .update({
+      statut: "ecart",
+      motif_ecart: motif,
+      verifie_le: new Date().toISOString(),
+      verifie_par: utilisateurId,
+    })
+    .eq("id", ligneId);
+
+  if (error) {
+    throw new Error("Impossible de signaler cet écart.");
+  }
+}
+
+/**
+ * "Poser pour un collaborateur" — Delphine crée une demande déjà validée au
+ * nom d'un collaborateur (oubli du salarié, correction ponctuelle — maladie
+ * hors scope, décision actée). Visible dans l'historique du salarié
+ * concerné (transparence totale, décision actée) : `commentaire_decision`
+ * trace qui l'a ajoutée.
+ */
+export async function poserCongePourCollaborateur(
+  input: NouvelleDemandeInput & { utilisateurId: string },
+): Promise<void> {
+  const supabase = createClient();
+  const auteurId = await getUtilisateurId(supabase);
+
+  const [typeAbsenceId, nbDemiJournees, { data: auteur }] = await Promise.all([
+    getTypeAbsenceId(supabase, input.type),
+    calculerNbDemiJournees(supabase, input.debut, input.fin, input.demiDebut, input.demiFin),
+    supabase.from("utilisateurs").select("prenom, nom").eq("id", auteurId).single(),
+  ]);
+
+  const commentaire = auteur
+    ? `Ajouté par ${auteur.prenom} ${auteur.nom}${input.note ? " — " + input.note : ""}`
+    : input.note || null;
+
+  const { error } = await supabase.from("demandes_conges").insert({
+    utilisateur_id: input.utilisateurId,
+    type_absence_id: typeAbsenceId,
+    date_debut: input.debut,
+    date_fin: input.fin,
+    demi_debut: input.demiDebut,
+    demi_fin: input.demiFin,
+    nb_demi_journees: nbDemiJournees,
+    is_anticipation: input.isAnticipation,
+    commentaire_salarie: input.note || null,
+    statut: "validee",
+    validateur_id: auteurId,
+    commentaire_decision: commentaire,
+    date_decision: new Date().toISOString(),
+  });
+
+  if (error) {
+    throw new Error("Impossible d'ajouter ce congé.");
+  }
+}

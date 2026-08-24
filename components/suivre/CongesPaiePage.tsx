@@ -118,9 +118,27 @@ function genererCsv(lignes: LigneCollab[]): string {
  * par défaut 25→24 (`periodePaieParDefaut`, cycle de transmission à la
  * comptable), modifiable via les deux champs date. Export CSV côté client
  * (Blob + téléchargement), pas d'appel serveur.
+ *
+ * `masquerTitre` (24/08/2026) — opt-in : masque le `<h1>` "Export paie" et
+ * réduit le padding vertical d'origine, pour un usage imbriqué dans un autre
+ * écran qui porte déjà son propre titre (`CloturePaiePage`, onglet "Générer
+ * l'export" — reprend ce composant tel quel plutôt que de dupliquer sa
+ * logique). Défaut : comportement inchangé, écran `/suivre/paie` autonome.
+ *
+ * `periodeInitiale` (24/08/2026) — override du calcul par défaut
+ * (`periodePaieParDefaut()`), pour ouvrir directement sur une période
+ * précise (mois d'archive choisi sur `/suivre/cloture-paie`) plutôt que
+ * toujours la période en cours. Reste modifiable ensuite via les mêmes
+ * champs date, comme le calcul par défaut.
  */
-export function CongesPaiePage() {
-  const defaut = periodePaieParDefaut();
+export function CongesPaiePage({
+  masquerTitre = false,
+  periodeInitiale,
+}: {
+  masquerTitre?: boolean;
+  periodeInitiale?: { debut: string; fin: string };
+} = {}) {
+  const defaut = periodeInitiale ?? periodePaieParDefaut();
   const [debut, setDebut] = useState(defaut.debut);
   const [fin, setFin] = useState(defaut.fin);
   const { demandes, loading, error, refetch } = useCongesConsommes(debut, fin);
@@ -170,8 +188,10 @@ export function CongesPaiePage() {
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Export paie</h1>
+    <div
+      className={`flex w-full max-w-md flex-col gap-5 md:max-w-none ${masquerTitre ? "" : "pt-5 pb-4 md:pt-0"}`}
+    >
+      {!masquerTitre && <h1 className="text-ink-900 px-1 text-2xl font-semibold">Export paie</h1>}
 
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div
