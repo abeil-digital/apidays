@@ -2234,6 +2234,19 @@ détaillées ci-dessous.
   (`border-mint text-mint bg-transparent`) : `hover:bg-mint-tint` (token déjà existant, utilisé
   jusque-là pour le fond du bloc "Soldes"). `transition-colors duration-150` ajouté aux deux.
 
+**"Mon calendrier" supprimé (24/08/2026)** : retiré de la sous-navigation "Poser"
+(`components/layout/tabs.ts`, `POSER_TABS`), puis la route et la page elle-même supprimées une fois
+confirmé qu'elle n'était plus reliée à rien — `app/(app)/mon-calendrier/page.tsx` et
+`components/dashboard/MonCalendrierPage.tsx` (gabarit onglets + colonne légende CPI/DJI/Fériés,
+distinct du calendrier "nouvelle version" d'Accueil/`Suivre > Calendrier`, voir ci-dessus).
+Vérifié avant suppression : composant self-contained (aucun helper extrait dans un fichier à part),
+tous ses imports (`useCalendrier`/`useDemandes`/`useReglesConges`/`MiniCalendrier`/`TypeBadge`/...)
+restent utilisés ailleurs — rien d'autre à nettoyer. `/mon-calendrier` renvoie désormais un 404
+(vérifié). Les mentions de `MonCalendrierPage`/`/mon-calendrier` restant en commentaire dans
+`CalendrierCollaborateur.tsx`/`SuivreCalendrierPage.tsx` (comme précédent de gabarit écarté) et dans
+ce fichier sont volontairement conservées, à titre de contexte historique — même convention que les
+écrans Calendrier/`calendrier3` déjà retirés plus haut.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

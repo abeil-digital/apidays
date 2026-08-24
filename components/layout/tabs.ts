@@ -18,7 +18,6 @@ export interface NavTab {
 
 const POSER_TABS: NavTab[] = [
   { href: "/", label: "Accueil", Icon: Home },
-  { href: "/mon-calendrier", label: "Mon calendrier", Icon: CalendarDays },
   { href: "/historique", label: "Historique", Icon: History },
 ];
 
