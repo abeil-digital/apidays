@@ -67,14 +67,16 @@ async function fetchDemandesAvecSoldeTransmission(
 }
 
 /**
- * Congés en attente chevauchant la période — même logique de chevauchement
- * que `MonCalendrierPage` (`d.debut <= fin && d.fin >= debut`), pas
- * `date_debut` seul : un congé en attente à cheval doit apparaître dès qu'il
- * touche la période, anticipation demandée par Vincent.
+ * Congés en attente pas encore dus (même règle que les validés/annulés,
+ * `demande.debut <= periode.fin`, pas de borne basse) — corrigé le
+ * 24/08/2026 : un chevauchement strict avec la période (`d.fin >= debut`)
+ * faisait disparaître un congé en attente resté non tranché depuis un mois
+ * largement passé (ex. posé le 16/07, jamais décidé) de tous les récaps,
+ * validé ou pas — alors que c'est justement ce genre d'oubli que l'écran
+ * doit faire remonter pour que Delphine le tranche avant transmission.
  */
-async function fetchDemandesEnAttenteChevauchantes(
+async function fetchDemandesEnAttenteAvant(
   supabase: SupabaseClient,
-  debut: string,
   fin: string,
 ): Promise<DemandeEquipe[]> {
   const { data, error } = await supabase
@@ -82,7 +84,6 @@ async function fetchDemandesEnAttenteChevauchantes(
     .select(SELECT_DEMANDE_EQUIPE)
     .eq("statut", "en_attente")
     .lte("date_debut", fin)
-    .gte("date_fin", debut)
     .order("date_debut", { ascending: true });
 
   if (error) {
@@ -101,7 +102,7 @@ async function fetchDemandesEnAttenteChevauchantes(
  * - Validés dont il reste des jours à transmettre (`joursRestants > 0`).
  * - Annulés dont le solde de transmission n'a pas encore été corrigé
  *   (`joursRestants < 0` — ligne de correction à venir).
- * - En attente chevauchant la période (anticipation).
+ * - En attente pas encore dues (backlog jamais tranché + anticipation).
  */
 export async function fetchCongesATransmettre(periode: {
   debut: string;
@@ -111,7 +112,7 @@ export async function fetchCongesATransmettre(periode: {
 
   const [avecSolde, enAttente] = await Promise.all([
     fetchDemandesAvecSoldeTransmission(supabase),
-    fetchDemandesEnAttenteChevauchantes(supabase, periode.debut, periode.fin),
+    fetchDemandesEnAttenteAvant(supabase, periode.fin),
   ]);
 
   const resultat: CongeATransmettre[] = [];
