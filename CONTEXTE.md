@@ -2555,6 +2555,56 @@ réécrire l'historique).
   `STATUT_PAR_FILTRE`) pour les isoler facilement plutôt que les laisser noyées dans "Tous les
   statuts".
 
+**Effet de bord sur les calendriers — congés annulés qui continuaient d'occuper des jours
+(25/08/2026)** : conséquence directe du retrait du filtre `.neq("statut", "annulee")` sur
+`fetchDemandes` (voir plus haut) — plusieurs fonctions `demandeDuJour`/équivalentes, qui résolvent
+"qu'est-ce qui occupe ce jour du calendrier", n'excluaient que `refusé` et pas `annulé` (l'exclusion
+d'`annulé` était jusque-là inutile, aucune demande annulée ne remontait jamais dans `demandes`).
+Signalé par Vincent : une régularisation devait aussi "libérer" le jour sur le calendrier du
+collaborateur, pas seulement rester tracée dans son historique/journal.
+
+- **`Dashboard2Page.tsx`** (Accueil, "Mon calendrier") — `demandeDuJour`.
+- **`CalendrierCollaborateur.tsx`** (Suivre > Calendrier, vue manager) — `demandeDuJour`, même
+  correction.
+- **`compterTypologies.ts`** — les compteurs "C. payés (X j)"/etc. affichés au-dessus du calendrier
+  sommaient aussi les jours des demandes annulées dans leurs totaux.
+- **Déjà corrects, non touchés** : `creerResolveurOccupant` (`DetailPeriodeConges.tsx`),
+  `PoserDemandeModal.tsx`/`PoserCongePourCollaborateurModal.tsx` (jours déjà occupés bloquant la
+  sélection d'une nouvelle demande), `CalendrierPage.tsx` (Paramétrer) — excluaient déjà `annulé`
+  en plus de `refusé`, écrits après la première apparition de ce bug ailleurs dans le code.
+- Vérifié en conditions réelles : le calendrier d'Olivier (`/suivre/calendrier`) ne montre plus le
+  congé annulé 03/08→28/08 (20 j) — seule sa demande "en attente" distincte sur les mêmes dates
+  (14,5 j, résidu de test d'une session précédente) reste visible.
+
+**Calendrier — demi-journées affichées comme des journées pleines (25/08/2026)** : signalé par
+Vincent (Delphine, 16/09, un demi-CP affiché comme un jour entier). `tipoDuJour`
+(`Dashboard2Page.tsx`/`CalendrierCollaborateur.tsx`) rendait TOUJOURS un fond plein
+(`classeFondTypeBadge`) pour un jour occupé par une demande, quelle que soit sa vraie couverture —
+seule la pastille DJI utilisait déjà la variante `moitie` de `MiniCalendrier` (couleur pleine +
+côté gauche/droite posé, déjà utilisée aussi pour les jours fériés/CPI communs). Fix : `tipoDuJour`
+calcule maintenant `matinCouvert`/`apresMidiCouvert` à partir de `demiDebut`/`demiFin` sur les bornes
+de la demande (`iso === demande.debut`/`demande.fin` uniquement — un jour au milieu d'une période
+multi-jours reste toujours plein), et bascule sur `moitie` dès qu'un seul des deux est couvert.
+Nouvelle constante `VAR_COULEUR_TYPE` (dupliquée dans les deux fichiers, même convention que
+`DetailCongePanel.tsx`/`PoserDemandeModal.tsx`) — `moitie` prend une couleur CSS brute, pas une
+classe Tailwind. Teinte atténuée pour "en attente" reproduite via `color-mix` (équivalent de
+`classeFondAttenueTypeBadge` mais applicable à une couleur brute). Vérifié via le style calculé du
+DOM (`background: linear-gradient(...)`, plus fiable qu'une capture d'écran à cette échelle) : le 16
+septembre affiche bien une pastille moitié pleine/moitié claire, pas un fond plein.
+
+**Légende du calendrier — plage "mois en cours" démarrant littéralement aujourd'hui, pas le 1er du
+mois (25/08/2026)** : suite du point précédent — Vincent a signalé un total "C. payés" incohérent
+(5,5 j affichés, 6,5 j attendus : 0,5 + 5 + 1 j pour un congé en attente du 11/08, avant la date du
+jour). Cause : `ranges.en_cours.debut`/`ranges.periode_cp.debut`
+(`Dashboard2Page.tsx`/`CalendrierCollaborateur.tsx`) valaient `todayIso` (aujourd'hui, 25/08) plutôt
+que le 1er du mois, alors que le sélecteur "Débute :" affiche le libellé **"Août 26"** — laissant
+croire que tout le mois est couvert, alors que les 24 premiers jours étaient silencieusement exclus.
+Fix : nouvelle constante `debutMoisActuel` (1er jour du mois en cours), substituée à `todayIso`
+comme valeur par défaut (non "vue complète") des deux plages — le libellé et la donnée réelle
+correspondent maintenant. `todayIso` reste utilisé tel quel pour `estAujourdhui` (marqueur "jour
+présent" sur la grille, sans rapport avec la plage de calcul). Vérifié : "C. payés" passe de 5,5 j à
+6,5 j, le 11/08 réapparaît bien dans la liste/le calendrier d'août.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

@@ -118,6 +118,23 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
+// Nom de la variable CSS du token couleur du type — pour la variante `moitie`
+// d'une pastille demi-journée (`tipoDuJour`), qui prend une couleur CSS brute
+// plutôt qu'une classe Tailwind. Même procédé que `DetailCongePanel.tsx`/
+// `PoserDemandeModal.tsx`.
+const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
+  CP: "--color-cp",
+  RTT: "--color-rtt",
+  CPA: "--color-cpa",
+  CSS: "--color-css",
+  CE: "--color-ce",
+  RECUP: "--color-recup",
+  EVT_FAM: "--color-evtfam",
+  DJI: "--color-dji",
+  CPI: "--color-cpi",
+  FERIE: "--color-ferie",
+};
+
 /**
  * Accueil collaborateur — écran unique, route `/` (14/08/2026 : remplace
  * l'ancien `DashboardPage`, supprimé ; le nom de fichier/composant
@@ -187,6 +204,13 @@ export function Dashboard2Page() {
   const todayIso = todayISO();
   const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
   const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
+  // 1er jour du mois en cours (25/08/2026, bug signalé par Vincent) — la vue
+  // "mois en cours" ("Août 26") doit démarrer le 1er du mois, pas
+  // littéralement aujourd'hui : sinon un congé déjà posé plus tôt dans le
+  // mois (validé ou encore en attente) disparaissait de la légende/du
+  // calendrier alors que le libellé affiché ("Août 26") laisse croire que
+  // tout le mois est couvert.
+  const debutMoisActuel = isoDate(anneeActuelle, new Date().getMonth(), 1);
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   // Fenêtre de la période de référence CP contenant aujourd'hui — par
@@ -210,9 +234,12 @@ export function Dashboard2Page() {
     : finAnneeActuelle;
 
   const ranges: Record<Onglet, { debut: string; fin: string }> = {
-    en_cours: { debut: vueCompleteEnCours ? debutAnneeActuelle : todayIso, fin: finAnneeActuelle },
+    en_cours: {
+      debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
+      fin: finAnneeActuelle,
+    },
     periode_cp: {
-      debut: vueCompletePeriodeCp ? debutPeriodeCp : todayIso,
+      debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
       fin: finPeriodeCp,
     },
     annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
@@ -261,7 +288,9 @@ export function Dashboard2Page() {
   });
 
   function demandeDuJour(iso: string): Demande | undefined {
-    return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
+    return demandes.find(
+      (d) => d.statut !== "refusé" && d.statut !== "annulé" && iso >= d.debut && iso <= d.fin,
+    );
   }
 
   // Jours communs, tous types confondus : les Fériés sont montrés même sur
@@ -304,15 +333,38 @@ export function Dashboard2Page() {
   // > DJI. Un chevauchement demande/CPI-DJI reste un cas marginal (voir
   // Backlog.md — scan de chevauchement dédié), la demande perso l'emporte
   // visuellement ici plutôt que de le masquer.
+  //
+  // Demi-journée d'une demande rendue comme telle (25/08/2026, bug signalé
+  // par Vincent : "16/09 pour Delphine s'affiche comme une journée") — avant
+  // ce fix, un jour occupé par une demande était TOUJOURS un fond plein
+  // (`classeFond`), quelle que soit sa vraie couverture. Seuls les bornes
+  // (`iso === demande.debut`/`demande.fin`) peuvent être demi-couvertes ; un
+  // jour au milieu d'une période multi-jours reste toujours plein. Même
+  // variante `moitie` que la pastille DJI juste au-dessus (couleur pleine +
+  // côté posé), teinte atténuée en plus pour "en attente" (`color-mix`,
+  // équivalent de `classeFondAttenueTypeBadge` mais applicable à une couleur
+  // CSS brute plutôt qu'à une classe Tailwind).
   function tipoDuJour(iso: string): PastilleJour | null {
     const demande = demandeDuJour(iso);
     if (demande) {
       const code = codeBadgeDemande(demande);
-      const classeFond =
+      const matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
+      const apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+
+      if (matinCouvert && apresMidiCouvert) {
+        const classeFond =
+          demande.statut === "en attente"
+            ? classeFondAttenueTypeBadge(code)
+            : classeFondTypeBadge(code);
+        return { classeFond };
+      }
+
+      const couleurBase = `var(${VAR_COULEUR_TYPE[code]})`;
+      const couleur =
         demande.statut === "en attente"
-          ? classeFondAttenueTypeBadge(code)
-          : classeFondTypeBadge(code);
-      return { classeFond };
+          ? `color-mix(in srgb, ${couleurBase} 50%, white)`
+          : couleurBase;
+      return { moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" } };
     }
     return communDuJour(iso);
   }

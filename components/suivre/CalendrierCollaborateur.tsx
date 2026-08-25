@@ -99,6 +99,21 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
+// Voir Dashboard2Page.tsx (même constante, duplication assumée entre les
+// deux variantes de calendrier, comme le reste de leurs helpers).
+const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
+  CP: "--color-cp",
+  RTT: "--color-rtt",
+  CPA: "--color-cpa",
+  CSS: "--color-css",
+  CE: "--color-ce",
+  RECUP: "--color-recup",
+  EVT_FAM: "--color-evtfam",
+  DJI: "--color-dji",
+  CPI: "--color-cpi",
+  FERIE: "--color-ferie",
+};
+
 /**
  * Calendrier d'un collaborateur, pour `/suivre/calendrier` (24/08/2026,
  * manager/admin) — reprend le gabarit du calendrier "nouvelle version"
@@ -152,6 +167,9 @@ export function CalendrierCollaborateur({
   const todayIso = todayISO();
   const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
   const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
+  // Voir Dashboard2Page.tsx — même fix (25/08/2026) : la vue "mois en cours"
+  // doit démarrer le 1er du mois, pas littéralement aujourd'hui.
+  const debutMoisActuel = isoDate(anneeActuelle, new Date().getMonth(), 1);
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const debutPeriodeCp = regleCp
@@ -171,9 +189,12 @@ export function CalendrierCollaborateur({
     : finAnneeActuelle;
 
   const ranges: Record<Onglet, { debut: string; fin: string }> = {
-    en_cours: { debut: vueCompleteEnCours ? debutAnneeActuelle : todayIso, fin: finAnneeActuelle },
+    en_cours: {
+      debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
+      fin: finAnneeActuelle,
+    },
     periode_cp: {
-      debut: vueCompletePeriodeCp ? debutPeriodeCp : todayIso,
+      debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
       fin: finPeriodeCp,
     },
     annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
@@ -217,7 +238,9 @@ export function CalendrierCollaborateur({
   });
 
   function demandeDuJour(iso: string): Demande | undefined {
-    return demandes.find((d) => d.statut !== "refusé" && iso >= d.debut && iso <= d.fin);
+    return demandes.find(
+      (d) => d.statut !== "refusé" && d.statut !== "annulé" && iso >= d.debut && iso <= d.fin,
+    );
   }
 
   function communDuJour(iso: string): PastilleJour | null {
@@ -242,15 +265,29 @@ export function CalendrierCollaborateur({
     return null;
   }
 
+  // Demi-journée rendue comme telle, pas un fond plein — même fix que
+  // Dashboard2Page.tsx (25/08/2026, bug signalé par Vincent).
   function tipoDuJour(iso: string): PastilleJour | null {
     const demande = demandeDuJour(iso);
     if (demande) {
       const code = codeBadgeDemande(demande);
-      const classeFond =
+      const matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
+      const apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+
+      if (matinCouvert && apresMidiCouvert) {
+        const classeFond =
+          demande.statut === "en attente"
+            ? classeFondAttenueTypeBadge(code)
+            : classeFondTypeBadge(code);
+        return { classeFond };
+      }
+
+      const couleurBase = `var(${VAR_COULEUR_TYPE[code]})`;
+      const couleur =
         demande.statut === "en attente"
-          ? classeFondAttenueTypeBadge(code)
-          : classeFondTypeBadge(code);
-      return { classeFond };
+          ? `color-mix(in srgb, ${couleurBase} 50%, white)`
+          : couleurBase;
+      return { moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" } };
     }
     return communDuJour(iso);
   }

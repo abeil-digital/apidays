@@ -78,7 +78,11 @@ export function compterTypologies({
 
   demandes
     .filter(
-      (d) => d.statut !== "refusé" && d.debut <= rangeActive.fin && d.fin >= rangeActive.debut,
+      (d) =>
+        d.statut !== "refusé" &&
+        d.statut !== "annulé" &&
+        d.debut <= rangeActive.fin &&
+        d.fin >= rangeActive.debut,
     )
     .forEach((d) => ajouter(codeBadgeDemande(d), d.nbDemiJournees / 2));
 
