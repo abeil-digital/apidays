@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, SquareSplitHorizontal } from "lucide-react";
 import type { CongeATransmettre, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
 import { formatJours, formatPeriodePillNumerique } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
@@ -39,10 +39,33 @@ function libellePeriodeDemande(d: DemandeEquipe): string {
   return formatPeriodePillNumerique(d.debut, d.fin);
 }
 
+/**
+ * Période affichée, bornée à la période en cours (25/08/2026, "on affiche
+ * dans le tableau export que les jours pris en compte" — Vincent, exemple
+ * donné : un congé du 31/08 au 11/09 doit afficher "31/08" en août, pas
+ * "31/08 au 11/09/26"). Ne borne QUE la fin, quand elle dépasse la période
+ * (même condition que `estACheval`) — jamais le début : un congé de
+ * repêchage/correction démarre par définition avant la période (`d.fin <
+ * debutPeriode`), le borner produirait un intervalle inversé (bug constaté :
+ * "01/08 au 30/07/26"). Le détail complet (`DetailCongePanel`) continue
+ * d'utiliser `selection.debut`/`fin`, jamais cette version tronquée.
+ */
+function libellePeriodeAffichee(d: DemandeEquipe, finPeriode: string): string {
+  const finAffiche = d.fin > finPeriode ? finPeriode : d.fin;
+  return formatPeriodePillNumerique(d.debut, finAffiche);
+}
+
 interface DatePeriode {
   id: string;
   label: string;
   statut: StatutDemande;
+  /** Congé "à cheval" sur cette période et la suivante (25/08/2026, demande
+   * explicite) — le reste du congé sera transmis sur un futur export, pas
+   * celui-ci. Affiché via une pastille ronde orange dédiée à côté de la date
+   * (`SquareSplitHorizontal`), en plus du libellé de date déjà borné à la
+   * période (`libellePeriodeAffichee`) et du chiffre en tête de colonne déjà
+   * limité aux jours comptés. */
+  aCheval: boolean;
 }
 
 interface LigneCollab {
@@ -63,20 +86,35 @@ function ligneVide(): LigneCollab["parType"] {
 
 // Cas à la marge (regularisation) : les jours non validés comptent dans le
 // total dès maintenant (voir pastille orange/verte pour les distinguer). Les
-// jours annulés (régularisation depuis cette page) ou refusés restent
-// visibles pour la traçabilité, mais ne comptent pas — ni l'un ni l'autre
-// n'a jamais été (ou n'est plus) un congé réellement accordé.
+// jours refusés restent visibles pour la traçabilité, mais ne comptent pas —
+// un refus n'a jamais été un congé réellement accordé.
 //
 // `joursPour` (25/08/2026) — par défaut la durée totale de la demande
 // (`nbDemiJournees / 2`). En mode `sourceTransmission` (voir
 // `CongesPaiePage`), les demandes reçues sont des `CongeATransmettre` : un
 // congé à cheval sur deux périodes déjà partiellement transmis ne doit
-// compter que son reliquat (`joursRestants`), pas sa durée totale — sinon
-// les jours déjà transmis lors d'un export précédent seraient recomptés en
-// double dans ce récap/CSV (bug signalé le 25/08/2026).
+// compter QUE la portion effectivement prise en compte pour cette
+// transmission (`joursATransmettreParId`, positif ou négatif pour une
+// correction), pas sa durée totale ni le solde complet — sinon les jours
+// déjà transmis lors d'un export précédent seraient recomptés en double
+// dans ce récap/CSV (bug signalé le 25/08/2026). Le détail complet de la
+// demande (période entière, solde avant/après) reste visible dans
+// `DetailCongePanel`, ouvert au clic sur une pastille de date — seul ce
+// tableau se limite aux jours comptés.
+//
+// `inclureAnnuleDansTotal` (25/08/2026) — un congé "annulé" ne compte
+// normalement pas dans le total (cas par défaut, ci-dessus). Exception :
+// le tableau "Congés passés en paye mais annulés" (`CongesPaiePage`)
+// regroupe justement des demandes 100% annulées, dont le `joursPour` renvoie
+// la correction négative à transmettre — sans cette option, leur total
+// resterait à 0 (exclu par la même règle), la ligne comme les dates
+// resteraient affichées mais vides de jours.
 function grouperParCollaborateur(
   demandes: DemandeEquipe[],
   joursPour: (d: DemandeEquipe) => number = (d) => d.nbDemiJournees / 2,
+  inclureAnnuleDansTotal = false,
+  estACheval: (d: DemandeEquipe) => boolean = () => false,
+  libelle: (d: DemandeEquipe) => string = libellePeriodeDemande,
 ): LigneCollab[] {
   const parId = new Map<string, LigneCollab>();
 
@@ -95,16 +133,143 @@ function grouperParCollaborateur(
     }
 
     const ligne = parId.get(id)!;
-    if (d.statut !== "annulé" && d.statut !== "refusé") {
+    if (d.statut !== "refusé" && (inclureAnnuleDansTotal || d.statut !== "annulé")) {
       ligne.parType[bucket].jours += joursPour(d);
     }
     ligne.parType[bucket].dates.push({
       id: d.id,
-      label: libellePeriodeDemande(d),
+      label: libelle(d),
       statut: d.statut,
+      aCheval: estACheval(d),
     });
   }
 
+  return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom));
+}
+
+/**
+ * Grille collaborateur × type — même rendu pour les 3 tableaux de
+ * "Générer l'export" (25/08/2026, demande explicite : "les tableaux 2 et 3
+ * doivent prendre le même format que le tableau 1"). `c.jours` (déjà
+ * calculé en amont par `grouperParCollaborateur`) reflète uniquement la
+ * portion effectivement prise en compte pour cette transmission — jamais la
+ * durée totale d'un congé à cheval ; le détail complet de la demande reste
+ * à un clic, via `DetailCongePanel`.
+ */
+function TableauCollaborateurType({
+  lignes,
+  selectionId,
+  onSelect,
+  enCours,
+  emptyText,
+}: {
+  lignes: LigneCollab[];
+  selectionId: string | null;
+  onSelect: (id: string) => void;
+  enCours: boolean;
+  emptyText: string;
+}) {
+  if (lignes.length === 0) return <EmptyRow text={emptyText} />;
+
+  return (
+    <div className="border-ink-300/60 w-full overflow-x-auto border-t">
+      <table className="w-full min-w-[640px] text-left text-sm">
+        <thead>
+          <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+            <th className="px-3 py-3 text-center">Collaborateur</th>
+            {TYPES.map((t) => (
+              <th key={t} className="px-3 py-3 text-center">
+                {LABEL_TYPE[t]}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {lignes.map((ligne) => (
+            <tr key={ligne.id} className="border-ink-300/60 border-b last:border-b-0">
+              <td className="px-3 py-3 align-top">
+                <div className="flex items-center gap-1.5">
+                  <Avatar initiales={ligne.initiales} />
+                  <span className="text-ink-900 text-sm font-semibold">{ligne.nom}</span>
+                </div>
+              </td>
+              {TYPES.map((t) => {
+                const c = ligne.parType[t];
+                return (
+                  <td key={t} className="px-3 py-3 align-top">
+                    {c.dates.length > 0 ? (
+                      <div className="grid grid-cols-[auto_1fr] items-start gap-x-1.5 gap-y-1">
+                        <span className="text-ink-900 w-10 shrink-0 text-right font-bold whitespace-nowrap">
+                          {c.jours !== 0 ? `${formatJours(c.jours)} j` : ""}
+                        </span>
+                        <div className="flex flex-col gap-1">
+                          {c.dates.map((date, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => onSelect(date.id)}
+                                disabled={enCours}
+                                title={date.aCheval ? "Transmission partielle" : undefined}
+                                className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-opacity duration-150 hover:opacity-70 disabled:pointer-events-none disabled:opacity-40 ${classeBordureTypeBadge(t)} ${date.id === selectionId ? "ring-mint ring-2" : ""}`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    date.statut === "annulé" || date.statut === "refusé"
+                                      ? "bg-status-danger-fg"
+                                      : date.statut === "validé"
+                                        ? "bg-status-success-fg"
+                                        : "bg-status-warning-fg"
+                                  }`}
+                                />
+                                {date.label}
+                              </button>
+                              {date.aCheval && (
+                                <span
+                                  title="Transmission partielle"
+                                  className="bg-status-warning-fg flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full"
+                                >
+                                  <SquareSplitHorizontal size={10} strokeWidth={2.5} className="text-white" />
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/**
+ * Fusionne plusieurs listes `LigneCollab` (une par tableau — période en
+ * cours/repêchage/corrections, 25/08/2026) en une seule, par collaborateur ×
+ * type. Alimente le CSV : "l'export CSV il est incomplet on doit retrouver
+ * les 3 tableaux" (Vincent) — l'export ne montrait jusqu'ici que le récap de
+ * la période en cours, plus les deux tableaux ajoutés ensuite pour la
+ * parité visuelle, alors que ce sont ces 3 tableaux réunis qui composent ce
+ * que "Transmettre" envoie réellement.
+ */
+function fusionnerLignes(...groupes: LigneCollab[][]): LigneCollab[] {
+  const parId = new Map<string, LigneCollab>();
+  for (const groupe of groupes) {
+    for (const ligne of groupe) {
+      if (!parId.has(ligne.id)) {
+        parId.set(ligne.id, { ...ligne, parType: ligneVide() });
+      }
+      const cible = parId.get(ligne.id)!;
+      for (const t of TYPES) {
+        cible.parType[t].jours += ligne.parType[t].jours;
+        cible.parType[t].dates.push(...ligne.parType[t].dates);
+      }
+    }
+  }
   return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom));
 }
 
@@ -114,8 +279,8 @@ function genererCsv(lignes: LigneCollab[]): string {
     ligne.nom,
     ...TYPES.map((t) => {
       const c = ligne.parType[t];
-      const dates = c.dates.filter((d) => d.statut !== "annulé" && d.statut !== "refusé");
-      return c.jours > 0
+      const dates = c.dates.filter((d) => d.statut !== "refusé");
+      return c.jours !== 0
         ? `${formatJours(c.jours)} j (${dates.map((d) => d.label).join(", ")})`
         : "0";
     }),
@@ -127,12 +292,15 @@ function genererCsv(lignes: LigneCollab[]): string {
 }
 
 /**
- * Détail par collaborateur des congés consommés sur la période — Espace
- * Suivre > sous-rubrique "Export paie", visible manager + admin (comme le
- * reste de `/suivre`, bloqué pour les salarié·es dans `proxy.ts`). Période
- * par défaut le mois calendaire en cours (`periodePaieParDefaut`),
- * modifiable via les deux champs date. Export CSV côté client
- * (Blob + téléchargement), pas d'appel serveur.
+ * Détail par collaborateur des congés consommés sur la période — utilisé par
+ * l'onglet "Générer l'export" de `TransmissionsPaiePage` (25/08/2026,
+ * seul appelant depuis la suppression de l'ancien écran autonome
+ * `/suivre/paie` "Export paie"), visible manager + admin (comme le reste de
+ * `/suivre`, bloqué pour les salarié·es dans `proxy.ts`). Période par défaut
+ * le mois calendaire en cours (`periodePaieParDefaut`), modifiable via les
+ * deux champs date — sauf en mode `sourceTransmission`, où elle est figée
+ * (voir plus bas). Export CSV côté client (Blob + téléchargement), pas
+ * d'appel serveur.
  *
  * `masquerTitre` (24/08/2026) — opt-in : masque le `<h1>` "Export paie" et
  * réduit le padding vertical d'origine, pour un usage imbriqué dans un autre
@@ -158,13 +326,33 @@ function genererCsv(lignes: LigneCollab[]): string {
  * date strict habituel — pour que cet aperçu/le CSV corresponde exactement
  * à ce que "Transmettre" enverra réellement (même fonction). Utilisé par
  * l'onglet "Générer l'export" de `TransmissionsPaiePage`, aux côtés de
- * `validesUniquement`.
+ * `validesUniquement`. Active aussi (25/08/2026, continuité avec "Quels
+ * congés transmettre") : la période Du/Au n'est plus éditable (affichée en
+ * texte figé plutôt qu'en champs date — cet onglet transmet exactement la
+ * période choisie sur la liste, pas question de la changer ici), le bouton
+ * "Exporter (CSV)" disparaît du bandeau du haut (déplacé dans le bandeau
+ * sticky du parent, voir `exporter()` ci-dessous), et deux tableaux
+ * supplémentaires apparaissent sous le récap collaborateur × type, dans le
+ * MÊME format grille collaborateur × type (`TableauCollaborateurType`,
+ * 25/08/2026 — "les tableaux 2 et 3 doivent prendre le même format que le
+ * tableau 1", pas le rendu ligne-par-ligne `HistoriqueTable` initialement
+ * utilisé) : "Congés consommés non passés sur des périodes précédentes"
+ * (`lignesRepechage`) et "Congés passés en paye mais annulés"
+ * (`lignesCorrections`, `grouperParCollaborateur(..., inclureAnnuleDansTotal:
+ * true)` pour que leur total reflète la correction négative plutôt que 0).
+ * Le récap collaborateur × type exclut désormais ce repêchage
+ * (`demandesAffichees` filtré sur `fin >= debut`) pour ne pas compter deux
+ * fois les mêmes jours à l'écran. Chaque cellule n'affiche QUE les jours
+ * effectivement pris en compte pour cette transmission (`joursPourTransmission`,
+ * pas la durée totale d'un congé à cheval) — le détail complet de la
+ * demande (période entière, solde avant/après) reste dans
+ * `DetailCongePanel`, au clic sur une pastille de date.
  *
  * Expose `exporter()` via `ref` (25/08/2026,
  * `useImperativeHandle`) — pour que le bandeau sticky de `GenererExport`
- * (bouton "Transmettre" → modale de confirmation) puisse déclencher le
- * téléchargement du CSV depuis cette modale, sans dupliquer la génération
- * (`genererCsv`/`lignes`, internes à ce composant).
+ * (lien texte "Exporter (CSV)", juste avant "Transmettre") puisse déclencher
+ * le téléchargement du CSV sans dupliquer la génération (`genererCsv`/
+ * `lignes`, internes à ce composant).
  */
 export interface CongesPaiePageHandle {
   exporter: () => void;
@@ -234,19 +422,63 @@ export const CongesPaiePage = forwardRef<
     };
   }, [demandes, sourceTransmission]);
 
-  const demandesAffichees = validesUniquementForce || validesUniquement
+  const demandesValidesFiltrees = validesUniquementForce || validesUniquement
     ? demandes.filter((d) => d.statut === "validé")
     : demandes;
+  // En mode transmission (25/08/2026), le repêchage (congés d'une période
+  // antérieure jamais transmis) a désormais son propre tableau ci-dessous —
+  // exclu d'ici pour ne pas compter les mêmes jours deux fois à l'écran
+  // (les corrections, statut "annulé", sont déjà hors de ce filtre puisque
+  // "validés uniquement" est forcé sur cet onglet).
+  const demandesAffichees = sourceTransmission
+    ? demandesValidesFiltrees.filter((d) => d.fin >= debut)
+    : demandesValidesFiltrees;
+  const joursPourTransmission = (d: DemandeEquipe) =>
+    joursATransmettreParId[d.id] ?? (d as CongeATransmettre).joursRestants;
+  // Congé "à cheval" sur cette période et la suivante (25/08/2026, "j'insiste
+  // sur le cheval" — Vincent) : sa fin dépasse la borne haute de la période
+  // en cours, donc seule une partie de son solde est prise en compte ici, le
+  // reste attendra un futur export. Signalé par une icône dédiée sur la
+  // pastille de date plutôt que seulement déductible du chiffre en tête de
+  // colonne (déjà limité aux jours comptés, `joursPourTransmission`).
+  const estACheval = (d: DemandeEquipe) => d.fin > fin;
+  const libelleAffiche = (d: DemandeEquipe) => libellePeriodeAffichee(d, fin);
   const lignes = grouperParCollaborateur(
     demandesAffichees,
-    sourceTransmission
-      ? (d) => joursATransmettreParId[d.id] ?? (d as CongeATransmettre).joursRestants
-      : undefined,
+    sourceTransmission ? joursPourTransmission : undefined,
+    false,
+    sourceTransmission ? estACheval : undefined,
+    sourceTransmission ? libelleAffiche : undefined,
   );
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
 
+  // Tableaux "équivalents" à "Quels congés transmettre" (25/08/2026, demande
+  // explicite) — même répartition collaborateur × type que le récap
+  // principal ci-dessus, pour que "Générer l'export" montre exactement ce
+  // qui compose le CSV/la transmission, pas seulement le récap de la période
+  // en cours ("les tableaux 2 et 3 doivent prendre le même format que le
+  // tableau 1" — Vincent).
+  const lignesRepechage = sourceTransmission
+    ? grouperParCollaborateur(
+        (demandes as CongeATransmettre[]).filter((d) => d.statut !== "annulé" && d.fin < debut),
+        joursPourTransmission,
+        false,
+        estACheval,
+        libelleAffiche,
+      )
+    : [];
+  const lignesCorrections = sourceTransmission
+    ? grouperParCollaborateur(
+        (demandes as CongeATransmettre[]).filter((d) => d.statut === "annulé"),
+        joursPourTransmission,
+        true,
+        estACheval,
+        libelleAffiche,
+      )
+    : [];
+
   function exporter() {
-    const csv = genererCsv(lignes);
+    const csv = genererCsv(fusionnerLignes(lignes, lignesRepechage, lignesCorrections));
     const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -289,117 +521,117 @@ export const CongesPaiePage = forwardRef<
 
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <div
-          className={`bg-surface-card w-full shadow-sm xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
+          className={`flex w-full min-w-0 flex-col gap-5 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
         >
-          <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-            <InputFiltrePill
-              type="date"
-              aria-label="Du"
-              value={debut}
-              onChange={(e) => setDebut(e.target.value)}
-              disabled={enCours}
-            />
-            <InputFiltrePill
-              type="date"
-              aria-label="Au"
-              value={fin}
-              onChange={(e) => setFin(e.target.value)}
-              disabled={enCours}
-            />
-            {!validesUniquementForce && (
-              <label className="text-ink-500 flex items-center gap-1.5 text-xs font-semibold">
-                <input
-                  type="checkbox"
-                  checked={validesUniquement}
-                  onChange={(e) => setValidesUniquement(e.target.checked)}
-                  disabled={enCours}
-                  className="accent-mint h-4 w-4"
-                />
-                Validés uniquement
-              </label>
+          <div className="bg-surface-card w-full shadow-sm">
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              {sourceTransmission ? (
+                // Période figée (25/08/2026, demande explicite) — cet onglet
+                // ("Générer l'export") transmet exactement la période choisie
+                // sur la liste `/suivre/transmissions-paie`, plus de champs
+                // Du/Au éditables qui pourraient désynchroniser l'aperçu de ce
+                // qui sera réellement transmis.
+                <span className="text-ink-900 rounded-full border border-ink-300/60 px-3 py-1.5 text-sm font-semibold">
+                  {formatPeriodePillNumerique(debut, fin)}
+                </span>
+              ) : (
+                <>
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Du"
+                    value={debut}
+                    onChange={(e) => setDebut(e.target.value)}
+                    disabled={enCours}
+                  />
+                  <InputFiltrePill
+                    type="date"
+                    aria-label="Au"
+                    value={fin}
+                    onChange={(e) => setFin(e.target.value)}
+                    disabled={enCours}
+                  />
+                </>
+              )}
+              {!validesUniquementForce && (
+                <label className="text-ink-500 flex items-center gap-1.5 text-xs font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={validesUniquement}
+                    onChange={(e) => setValidesUniquement(e.target.checked)}
+                    disabled={enCours}
+                    className="accent-mint h-4 w-4"
+                  />
+                  Validés uniquement
+                </label>
+              )}
+              {!sourceTransmission && (
+                <Button
+                  onClick={exporter}
+                  disabled={lignes.length === 0}
+                  className="ml-auto rounded-full px-4 py-2"
+                >
+                  <Download size={16} />
+                  Exporter (CSV)
+                </Button>
+              )}
+            </div>
+
+            {error && (
+              <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-sm">
+                {error}
+              </div>
             )}
-            <Button
-              onClick={exporter}
-              disabled={lignes.length === 0}
-              className="ml-auto rounded-full px-4 py-2"
-            >
-              <Download size={16} />
-              Exporter (CSV)
-            </Button>
+
+            {loading ? (
+              <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
+            ) : (
+              <TableauCollaborateurType
+                lignes={lignes}
+                selectionId={selectionId}
+                onSelect={setSelectionId}
+                enCours={enCours}
+                emptyText="Aucun congé validé sur cette période."
+              />
+            )}
           </div>
 
-          {error && (
-            <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-sm">
-              {error}
+          {sourceTransmission && (
+            <div className="bg-surface-card w-full shadow-sm">
+              <div className="px-4 pt-3 pb-1">
+                <h2 className="text-ink-900 text-sm font-bold">
+                  Congés consommés non passés sur des périodes précédentes
+                </h2>
+              </div>
+              {loading ? (
+                <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
+              ) : (
+                <TableauCollaborateurType
+                  lignes={lignesRepechage}
+                  selectionId={selectionId}
+                  onSelect={setSelectionId}
+                  enCours={enCours}
+                  emptyText="Aucun congé en repêchage."
+                />
+              )}
             </div>
           )}
 
-          {loading ? (
-            <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
-          ) : lignes.length === 0 ? (
-            <EmptyRow text="Aucun congé validé sur cette période." />
-          ) : (
-            <div className="border-ink-300/60 w-full overflow-x-auto border-t">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead>
-                  <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
-                    <th className="px-3 py-3 text-center">Collaborateur</th>
-                    {TYPES.map((t) => (
-                      <th key={t} className="px-3 py-3 text-center">
-                        {LABEL_TYPE[t]}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lignes.map((ligne) => (
-                    <tr key={ligne.id} className="border-ink-300/60 border-b last:border-b-0">
-                      <td className="px-3 py-3 align-top">
-                        <div className="flex items-center gap-1.5">
-                          <Avatar initiales={ligne.initiales} />
-                          <span className="text-ink-900 text-sm font-semibold">{ligne.nom}</span>
-                        </div>
-                      </td>
-                      {TYPES.map((t) => {
-                        const c = ligne.parType[t];
-                        return (
-                          <td key={t} className="px-3 py-3 align-top">
-                            {c.dates.length > 0 ? (
-                              <div className="grid grid-cols-[auto_1fr] items-start gap-x-1.5 gap-y-1">
-                                <span className="text-ink-900 w-10 shrink-0 text-right font-bold whitespace-nowrap">
-                                  {c.jours > 0 ? `${formatJours(c.jours)} j` : ""}
-                                </span>
-                                <div className="flex flex-col gap-1">
-                                  {c.dates.map((date, i) => (
-                                    <button
-                                      key={i}
-                                      type="button"
-                                      onClick={() => setSelectionId(date.id)}
-                                      disabled={enCours}
-                                      className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold transition-opacity duration-150 hover:opacity-70 disabled:pointer-events-none disabled:opacity-40 ${classeBordureTypeBadge(t)} ${date.id === selectionId ? "ring-mint ring-2" : ""}`}
-                                    >
-                                      <span
-                                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                          date.statut === "annulé" || date.statut === "refusé"
-                                            ? "bg-status-danger-fg"
-                                            : date.statut === "validé"
-                                              ? "bg-status-success-fg"
-                                              : "bg-status-warning-fg"
-                                        }`}
-                                      />
-                                      {date.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {sourceTransmission && (
+            <div className="bg-surface-card w-full shadow-sm">
+              <div className="px-4 pt-3 pb-1">
+                <h2 className="text-ink-900 text-sm font-bold">Congés passés en paye mais annulés</h2>
+              </div>
+              {loading ? (
+                <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
+              ) : (
+                <TableauCollaborateurType
+                  lignes={lignesCorrections}
+                  selectionId={selectionId}
+                  onSelect={setSelectionId}
+                  enCours={enCours}
+                  emptyText="Aucune correction à transmettre."
+                />
+              )}
             </div>
           )}
         </div>

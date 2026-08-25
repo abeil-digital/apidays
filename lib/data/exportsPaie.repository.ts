@@ -222,6 +222,39 @@ export async function fetchExportPaie(periode: {
 }
 
 /**
+ * Statut de transmission de plusieurs périodes en un seul aller-retour —
+ * pour la liste `/suivre/transmissions-paie` (25/08/2026, repasse technique :
+ * la liste n'affichait aucun statut, alors que `exports_paie` le porte
+ * depuis le 24/08/2026 — un `fetchExportPaie` par période aurait fait
+ * NB_ARCHIVES + 1 aller-retours). Clé du record : `periode.debut` (même
+ * convention que l'URL `/suivre/transmissions-paie/[debut]`).
+ */
+export async function fetchExportsPaie(
+  periodes: { debut: string; fin: string }[],
+): Promise<Record<string, { id: string; genereLe: string }>> {
+  if (periodes.length === 0) return {};
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("exports_paie")
+    .select("id, genere_le, periode_debut")
+    .in(
+      "periode_debut",
+      periodes.map((p) => p.debut),
+    );
+
+  if (error) {
+    throw new Error("Impossible de vérifier les périodes déjà transmises.");
+  }
+
+  const parPeriode: Record<string, { id: string; genereLe: string }> = {};
+  for (const row of data ?? []) {
+    parPeriode[row.periode_debut] = { id: row.id, genereLe: row.genere_le };
+  }
+  return parPeriode;
+}
+
+/**
  * Action "Transmettre" — crée l'export puis ses lignes :
  * - Congés validés avec un reliquat : seule la portion tombant dans la
  *   période est transmise maintenant (`joursDansPeriode`), plafonnée au

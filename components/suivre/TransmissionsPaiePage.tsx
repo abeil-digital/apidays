@@ -18,7 +18,7 @@ import {
   genererExportPaie,
 } from "@/lib/data/exportsPaie.repository";
 import type { LigneExportPaie } from "@/lib/types";
-import { formatJours } from "@/lib/format";
+import { formatJours, renderDureeATransmettre } from "@/lib/format";
 import { LABEL_COURT, LABEL_LONG, TypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill } from "@/components/ui/FiltrePill";
 import { Button } from "@/components/ui/Button";
@@ -31,26 +31,6 @@ import { PoserCongePourCollaborateurModal } from "@/components/suivre/PoserConge
 import { VerifierFichesPaiePage } from "@/components/suivre/VerifierFichesPaiePage";
 
 type Onglet = "transmettre" | "export" | "verifier";
-
-// "X/Y j" — X = jours qui partiraient réellement si on transmettait
-// maintenant (`calculerJoursATransmettreMaintenant`, tient compte du
-// découpage sur un congé à cheval), Y = durée totale de la demande
-// (25/08/2026, demande explicite : "bricoler un truc" pour visualiser la
-// répartition avant même de cliquer "Transmettre", plutôt que d'afficher le
-// solde restant complet comme si tout partait ce mois-ci). Une correction
-// (demande annulée après avoir été transmise) garde son propre format. Un
-// congé "en attente" affiche "0/Y j" — `calculerJoursATransmettreMaintenant`
-// renvoie toujours 0 pour ce statut (pas encore décidé, jamais transmis par
-// `genererExportPaie` tant que ce n'est pas le cas) : le X/Y rend ça
-// explicite plutôt que de le masquer.
-function renderDureeATransmettre(demande: CongeATransmettre, joursMaintenant: number | undefined) {
-  if (demande.statut === "annulé") {
-    return `-${formatJours(demande.joursDejaTransmis)} j (retro)`;
-  }
-  const total = demande.nbDemiJournees / 2;
-  const transmis = joursMaintenant ?? (demande.statut === "en attente" ? 0 : demande.joursRestants);
-  return `${formatJours(transmis)}/${formatJours(total)} j`;
-}
 
 // Codes de type suivis par le récap (25/08/2026) — mêmes 7 codes que le
 // sélecteur "Poser pour un collaborateur", CPA dérivé de CP + isAnticipation.
@@ -434,17 +414,19 @@ function QuelsCongesTransmettre({
 }
 
 /**
- * Onglet "Générer l'export" — l'export CSV existant (`CongesPaiePage`)
- * complété par l'action réelle "Transmettre" (`genererExportPaie`), qui crée
- * les lignes `export_paie_lignes` correspondantes. Les deux coexistent : le
- * CSV documente ce qui vient d'être transmis, "Transmettre" met à jour le
- * statut interne — décision provisoire, à confirmer avec Vincent (voir plan).
- * Le bouton "Transmettre" (25/08/2026, continuité avec le bandeau sticky de
- * "Quels congés transmettre") n'agit plus directement : il ouvre une modale
- * de confirmation avec un lien de téléchargement du CSV (délégué à
- * `CongesPaiePage` via `ref`/`useImperativeHandle`, pour ne pas dupliquer sa
- * génération) et un bouton Confirmer qui déclenche `transmettre()`. Se
- * désactive une fois la période déjà transmise (contrainte unique
+ * Onglet "Générer l'export" — même continuité que "Quels congés transmettre"
+ * (25/08/2026, demande explicite) : `CongesPaiePage` y est rendu avec une
+ * période figée (plus de champs Du/Au éditables, `sourceTransmission`) et les
+ * mêmes 3 tableaux (récap collaborateur × type limité à la période en cours,
+ * + "Congés consommés non passés sur des périodes précédentes" +
+ * "Congés passés en paye mais annulés"), pour que cette vue montre exactement
+ * ce que "Transmettre" enverra. Le bandeau sticky du bas porte le statut
+ * ("Brouillon - non transmis" / "Période transmise le..."), un lien texte
+ * "Exporter (CSV)" (délégué à `CongesPaiePage` via `ref`/
+ * `useImperativeHandle`, pour ne pas dupliquer sa génération) juste avant le
+ * bouton "Transmettre", qui ouvre une modale de confirmation plutôt que
+ * d'agir directement — Confirmer y déclenche `transmettre()`. Se désactive
+ * une fois la période déjà transmise (contrainte unique
  * `exports_paie_periode_unique` côté base).
  */
 function GenererExport({
@@ -478,6 +460,13 @@ function GenererExport({
   return (
     <div className="flex flex-col gap-5">
       <CongesPaiePage
+        // Remonte (donc refetch) une fois la période transmise (25/08/2026,
+        // repasse technique) — sans ça, les tableaux et le feed du panneau de
+        // détail restaient figés sur l'état "avant transmission" après un
+        // "Transmettre" réussi (aucun mécanisme ne redéclenchait le fetch
+        // interne de `CongesPaiePage`, `onTransmis` ne rafraîchissant que
+        // `exportPaie` côté parent).
+        key={exportPaie ? exportPaie.id : "brouillon"}
         ref={congesPaieRef}
         masquerTitre
         periodeInitiale={periode}
@@ -492,17 +481,26 @@ function GenererExport({
               Période transmise le {new Date(exportPaie.genereLe).toLocaleDateString("fr-FR")}
             </span>
           ) : (
-            <span className="text-ink-500">Pas encore transmise.</span>
+            <span className="text-ink-500">Brouillon - non transmis</span>
           )}
         </div>
-        <Button
-          onClick={() => setModalOuverte(true)}
-          disabled={Boolean(exportPaie)}
-          className="rounded-full px-5 py-2.5 text-sm"
-        >
-          <Send size={16} />
-          Transmettre
-        </Button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => congesPaieRef.current?.exporter()}
+            className="text-mint hover:text-mint-hover text-sm font-semibold underline"
+          >
+            Exporter (CSV)
+          </button>
+          <Button
+            onClick={() => setModalOuverte(true)}
+            disabled={Boolean(exportPaie)}
+            className="rounded-full px-5 py-2.5 text-sm"
+          >
+            <Send size={16} />
+            Transmettre
+          </Button>
+        </div>
       </div>
 
       {modalOuverte && (
@@ -512,13 +510,6 @@ function GenererExport({
               Confirmez-vous la transmission de cette période à la paie ? Cette action crée les
               lignes de suivi correspondantes.
             </p>
-            <button
-              type="button"
-              onClick={() => congesPaieRef.current?.exporter()}
-              className="text-mint hover:text-mint-hover w-fit text-sm font-semibold underline"
-            >
-              Télécharger le CSV
-            </button>
             {erreur && (
               <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
                 {erreur}

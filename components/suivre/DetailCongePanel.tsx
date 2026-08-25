@@ -90,14 +90,15 @@ interface DetailCongePanelProps {
    * plusieurs). */
   lignesTransmission?: LigneExportPaie[];
   /** Prévision "si je transmets maintenant" (25/08/2026) — optionnel, absent
-   * partout sauf depuis "Quels congés transmettre" (Transmissions paie).
-   * Ajoute une entrée "Transmis paie le {aujourd'hui} : X j / Y j" en fin de
-   * feed, distincte visuellement des lignes réelles (`lignesTransmission`,
-   * `export_paie_lignes` déjà créées) — c'est une projection, rien n'a
-   * encore été transmis. Sert à clarifier, congé par congé, ce que
-   * contiendrait l'export si Delphine cliquait "Transmettre" maintenant
-   * (répond à la confusion notée sur l'aperçu global de "Générer l'export",
-   * qui n'affiche pas ce détail par congé). */
+   * partout sauf depuis "Quels congés transmettre"/"Générer l'export"
+   * (Transmissions paie). Ajoute une entrée "Transmis paie le {aujourd'hui} -
+   * X j/Y j" en fin de feed (orange, `X j` en gras — 25/08/2026, demande
+   * explicite), distincte visuellement des lignes réelles
+   * (`lignesTransmission`, `export_paie_lignes` déjà créées) — c'est une
+   * projection, rien n'a encore été transmis. Sert à clarifier, congé par
+   * congé, ce que contiendrait l'export si Delphine cliquait "Transmettre"
+   * maintenant (répond à la confusion notée sur l'aperçu global de "Générer
+   * l'export", qui n'affiche pas ce détail par congé). */
   previsionTransmission?: { jours: number; total: number };
 }
 
@@ -398,19 +399,22 @@ export function DetailCongePanel({
     entreesFeed.push({
       key: "prevision",
       date: new Date().toISOString(),
+      // Orange, avec emphase sur le nombre de jours transmis (25/08/2026,
+      // demande explicite : "Transmis paie le jj/mm/AA - 1J/NNj en orange
+      // avec une emphase sur le nombre de jours transmis") — distingue cette
+      // ligne, purement prévisionnelle (rien n'est encore réellement
+      // transmis), des lignes réelles ci-dessus (`lignesTransmission`, en
+      // orange atténué "warning" également, mais sans le gras).
       node: (
-        <>
-          <span className="text-ink-500 font-semibold italic">
-            {retro ? "Transmis (retro)" : "Transmis paie"} le{" "}
-            {formatJjMmAa(new Date().toISOString().slice(0, 10))}
+        <span className="text-status-warning-fg italic">
+          {retro ? "Transmis (retro)" : "Transmis paie"} le{" "}
+          {formatJjMmAa(new Date().toISOString().slice(0, 10))} -{" "}
+          <span className="font-bold not-italic">
+            {retro ? "-" : ""}
+            {formatJours(Math.abs(previsionTransmission.jours))} j
           </span>
-          <span className="text-ink-500 italic">
-            {" "}
-            : {retro ? "-" : ""}
-            {formatJours(Math.abs(previsionTransmission.jours))} j /{" "}
-            {formatJours(previsionTransmission.total)} j
-          </span>
-        </>
+          /{formatJours(previsionTransmission.total)} j
+        </span>
       ),
       previsionnel: true,
     });

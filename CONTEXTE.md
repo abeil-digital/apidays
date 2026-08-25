@@ -2771,6 +2771,176 @@ points précédents, plusieurs retouches réclamées en observant le cas de test
   de Congés Payés à régulariser" en dessous avec un espacement net, tableau affichant "-2 j (retro)".
   `tsc`/`eslint`/`npm run build` clean.
 
+**"Générer l'export" — parité avec "Quels congés transmettre" (25/08/2026)** : Vincent — "On fige
+les dates de sélection / On integre les tableau équivalent [repêchage + corrections] / L'export csv
+devient un lien texte associé avant transmettre / Pas encore transmise : Brouillon - non transmis".
+Question posée (recommandation suivie) : le récap collaborateur × type existant doit-il continuer à
+sommer TOUS les jours (période + repêchage + corrections), ou exclure repêchage/corrections
+maintenant qu'ils ont leurs propres tableaux ? Réponse : exclure, pour ne pas compter les mêmes
+jours deux fois à l'écran.
+
+- **Période figée** : `CongesPaiePage` (props `sourceTransmission`) n'affiche plus les champs Du/Au
+  éditables mais un texte fixe (`formatPeriodePillNumerique`) — cet onglet transmet exactement la
+  période choisie sur la liste `/suivre/transmissions-paie`, plus de risque de la changer par erreur.
+- **2 tableaux ajoutés** sous le récap collaborateur × type : "Congés consommés non passés sur des
+  périodes précédentes" (repêchage) et "Congés passés en paye mais annulés" (corrections) — mêmes
+  `HistoriqueTable`/mêmes rendus (`renderDureeATransmettre`, "Transmis") que sur "Quels congés
+  transmettre". Le récap collaborateur × type est désormais filtré sur `fin >= debut` pour exclure ce
+  repêchage (les corrections en étaient déjà exclues, `validés uniquement` étant forcé sur cet onglet).
+- **`renderDureeATransmettre`** déplacée de `TransmissionsPaiePage.tsx` vers `lib/format.ts` (fonction
+  pure partagée) — évite un import circulaire (`CongesPaiePage` est rendu PAR `TransmissionsPaiePage`,
+  qui aurait dû importer depuis lui pour le réutiliser).
+- **Export CSV** : bouton retiré du bandeau du haut de `CongesPaiePage` (masqué quand
+  `sourceTransmission`) — devient un simple lien texte souligné "Exporter (CSV)" dans le bandeau
+  sticky de `GenererExport`, juste avant le bouton "Transmettre" (toujours `congesPaieRef.current
+  ?.exporter()` via `ref`). Le lien "Télécharger le CSV" à l'intérieur de la modale de confirmation
+  est retiré (redondant, déjà accessible avant l'ouverture de la modale).
+- **Wording statut** : "Pas encore transmise." → "Brouillon - non transmis".
+- Vérifié en navigateur : période figée en pill texte, 3 tableaux affichés (récap + repêchage +
+  corrections, mêmes lignes qu'observées sur "Quels congés transmettre"), lien "Exporter (CSV)" sans
+  erreur console, modale de confirmation inchangée (Annuler testé, aucun effet de bord). `tsc`/
+  `eslint`/`npm run build` clean.
+
+**"Générer l'export" — les 3 tableaux au même format (25/08/2026)** : Vincent — "Les tableau 2 et 3
+doivent prendre le même format que le tableau 1 [répartition par employés et colonne typologie de
+congés] / pour les congés à cheval, on affiche dans le tableau export que les jours pris en comptes
+en revanche le détail solde lui affiche toute la période". Les 2 tableaux ajoutés juste avant
+(repêchage/corrections) utilisaient `HistoriqueTable` (ligne par ligne) — remplacés par le même rendu
+grille collaborateur × type que le récap principal.
+
+- Nouveau composant local `TableauCollaborateurType` (`CongesPaiePage.tsx`) — extrait du rendu
+  jusque-là dupliqué du tableau 1, réutilisé pour les 3 tableaux (`lignes`/`lignesRepechage`/
+  `lignesCorrections`, tous produits par `grouperParCollaborateur`).
+- **`grouperParCollaborateur`** gagne un 3ᵉ paramètre `inclureAnnuleDansTotal` (défaut `false`,
+  comportement inchangé) : une demande "annulée" ne comptait jamais dans le total par type, ce qui
+  aurait affiché "0 j" pour le tableau corrections (100% composé de demandes annulées) au lieu de la
+  correction négative à transmettre — passé à `true` uniquement pour ce 3ᵉ tableau.
+- **Jours "pris en compte" vs "détail solde"** — déjà correct côté cellule (`joursPourTransmission`,
+  = `joursATransmettreParId`/`joursRestants`, jamais la durée totale d'un congé à cheval) mais pas
+  encore formalisé en commentaire ; le clic sur une pastille de date ouvre toujours `DetailCongePanel`
+  avec la période ENTIÈRE de la demande (`selection.debut`/`fin`, inchangé) — la distinction demandée
+  ("tableau = jours comptés, détail solde = période complète") était donc déjà en place, seulement
+  documentée plus explicitement dans les commentaires du fichier.
+- Vérifié en navigateur : "Congés consommés non passés sur des périodes précédentes" et "Congés
+  passés en paye mais annulés" utilisent désormais la même grille (Avatar + nom + colonnes CP/RTT/
+  CPA/CSS + pastilles de dates) — la correction Salarie Test affiche "-2 j" avec pastille rouge
+  (statut annulé), comme sur le tableau 1. `tsc`/`eslint`/`npm run build` clean.
+
+**Icône "congé à cheval" sur les pastilles de date (25/08/2026)** : Vincent — "j'insiste sur le
+cheval :) On affiche dans le tableau export que les jours concernés par l'export. quitte à mettre
+une icone 15*15 fond orange pour le signifier : table-columns-split. En revanche le détail affiche
+bien le congé dans son ensemble" — le chiffre en tête de colonne montrait déjà seulement les jours
+comptés (`joursPourTransmission`), mais rien ne signalait visuellement, sur la pastille elle-même,
+qu'un congé était fractionné entre deux périodes.
+
+- `DatePeriode` (`CongesPaiePage.tsx`) gagne un champ `aCheval: boolean`. `grouperParCollaborateur`
+  prend un 4ᵉ paramètre `estACheval: (d) => boolean` (défaut `() => false`) — calculé par l'appelant
+  comme `d.fin > fin` (la fin de la demande dépasse la borne haute de la période affichée), passé aux
+  3 tableaux (récap période/repêchage/corrections).
+- Pastille concernée : une icône `TableColumnsSplit` (lucide-react, confirmé disponible) dans un
+  carré 15×15 `bg-status-warning-fg` (orange, même token que le point "en attente"), glyphe blanc,
+  juste après la pastille de date — `title` explicite au survol.
+- `DetailCongePanel` (ouvert au clic sur une pastille) reste inchangé : affiche toujours
+  `selection.debut`/`selection.fin`, la période ENTIÈRE de la demande, jamais tronquée — déjà le cas,
+  confirmé par Vincent ("le détail affiche bien le congé dans son ensemble").
+- Vérifié en navigateur : icône orange visible sur "31/08 au 11/09/26" (Delphine) et "26/08 au
+  03/09/26" (Salarie Test), toutes deux dépassant le 31/08 — absente sur les congés entièrement
+  dans le mois. `tsc`/`eslint`/`npm run build` clean.
+
+**Correction — libellé de date borné + icône ronde (25/08/2026)** : Vincent, suite immédiate du
+point précédent — deux retouches. D'abord signalé un vrai bug : "tu m'affiches pour les à cheval
+les dates prises en compte 31/08 au 31/08 au lieu de 31/08 au 11/09/26 dans le tableau" — la pastille
+de date des congés à cheval devait afficher la portion comptée pour CETTE période (ex. "31/08" pour
+un congé du 31/08 au 11/09, vu depuis août), pas la période complète de la demande.
+
+- Nouvelle fonction `libellePeriodeAffichee(d, finPeriode)` — borne `d.fin` à `finPeriode` quand elle
+  la dépasse (même condition que `estACheval`), laisse `d.debut` inchangé. Threadée dans
+  `grouperParCollaborateur` via un nouveau paramètre `libelle` (défaut `libellePeriodeDemande`,
+  inchangé pour les appels hors transmission).
+- **Premier essai buté** : bornage symétrique (début ET fin) — cassait le repêchage/les corrections,
+  dont les dates démarrent par construction avant la période (`d.fin < debutPeriode`) ; les borner
+  produisait un intervalle inversé ("01/08 au 30/07/26"). Corrigé en ne bornant QUE la fin.
+- **Icône** : passée d'un carré `TableColumnsSplit` à une pastille RONDE `SquareSplitHorizontal`
+  ("icone ronde mode alerte" — Vincent), toujours 15×15, fond `bg-status-warning-fg` (orange),
+  glyphe blanc.
+- Vérifié en navigateur : "31/08/26" (Delphine, était "31/08 au 11/09/26") et "26/08 au 31/08/26"
+  (Salarie Test, était "26/08 au 03/09/26") avec la pastille orange ronde ; repêchage ("30/07/26")
+  et corrections ("16/07 au 17/07/26") inchangés, sans intervalle inversé. `tsc`/`eslint`/
+  `npm run build` clean.
+
+**Suivi du congé — prévision en orange + tooltip "Transmission partielle" (25/08/2026)** :
+Vincent — "Dans le suivi du congé : tu me mets Transmis paie le jj/mm/AA - 1J/NNj en orange avec une
+emphase sur le nombre de jours transmis / Un over sur les jours cheval et leur icone qui disent
+Transmission partielle".
+
+- **`DetailCongePanel`** : la ligne de prévision (`previsionTransmission`, italique, non encore
+  réellement transmise) passe de gris (`text-ink-500`) à orange (`text-status-warning-fg`, même
+  token que le point "en attente"/l'icône à cheval) ; séparateur `:` remplacé par `-` ; le nombre de
+  jours transmis (avant le `/`) passe en gras (`font-bold not-italic`), le total après `/` reste en
+  poids normal. Vérifié programmatiquement (`getComputedStyle`) : couleur `rgb(199, 119, 0)`
+  (`#c77700`), `font-weight: 700` sur "4 j" — rendu "Transmis paie le 25/08/26 - **4 j**/7 j".
+- **`CongesPaiePage`** (tableaux "Générer l'export") : le `title` (tooltip au survol) sur l'icône
+  ronde orange ET sur la pastille de date elle-même passe de la longue description initiale à
+  "Transmission partielle" (court, cohérent entre les deux éléments) — vérifié en DOM, les deux
+  `[title="Transmission partielle"]` présents sur les congés à cheval (bouton de date + pastille
+  icône).
+- `tsc`/`eslint`/`npm run build` clean.
+
+**Repasse technique Transmissions paie (25/08/2026)** : Vincent a demandé une "grosse repasse
+technique" sur Accueil/Quels congés transmettre/Générer l'export après la série de retouches UI —
+relecture + correction au fil de l'eau (mode choisi explicitement).
+
+**Bug trouvé en premier, signalé par Vincent avant même la fin de la relecture** : "l'export CSV de
+générer l'export il est incomplet on doit retrouver les 3 tableaux" — conséquence directe de
+l'exclusion du repêchage/des corrections hors du récap collaborateur × type (25/08/2026, plus tôt,
+pour ne pas les compter deux fois à l'écran) : `exporter()` ne générait le CSV qu'à partir de ce
+récap (`lignes`), perdant le repêchage et les corrections au passage.
+
+- Nouvelle fonction `fusionnerLignes(...groupes: LigneCollab[][])` (`CongesPaiePage.tsx`) — combine
+  plusieurs `LigneCollab[]` par collaborateur × type (somme des jours, concaténation des dates).
+  `exporter()` appelle désormais `genererCsv(fusionnerLignes(lignes, lignesRepechage,
+  lignesCorrections))` — le CSV redevient le reflet complet des 3 tableaux, cohérent avec ce que
+  `Transmettre` envoie réellement.
+- `genererCsv` : `c.jours > 0` → `c.jours !== 0` (une correction pure, cellule 100% "annulé", a un
+  total négatif — l'ancien seuil `> 0` l'aurait affichée à "0") ; le filtre des dates listées entre
+  parenthèses passe de `statut !== "annulé" && statut !== "refusé"` à `statut !== "refusé"` seul (les
+  demandes "annulé" n'apparaissent QUE dans les cellules de corrections, où leur date doit rester
+  visible — l'ancien filtre les aurait toutes masquées).
+- Vérifié en interceptant `URL.createObjectURL` en navigateur (JS) : Salarie Test → "11 j (...,
+  16/07 au 17/07/26)" = 13 j (période) − 2 j (correction), toutes les dates des 3 tableaux listées ;
+  Olivier Test → "0,5 j (30/07/26)" (repêchage, absent du récap période) ; Delphine → "1 j
+  (31/08/26)" (date déjà bornée à la période, cohérent avec l'affichage écran). `tsc`/`eslint`/
+  `npm run build` clean.
+
+**Suite de la repasse technique — refetch après transmission + statut sur la liste (25/08/2026)** :
+au-delà du bug CSV (ci-dessus), la relecture systématique d'Accueil/Quels congés transmettre/Générer
+l'export a fait remonter deux autres points, corrigés dans la foulée.
+
+- **Bug réel — pas de refetch après "Transmettre"** : une fois une période transmise avec succès
+  (`GenererExport.transmettre()`), `onTransmis` (= `rafraichirExport`, côté `TransmissionsPaiePage`)
+  ne rafraîchissait QUE l'état `exportPaie` du parent (pour le bandeau sticky) — rien ne redéclenchait
+  le fetch interne de `CongesPaiePage` (`useCongesConsommes`), qui ne dépend que de
+  `[debut, fin, sourceTransmission, version]`, tous invariants ici. Résultat : les 3 tableaux et le
+  feed du panneau de détail restaient figés sur l'état "avant transmission" tant que la page n'était
+  pas rechargée. Corrigé en donnant à `<CongesPaiePage>` une `key={exportPaie ? exportPaie.id :
+  "brouillon"}` — le composant remonte (donc refetch tout) dès que `exportPaie` passe de `null` à un
+  id réel. Vérifié par lecture du flux de données (`tsc`/`eslint`/`npm run build` clean) — non testé
+  en cliquant réellement sur "Confirmer" pour ne pas créer un export réel sur la période d'août en
+  cours de test.
+- **Accueil sans statut de transmission** : `ListeTransmissionsPaiePage.tsx` (liste
+  `/suivre/transmissions-paie`) affichait toutes les périodes de la même façon, sans distinguer
+  celles déjà transmises — son propre commentaire admettait "pas encore de statut transmis/vérifié
+  affiché" alors que `exports_paie` porte cette info depuis le 24/08/2026. Ajout d'un badge vert
+  "Transmis le JJ/MM/AAAA" par ligne (mois en cours + les 12 archives), alimenté par une nouvelle
+  fonction groupée `fetchExportsPaie(periodes)` (`exportsPaie.repository.ts`, un seul aller-retour
+  `.in("periode_debut", ...)` plutôt que 13 requêtes individuelles). Vérifié en navigateur : "Juillet
+  2026" (transmis via SQL plus tôt dans la session) affiche "Transmis le 30/07/2026" avec l'icône
+  `Send`, les autres mois n'affichent rien.
+- **Nettoyage de commentaires périmés** : sous-titre "Récap congé + génération de l'export" → "Quels
+  congés transmettre + génération de l'export" (nom d'onglet à jour) ; doc de `CongesPaiePage`
+  (référençait encore l'ancien écran autonome "Export paie") ; doc de `previsionTransmission`
+  (`DetailCongePanel`, gardait l'ancien format ":" au lieu du "-"/gras actuel).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
@@ -2818,3 +2988,9 @@ points précédents, plusieurs retouches réclamées en observant le cas de test
    - "Poser pour un collaborateur" n'a qu'un seul point d'entrée pour l'instant (onglet "Quels congés
      transmettre" de Transmissions paie) — à voir si un second point d'entrée depuis "Suivre les demandes"
      est utile.
+   - **Priorité moyenne** — Uniformisation UI des icônes "à cheval" et du feed de la card "Détail du
+     congé" (`DetailCongePanel`) : plusieurs allers-retours de style le 25/08/2026 (carré →
+     pastille ronde, `TableColumnsSplit` → `SquareSplitHorizontal`, wording tooltip, couleur/gras de
+     la ligne "Transmis paie", tri chronologique du feed) — repasser dessus à froid pour vérifier la
+     cohérence d'ensemble (mêmes couleurs/tailles d'icône partout où "à cheval" apparaît, feed lisible
+     sur tous les statuts/cas de figure) plutôt que les correctifs ponctuels accumulés.

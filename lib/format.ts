@@ -1,3 +1,5 @@
+import type { CongeATransmettre } from "@/lib/types";
+
 export function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   return new Intl.DateTimeFormat("fr-FR", {
@@ -137,4 +139,34 @@ export function moisEffet(dateEffetIso: string): string {
 export function formatMoisAnneeCourt(anneeMoisIso: string): string {
   const [annee, mois] = anneeMoisIso.split("-");
   return `${mois}/${annee.slice(2)}`;
+}
+
+/**
+ * "X/Y j" — X = jours qui partiraient réellement si on transmettait
+ * maintenant (`calculerJoursATransmettreMaintenant`, tient compte du
+ * découpage sur un congé à cheval), Y = durée totale de la demande
+ * (25/08/2026, "Quels congés transmettre" — visualiser la répartition avant
+ * même de cliquer "Transmettre", plutôt que d'afficher le solde restant
+ * complet comme si tout partait ce mois-ci). Une correction (demande
+ * annulée après avoir été transmise) garde son propre format, marquée
+ * "(retro)". Un congé "en attente" affiche "0/Y j" —
+ * `calculerJoursATransmettreMaintenant` renvoie toujours 0 pour ce statut
+ * (pas encore décidé, jamais transmis par `genererExportPaie` tant que ce
+ * n'est pas le cas) : le X/Y rend ça explicite plutôt que de le masquer.
+ *
+ * Partagée entre "Quels congés transmettre" et "Générer l'export"
+ * (`TransmissionsPaiePage`/`CongesPaiePage`, 25/08/2026) — placée ici plutôt
+ * que dans l'un des deux composants pour éviter un import circulaire entre
+ * eux (`CongesPaiePage` est rendu par `TransmissionsPaiePage`).
+ */
+export function renderDureeATransmettre(
+  demande: CongeATransmettre,
+  joursMaintenant: number | undefined,
+): string {
+  if (demande.statut === "annulé") {
+    return `-${formatJours(demande.joursDejaTransmis)} j (retro)`;
+  }
+  const total = demande.nbDemiJournees / 2;
+  const transmis = joursMaintenant ?? (demande.statut === "en attente" ? 0 : demande.joursRestants);
+  return `${formatJours(transmis)}/${formatJours(total)} j`;
 }
