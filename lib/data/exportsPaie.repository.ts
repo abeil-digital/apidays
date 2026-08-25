@@ -15,6 +15,8 @@ import {
   SELECT_DEMANDE_EQUIPE,
   type DemandeEquipeRow,
 } from "@/lib/data/demandes.repository";
+import { fetchSoldes } from "@/lib/data/soldes.repository";
+import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 
 /**
  * Repository "Transmissions paie" — transmission des congés vers la comptable
@@ -63,7 +65,9 @@ async function fetchDemandesAvecSoldeTransmission(
       demande: mapDemandeEquipeDepuisDb(row),
       soldeTransmission: soldeTransmission(row),
     }))
-    .filter(({ demande }) => demande.type === "CP" || demande.type === "RTT" || demande.type === "CSS");
+    .filter(
+      ({ demande }) => demande.type === "CP" || demande.type === "RTT" || demande.type === "CSS",
+    );
 }
 
 /**
@@ -310,7 +314,11 @@ export async function genererExportPaie(periode: {
           ? joursRestants
           : Math.min(await joursDansPeriode(supabase, demande, periode), joursRestants);
       if (joursCettePeriode > 0) {
-        lignes.push({ export_paie_id: exportPaie.id, demande_id: demande.id, jours_inclus: joursCettePeriode });
+        lignes.push({
+          export_paie_id: exportPaie.id,
+          demande_id: demande.id,
+          jours_inclus: joursCettePeriode,
+        });
       }
     } else if (demande.statut === "annulé" && solde > 0) {
       lignes.push({ export_paie_id: exportPaie.id, demande_id: demande.id, jours_inclus: -solde });
@@ -347,7 +355,9 @@ interface LigneCheckRow extends LigneExportPaieRow {
  * imprimé sur la fiche de paie), avec le détail par congé pour isoler un
  * écart précis (décision actée : "il faut passer en mode détail").
  */
-export async function fetchCheckFichesPaie(exportId: string): Promise<CheckFichePaieCollaborateur[]> {
+export async function fetchCheckFichesPaie(
+  exportId: string,
+): Promise<CheckFichePaieCollaborateur[]> {
   const supabase = createClient();
 
   const { data: exportPaie, error: errorExport } = await supabase
@@ -362,7 +372,9 @@ export async function fetchCheckFichesPaie(exportId: string): Promise<CheckFiche
 
   const { data, error } = await supabase
     .from("export_paie_lignes")
-    .select(`id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, demandes_conges(${SELECT_DEMANDE_EQUIPE})`)
+    .select(
+      `id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, demandes_conges(${SELECT_DEMANDE_EQUIPE})`,
+    )
     .eq("export_paie_id", exportId);
 
   if (error) {
@@ -372,7 +384,9 @@ export async function fetchCheckFichesPaie(exportId: string): Promise<CheckFiche
   const parCollaborateur = new Map<string, CheckFichePaieCollaborateur>();
 
   for (const row of (data ?? []) as unknown as LigneCheckRow[]) {
-    const demandeRow = Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges;
+    const demandeRow = Array.isArray(row.demandes_conges)
+      ? row.demandes_conges[0]
+      : row.demandes_conges;
     if (!demandeRow) continue;
     const demande = mapDemandeEquipeDepuisDb(demandeRow);
 
@@ -413,7 +427,10 @@ interface LigneTransmissionRow {
   statut: StatutTransmission;
   motif_ecart: string | null;
   verifie_le: string | null;
-  exports_paie: { genere_le: string; periode_debut: string; periode_fin: string } | { genere_le: string; periode_debut: string; periode_fin: string }[] | null;
+  exports_paie:
+    | { genere_le: string; periode_debut: string; periode_fin: string }
+    | { genere_le: string; periode_debut: string; periode_fin: string }[]
+    | null;
 }
 
 /**
@@ -430,7 +447,9 @@ export async function fetchLignesTransmissionParDemande(
 
   const { data, error } = await supabase
     .from("export_paie_lignes")
-    .select("id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, exports_paie(genere_le, periode_debut, periode_fin)")
+    .select(
+      "id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, exports_paie(genere_le, periode_debut, periode_fin)",
+    )
     .in("demande_id", demandeIds);
 
   if (error) {
@@ -549,4 +568,137 @@ export async function poserCongePourCollaborateur(
         console.error("Impossible d'enregistrer la décision dans le journal.", erreurJournal);
       }
     });
+}
+
+export interface SoldeComparaisonCategorie {
+  moisPrecedent: number;
+  moisEnCours: number;
+  mouvement: number;
+}
+
+export interface ComparaisonSoldeCollaborateur {
+  utilisateur: { id: string; prenom: string; nom: string };
+  cp: SoldeComparaisonCategorie;
+  rtt: SoldeComparaisonCategorie;
+  cpa: SoldeComparaisonCategorie;
+}
+
+/** Somme signée des `export_paie_lignes` d'un export, par collaborateur et par
+ * type (CP/RTT/CPA) — un `jours_inclus` positif (transmission normale) réduit
+ * le solde, un `jours_inclus` négatif (correction/retro) le restitue ; d'où
+ * l'inversion de signe (`-total`) pour obtenir un "mouvement de solde"
+ * directement comparable à la fiche de paie. */
+async function fetchMouvementsExport(
+  exportId: string,
+): Promise<Record<string, { cp: number; rtt: number; cpa: number }>> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("export_paie_lignes")
+    .select(`jours_inclus, demandes_conges(utilisateur_id, type_absence_id, is_anticipation)`)
+    .eq("export_paie_id", exportId);
+
+  if (error) {
+    throw new Error("Impossible de charger les mouvements de cet export.");
+  }
+
+  const [idCp, idRtt] = await Promise.all([
+    getTypeAbsenceId(supabase, "CP"),
+    getTypeAbsenceId(supabase, "RTT"),
+  ]);
+
+  const parUtilisateur: Record<string, { cp: number; rtt: number; cpa: number }> = {};
+  for (const row of (data ?? []) as unknown as {
+    jours_inclus: number;
+    demandes_conges:
+      | { utilisateur_id: string; type_absence_id: string; is_anticipation: boolean }
+      | { utilisateur_id: string; type_absence_id: string; is_anticipation: boolean }[]
+      | null;
+  }[]) {
+    const demande = Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges;
+    if (!demande) continue;
+
+    const entree = (parUtilisateur[demande.utilisateur_id] ??= { cp: 0, rtt: 0, cpa: 0 });
+    const jours = -Number(row.jours_inclus);
+    if (demande.type_absence_id === idRtt) {
+      entree.rtt += jours;
+    } else if (demande.type_absence_id === idCp && demande.is_anticipation) {
+      entree.cpa += jours;
+    } else if (demande.type_absence_id === idCp) {
+      entree.cp += jours;
+    }
+  }
+  return parUtilisateur;
+}
+
+/**
+ * Comparaison de soldes par collaborateur pour "Vérifier les fiches de
+ * paie" (25/08/2026, demande explicite de Vincent) — "Delphine envoie les
+ * mouvements de congés qui ont eu lieu pendant le mois au comptable (export
+ * CSV) ; le comptable crée les fiches de paie en conséquence, qui contiennent
+ * les soldes ; Delphine doit vérifier que les soldes sont ok, que les jours
+ * consommés sont bien implémentés et que les jours acquis sont bien pris en
+ * compte." Solde précédent/en cours "tel qu'il était" à ces dates
+ * (`fetchSoldes` avec `dateReference`, calcul indépendant, capture donc aussi
+ * l'acquisition du mois) ; **mouvement = exactement ce qui est dans CET
+ * export** (`fetchMouvementsExport`, `export_paie_lignes`), pas un simple
+ * différentiel de solde global — décision actée avec Vincent, pour que le
+ * mouvement affiché soit strictement ce que le comptable a reçu ce mois-ci
+ * (un congé validé ce mois-ci mais pas encore transmis, ou l'inverse, ne
+ * doit pas se mélanger avec ce contrôle). Solde précédent/mouvement/solde en
+ * cours restent 3 valeurs indépendantes plutôt que l'une dérivée des autres :
+ * un écart entre elles est justement le signal à repérer ("chaque mois
+ * contrôler qu'il n'y a pas un écart qui se crée entre le solde de l'outil et
+ * les soldes comptable").
+ *
+ * Tous les collaborateurs ACTIFS sont inclus, pas seulement ceux qui ont des
+ * lignes transmises sur cet export — "le 0 mouvement est important" (Vincent) :
+ * un collaborateur sans aucun mouvement doit apparaître avec 0 explicite,
+ * pas être absent de la liste.
+ */
+export async function fetchComparaisonSoldes(
+  periode: { debut: string; fin: string },
+  exportId: string | null,
+): Promise<ComparaisonSoldeCollaborateur[]> {
+  const veilleDebut = new Date(`${periode.debut}T00:00:00Z`);
+  veilleDebut.setUTCDate(veilleDebut.getUTCDate() - 1);
+  const finMoisPrecedent = veilleDebut;
+  const finMoisEnCours = new Date(`${periode.fin}T00:00:00Z`);
+
+  const [utilisateurs, mouvementsParUtilisateur] = await Promise.all([
+    fetchUtilisateursAdmin(),
+    exportId
+      ? fetchMouvementsExport(exportId)
+      : Promise.resolve<Record<string, { cp: number; rtt: number; cpa: number }>>({}),
+  ]);
+  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+
+  return Promise.all(
+    actifs.map(async (u) => {
+      const [soldesPrecedent, soldesEnCours] = await Promise.all([
+        fetchSoldes(u.id, finMoisPrecedent),
+        fetchSoldes(u.id, finMoisEnCours),
+      ]);
+      const mouvements = mouvementsParUtilisateur[u.id] ?? { cp: 0, rtt: 0, cpa: 0 };
+
+      return {
+        utilisateur: { id: u.id, prenom: u.prenom, nom: u.nom },
+        cp: {
+          moisPrecedent: soldesPrecedent.cp.valeur,
+          moisEnCours: soldesEnCours.cp.valeur,
+          mouvement: mouvements.cp,
+        },
+        rtt: {
+          moisPrecedent: soldesPrecedent.rtt.valeur,
+          moisEnCours: soldesEnCours.rtt.valeur,
+          mouvement: mouvements.rtt,
+        },
+        cpa: {
+          moisPrecedent: soldesPrecedent.cpa.valeur,
+          moisEnCours: soldesEnCours.cpa.valeur,
+          mouvement: mouvements.cpa,
+        },
+      };
+    }),
+  );
 }

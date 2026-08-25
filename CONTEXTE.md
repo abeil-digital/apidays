@@ -2968,29 +2968,190 @@ l'export a fait remonter deux autres points, corrigés dans la foulée.
 - **TypeScript strict**, ESLint + Prettier (`prettier-plugin-tailwindcss`) — `npm run lint`,
   `npm run typecheck`, `npm run format` avant tout commit.
 
+**"Vérifier les fiches de paie" — comparaison de soldes CP/RTT par employé (25/08/2026)** :
+Vincent, à partir d'une capture de fiche de paie réelle (colonnes Droit/Pris/Solde par catégorie) —
+"L'objectif est de pouvoir vérifier que les données sur les fiches de paie du mois sont iso. Je
+pense qu'il faut reprendre tous les soldes par employé : Soldes mois précédent / Soldes du mois en
+cours / mouvement du mois / le 0 mouvement est important". Passé par un plan validé avant
+implémentation (voir échange complet) — décision actée : un seul CP combiné (pas de split "CP n /
+CP n-1+n-2" comme sur la fiche de paie, cf. `questions.md`), calcul rétrospectif exact plutôt qu'une
+approximation limitée à la période en cours.
+
+- **Moteur de solde généralisé** (`lib/data/soldes.repository.ts`) — `fetchSoldes`,
+  `fetchHistoriqueCp`, `fetchHistoriqueRtt` gagnent un paramètre optionnel `dateReference?: Date`
+  (défaut `new Date()`, comportement inchangé pour tous les appelants existants). Le moteur ancrait
+  déjà tout son calcul interne (accrual, ancienneté, report) sur une `reference` threadée en
+  paramètre — seul le point d'entrée figeait `aujourdhui = new Date()` en dur ; remplacé par
+  `aujourdhui = dateReference ?? new Date()`, un changement additif et à faible risque.
+- **`fetchComparaisonSoldes(periode)`** (`lib/data/exportsPaie.repository.ts`) — pour chaque
+  utilisateur **actif** (pas seulement ceux avec des lignes transmises sur l'export — "le 0
+  mouvement est important", donc tous les actifs apparaissent, y compris à 0), calcule le solde
+  CP/RTT "tel qu'il était" fin du mois précédent et fin du mois en cours (`dateReference` = veille
+  du `periode.debut` / `periode.fin`), et le mouvement (différence). CPA exclu (absent de la fiche
+  de paie).
+- **`VerifierFichesPaiePage.tsx`** — nouvelle section "Soldes" (tableau collaborateur × CP/RTT ×
+  Mois précédent/Mois en cours/Mouvement, `formatMouvement` avec signe explicite "+"/"-"/"0"),
+  affichée **indépendamment de l'existence d'un export** (contrairement au détail ligne par ligne
+  existant, qui reste scopé à l'export généré) — le solde calculé par l'app existe et vaut la peine
+  d'être vérifié même avant transmission. Les deux contrôles coexistent : macro (solde global) au-
+  dessus, micro (congé par congé, "Ça matche"/"Écart") en dessous, inchangé.
+- Vérifié en navigateur : juillet 2026 (période transmise) affiche les deux sections ensemble ; août
+  2026 (pas encore transmis) affiche "Soldes" quand même, avec le message "Aucun export généré"
+  seulement sous la partie détail. Mouvements à 0 explicitement affichés ("0 j", jamais masqués/vides).
+  `tsc`/`eslint`/`npm run build` clean.
+
+**Correction — "Vérifier les fiches de paie" ne comptait aucun mouvement (25/08/2026)** :
+Vincent — "on ne prend pas en compte les congés exportés ? Olivier devrait avoir -0,5j dans ses CP
+et salarié test 2 jours en plus suite a la régul / il faut aussi afficher les CPA". Bug réel, pas un
+malentendu : tous les mouvements CP/RTT affichaient "0 j" quelle que soit la période.
+
+- **Cause racine** : `sommeJours` (`soldes.repository.ts`, cœur du calcul de consommation, appelé
+  partout dans le fichier) filtrait sur le statut **actuel** de la demande en base
+  (`.eq("statut", statuts)`), pas sur son statut **tel qu'il était à la date demandée**. Résultat :
+  interroger "solde au 31/07" et "solde au 31/08" utilisait le MÊME statut courant dans les deux cas
+  — une demande régularisée (annulée) aujourd'hui disparaissait du calcul même pour une date
+  antérieure à cette régularisation, faisant mécaniquement ressortir un mouvement à 0 partout.
+- **Correctif** : `sommeJours` récupère désormais toutes les demandes de la période (sans filtrer
+  par statut), puis détermine pour chacune son statut "à la date de référence" via le journal
+  `decisions_demande` (la dernière décision avec `decide_le <= dateReference`), avec repli sur le
+  statut actuel + `date_decision` pour les demandes décidées avant l'introduction du journal (même
+  convention que le feed de `DetailCongePanel`). Les 11 appels de `sommeJours` dans le fichier
+  (`fetchSoldes`, `fetchSoldeAnticipe`, `fetchHistoriqueCp`) mis à jour pour lui passer la date de
+  référence déjà en contexte (`aujourdhui`/`reference`) — aucun changement de comportement pour un
+  appel "maintenant" (aucune décision ne peut avoir eu lieu dans le futur).
+- **CPA ajouté** au comparatif "Vérifier les fiches de paie" (`fetchComparaisonSoldes`,
+  `VerifierFichesPaiePage.tsx`) — initialement exclu (absent de la fiche de paie photographiée),
+  Vincent le veut quand même affiché à côté de CP/RTT.
+- Vérifié en navigateur : les mouvements ne sont plus figés à 0 (ex. Salarie Test CP -18 j en août,
+  Olivier Test -16,5 j) — les gros chiffres du jour reflètent l'activité de test intense de cette
+  session (beaucoup de décisions prises aujourd'hui même, 25/08, donc "hors" du solde au 31/07 mais
+  "dans" celui au 31/08/≈maintenant), pas une anomalie. `tsc`/`eslint`/`npm run build` clean.
+
+**Correction — "mouvement" ancré sur l'export réel, pas un diff de solde global (25/08/2026)** :
+Vincent a repris l'objectif en détail — "Delphine envoie les mouvements de congés qui ont eu lieu
+pendant le mois au comptable (export CSV) ; le comptable crée les fiches de paie en conséquence, qui
+contiennent les soldes ; Delphine doit vérifier que les soldes sont ok, que les jours consommés sont
+bien implémentés et que les jours acquis sont bien pris en compte [...] chaque mois contrôler qu'il
+n'y a pas un écart qui se crée entre le solde de l'outil et les soldes comptable." Signalé avec un
+exemple concret (0,5j CP d'Olivier transmis en juillet, absent de la vérif) — après clarification
+(question posée), le "mouvement" ne doit plus être un différentiel générique de solde (qui peut
+capter des mouvements sans rapport, ex. une demande d'un autre mois validée le même jour), mais
+**exactement ce qui a été transmis dans CET export**.
+
+- **`fetchMouvementsExport(exportId)`** (`exportsPaie.repository.ts`) — somme signée des
+  `export_paie_lignes` de l'export, par collaborateur et par type (CP/RTT/CPA) — `jours_inclus`
+  positif (transmission normale) réduit le solde donc `-jours_inclus` ; négatif (correction/retro)
+  le restitue.
+- **`fetchComparaisonSoldes(periode, exportId)`** — `mouvement` vient désormais de
+  `fetchMouvementsExport` (0 si `exportId` est `null`, aucune période sans export généré n'a de
+  mouvement à vérifier) ; `moisPrecedent`/`moisEnCours` restent calculés indépendamment via le
+  moteur de solde général (`fetchSoldes`, capture bien l'acquisition du mois). Les 3 valeurs restent
+  volontairement indépendantes plutôt que l'une dérivée des autres : **la cohérence entre elles EST
+  le contrôle** — `solde précédent − mouvement ≈ solde en cours` doit se vérifier à l'œil, un écart
+  est justement ce qu'il faut détecter.
+- Vérifié en navigateur (juillet 2026, export réel généré via SQL) : Salarie Test — solde précédent
+  49 j, mouvement -2 j (exactement les "2 j transmis" du contrôle ligne par ligne juste en dessous),
+  solde en cours 47 j → 49 − 2 = 47, cohérent. Olivier Test affiche 0 mouvement en juillet, à raison :
+  son congé du 30/07 n'a été validé que le 25/08, donc absent de l'export de juillet — pas un bug,
+  confirme que le mouvement colle bien au contenu réel de l'export. `tsc`/`eslint`/`npm run build`
+  clean.
+
+**Correction — "Générer l'export" figé une fois transmis, plus jamais le backlog live (25/08/2026)** :
+Vincent — "la demi journée d'Olivier est quand même affichée dans l'export de juillet... ya un
+soucis" (repris ensuite : "donc la 0,5j d'Olivier devrait même pas apparaître dans l'export de
+juillet" — confirmé). Root cause : `CongesPaiePage` (source de "Générer l'export") interrogeait
+toujours le backlog LIVE (`fetchCongesATransmettre`, "ce qui reste à transmettre maintenant"), même
+pour une période DÉJÀ transmise — le congé d'Olivier (30/07, validé seulement le 25/08, donc après
+la génération réelle de l'export de juillet) y réapparaissait comme repêchage alors qu'il n'a jamais
+fait partie de cet export.
+
+- **`figeParExport`** (`sourceTransmission && Boolean(exportId)`) — nouveau mode dans
+  `CongesPaiePage.tsx` : une fois l'export généré, les 3 tableaux + le CSV se sourcent sur
+  `fetchCheckFichesPaie(exportId)` (le contenu réel et immuable d'`export_paie_lignes`), plus sur le
+  live. Catégorisation période courante/repêchage/corrections refaite sur le signe de
+  `jours_inclus` (négatif = correction) plutôt que sur le statut ACTUEL de la demande (qui peut
+  changer après coup sans toucher l'export d'origine).
+- **Bug corrélé trouvé pendant la vérif** : même une fois la bonne demande placée dans le bon
+  tableau, `grouperParCollaborateur` remettait son total à 0 — le garde interne excluait toujours les
+  demandes au statut LIVE "annulé", y compris en mode figé (Salarie Test, transmis "en positif" en
+  juillet puis régularisé depuis : son "2 j" retombait à 0 dans le tableau alors que l'export réel
+  les contenait bien). `inclureAnnuleDansTotal` forcé à `true` en mode figé (les 3 tableaux) pour ne
+  plus laisser le statut courant invalider un montant déjà réellement transmis.
+- `previsionTransmission` (DetailCongePanel) masquée en mode figé — plus de "si on transmettait
+  maintenant" à prévisualiser, c'est déjà transmis. `lignesTransmissionParId`/`selection` re-sourcés
+  sur les demandes réellement affichées (figées ou live selon le mode) plutôt que sur le backlog live
+  inconditionnellement.
+- Vérifié en navigateur : juillet (déjà transmis) — Olivier absent partout, Salarie Test affiche
+  "2 j" (plus 0), CSV export contient exactement une ligne "Salarie Test → 2 j (16/07 au 17/07/26)".
+  Août (pas encore transmis, "Brouillon - non transmis") — comportement live inchangé, Olivier
+  toujours visible en repêchage (correct, il sera capté au prochain "Transmettre"). `tsc`/`eslint`/
+  `npm run build` clean.
+
+**Chantier "Vérifier les fiches de paie" — mis en pause le 25/08/2026, reprise à prévoir** :
+synthèse de toute la session du jour sur ce sujet, avant pause explicitement demandée par Vincent
+("on a pas fini cette section on affinera plus tard"). Regroupe plusieurs entrées éclatées
+ci-dessus en un seul point de repère.
+
+**Objectif métier** (formulé par Vincent en cours de route, à retenir pour la suite) : chaque mois,
+Delphine transmet au comptable les mouvements de congés du mois (CSV, "Générer l'export") ; le
+comptable établit les fiches de paie en conséquence, qui affichent des soldes (Droit/Pris/Solde par
+catégorie — CP n / CP n-1+n-2 / RTT, format observé sur une vraie fiche de paie). Delphine doit
+pouvoir, chaque mois, vérifier en un coup d'œil que le solde de l'outil colle à celui du comptable —
+et détecter tôt un écart qui se serait créé entre les deux.
+
+**Ce qui a été construit aujourd'hui** :
+1. Section "Soldes" dans `VerifierFichesPaiePage.tsx` — par collaborateur actif, CP/RTT/CPA : solde
+   fin de mois précédent, solde fin de mois en cours, mouvement du mois (jamais masqué à 0).
+2. Moteur de solde généralisé pour accepter une date de référence passée (`fetchSoldes`,
+   `fetchHistoriqueCp`, `fetchHistoriqueRtt` — paramètre `dateReference` optionnel, défaut inchangé).
+3. `fetchComparaisonSoldes(periode, exportId)` — solde précédent/en cours calculés indépendamment via
+   le moteur général ; mouvement ancré sur le contenu réel de l'export (`fetchMouvementsExport`,
+   `export_paie_lignes`), pas un différentiel générique — décision actée après clarification, pour
+   que le mouvement affiché soit strictement ce que le comptable a reçu ce mois-ci.
+4. `CongesPaiePage` (source de "Générer l'export") gagne un mode figé (`figeParExport`) : une fois
+   l'export généré, les 3 tableaux + le CSV reflètent exactement `export_paie_lignes`, plus jamais le
+   backlog live (`fetchCongesATransmettre`), qui peut diverger après coup.
+
+**2 bugs réels trouvés et corrigés en cours de route** (pas des malentendus — vérifiés par Vincent
+sur des cas concrets) :
+- `sommeJours` (cœur du calcul de consommation CP/RTT, `soldes.repository.ts`) filtrait sur le
+  statut ACTUEL de la demande plutôt que sur son statut à la date demandée — tout mouvement
+  ressortait à 0 quelle que soit la période. Corrigé via replay du journal `decisions_demande`.
+- `grouperParCollaborateur` (`CongesPaiePage.tsx`) — même famille de bug, sur le nombre de jours
+  cette fois : son garde interne excluait les demandes au statut LIVE "annulé" même en mode figé, ce
+  qui remettait à 0 le total d'une demande pourtant réellement transmise (positive) puis régularisée
+  depuis. `inclureAnnuleDansTotal` forcé à `true` en mode figé.
+
+**Ce qui N'A PAS été fait/vérifié — à reprendre** :
+- **CP n / CP n-1+n-2** : toujours un seul total CP combiné, pas de split par ancienneté du solde
+  comme sur la vraie fiche de paie (décision actée de ne pas s'y attaquer maintenant, voir
+  `questions.md` — le report CP est à un seul niveau dans le moteur actuel, un vrai split demanderait
+  de revoir ce moteur).
+- **`fetchHistoriqueCp`/`fetchHistoriqueRtt`** ont bien le paramètre `dateReference`, mais leurs
+  propres requêtes internes de construction du ledger mensuel (les lignes `.eq("statut", ...)` autour
+  de 867/1059/1243 dans `soldes.repository.ts`) n'ont PAS reçu le même correctif que `sommeJours` —
+  latent, sans impact aujourd'hui puisque `fetchComparaisonSoldes` passe par `fetchSoldes` et non ces
+  deux fonctions, mais à corriger si un futur usage leur passe une `dateReference` passée.
+- **"Quels congés transmettre" n'a pas de mode figé** — contrairement à "Générer l'export", cet
+  onglet continue d'afficher le backlog live même pour une période déjà transmise. Comportement
+  peut-être voulu (l'onglet sert justement à repérer ce qui reste à transmettre, période close ou
+  pas), mais pas explicitement tranché avec Vincent — à confirmer.
+- **Correction jamais vue en conditions réelles dans le tableau figé** : la régularisation de
+  Salarie Test (16/07-17/07) n'a jamais été elle-même transmise dans un export réel (août n'a pas
+  encore été transmis au moment de la pause) — la logique de catégorisation "corrections" en mode
+  figé (`jours_inclus < 0`) est vérifiée par lecture de code, pas par un cas réel observé à l'écran.
+- **Aucun audit de bout en bout** des soldes pour tous les collaborateurs/tous les mois — seuls
+  juillet et août ont été spot-vérifiés sur les points signalés par Vincent, pas une passe
+  exhaustive.
+- Format Droit/Pris/Solde de la vraie fiche de paie simplifié à Solde précédent/Mouvement/Solde en
+  cours (3 valeurs, pas de Droit/Pris détaillés séparément) — à revalider une fois Vincent en usage
+  réel, si le niveau de détail s'avère insuffisant pour vraiment "checker que les jours sont bien
+  pris en compte dans la FDP".
+
+Voir aussi `Backlog.md` (item ajouté) et `questions.md` (les points ci-dessus qui nécessitent une
+décision de Vincent avant de reprendre).
+
 ## À faire
 
-1. Intégrer la vraie charte graphique Abeil (`Charte-abeil/`) — remplacer la palette de travail et
-   le logo placeholder
-2. Dépouiller `documentation-conges/` pour définir les règles de calcul CP/RTT réelles (compléter
-   les points encore ouverts du schéma, voir [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md)), puis
-   brancher `soldes.repository.ts`
-3. Suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de solde), puis
-   Espace Manager
-4. Transmissions paie (24/08/2026, points restés ouverts, non bloquants) :
-   - CSV existant vs bouton "Transmettre" sur l'onglet "Générer l'export" : les deux coexistent
-     aujourd'hui (décision provisoire) — à confirmer avec Vincent si le CSV doit à terme disparaître
-     au profit du seul "Transmettre", ou s'ils ont chacun leur usage (CSV = document à envoyer,
-     Transmettre = mise à jour du statut interne).
-   - Rejouer "Générer l'export" sur une période déjà transmise : bloqué par la contrainte unique SQL
-     (`exports_paie_periode_unique`) + bouton désactivé côté UI une fois un export détecté — pas de
-     message d'erreur dédié si l'action était malgré tout tentée en direct (ex. appel API hors UI).
-   - "Poser pour un collaborateur" n'a qu'un seul point d'entrée pour l'instant (onglet "Quels congés
-     transmettre" de Transmissions paie) — à voir si un second point d'entrée depuis "Suivre les demandes"
-     est utile.
-   - **Priorité moyenne** — Uniformisation UI des icônes "à cheval" et du feed de la card "Détail du
-     congé" (`DetailCongePanel`) : plusieurs allers-retours de style le 25/08/2026 (carré →
-     pastille ronde, `TableColumnsSplit` → `SquareSplitHorizontal`, wording tooltip, couleur/gras de
-     la ligne "Transmis paie", tri chronologique du feed) — repasser dessus à froid pour vérifier la
-     cohérence d'ensemble (mêmes couleurs/tailles d'icône partout où "à cheval" apparaît, feed lisible
-     sur tous les statuts/cas de figure) plutôt que les correctifs ponctuels accumulés.
+Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
+fusionnée dedans).

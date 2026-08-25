@@ -31,6 +31,21 @@ selon le cas).
   concerné (transparence actée). Portée volontairement limitée : oubli de saisie/correction
   ponctuelle — la maladie reste explicitement hors scope (décision déjà actée avec Vincent). À
   confirmer que ce périmètre reste le bon une fois l'écran testé en usage réel.
+- **"Quels congés transmettre" doit-il aussi geler sur une période déjà transmise ?** (25/08/2026,
+  chantier "Vérifier les fiches de paie" mis en pause) — "Générer l'export" a désormais un mode figé
+  une fois l'export généré (montre le contenu réel `export_paie_lignes`, plus le backlog live). "Quels
+  congés transmettre" n'a PAS reçu le même traitement — il continue d'afficher le backlog live même
+  pour une période déjà transmise. Comportement peut-être voulu (l'onglet sert justement à repérer ce
+  qui reste à transmettre, y compris pour une période déjà close), mais pas explicitement tranché.
+- **Split "CP n / CP n-1+n-2" sur "Vérifier les fiches de paie"** (25/08/2026) — la vraie fiche de
+  paie du comptable distingue le CP de l'année en cours du CP reporté des années précédentes ; l'app
+  ne montre qu'un total CP combiné (le moteur de solde actuel n'a qu'un seul niveau de report, pas de
+  détail par année). Vincent a validé qu'on n'attaque pas ce chantier pour l'instant — à rouvrir si le
+  total combiné s'avère insuffisant pour vraiment vérifier la fiche de paie à l'usage.
+- **Format Droit/Pris/Solde vs Solde précédent/Mouvement/Solde en cours** (25/08/2026) — simplifié à
+  3 valeurs (pas de Droit/Pris détaillés séparément par catégorie) pour aller plus vite. À revalider
+  une fois Vincent en usage réel sur une vraie fiche de paie, si ce niveau de détail suffit pour
+  "checker que les jours sont bien pris en compte dans la FDP" comme demandé.
 
 ## Paramétrer/Calendrier
 

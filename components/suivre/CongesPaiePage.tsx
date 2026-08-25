@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/demandes.repository";
 import {
   calculerJoursATransmettreMaintenant,
+  fetchCheckFichesPaie,
   fetchLignesTransmissionParDemande,
 } from "@/lib/data/exportsPaie.repository";
 import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
@@ -365,6 +366,7 @@ export const CongesPaiePage = forwardRef<
     periodeInitiale?: { debut: string; fin: string };
     validesUniquement?: boolean;
     sourceTransmission?: boolean;
+    exportId?: string | null;
   }
 >(function CongesPaiePage(
   {
@@ -372,6 +374,7 @@ export const CongesPaiePage = forwardRef<
     periodeInitiale,
     validesUniquement: validesUniquementForce = false,
     sourceTransmission = false,
+    exportId = null,
   },
   ref,
 ) {
@@ -388,13 +391,57 @@ export const CongesPaiePage = forwardRef<
     Record<string, LigneExportPaie[]>
   >({});
 
+  // Contenu figé de l'export réel (25/08/2026, bug signalé : "la demi journée
+  // d'Olivier est quand même affichée dans l'export de juillet" — une fois
+  // une période transmise, cet écran continuait d'afficher le backlog LIVE
+  // (`fetchCongesATransmettre`, ce qui reste à transmettre MAINTENANT),
+  // désynchronisé du contenu réel de l'export déjà généré à l'époque, qui
+  // peut évoluer après coup — ex. une demande validée après la transmission).
+  // Décision actée : une fois `exportId` connu, les 3 tableaux/le CSV
+  // reflètent exactement `export_paie_lignes` de cet export, plus jamais la
+  // liste live.
+  const figeParExport = sourceTransmission && Boolean(exportId);
+  const [demandesFigees, setDemandesFigees] = useState<DemandeEquipe[]>([]);
+  const [joursParDemandeFigee, setJoursParDemandeFigee] = useState<Record<string, number>>({});
+  // Initialisé directement sur `figeParExport` plutôt que mis à jour dans
+  // l'effet ci-dessous pour le cas "pas de mode figé" — `figeParExport` est
+  // stable pour toute la durée de vie de cette instance (le parent force un
+  // remount via `key` au changement d'export, voir `TransmissionsPaiePage`).
+  const [chargementFige, setChargementFige] = useState(figeParExport);
+
+  useEffect(() => {
+    if (!figeParExport || !exportId) return;
+    let cancelled = false;
+    fetchCheckFichesPaie(exportId).then((collaborateurs) => {
+      if (cancelled) return;
+      const demandesVues: DemandeEquipe[] = [];
+      const jours: Record<string, number> = {};
+      for (const collab of collaborateurs) {
+        for (const { ligne, demande } of collab.lignes) {
+          demandesVues.push(demande);
+          jours[demande.id] = (jours[demande.id] ?? 0) + ligne.joursInclus;
+        }
+      }
+      setDemandesFigees(demandesVues);
+      setJoursParDemandeFigee(jours);
+      setChargementFige(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [exportId, figeParExport]);
+
+  const demandesPourFeed = figeParExport ? demandesFigees : demandes;
+
   // Même calcul que "Quels congés transmettre" (`TransmissionsPaiePage`) —
   // combien de jours partiraient réellement pour chaque ligne si on
   // transmettait maintenant, pas le solde restant complet (25/08/2026 :
   // sans ça, un congé à cheval encore réapparaissait ici avec son reliquat
-  // total au lieu de la portion qui sera effectivement transmise).
+  // total au lieu de la portion qui sera effectivement transmise). Sans
+  // objet une fois `figeParExport` — il n'y a plus de "si on transmettait
+  // maintenant" à prévisualiser, c'est déjà transmis.
   useEffect(() => {
-    if (!sourceTransmission) return;
+    if (!sourceTransmission || figeParExport) return;
     let cancelled = false;
     Promise.all(
       (demandes as CongeATransmettre[]).map(
@@ -406,21 +453,23 @@ export const CongesPaiePage = forwardRef<
     return () => {
       cancelled = true;
     };
-  }, [demandes, sourceTransmission, debut, fin]);
+  }, [demandes, sourceTransmission, figeParExport, debut, fin]);
 
   // Lignes de transmission réelles (`export_paie_lignes`), même logique que
   // "Quels congés transmettre" — alimente le feed "Transmis le"/"En paye le"
-  // du panneau de détail (25/08/2026).
+  // du panneau de détail (25/08/2026). Sourcé sur `demandesPourFeed` pour
+  // rester correct en mode figé (sinon basé sur le backlog live, potentiellement
+  // vide/différent des demandes réellement affichées).
   useEffect(() => {
     if (!sourceTransmission) return;
     let cancelled = false;
-    fetchLignesTransmissionParDemande(demandes.map((d) => d.id)).then((data) => {
+    fetchLignesTransmissionParDemande(demandesPourFeed.map((d) => d.id)).then((data) => {
       if (!cancelled) setLignesTransmissionParId(data);
     });
     return () => {
       cancelled = true;
     };
-  }, [demandes, sourceTransmission]);
+  }, [demandesPourFeed, sourceTransmission]);
 
   const demandesValidesFiltrees = validesUniquementForce || validesUniquement
     ? demandes.filter((d) => d.statut === "validé")
@@ -430,11 +479,15 @@ export const CongesPaiePage = forwardRef<
   // exclu d'ici pour ne pas compter les mêmes jours deux fois à l'écran
   // (les corrections, statut "annulé", sont déjà hors de ce filtre puisque
   // "validés uniquement" est forcé sur cet onglet).
-  const demandesAffichees = sourceTransmission
-    ? demandesValidesFiltrees.filter((d) => d.fin >= debut)
-    : demandesValidesFiltrees;
+  const demandesAffichees = figeParExport
+    ? demandesFigees.filter((d) => joursParDemandeFigee[d.id] >= 0 && d.fin >= debut)
+    : sourceTransmission
+      ? demandesValidesFiltrees.filter((d) => d.fin >= debut)
+      : demandesValidesFiltrees;
   const joursPourTransmission = (d: DemandeEquipe) =>
-    joursATransmettreParId[d.id] ?? (d as CongeATransmettre).joursRestants;
+    figeParExport
+      ? (joursParDemandeFigee[d.id] ?? 0)
+      : (joursATransmettreParId[d.id] ?? (d as CongeATransmettre).joursRestants);
   // Congé "à cheval" sur cette période et la suivante (25/08/2026, "j'insiste
   // sur le cheval" — Vincent) : sa fin dépasse la borne haute de la période
   // en cours, donc seule une partie de son solde est prise en compte ici, le
@@ -446,36 +499,65 @@ export const CongesPaiePage = forwardRef<
   const lignes = grouperParCollaborateur(
     demandesAffichees,
     sourceTransmission ? joursPourTransmission : undefined,
-    false,
+    // En mode figé (25/08/2026), le statut LIVE de la demande n'a plus voix
+    // au chapitre pour décider si ses jours comptent — seule compte la
+    // ligne réellement transmise (déjà catégorisée en amont via le signe de
+    // `joursParDemandeFigee`). Sans ce `true`, une demande transmise "en
+    // positif" puis régularisée depuis (statut actuel "annulé") voyait ses
+    // jours retombés à 0 dans ce tableau, alors que l'export réel les
+    // contenait bien (bug constaté : "la demi journée d'Olivier est quand
+    // même affichée dans l'export de juillet" — même famille de bug, ici sur
+    // le nombre de jours plutôt que sur la présence de la ligne).
+    figeParExport,
     sourceTransmission ? estACheval : undefined,
     sourceTransmission ? libelleAffiche : undefined,
   );
-  const selection = demandes.find((d) => d.id === selectionId) ?? null;
+  const selection = demandesPourFeed.find((d) => d.id === selectionId) ?? null;
 
   // Tableaux "équivalents" à "Quels congés transmettre" (25/08/2026, demande
   // explicite) — même répartition collaborateur × type que le récap
   // principal ci-dessus, pour que "Générer l'export" montre exactement ce
   // qui compose le CSV/la transmission, pas seulement le récap de la période
   // en cours ("les tableaux 2 et 3 doivent prendre le même format que le
-  // tableau 1" — Vincent).
-  const lignesRepechage = sourceTransmission
+  // tableau 1" — Vincent). En mode figé, la répartition repêchage/corrections
+  // se fait sur le contenu réel de l'export (`joursParDemandeFigee`, signé —
+  // négatif = correction) plutôt que sur le statut live de la demande, qui
+  // peut avoir changé depuis (ex. re-régularisée) sans que l'export d'origine
+  // en soit affecté.
+  const lignesRepechage = figeParExport
     ? grouperParCollaborateur(
-        (demandes as CongeATransmettre[]).filter((d) => d.statut !== "annulé" && d.fin < debut),
-        joursPourTransmission,
-        false,
-        estACheval,
-        libelleAffiche,
-      )
-    : [];
-  const lignesCorrections = sourceTransmission
-    ? grouperParCollaborateur(
-        (demandes as CongeATransmettre[]).filter((d) => d.statut === "annulé"),
+        demandesFigees.filter((d) => joursParDemandeFigee[d.id] >= 0 && d.fin < debut),
         joursPourTransmission,
         true,
         estACheval,
         libelleAffiche,
       )
-    : [];
+    : sourceTransmission
+      ? grouperParCollaborateur(
+          (demandes as CongeATransmettre[]).filter((d) => d.statut !== "annulé" && d.fin < debut),
+          joursPourTransmission,
+          false,
+          estACheval,
+          libelleAffiche,
+        )
+      : [];
+  const lignesCorrections = figeParExport
+    ? grouperParCollaborateur(
+        demandesFigees.filter((d) => joursParDemandeFigee[d.id] < 0),
+        joursPourTransmission,
+        true,
+        estACheval,
+        libelleAffiche,
+      )
+    : sourceTransmission
+      ? grouperParCollaborateur(
+          (demandes as CongeATransmettre[]).filter((d) => d.statut === "annulé"),
+          joursPourTransmission,
+          true,
+          estACheval,
+          libelleAffiche,
+        )
+      : [];
 
   function exporter() {
     const csv = genererCsv(fusionnerLignes(lignes, lignesRepechage, lignesCorrections));
@@ -489,6 +571,8 @@ export const CongesPaiePage = forwardRef<
   }
 
   useImperativeHandle(ref, () => ({ exporter }));
+
+  const chargementAffiche = figeParExport ? chargementFige : loading;
 
   async function valider(commentaire: string) {
     if (!selection) return;
@@ -582,7 +666,7 @@ export const CongesPaiePage = forwardRef<
               </div>
             )}
 
-            {loading ? (
+            {chargementAffiche ? (
               <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
             ) : (
               <TableauCollaborateurType
@@ -602,7 +686,7 @@ export const CongesPaiePage = forwardRef<
                   Congés consommés non passés sur des périodes précédentes
                 </h2>
               </div>
-              {loading ? (
+              {chargementAffiche ? (
                 <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
               ) : (
                 <TableauCollaborateurType
@@ -621,7 +705,7 @@ export const CongesPaiePage = forwardRef<
               <div className="px-4 pt-3 pb-1">
                 <h2 className="text-ink-900 text-sm font-bold">Congés passés en paye mais annulés</h2>
               </div>
-              {loading ? (
+              {chargementAffiche ? (
                 <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
               ) : (
                 <TableauCollaborateurType
@@ -648,7 +732,7 @@ export const CongesPaiePage = forwardRef<
             onValiderSucces={(id, message) => setToast({ id, message })}
             lignesTransmission={sourceTransmission ? lignesTransmissionParId[selection.id] : undefined}
             previsionTransmission={
-              sourceTransmission
+              sourceTransmission && !figeParExport
                 ? {
                     jours: joursATransmettreParId[selection.id] ?? 0,
                     total: selection.nbDemiJournees / 2,

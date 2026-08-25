@@ -19,7 +19,12 @@ import {
 } from "@/lib/data/exportsPaie.repository";
 import type { LigneExportPaie } from "@/lib/types";
 import { formatJours, renderDureeATransmettre } from "@/lib/format";
-import { LABEL_COURT, LABEL_LONG, TypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import {
+  LABEL_COURT,
+  LABEL_LONG,
+  TypeBadge,
+  type TypeBadgeCode,
+} from "@/components/demandes/TypeBadge";
 import { InputFiltrePill } from "@/components/ui/FiltrePill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -472,6 +477,7 @@ function GenererExport({
         periodeInitiale={periode}
         validesUniquement
         sourceTransmission
+        exportId={exportPaie?.id ?? null}
       />
 
       <div className="bg-surface-card border-ink-300/60 sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border-t px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
@@ -623,7 +629,7 @@ export function TransmissionsPaiePage({
         <GenererExport periode={periode} exportPaie={exportPaie} onTransmis={rafraichirExport} />
       )}
       {onglet === "verifier" && !chargementExport && (
-        <VerifierFichesPaiePage exportId={exportPaie?.id ?? null} />
+        <VerifierFichesPaiePage exportId={exportPaie?.id ?? null} periode={periode} />
       )}
     </div>
   );
