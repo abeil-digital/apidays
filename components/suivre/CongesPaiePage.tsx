@@ -135,7 +135,8 @@ function genererCsv(lignes: LigneCollab[]): string {
  * réduit le padding vertical d'origine, pour un usage imbriqué dans un autre
  * écran qui porte déjà son propre titre (`TransmissionsPaiePage`, onglet "Générer
  * l'export" — reprend ce composant tel quel plutôt que de dupliquer sa
- * logique). Défaut : comportement inchangé, écran `/suivre/paie` autonome.
+ * logique — seul appelant restant depuis la suppression de l'écran
+ * `/suivre/paie` autonome, 25/08/2026).
  *
  * `periodeInitiale` (24/08/2026) — override du calcul par défaut
  * (`periodePaieParDefaut()`), pour ouvrir directement sur une période
@@ -148,8 +149,6 @@ function genererCsv(lignes: LigneCollab[]): string {
  * laisser en option. Utilisé par l'onglet "Générer l'export" de
  * `TransmissionsPaiePage` (demande explicite : cette vue ne doit prendre en
  * compte que les congés validés, pas de choix à faire à cet endroit).
- * Défaut `false` : comportement inchangé, écran `/suivre/paie` autonome
- * garde la case à cocher.
  *
  * `sourceTransmission` (25/08/2026) — opt-in : bascule `useCongesConsommes`
  * sur `fetchCongesATransmettre` (backlog inclus) plutôt que le filtre par

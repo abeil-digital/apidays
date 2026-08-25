@@ -150,7 +150,7 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
     // (retrait par le salarié lui-même d'une demande encore en attente) n'a
     // aucun appelant dans l'UI, donc ce cas ne se produit pas en pratique.
     const verbe =
-      demande.statut === "validé" ? "validé" : demande.statut === "refusé" ? "refusé" : "retiré";
+      demande.statut === "validé" ? "validé" : demande.statut === "refusé" ? "refusé" : "annulé";
     evenements.push({
       id: `${demande.id}-decision`,
       demandeId: demande.id,

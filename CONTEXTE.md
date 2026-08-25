@@ -2605,6 +2605,41 @@ correspondent maintenant. `todayIso` reste utilisé tel quel pour `estAujourdhui
 présent" sur la grille, sans rapport avec la plage de calcul). Vérifié : "C. payés" passe de 5,5 j à
 6,5 j, le 11/08 réapparaît bien dans la liste/le calendrier d'août.
 
+**Régularisation — pas de notification "décision" sur la home + mot "retiré" au lieu d'"annulé"
+(25/08/2026)** : deux derniers trous signalés par Vincent sur ce chantier.
+
+- **`nbDecisionsNonVues`** (`Dashboard2Page.tsx`, stabilo "X nouvelle(s) décision(s)" en haut de
+  l'Accueil) ne comptait que `validé`/`refusé`, pas `annulé` — une régularisation ne déclenchait
+  donc aucune notification alors que `vu` repasse bien à `false` dessus (`deciderDemande`, déjà
+  générique à tout changement de statut). Fix : `annulé` ajouté au filtre.
+- **`ActiviteRecenteFeed.tsx`** — le verbe utilisé dans la phrase du journal ("Delphine a **retiré**
+  vos X jours...") remplacé par "**annulé**", cohérent avec le libellé utilisé partout ailleurs dans
+  l'app pour ce statut (`StatusBadge`, filtre "Annulés" de `SuivreDemandesPage`, etc.).
+- Vérifié en conditions réelles (test + restauration propre) : régularisé le CP du 16/09 de Delphine
+  → stabilo Accueil passé à "1 nouvelle décision", journal affichant "Delphine a annulé votre
+  demi-journée de CP du 16/09/2026 ma". Restauré ensuite à l'identique.
+- **Effet de bord découvert en testant, non lié à ce fix** : le journal a aussi fait remonter deux
+  autres régularisations de Delphine (21/09→25/09, 31/08→11/09) déjà présentes en base depuis un
+  test antérieur de cette session, jamais restaurées — invisibles jusqu'ici faute du fix du journal
+  ci-dessus. Vincent a confirmé vouloir les restaurer ; fait dans la foulée (repassées "validée" via
+  le bouton "Restaurer" de la régularisation).
+
+**"Export paie" (`/suivre/paie`) supprimé (25/08/2026)** — coexistait avec "Transmissions paie"
+depuis sa construction (24/08/2026), gardé volontairement en parallèle le temps de valider le
+nouveau parcours. Une fois "Transmissions paie" jugé complet, Vincent a demandé la suppression de
+l'ancien écran plutôt que de continuer à maintenir les deux.
+
+- `app/(app)/suivre/paie/page.tsx` (route) supprimé.
+- Entrée de nav "Export paie" retirée de `SUIVRE_TABS` (`components/layout/tabs.ts`), import
+  `Receipt` (lucide-react) devenu inutile, retiré aussi.
+- **`CongesPaiePage.tsx` conservé** — pas mort : c'est le composant réutilisé tel quel par l'onglet
+  "Générer l'export" de `TransmissionsPaiePage` (`masquerTitre`/`periodeInitiale`/
+  `validesUniquement`/`sourceTransmission` toujours renseignés par ce seul appelant restant).
+  Commentaires mentionnant l'ancien écran `/suivre/paie` autonome mis à jour dans ce fichier,
+  `useCongesConsommes.ts` et `TransmissionsPaiePage.tsx` — sans toucher au comportement.
+- Vérifié : `/suivre/paie` renvoie un 404, "Transmissions paie" reste la seule entrée de nav pour ce
+  périmètre, build/typecheck/lint clean.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

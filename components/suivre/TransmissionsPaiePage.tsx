@@ -404,9 +404,10 @@ function GenererExport({
 
 /**
  * "Transmissions paie" (`/suivre/transmissions-paie/[debut]`, 24/08/2026, restructuré en
- * 3 onglets le même jour) — nouvelle section Suivre, coexiste avec "Export
- * paie" (`/suivre/paie`) sans le remplacer. Toujours ouverte sur une période
- * précise (`periode`, choisie sur la page liste `/suivre/transmissions-paie`).
+ * 3 onglets le même jour) — nouvelle section Suivre, remplace l'ancien écran
+ * "Export paie" (`/suivre/paie`, supprimé le 25/08/2026 une fois ce parcours
+ * jugé complet). Toujours ouverte sur une période précise (`periode`, choisie
+ * sur la page liste `/suivre/transmissions-paie`).
  * - **Quels congés transmettre** : revue avant transmission.
  * - **Générer l'export** : export CSV + action "Transmettre".
  * - **Vérifier les fiches de paie** : check du retour comptable, désactivé

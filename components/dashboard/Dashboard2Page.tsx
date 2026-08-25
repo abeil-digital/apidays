@@ -428,7 +428,7 @@ export function Dashboard2Page() {
   // effacée au début de la session suivante).
   const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
   const nbDecisionsNonVues = demandes.filter(
-    (d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu,
+    (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
   ).length;
 
   return (

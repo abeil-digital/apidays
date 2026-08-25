@@ -12,20 +12,18 @@ interface UseCongesConsommesResult {
   refetch: () => void;
 }
 
-/** Congés validés (CP/RTT/CSS) sur une période — Espace Suivre > récap paie.
- * `refetch` permet de rafraîchir après une action locale (ex. valider/
- * dévalider une demande depuis "Export paie") sans dépendre d'un changement
- * de `debut`/`fin`.
+/** Congés validés (CP/RTT/CSS) sur une période — consommé par `CongesPaiePage`
+ * (onglet "Générer l'export" de `TransmissionsPaiePage`). `refetch` permet de
+ * rafraîchir après une action locale (ex. valider/dévalider une demande)
+ * sans dépendre d'un changement de `debut`/`fin`.
  *
  * `sourceTransmission` (25/08/2026) — opt-in : bascule sur
  * `fetchCongesATransmettre` (backlog inclus, sans borne basse de date) au
  * lieu de `fetchCongesConsommesPeriode` (strictement `date_debut` dans la
- * période). Utilisé par l'onglet "Générer l'export" de `TransmissionsPaiePage`
- * — sans ça, un congé du backlog (jamais transmis, démarré avant la
+ * période) — sans ça, un congé du backlog (jamais transmis, démarré avant la
  * période) était bien transmis au clic sur "Transmettre" (qui utilise déjà
  * `fetchCongesATransmettre`) mais invisible dans cet aperçu/le CSV, un
  * décalage trompeur entre ce qui est prévisualisé et ce qui part réellement.
- * Défaut `false` : comportement inchangé, écran `/suivre/paie` autonome.
  */
 export function useCongesConsommes(
   debut: string,
