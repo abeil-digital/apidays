@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import { Download } from "lucide-react";
-import type { CongeATransmettre, DemandeEquipe, StatutDemande } from "@/lib/types";
+import type { CongeATransmettre, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
 import { formatJours, formatPeriodePillNumerique } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
 import { useCongesConsommes } from "@/hooks/useCongesConsommes";
@@ -12,7 +12,10 @@ import {
   remettreEnAttenteDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
-import { calculerJoursATransmettreMaintenant } from "@/lib/data/exportsPaie.repository";
+import {
+  calculerJoursATransmettreMaintenant,
+  fetchLignesTransmissionParDemande,
+} from "@/lib/data/exportsPaie.repository";
 import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -156,18 +159,34 @@ function genererCsv(lignes: LigneCollab[]): string {
  * à ce que "Transmettre" enverra réellement (même fonction). Utilisé par
  * l'onglet "Générer l'export" de `TransmissionsPaiePage`, aux côtés de
  * `validesUniquement`.
+ *
+ * Expose `exporter()` via `ref` (25/08/2026,
+ * `useImperativeHandle`) — pour que le bandeau sticky de `GenererExport`
+ * (bouton "Transmettre" → modale de confirmation) puisse déclencher le
+ * téléchargement du CSV depuis cette modale, sans dupliquer la génération
+ * (`genererCsv`/`lignes`, internes à ce composant).
  */
-export function CongesPaiePage({
-  masquerTitre = false,
-  periodeInitiale,
-  validesUniquement: validesUniquementForce = false,
-  sourceTransmission = false,
-}: {
-  masquerTitre?: boolean;
-  periodeInitiale?: { debut: string; fin: string };
-  validesUniquement?: boolean;
-  sourceTransmission?: boolean;
-} = {}) {
+export interface CongesPaiePageHandle {
+  exporter: () => void;
+}
+
+export const CongesPaiePage = forwardRef<
+  CongesPaiePageHandle,
+  {
+    masquerTitre?: boolean;
+    periodeInitiale?: { debut: string; fin: string };
+    validesUniquement?: boolean;
+    sourceTransmission?: boolean;
+  }
+>(function CongesPaiePage(
+  {
+    masquerTitre = false,
+    periodeInitiale,
+    validesUniquement: validesUniquementForce = false,
+    sourceTransmission = false,
+  },
+  ref,
+) {
   const defaut = periodeInitiale ?? periodePaieParDefaut();
   const [debut, setDebut] = useState(defaut.debut);
   const [fin, setFin] = useState(defaut.fin);
@@ -177,6 +196,9 @@ export function CongesPaiePage({
   const [validesUniquement, setValidesUniquement] = useState(false);
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const [joursATransmettreParId, setJoursATransmettreParId] = useState<Record<string, number>>({});
+  const [lignesTransmissionParId, setLignesTransmissionParId] = useState<
+    Record<string, LigneExportPaie[]>
+  >({});
 
   // Même calcul que "Quels congés transmettre" (`TransmissionsPaiePage`) —
   // combien de jours partiraient réellement pour chaque ligne si on
@@ -197,6 +219,20 @@ export function CongesPaiePage({
       cancelled = true;
     };
   }, [demandes, sourceTransmission, debut, fin]);
+
+  // Lignes de transmission réelles (`export_paie_lignes`), même logique que
+  // "Quels congés transmettre" — alimente le feed "Transmis le"/"En paye le"
+  // du panneau de détail (25/08/2026).
+  useEffect(() => {
+    if (!sourceTransmission) return;
+    let cancelled = false;
+    fetchLignesTransmissionParDemande(demandes.map((d) => d.id)).then((data) => {
+      if (!cancelled) setLignesTransmissionParId(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demandes, sourceTransmission]);
 
   const demandesAffichees = validesUniquementForce || validesUniquement
     ? demandes.filter((d) => d.statut === "validé")
@@ -219,6 +255,8 @@ export function CongesPaiePage({
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  useImperativeHandle(ref, () => ({ exporter }));
 
   async function valider(commentaire: string) {
     if (!selection) return;
@@ -376,6 +414,7 @@ export function CongesPaiePage({
             onRegulariser={regulariser}
             onEnCoursChange={setEnCours}
             onValiderSucces={(id, message) => setToast({ id, message })}
+            lignesTransmission={sourceTransmission ? lignesTransmissionParId[selection.id] : undefined}
             previsionTransmission={
               sourceTransmission
                 ? {
@@ -401,4 +440,4 @@ export function CongesPaiePage({
       )}
     </div>
   );
-}
+});

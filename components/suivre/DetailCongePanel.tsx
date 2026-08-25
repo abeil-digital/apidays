@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import type {
   CongeImpose,
@@ -299,6 +299,125 @@ export function DetailCongePanel({
     });
   }
 
+  // Feed unifié, trié chronologiquement (25/08/2026, "c'est pas dans
+  // l'ordre" — Vincent) : décisions (`decisions_demande`) et transmissions
+  // paie réelles (`lignesTransmission`) mélangées, triées par date effective
+  // (`decideLe`/`genereLe`/`verifieLe`, tous des timestamptz ISO comparables
+  // tels quels), plutôt que deux blocs distincts l'un après l'autre — sans
+  // ça, "Annulé le 25/08" pouvait apparaître avant "En paye le 30/07",
+  // pourtant antérieur. Une ligne de correction (`joursInclus < 0`, congé
+  // déjà passé en paye puis régularisé) porte le suffixe "(retro)" — la
+  // même transmission normale ("Transmis"/"En paye") appliquée à une
+  // correction plutôt qu'à l'envoi d'origine.
+  const entreesFeed: {
+    key: string;
+    date: string;
+    node: ReactNode;
+    note?: ReactNode;
+    previsionnel?: boolean;
+  }[] = [];
+
+  if (historiqueDecisions.length > 0) {
+    for (const decision of historiqueDecisions) {
+      entreesFeed.push({
+        key: `decision-${decision.id}`,
+        date: decision.decideLe,
+        node: (
+          <>
+            <span className={`font-semibold ${TEXTE_DECISION[decision.statut]}`}>
+              {LIBELLE_DECISION[decision.statut]} le {formatJjMmAa(decision.decideLe.slice(0, 10))}
+            </span>
+            {decision.decidePar && (
+              <span className="text-ink-500"> par {decision.decidePar.prenom}</span>
+            )}
+          </>
+        ),
+        // Commentaire propre à CETTE décision (25/08/2026, "le commentaire
+        // est associé à annulé" — Vincent) — `decisions_demande.commentaire`,
+        // pas `selection.commentaireManager` (colonne unique côté
+        // `demandes_conges`, réécrite à chaque décision, qui ne peut porter
+        // que le commentaire du DERNIER événement, mal placé une fois le
+        // feed trié chronologiquement).
+        note: decision.commentaire || undefined,
+      });
+    }
+  } else if (selection.dateDecision) {
+    // Repli : demande décidée avant l'introduction de `decisions_demande`,
+    // aucune ligne de journal pour elle — seule la décision courante (mêmes
+    // colonnes que ci-dessus) est connue.
+    entreesFeed.push({
+      key: "decision-fallback",
+      date: selection.dateDecision,
+      node: (
+        <>
+          <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
+            {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
+          </span>
+          {selection.validateur && <span className="text-ink-500"> par {selection.validateur.prenom}</span>}
+        </>
+      ),
+      note: selection.commentaireManager || undefined,
+    });
+  }
+
+  for (const ligne of lignesTransmission ?? []) {
+    const retro = ligne.joursInclus < 0;
+    entreesFeed.push({
+      key: `transmis-${ligne.id}`,
+      date: ligne.genereLe,
+      node: (
+        <>
+          <span className="font-semibold text-status-warning-fg">
+            {retro ? "Transmis (retro)" : "Transmis"} le {formatJjMmAa(ligne.genereLe.slice(0, 10))}
+          </span>
+          <span className="text-ink-500">
+            {" "}
+            : {retro ? "-" : ""}
+            {formatJours(Math.abs(ligne.joursInclus))} j
+          </span>
+        </>
+      ),
+    });
+    if (ligne.statut !== "transmis" && ligne.verifieLe) {
+      entreesFeed.push({
+        key: `verifie-${ligne.id}`,
+        date: ligne.verifieLe,
+        node: (
+          <span className={`font-semibold ${TEXTE_TRANSMISSION[ligne.statut]}`}>
+            {ligne.statut === "en_paye" && retro ? "En paye (retro)" : LIBELLE_TRANSMISSION[ligne.statut]}{" "}
+            le {formatJjMmAa(ligne.verifieLe.slice(0, 10))}
+          </span>
+        ),
+        note: ligne.statut === "ecart" && ligne.motifEcart ? ligne.motifEcart : undefined,
+      });
+    }
+  }
+
+  if (previsionTransmission) {
+    const retro = previsionTransmission.jours < 0;
+    entreesFeed.push({
+      key: "prevision",
+      date: new Date().toISOString(),
+      node: (
+        <>
+          <span className="text-ink-500 font-semibold italic">
+            {retro ? "Transmis (retro)" : "Transmis paie"} le{" "}
+            {formatJjMmAa(new Date().toISOString().slice(0, 10))}
+          </span>
+          <span className="text-ink-500 italic">
+            {" "}
+            : {retro ? "-" : ""}
+            {formatJours(Math.abs(previsionTransmission.jours))} j /{" "}
+            {formatJours(previsionTransmission.total)} j
+          </span>
+        </>
+      ),
+      previsionnel: true,
+    });
+  }
+
+  entreesFeed.sort((a, b) => a.date.localeCompare(b.date));
+
   return (
     <div
       className={`flex w-full flex-col gap-[3px] ${
@@ -395,134 +514,31 @@ export function DetailCongePanel({
               {selection.note}
             </div>
           )}
-          {historiqueDecisions.length > 0
-            ? // Journal complet (`decisions_demande`) — une entrée par
-              // décision réelle, dans l'ordre (ex. Validé le… puis Annulé
-              // le…), plutôt que la seule décision courante ci-dessous.
-              historiqueDecisions.map((decision) => (
-                <div key={decision.id}>
-                  <div className="flex gap-2">
-                    <div className="flex w-1.5 shrink-0 justify-center">
-                      <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
-                    />
-                    <span className="text-[10px]">
-                      <span className={`font-semibold ${TEXTE_DECISION[decision.statut]}`}>
-                        {LIBELLE_DECISION[decision.statut]} le{" "}
-                        {formatJjMmAa(decision.decideLe.slice(0, 10))}
-                      </span>
-                      {decision.decidePar && (
-                        <span className="text-ink-500"> par {decision.decidePar.prenom}</span>
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))
-            : // Repli : demande décidée avant l'introduction de
-              // `decisions_demande`, aucune ligne de journal pour elle —
-              // seule la décision courante (mêmes colonnes que ci-dessus)
-              // est connue.
-              selection.dateDecision && (
-                <>
-                  <div className="flex gap-2">
-                    <div className="flex w-1.5 shrink-0 justify-center">
-                      <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
-                    />
-                    <span className="text-[10px]">
-                      <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
-                        {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
-                      </span>
-                      {selection.validateur && (
-                        <span className="text-ink-500"> par {selection.validateur.prenom}</span>
-                      )}
-                    </span>
-                  </div>
-                </>
-              )}
-          {lignesTransmission
-            ?.slice()
-            .sort((a, b) => a.genereLe.localeCompare(b.genereLe))
-            .map((ligne) => (
-              <div key={ligne.id}>
-                <div className="flex gap-2">
-                  <div className="flex w-1.5 shrink-0 justify-center">
-                    <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-                  <span className="text-[10px]">
-                    <span className="font-semibold text-status-warning-fg">
-                      Transmis le {formatJjMmAa(ligne.genereLe.slice(0, 10))}
-                    </span>
-                    <span className="text-ink-500">
-                      {" "}
-                      : {formatJours(Math.abs(ligne.joursInclus))} j{ligne.joursInclus < 0 ? " (correction)" : ""}
-                    </span>
-                  </span>
-                </div>
-                {ligne.statut !== "transmis" && ligne.verifieLe && (
-                  <>
-                    <div className="flex gap-2">
-                      <div className="flex w-1.5 shrink-0 justify-center">
-                        <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-                      <span className="text-[10px]">
-                        <span className={`font-semibold ${TEXTE_TRANSMISSION[ligne.statut]}`}>
-                          {LIBELLE_TRANSMISSION[ligne.statut]} le {formatJjMmAa(ligne.verifieLe.slice(0, 10))}
-                        </span>
-                      </span>
-                    </div>
-                    {ligne.statut === "ecart" && ligne.motifEcart && (
-                      <div className="text-ink-500 pt-1 pb-2 pl-[0.875rem] text-[10px] italic">
-                        {ligne.motifEcart}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-          {previsionTransmission && (
-            <div>
+          {entreesFeed.map((entree) => (
+            <div key={entree.key}>
               <div className="flex gap-2">
                 <div className="flex w-1.5 shrink-0 justify-center">
                   <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full border border-dashed border-ink-500" />
-                <span className="text-[10px]">
-                  <span className="text-ink-500 font-semibold italic">
-                    Transmis paie le {formatJjMmAa(new Date().toISOString().slice(0, 10))}
-                  </span>
-                  <span className="text-ink-500 italic">
-                    {" "}
-                    : {formatJours(previsionTransmission.jours)} j /{" "}
-                    {formatJours(previsionTransmission.total)} j
-                  </span>
-                </span>
+                <span
+                  className={
+                    entree.previsionnel
+                      ? "h-1.5 w-1.5 shrink-0 rounded-full border border-dashed border-ink-500"
+                      : `h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`
+                  }
+                />
+                <span className="text-[10px]">{entree.node}</span>
               </div>
+              {entree.note && (
+                <div className="text-ink-500 pt-1 pb-2 pl-[0.875rem] text-[10px] italic">
+                  {entree.note}
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
-
-        {selection.commentaireManager && (
-          <div className="text-ink-500 pr-4 pl-[1.875rem] text-[10px] italic">
-            {selection.commentaireManager}
-          </div>
-        )}
 
         {
           // "refusé" est un état terminal ici — pas de bouton Refuser/Valider

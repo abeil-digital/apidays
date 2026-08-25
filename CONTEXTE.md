@@ -2640,6 +2640,137 @@ l'ancien écran plutôt que de continuer à maintenir les deux.
 - Vérifié : `/suivre/paie` renvoie un 404, "Transmissions paie" reste la seule entrée de nav pour ce
   périmètre, build/typecheck/lint clean.
 
+**"Quels congés transmettre" — bandeau sticky de validation (25/08/2026)** : Vincent — "la séquence
+quels congés transmettre à mon sens doit être validée par l'utilisateur pour générer l'export" —
+bandeau sticky en bas de l'onglet, portant le bouton de validation ET le récap par type (déplacé
+depuis la carte de la colonne droite, qui n'apparaissait que quand rien n'était sélectionné — le
+bandeau, lui, reste visible en permanence). Question posée à Vincent : le bouton doit-il transmettre
+directement, ou juste amener à l'onglet "Générer l'export" ? Réponse : bascule d'onglet seulement —
+l'action réelle "Transmettre" reste un geste séparé, sur "Générer l'export" comme avant.
+
+- **`QuelsCongesTransmettre`** gagne une prop `onValiderEtGenererExport`, câblée par
+  `TransmissionsPaiePage` sur `() => setOnglet("export")`.
+- **`totauxParType`** (renommée depuis le composant `RecapParType`, devenu une simple fonction pure)
+  — même calcul qu'avant, réutilisé pour le rendu horizontal en pills du bandeau plutôt que la
+  liste verticale de card. La colonne droite de la grille (`xl:grid-cols-[minmax(0,900px)_16rem]`)
+  ne montre donc plus le récap quand rien n'est sélectionné — seulement `DetailCongePanel` quand une
+  ligne l'est, sinon vide (comportement d'avant l'introduction du récap, 25/08/2026 plus tôt).
+- Bandeau en `sticky bottom-0`, en dehors de la grille 2 colonnes (sibling après, pas à l'intérieur)
+  pour occuper toute la largeur plutôt que seulement la colonne de gauche.
+- Vérifié en navigateur : le bandeau reste visible en bas au scroll, le récap se met à jour en
+  fonction des filtres Du/Au, le bouton bascule effectivement vers l'onglet "Générer l'export".
+
+**"Générer l'export" — même continuité (bandeau sticky + modale de confirmation, 25/08/2026)** :
+Vincent — "Même sticky même position du bouton transmettre qui ouvre une modale de confirmation de
+validation + lien du téléchargement du CSV". Le bouton "Transmettre" (auparavant en haut de
+l'onglet, effet immédiat) a été déplacé dans un bandeau sticky en bas, au même style que celui de
+"Quels congés transmettre", et n'agit plus directement : il ouvre une `Modal` de confirmation
+contenant un lien "Télécharger le CSV" et Annuler/Confirmer — Confirmer déclenche l'action réelle
+`genererExportPaie` (inchangée).
+
+- **`CongesPaiePage`** converti en `forwardRef` (`useImperativeHandle`) pour exposer sa fonction
+  `exporter()` — nouvelle interface exportée `CongesPaiePageHandle`. Nécessaire car la génération du
+  CSV (`genererCsv`/`lignes`) vit dans la closure de ce composant, rendu comme enfant de
+  `GenererExport` ; plutôt que dupliquer cette logique dans la modale, celle-ci appelle
+  `congesPaieRef.current?.exporter()` via un `useRef<CongesPaiePageHandle>` posé sur
+  `<CongesPaiePage ref={congesPaieRef} .../>`.
+- **`GenererExport`** : l'ancienne barre du haut (`bg-surface-card ... shadow-sm` avec statut +
+  bouton) devient le bandeau sticky du bas (`sticky bottom-0`, même classes que celui de
+  `QuelsCongesTransmettre`) ; le statut ("Pas encore transmise."/"Période transmise le…") reste à
+  gauche, le bouton "Transmettre" à droite. Le bouton reste désactivé une fois la période transmise
+  (`Boolean(exportPaie)`).
+- La modale (`components/ui/Modal.tsx`, `title="Transmettre la période"`) affiche un message de
+  confirmation, le lien CSV, l'erreur éventuelle (`erreur`, remontée de `genererExportPaie`), puis
+  Annuler (ferme la modale)/Confirmer (appelle `transmettre()`, qui ferme la modale et rafraîchit
+  le statut via `onTransmis` en cas de succès).
+- Vérifié en navigateur (après un restart `.next` pour purger un faux électrique HMR habituel de ce
+  projet, voir plus haut) : bandeau identique visuellement à celui de "Quels congés transmettre",
+  clic sur "Transmettre" ouvre la modale, "Télécharger le CSV" déclenche `exporter()` sans erreur
+  console, "Annuler" ferme la modale sans effet de bord (statut resté "Pas encore transmise.").
+  Confirmer non testé en conditions réelles pour ne pas polluer les données de Vincent (l'action
+  `genererExportPaie` elle-même est inchangée et déjà vérifiée par ailleurs) ; `tsc`/`eslint`/
+  `npm run build` clean.
+
+**Bandeau sticky — récap CP/RTT/CPA en pastilles colorées (25/08/2026)** : Vincent a fourni une
+capture (3 pastilles rondes bleu/vert/gris, juste un chiffre dedans, ex. "62 j"/"1,75 j"/"5 j") avec
+la consigne "dans le sticky de la première étape tu m'intègre les soldes dans ce format". Question
+posée pour clarifier de quel solde il s'agissait (celui du collaborateur sélectionné, ou un par
+collaborateur listé) — réponse : ni l'un ni l'autre, c'est le total CP/RTT/CPA de la période
+concernée (même donnée que le récap déjà présent), affiché dans le style pastille plutôt qu'en
+texte — "pour le moment on a juste congés payés : Note : le 0 est une donnée importante" (donc les
+3 pastilles CP/RTT/CPA restent visibles même à 0, contrairement au reste du récap).
+
+- Le style exact réutilise `TypeBadge` (`components/demandes/TypeBadge.tsx`) `variant="pill"` avec
+  `label` réglé sur `${jours} j` — le même rendu que la colonne solde de `SuivreSoldesPage.tsx`
+  (`LigneSolde`), pas de nouveau composant.
+- **`totauxParType`** change de signature : retourne désormais le `Record<TypeBadgeCode, number>`
+  complet (non filtré) plutôt qu'un tableau déjà filtré sur les valeurs non nulles — le filtrage
+  devient la responsabilité de l'appelant, puisqu'il diffère maintenant selon le type.
+- Nouvelle constante `TYPES_PRINCIPAUX = ["CP", "RTT", "CPA"]` — ces 3 types sont toujours rendus en
+  pastille colorée, y compris à 0. Les autres types de `TYPES_RECAP` (CSS/CE/RECUP/EVT_FAM, plus
+  rares) gardent l'ancien rendu texte (`{LABEL_LONG[code]} : {jours} j`) et restent masqués quand
+  nuls — pas de raison de leur appliquer la même règle de visibilité, Vincent n'a parlé que des 3
+  types officiels transmis à la paie.
+- Vérifié en navigateur : bandeau affiche "14 j" (pastille bleue CP), "0 j" (verte RTT), "0 j"
+  (grise CPA) sur la période de test (seuls des CP existent) ; `tsc`/`eslint` clean.
+
+**Feed du `DetailCongePanel` — lignes de transmission réelles + tri chronologique unifié
+(25/08/2026)** : suite directe du point précédent. `fetchLignesTransmissionParDemande`
+(`exportsPaie.repository.ts`) existait déjà mais n'était câblée nulle part — branchée sur
+`QuelsCongesTransmettre` et `CongesPaiePage` (prop `lignesTransmission`, déjà prévue dans
+`DetailCongePanel` depuis le 24/08), pour matérialiser dans le feed le vrai passage en paie
+("Transmis le"/"En paye le"/"Écart signalé le"), pas seulement la prévision.
+
+- Test réalisé sur le congé Salarie Test 16/07-17/07 (rétro-daté par SQL à la demande de
+  Vincent : posé 07/07, validé 13/07, export juillet transmis+vérifié "en paye" le 30/07, puis
+  régularisé/annulé ce jour via l'UI) — a révélé un bug d'ordre : le feed rendait le bloc
+  "décisions" (`historiqueDecisions`) puis le bloc "transmissions" (`lignesTransmission`) l'un
+  après l'autre, sans les mélanger par date — "Annulé le 25/08" apparaissait donc avant "En paye
+  le 30/07", pourtant antérieur ("c'est pas dans l'ordre" — Vincent).
+- Corrigé en fusionnant les deux sources dans un seul tableau `entreesFeed` (décisions +
+  lignes de transmission + prévision), trié par date effective avant rendu (`decideLe`/
+  `genereLe`/`verifieLe`, tous des timestamptz ISO directement comparables) plutôt que deux
+  blocs figés — un seul passage de map sur le tableau trié, connecteur entre chaque entrée.
+- **Convention "(retro)"** (demande explicite) : une ligne de correction (`joursInclus < 0` —
+  congé déjà transmis puis annulé) porte désormais le suffixe "(retro)" à la fois sur "Transmis"
+  et sur "En paye"/"Écart", pour la distinguer de l'envoi d'origine — même mécanique de
+  transmission, appliquée à un ajustement plutôt qu'au premier envoi. Le point encore ouvert
+  ("Restitué solde Fdp {mois}") reste à préciser avec Vincent : dépend de quel export futur
+  transmettra effectivement cette correction négative (celui d'août si transmis avant la
+  clôture, sinon celui de septembre) — pas encore un cas testable tant que cette correction n'a
+  pas été elle-même transmise.
+- Vérifié en navigateur, ordre du feed sur le cas test : "Posé le 07/07/2026" → "Validé le
+  13/07/26 par Delphine" → "Transmis le 30/07/26 : 2 j" → "En paye le 30/07/26" → "Annulé le
+  25/08/26 par Delphine" → "Transmis en paie (retro) le 25/08/26 : -2 j / 2 j" (prévision,
+  pointillés) — conforme à l'ordre demandé. `tsc`/`eslint`/`npm run build` clean.
+
+**Feed — commentaire dupliqué + retouches sticky/tableau (25/08/2026)** : suite immédiate des deux
+points précédents, plusieurs retouches réclamées en observant le cas de test en direct.
+
+- **Commentaire de régularisation mal placé** : affiché comme un bloc générique
+  (`selection.commentaireManager`, la colonne `commentaire_decision` de `demandes_conges`, réécrite
+  à chaque décision) tout en bas du feed, donnant l'impression d'être associé au DERNIER événement
+  affiché plutôt qu'à "Annulé" ("le commentaire est associé à annulé" — Vincent). Corrigé en portant
+  ce commentaire par décision : chaque entrée de `entreesFeed` issue de `historiqueDecisions` prend
+  désormais `decision.commentaire` (déjà journalisé par `decisions_demande`, un par décision) comme
+  `note` — rendu juste sous cette entrée précise, plus comme bloc générique en fin de panneau (bloc
+  `selection.commentaireManager` supprimé, devenu redondant/trompeur).
+- **Doublon transitoire** : lors du premier passage, le commentaire apparaissait deux fois (une fois
+  correctement sous "Annulé", une fois encore via l'ancien bloc générique, positionné après "Transmis
+  (retro)" à cause du tri chronologique) — résolu par la suppression de ce bloc ci-dessus, plus de
+  doublon.
+- **Libellé "(retro)" simplifié** : "Transmis en paie (retro)" → "Transmis (retro)" (répété deux fois,
+  Vincent a coupé court : "Transmis (retro) : -2j") — dans le feed (ligne réelle ET prévision) ET dans
+  la colonne "Transmis" du tableau "Quels congés transmettre"/le détail de "Vérifier les fiches de
+  paie" (`(correction)` → `(retro)` partout, wording unifié).
+- **Sticky bar** : pastilles CP/RTT/CPA maintenant surmontées de leur code (`LABEL_COURT`, "CP"/
+  "RTT"/"CPA" — "attribuer les soldes à leur nom") ; interligne ajouté entre la ligne de pastilles et
+  la phrase "à régulariser" (`gap-1.5` → `gap-2.5`) ; le montant ("2 j") de cette phrase passe en gras,
+  seul le reste ("de Congés Payés à régulariser") reste en texte normal.
+- Vérifié en navigateur (screenshot) : "CP 14,5 j" / "RTT 0 j" / "CPA 0 j" avec libellés, "**2 j**
+  de Congés Payés à régulariser" en dessous avec un espacement net, tableau affichant "-2 j (retro)".
+  `tsc`/`eslint`/`npm run build` clean.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

@@ -158,7 +158,7 @@ export function VerifierFichesPaiePage({ exportId }: { exportId: string | null }
                           <span className="text-ink-500">
                             {" "}
                             {demande.debut} → {demande.fin} · {formatJours(Math.abs(ligne.joursInclus))} j
-                            {ligne.joursInclus < 0 ? " (correction)" : ""}
+                            {ligne.joursInclus < 0 ? " (retro)" : ""}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
