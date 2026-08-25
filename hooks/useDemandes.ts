@@ -77,7 +77,7 @@ export function useDemandes(utilisateurId?: string): UseDemandesResult {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // "Vu" des décisions (validée/refusée) — "depuis votre dernière connexion"
+  // "Vu" des décisions (validée/refusée/annulée) — "depuis votre dernière connexion"
   // plutôt que "tant que le tiroir journal est fermé" (18/08/2026, retour de
   // Vincent : perturbant que la mise en avant disparaisse dès qu'on
   // ouvre/ferme le volet). Principe : une décision reste mise en avant toute
@@ -119,7 +119,9 @@ export function useDemandes(utilisateurId?: string): UseDemandesResult {
     if (utilisateurId) return;
     if (loading) return;
     const nonVues = demandes
-      .filter((d) => (d.statut === "validé" || d.statut === "refusé") && !d.vu)
+      .filter(
+        (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
+      )
       .map((d) => d.id);
     localStorage.setItem(CARRYOVER_KEY, JSON.stringify(nonVues));
   }, [loading, demandes, utilisateurId]);

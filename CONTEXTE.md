@@ -2247,18 +2247,18 @@ restent utilisés ailleurs — rien d'autre à nettoyer. `/mon-calendrier` renvo
 ce fichier sont volontairement conservées, à titre de contexte historique — même convention que les
 écrans Calendrier/`calendrier3` déjà retirés plus haut.
 
-**Clôture paie — construction de l'écran (24/08/2026)** : nouvel item de nav séparé sous Suivre
+**Transmissions paie — construction de l'écran (24/08/2026)** : nouvel item de nav séparé sous Suivre
 (`components/layout/tabs.ts`, `SUIVRE_TABS`, icône `ClipboardCheck`, après "Export paie" — coexiste
 avec `/suivre/paie`, qui n'est pas retiré). Chantier mené en plusieurs passes le même jour :
 
-- **Page liste `/suivre/cloture-paie`** (`ListeCloturePaiePage.tsx`, nouveau,
+- **Page liste `/suivre/transmissions-paie`** (`ListeTransmissionsPaiePage.tsx`, nouveau,
   `components/suivre/`) : une carte "Mois en cours" (`periodePaieParDefaut()`) + une section
   Archives listant les 12 périodes précédentes (`periodesPrecedentes`, nouvelle fonction dans
   `lib/periodePaie.ts`, avec `finDePeriode`/`libellePeriode`), chaque carte menant à
-  `/suivre/cloture-paie/[debut]` (`debut` = 25 du mois, clé de période dans l'URL).
-- **Page par période `/suivre/cloture-paie/[debut]`** (`app/(app)/suivre/cloture-paie/[debut]/page.tsx`,
+  `/suivre/transmissions-paie/[debut]` (`debut` = 25 du mois, clé de période dans l'URL).
+- **Page par période `/suivre/transmissions-paie/[debut]`** (`app/(app)/suivre/transmissions-paie/[debut]/page.tsx`,
   `params: Promise<{ debut: string }>` — convention Next.js 16 déjà en place ailleurs, ex.
-  `/parametrer/utilisateurs/[id]`) → `CloturePaiePage.tsx`, 3 onglets :
+  `/parametrer/utilisateurs/[id]`) → `TransmissionsPaiePage.tsx`, 3 onglets :
   - **"Quels congés transmettre"** — branché sur `fetchCongesATransmettre` (nouveau repository
     `lib/data/exportsPaie.repository.ts`, hook `hooks/useCongesATransmettre.ts`), tableau
     `HistoriqueTable` (largeur verrouillée via CSS Grid, même pattern que "Suivre les demandes"),
@@ -2299,8 +2299,8 @@ avec `/suivre/paie`, qui n'est pas retiré). Chantier mené en plusieurs passes 
   admin `for all`, même pattern que `demandes_conges`. Détail complet et rationale dans
   [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md#points-de-modélisation-notables).
 
-**Clôture paie — règles métier de la transmission (24/08/2026)** : refonte du parcours "export
-paie" en un vrai suivi de transmission, nouvel écran `/suivre/cloture-paie` (coexiste avec
+**Transmissions paie — règles métier de la transmission (24/08/2026)** : refonte du parcours "export
+paie" en un vrai suivi de transmission, nouvel écran `/suivre/transmissions-paie` (coexiste avec
 l'ancien `/suivre/paie`, qui n'est pas retiré). Détail technique (schéma, calcul, code) dans
 [BASE-DE-DONNEES.md](BASE-DE-DONNEES.md#points-de-modélisation-notables) — ici, les règles métier
 actées avec Vincent qui ont guidé cette conception :
@@ -2337,6 +2337,223 @@ actées avec Vincent qui ont guidé cette conception :
   repérée par Delphine — **la maladie est explicitement hors scope** pour l'instant (confirmé par
   Vincent). Le congé ajouté doit être visible dans l'historique du salarié concerné (transparence
   totale actée — pas de ligne cachée, même si c'est Delphine qui l'a créée à sa place).
+- **Période de transmission passée en mois calendaire (01→dernier jour), 25/08/2026** — remplace le
+  cycle 25→24 initial (Delphine transmettait vers le 20, la comptable émettait les fiches jusqu'au
+  24). Décidé après un aller-retour : un premier essai a gardé le cycle 25→24 en arrière-plan tout
+  en changeant seulement l'affichage des filtres Du/Au sur le mois calendaire (moins perturbant pour
+  Delphine) — mais Vincent a demandé un alignement complet plutôt que deux notions de "période"
+  différentes coexistant silencieusement. `periodePaieParDefaut`/`finDePeriode`/`periodesPrecedentes`
+  (`lib/periodePaie.ts`) calculent désormais directement le mois calendaire ; `libellePeriode` était
+  déjà indifférent au changement (nommée d'après le mois de `fin`, qui tombe dans le même mois
+  calendaire que `debut` de toute façon). Pas de migration de schéma nécessaire : `exports_paie`
+  stocke des dates arbitraires, seule la logique applicative qui les calcule a changé.
+
+**Transmissions paie — refactos post-construction (25/08/2026)** : plusieurs ajustements
+demandés une fois l'écran en main, avant de reprendre la partie "Vérifier les fiches de paie".
+
+- **Onglet "Quels congés transmettre" éclaté en 3 tableaux distincts** (`TransmissionsPaiePage.tsx`,
+  `QuelsCongesTransmettre`), plutôt qu'un seul mélangeant tout — un seul état `demandes` (toujours
+  issu de `fetchCongesATransmettre`) reste la source, seulement reparti côté client en 3 groupes
+  affichés séparément :
+  - **"Congés consommés sur la période"** — `d.fin >= debut` (le congé touche l'intervalle Du/Au
+    affiché).
+  - **"Congés consommés non passés sur des périodes précédentes"** — `d.fin < debut` (le backlog :
+    validés/en attente jamais tranchés d'un mois antérieur).
+  - **"Congés passés en paye mais annulés"** — `d.statut === "annulé"`, à part des deux tableaux
+    ci-dessus plutôt que mélangés dedans (avant : une correction en attente de régularisation
+    pouvait se retrouver listée dans "sur la période" ou "repêchage" selon sa date, peu lisible).
+  Chaque tableau a son propre `<HistoriqueTable>`, `selectionId`/`DetailCongePanel` restent
+  partagés entre les 3 (un seul panneau ouvert à la fois, quel que soit le tableau cliqué).
+- **`HistoriqueTable.tsx` — colonnes "Statut" et "Collaborateur" rendues triables**, en plus des
+  colonnes déjà triables "Dates"/"Posé le" (mécanisme `ColonneTriable` étendu). "Statut" trie sur un
+  ordre métier (`STATUT_ORDRE`, pas alphabétique) : en attente → validé → refusé → annulé, l'idée
+  étant de faire remonter en premier ce qui demande une action. "Collaborateur" trie par nom complet
+  (`localeCompare`).
+- **Fusion visuelle des lignes consécutives d'un même collaborateur** quand le tri actif est
+  "Collaborateur" (`trierEtGrouperParCollaborateur`, nouveau) — la cellule Collaborateur (avatar +
+  nom) n'apparaît qu'une fois par groupe, étirée sur toutes ses lignes via l'attribut HTML natif
+  `rowSpan` (pas de librairie). Piège rencontré et corrigé deux fois :
+  - Un `tr:hover` CSS ne peut pas atteindre une cellule `rowSpan`-ée qui n'est l'enfant que de la
+    PREMIÈRE `<tr>` du groupe — survoler une ligne du milieu du groupe ne teintait donc pas le nom.
+    Fix : état `hoveredId` suivi en JS (`onMouseEnter`/`onMouseLeave` sur chaque `<tr>`), la cellule
+    fusionnée recalcule sa propre classe de fond à partir de cet état plutôt que de compter sur le
+    survol CSS natif de sa ligne.
+  - Une fois ce fix posé, la PREMIÈRE ligne du groupe se retrouvait deux fois plus foncée que les
+    autres au survol/à la sélection : elle recevait à la fois la classe hover/active native de son
+    propre `<tr>` ET la classe JS ajoutée par-dessus, les deux (semi-transparentes, même teinte) se
+    superposaient. Fix : la classe JS ne s'applique que si c'est une AUTRE ligne du groupe qui est
+    survolée/sélectionnée (`hoveredId !== demande.id` / `selectedId !== demande.id`) — la ligne qui
+    porte nativement la cellule n'a jamais besoin du double calque, sa propre classe suffit déjà.
+  Nouvelle classe utilitaire ajoutée pour ce besoin :
+  `classeFondSurvolTypeBadgeActif` (`TypeBadge.tsx`) — même teinte que `classeFondSurvolTypeBadge`
+  (15%) mais sans le préfixe `hover:`, pour un survol piloté en JS plutôt qu'en CSS pur.
+- **Tri par défaut sur "Collaborateur"** pour les 2 premiers tableaux de "Quels congés transmettre"
+  (nouvelle prop `triParDefaut` de `HistoriqueTable`) — direct à l'ouverture, sans clic requis.
+- **Onglet "Générer l'export" aligné sur "Quels congés transmettre"** — jusque-là, cet onglet
+  (qui réutilise `CongesPaiePage`) passait par `fetchCongesConsommesPeriode` (filtre strict
+  `date_debut` dans la période), pas `fetchCongesATransmettre` : un congé du backlog (démarré avant
+  la période, jamais transmis) était donc bien transmis au clic sur "Transmettre" mais invisible
+  dans cet aperçu/le CSV — décalage trompeur repéré par Vincent ("Pourquoi Olivier Test n'apparaît
+  pas sur Générer l'export ?"). Fix : nouveau paramètre `sourceTransmission` sur `useCongesConsommes`
+  et `CongesPaiePage`, qui bascule sur `fetchCongesATransmettre` quand activé — seul l'onglet
+  "Générer l'export" de `TransmissionsPaiePage` l'active, `/suivre/paie` autonome garde son
+  comportement d'origine.
+  - **Effet de bord découvert dans la foulée** : `grouperParCollaborateur` (`CongesPaiePage.tsx`)
+    sommait `nbDemiJournees` (la durée TOTALE de la demande), pas le reliquat — un congé à cheval
+    déjà partiellement transmis lors d'un export précédent se retrouvait donc recompté en entier
+    dans l'aperçu du mois suivant, en double des jours déjà partis. Fix : nouveau paramètre
+    `joursPour` sur `grouperParCollaborateur`, utilisé avec `joursRestants` (pas `nbDemiJournees`)
+    quand `sourceTransmission` est actif. Vérifié en conditions réelles : un congé 21/09→25/09
+    transmis à 4/5 sur un export ne réapparaît plus qu'à 1 j (le reliquat) sur l'export suivant, pas
+    5 j.
+- **Case "Validés uniquement" masquée sur cet onglet** (nouveau paramètre `validesUniquement` de
+  `CongesPaiePage`, forcé sur "Générer l'export" uniquement) — sur cette vue, seuls les congés
+  validés ont vocation à être transmis, pas de choix à faire à cet endroit (demande explicite).
+  `/suivre/paie` autonome garde la case à cocher.
+
+**Transmissions paie — aperçu du découpage sur un congé à cheval (25/08/2026)** : discussion partie
+d'un cas concret (Delphine, CP du 31/08 au 11/09) — le découpage réel entre deux périodes était déjà
+correct au moment de cliquer "Transmettre" (`joursDansPeriode` dans `genererExportPaie`), mais rien
+ne le montrait AVANT ce clic : la colonne Durée et le total de "Générer l'export" affichaient le
+solde restant complet, comme si tout partait ce mois-ci. Vincent : "bricoler un truc" plutôt que de
+resigner sur la question — la logique de découpage existant déjà, il s'agissait de la réutiliser
+pour l'affichage, pas d'en inventer une nouvelle.
+
+- **`calculerJoursATransmettreMaintenant(conge, periode)`** (nouveau, exporté depuis
+  `lib/data/exportsPaie.repository.ts`) — extrait la même logique que la boucle de
+  `genererExportPaie` (rattrapage complet si `conge.fin <= periode.fin`, sinon intersection plafonnée
+  au reliquat via `joursDansPeriode`, désormais partagée) dans une fonction autonome, appelable pour
+  un aperçu sans créer de ligne `export_paie_lignes`. Une demande annulée (correction) renvoie
+  directement son reliquat négatif, pas de découpage par date pour ce cas.
+- **Colonne Durée de "Quels congés transmettre" — toujours au format "X/Y j"** (`TransmissionsPaiePage.tsx`,
+  `renderDureeATransmettre`) : X = jours qui partiraient réellement maintenant
+  (`calculerJoursATransmettreMaintenant`, calculé en async via un `useEffect` sur `demandes` une fois
+  chargées — `Promise.all`, stocké dans un state `joursATransmettreParId` indexé par id de demande),
+  Y = durée totale de la demande. Avant : affichait "Y j" tout court tant que rien n'avait encore été
+  transmis, masquant le fait qu'un congé à cheval ne partirait que partiellement.
+- **Nouvelle carte "Jours transmis par type" dans la colonne droite** (`RecapParType`, nouveau) —
+  occupe l'espace jusque-là vide de la grille (`xl:grid-cols-[minmax(0,900px)_16rem]`) tant qu'aucune
+  ligne n'est sélectionnée (le `DetailCongePanel` prend sa place au clic sur une ligne, exclusif l'un
+  de l'autre). Somme, par type (CP/RTT/CPA/CSS/CE/RECUP/EVT_FAM), les mêmes valeurs que la colonne
+  Durée — inclut les corrections négatives des congés annulés, pour un total net qui correspond
+  exactement à ce que contiendrait l'export généré maintenant. Première vérification (38 j) trompeuse
+  — voir le bug ci-dessous, découvert par Vincent juste après.
+
+**Transmissions paie — bug "en attente" compté dans le récap (25/08/2026)** : `calculerJoursATransmettreMaintenant`
+ne traitait explicitement que le cas `annulé` (correction) avant de tomber dans le calcul général
+(rattrapage/intersection) — un congé **en attente** de décision (jamais validé) s'y engouffrait donc
+comme n'importe quel congé validé, alors que `genererExportPaie` ne le transmettra jamais tant qu'il
+n'est pas décidé (`fetchDemandesAvecSoldeTransmission` ne fetch que `validee`/`annulee`). Signalé par
+Vincent avec un exemple concret : total affiché 38 j, mais la somme des lignes réellement **validées**
+de la période ne faisait pas ce compte — l'écart (3 j) correspondait exactement aux deux demandes
+encore en attente (1 j + 2 j).
+
+- **Fix** : `calculerJoursATransmettreMaintenant` renvoie `0` pour un congé `en attente`, avant tout
+  autre calcul.
+- **Aller-retour sur l'affichage "0/Y j"** : premier réflexe, masquer le format X/Y pour `en attente`
+  (juste "Y j", pour éviter un "0/Y" jugé trompeur). Vincent est revenu dessus : "0/NN" explicite est
+  finalement ce qu'il veut — montre sans ambiguïté que rien ne partira tant que ce n'est pas décidé.
+  `renderDureeATransmettre` garde donc le format X/Y uniforme pour tous les statuts.
+- Revérifié : total du récap passé de 38 j à 35 j, correspondant exactement à la somme des lignes
+  `Validé` affichées (les deux `En attente` valent maintenant 0/Y j, conforme à ce que
+  `genererExportPaie` ferait réellement).
+- **Colonne Durée renommée "Transmis"** (nouvelle prop `libelleColonneDuree` de `HistoriqueTable`,
+  utilisée seulement par les 3 tableaux de "Quels congés transmettre") — plus parlant que "Durée"
+  une fois au format X/Y. Les autres usages de `HistoriqueTable` ("Suivre les demandes"...) gardent
+  "Durée"/"Nbre jours".
+- **Même bug retrouvé côté "Générer l'export"** : `grouperParCollaborateur` (`CongesPaiePage.tsx`)
+  utilisait encore `joursRestants` (le solde total restant) comme valeur du paramètre `joursPour` en
+  mode `sourceTransmission`, pas `calculerJoursATransmettreMaintenant` — un congé à cheval y
+  réapparaissait donc avec son reliquat complet plutôt que la portion réellement transmissible ce
+  mois-ci (ex. Delphine 31/08→11/09 : 9,5 j affichés au lieu de 1 j). Fix : même calcul async que
+  "Quels congés transmettre", precalculé dans un state `joursATransmettreParId` (`useEffect` sur
+  `demandes`/`sourceTransmission`/`debut`/`fin`), consommé par `joursPour` avec repli sur
+  `joursRestants` tant que le calcul n'est pas résolu. Revérifié : total Delphine passé de 10,5 j à
+  2 j (1 + 1, cohérent avec les 35 j du récap "Quels congés transmettre").
+
+**Transmissions paie — feed "prévision" dans `DetailCongePanel` (25/08/2026)** : nouvelle prop
+`previsionTransmission?: { jours: number; total: number }` sur `DetailCongePanel.tsx` — ajoute une
+entrée "Transmis paie le {aujourd'hui} : X j / Y j" en fin de feed (pastille en pointillés + texte
+italique, distincte des lignes réelles `lignesTransmission`/`export_paie_lignes` déjà transmises,
+pour ne pas laisser croire que c'est déjà fait). Branchée à la fois depuis "Quels congés
+transmettre" (`TransmissionsPaiePage.tsx`) et "Générer l'export" (`CongesPaiePage.tsx`, uniquement
+si `sourceTransmission`), toutes deux réutilisant le même state `joursATransmettreParId` déjà
+calculé pour la colonne "Transmis"/le total par collaborateur — répond à la confusion notée par
+Vincent sur l'aperçu global de "Générer l'export" (qui n'affichait pas ce détail congé par congé) :
+cliquer sur une date pill ouvre maintenant ce détail directement.
+
+**Régularisation invisible pour le salarié concerné (25/08/2026)** : signalé par Vincent avec un cas
+réel (Delphine régularise — annule — un congé déjà validé d'Olivier, 03/08→28/08) — Olivier n'était
+notifié nulle part et ne voyait jamais cette décision dans son propre historique.
+
+- **Cause** : `fetchDemandes` (`demandes.repository.ts`, "Mon historique"/Accueil du salarié
+  connecté) excluait purement et simplement toute demande `statut = 'annulee'` via `.neq(...)` —
+  une régularisation devenait donc invisible pour l'intéressé, alors qu'elle reste déjà visible côté
+  Delphine (section "Congés passés en paye mais annulés" de Transmissions paie).
+- **Fix (3 endroits)** :
+  - `fetchDemandes` — filtre `.neq("statut", "annulee")` retiré, la demande annulée remonte
+    désormais dans l'historique du salarié comme n'importe quelle autre décision. Sans risque pour
+    `annulerDemande` (retrait par le salarié lui-même d'une demande en attente) : cette fonction n'a
+    aucun appelant dans l'UI actuellement, donc toute demande `annulee` remontée aujourd'hui est une
+    régularisation Delphine, traçable via `dateDecision`/`validateur`.
+  - `useDemandes.ts` — le mécanisme "vu depuis votre dernière connexion" (mise en avant jaune du
+    journal) filtrait uniquement `validé`/`refusé` pour la liste "non vues" persistée ; étendu à
+    `annulé`.
+  - `ActiviteRecenteFeed.tsx` ("Mon journal", tiroir Accueil) — `evenementsDeDemande` ne générait un
+    événement "décision" que pour `validé`/`refusé` ; étendu à `annulé` avec son propre verbe
+    ("a retiré vos X jours de CP du…au…", tone rouge comme un refus — nouveau mapping
+    `STABILO_PAR_STATUT`).
+- **Non vérifié en conditions réelles** faute d'identifiants pour le compte de test d'Olivier dans
+  cette session — logique cohérente avec le traitement déjà existant de `validé`/`refusé` partout
+  ailleurs (`StatusBadge`/`HistoriqueTable` gèrent déjà le tone "annulé"), à confirmer par Vincent.
+
+**Journal complet des décisions — `decisions_demande` (25/08/2026)** : suite directe du point
+précédent — capture d'écran à l'appui, Vincent a montré le feed d'un congé régularisé qui saute
+directement de "Posé le" à "Annulé le", sans jamais montrer "Validé le" : `demandes_conges.
+date_decision`/`validateur_id`/`commentaire_decision` ne gardent que la décision COURANTE, une
+régularisation écrase silencieusement la trace de la validation d'origine. Question posée à Vincent
+(table d'historique complète vs colonnes séparées pour la régularisation, un seul niveau) — a choisi
+la table d'historique, cohérent avec le principe déjà appliqué à `export_paie_lignes` (ne jamais
+réécrire l'historique).
+
+- **Nouvelle table `decisions_demande`** (`demande_id`, `statut`, `commentaire`, `decide_par`,
+  `decide_le`) — une ligne par décision réelle, jamais écrasée. RLS : salarié lit celles de ses
+  propres demandes (`exists` sur `demandes_conges.utilisateur_id`), manager/admin lisent tout,
+  manager/admin créent, admin `for all`. `demandes_conges` elle-même n'est pas modifiée — reste la
+  décision courante pour toute lecture rapide qui n'a pas besoin de l'historique complet.
+- **Écriture** : `deciderDemande` (`demandes.repository.ts`, partagée par valider/refuser/
+  régulariser) insère une ligne après chaque mise à jour de `demandes_conges` — best-effort (une
+  erreur d'écriture du journal ne fait pas échouer la décision elle-même, déjà actée). Même
+  insertion dans `poserCongePourCollaborateur` (validation directe à la création).
+  `remettreEnAttenteDemande` ("Annuler" du bandeau de confirmation post-validation) n'écrit
+  volontairement rien dans le journal — c'est un "annuler mon propre clic", pas une vraie décision à
+  historiser.
+- **Lecture** : nouvelle fonction `fetchHistoriqueDecisions(demandeId)` (`demandes.repository.ts`).
+- **`DetailCongePanel.tsx`** — le feed affiche désormais une entrée par ligne d'historique
+  (`Validé le… par…` puis `Annulé le… par…`, etc.) au lieu d'une seule décision. **Repli explicite**
+  pour la compatibilité arrière : la table démarre vide, une demande déjà décidée avant cette
+  migration n'a aucune ligne tant qu'elle ne subit pas une NOUVELLE décision — si
+  `historiqueDecisions` est vide, le composant retombe sur l'ancien affichage à partir de
+  `selection.dateDecision`/`selection.validateur` (comportement inchangé pour ces demandes-là).
+- **Migration + backfill exécutés par Vincent** (`insert into decisions_demande select … from
+  demandes_conges where date_decision is not null and not exists (…)`, idempotent) — préserve la
+  décision courante de chaque demande déjà décidée comme première ligne de son journal, avant
+  qu'une future régularisation ne l'écrase. Ne peut PAS recréer un historique déjà perdu : une
+  demande déjà régularisée avant ce jour (ex. l'ancien test Olivier 03/08→28/08) n'a que sa dernière
+  décision connue (`annulee`), l'étape "Validé le" d'origine, jamais stockée deux fois nulle part,
+  reste irrécupérable pour ce cas précis.
+- **Vérifié en conditions réelles** (test + restauration propre après coup, aucune donnée de test
+  laissée) : régularisé un congé d'Olivier fraîchement validé (01/12/26) — feed affiché
+  "Validé le 16/08/26 par Olivier" puis "Annulé le 25/08/26 par Delphine" avec le commentaire, dans
+  le bon ordre. Confirme que le backfill + le journal fonctionnent ensemble pour toute demande
+  actuellement dans un état connu au moment du backfill.
+- **`fetchDemandesEquipe` ("Suivre les demandes") — même correction que `fetchDemandes`** : excluait
+  aussi totalement les demandes `annulee`, laissant Delphine sans AUCUN moyen de retrouver une
+  régularisation qui n'a jamais été transmise (donc absente aussi de "Transmissions paie > Congés
+  passés en paye mais annulés", qui ne liste que les corrections à faire). Filtre `.neq` retiré ;
+  nouveau filtre "Annulés" ajouté à `SuivreDemandesPage.tsx` (`Filtre`/`FILTRES`/
+  `STATUT_PAR_FILTRE`) pour les isoler facilement plutôt que les laisser noyées dans "Tous les
+  statuts".
 
 ## Décisions prises
 
@@ -2374,7 +2591,7 @@ actées avec Vincent qui ont guidé cette conception :
    brancher `soldes.repository.ts`
 3. Suite de l'Espace Delphine (paramétrage RTT imposés, export paie, correction de solde), puis
    Espace Manager
-4. Clôture paie (24/08/2026, points restés ouverts, non bloquants) :
+4. Transmissions paie (24/08/2026, points restés ouverts, non bloquants) :
    - CSV existant vs bouton "Transmettre" sur l'onglet "Générer l'export" : les deux coexistent
      aujourd'hui (décision provisoire) — à confirmer avec Vincent si le CSV doit à terme disparaître
      au profit du seul "Transmettre", ou s'ils ont chacun leur usage (CSV = document à envoyer,
@@ -2383,5 +2600,5 @@ actées avec Vincent qui ont guidé cette conception :
      (`exports_paie_periode_unique`) + bouton désactivé côté UI une fois un export détecté — pas de
      message d'erreur dédié si l'action était malgré tout tentée en direct (ex. appel API hors UI).
    - "Poser pour un collaborateur" n'a qu'un seul point d'entrée pour l'instant (onglet "Quels congés
-     transmettre" de Clôture paie) — à voir si un second point d'entrée depuis "Suivre les demandes"
+     transmettre" de Transmissions paie) — à voir si un second point d'entrée depuis "Suivre les demandes"
      est utile.

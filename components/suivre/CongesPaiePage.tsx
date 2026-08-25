@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download } from "lucide-react";
-import type { DemandeEquipe, StatutDemande } from "@/lib/types";
+import type { CongeATransmettre, DemandeEquipe, StatutDemande } from "@/lib/types";
 import { formatJours, formatPeriodePillNumerique } from "@/lib/format";
 import { periodePaieParDefaut } from "@/lib/periodePaie";
 import { useCongesConsommes } from "@/hooks/useCongesConsommes";
@@ -12,6 +12,7 @@ import {
   remettreEnAttenteDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
+import { calculerJoursATransmettreMaintenant } from "@/lib/data/exportsPaie.repository";
 import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
@@ -62,7 +63,18 @@ function ligneVide(): LigneCollab["parType"] {
 // jours annulés (régularisation depuis cette page) ou refusés restent
 // visibles pour la traçabilité, mais ne comptent pas — ni l'un ni l'autre
 // n'a jamais été (ou n'est plus) un congé réellement accordé.
-function grouperParCollaborateur(demandes: DemandeEquipe[]): LigneCollab[] {
+//
+// `joursPour` (25/08/2026) — par défaut la durée totale de la demande
+// (`nbDemiJournees / 2`). En mode `sourceTransmission` (voir
+// `CongesPaiePage`), les demandes reçues sont des `CongeATransmettre` : un
+// congé à cheval sur deux périodes déjà partiellement transmis ne doit
+// compter que son reliquat (`joursRestants`), pas sa durée totale — sinon
+// les jours déjà transmis lors d'un export précédent seraient recomptés en
+// double dans ce récap/CSV (bug signalé le 25/08/2026).
+function grouperParCollaborateur(
+  demandes: DemandeEquipe[],
+  joursPour: (d: DemandeEquipe) => number = (d) => d.nbDemiJournees / 2,
+): LigneCollab[] {
   const parId = new Map<string, LigneCollab>();
 
   for (const d of demandes) {
@@ -81,7 +93,7 @@ function grouperParCollaborateur(demandes: DemandeEquipe[]): LigneCollab[] {
 
     const ligne = parId.get(id)!;
     if (d.statut !== "annulé" && d.statut !== "refusé") {
-      ligne.parType[bucket].jours += d.nbDemiJournees / 2;
+      ligne.parType[bucket].jours += joursPour(d);
     }
     ligne.parType[bucket].dates.push({
       id: d.id,
@@ -115,42 +127,87 @@ function genererCsv(lignes: LigneCollab[]): string {
  * Détail par collaborateur des congés consommés sur la période — Espace
  * Suivre > sous-rubrique "Export paie", visible manager + admin (comme le
  * reste de `/suivre`, bloqué pour les salarié·es dans `proxy.ts`). Période
- * par défaut 25→24 (`periodePaieParDefaut`, cycle de transmission à la
- * comptable), modifiable via les deux champs date. Export CSV côté client
+ * par défaut le mois calendaire en cours (`periodePaieParDefaut`),
+ * modifiable via les deux champs date. Export CSV côté client
  * (Blob + téléchargement), pas d'appel serveur.
  *
  * `masquerTitre` (24/08/2026) — opt-in : masque le `<h1>` "Export paie" et
  * réduit le padding vertical d'origine, pour un usage imbriqué dans un autre
- * écran qui porte déjà son propre titre (`CloturePaiePage`, onglet "Générer
+ * écran qui porte déjà son propre titre (`TransmissionsPaiePage`, onglet "Générer
  * l'export" — reprend ce composant tel quel plutôt que de dupliquer sa
  * logique). Défaut : comportement inchangé, écran `/suivre/paie` autonome.
  *
  * `periodeInitiale` (24/08/2026) — override du calcul par défaut
  * (`periodePaieParDefaut()`), pour ouvrir directement sur une période
- * précise (mois d'archive choisi sur `/suivre/cloture-paie`) plutôt que
+ * précise (mois d'archive choisi sur `/suivre/transmissions-paie`) plutôt que
  * toujours la période en cours. Reste modifiable ensuite via les mêmes
  * champs date, comme le calcul par défaut.
+ *
+ * `validesUniquement` (25/08/2026) — opt-in : masque la case à cocher
+ * "Validés uniquement" et applique le filtre en permanence, plutôt que de la
+ * laisser en option. Utilisé par l'onglet "Générer l'export" de
+ * `TransmissionsPaiePage` (demande explicite : cette vue ne doit prendre en
+ * compte que les congés validés, pas de choix à faire à cet endroit).
+ * Défaut `false` : comportement inchangé, écran `/suivre/paie` autonome
+ * garde la case à cocher.
+ *
+ * `sourceTransmission` (25/08/2026) — opt-in : bascule `useCongesConsommes`
+ * sur `fetchCongesATransmettre` (backlog inclus) plutôt que le filtre par
+ * date strict habituel — pour que cet aperçu/le CSV corresponde exactement
+ * à ce que "Transmettre" enverra réellement (même fonction). Utilisé par
+ * l'onglet "Générer l'export" de `TransmissionsPaiePage`, aux côtés de
+ * `validesUniquement`.
  */
 export function CongesPaiePage({
   masquerTitre = false,
   periodeInitiale,
+  validesUniquement: validesUniquementForce = false,
+  sourceTransmission = false,
 }: {
   masquerTitre?: boolean;
   periodeInitiale?: { debut: string; fin: string };
+  validesUniquement?: boolean;
+  sourceTransmission?: boolean;
 } = {}) {
   const defaut = periodeInitiale ?? periodePaieParDefaut();
   const [debut, setDebut] = useState(defaut.debut);
   const [fin, setFin] = useState(defaut.fin);
-  const { demandes, loading, error, refetch } = useCongesConsommes(debut, fin);
+  const { demandes, loading, error, refetch } = useCongesConsommes(debut, fin, sourceTransmission);
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [validesUniquement, setValidesUniquement] = useState(false);
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
+  const [joursATransmettreParId, setJoursATransmettreParId] = useState<Record<string, number>>({});
 
-  const demandesAffichees = validesUniquement
+  // Même calcul que "Quels congés transmettre" (`TransmissionsPaiePage`) —
+  // combien de jours partiraient réellement pour chaque ligne si on
+  // transmettait maintenant, pas le solde restant complet (25/08/2026 :
+  // sans ça, un congé à cheval encore réapparaissait ici avec son reliquat
+  // total au lieu de la portion qui sera effectivement transmise).
+  useEffect(() => {
+    if (!sourceTransmission) return;
+    let cancelled = false;
+    Promise.all(
+      (demandes as CongeATransmettre[]).map(
+        async (d) => [d.id, await calculerJoursATransmettreMaintenant(d, { debut, fin })] as const,
+      ),
+    ).then((entrees) => {
+      if (!cancelled) setJoursATransmettreParId(Object.fromEntries(entrees));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demandes, sourceTransmission, debut, fin]);
+
+  const demandesAffichees = validesUniquementForce || validesUniquement
     ? demandes.filter((d) => d.statut === "validé")
     : demandes;
-  const lignes = grouperParCollaborateur(demandesAffichees);
+  const lignes = grouperParCollaborateur(
+    demandesAffichees,
+    sourceTransmission
+      ? (d) => joursATransmettreParId[d.id] ?? (d as CongeATransmettre).joursRestants
+      : undefined,
+  );
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
 
   function exporter() {
@@ -212,16 +269,18 @@ export function CongesPaiePage({
               onChange={(e) => setFin(e.target.value)}
               disabled={enCours}
             />
-            <label className="text-ink-500 flex items-center gap-1.5 text-xs font-semibold">
-              <input
-                type="checkbox"
-                checked={validesUniquement}
-                onChange={(e) => setValidesUniquement(e.target.checked)}
-                disabled={enCours}
-                className="accent-mint h-4 w-4"
-              />
-              Validés uniquement
-            </label>
+            {!validesUniquementForce && (
+              <label className="text-ink-500 flex items-center gap-1.5 text-xs font-semibold">
+                <input
+                  type="checkbox"
+                  checked={validesUniquement}
+                  onChange={(e) => setValidesUniquement(e.target.checked)}
+                  disabled={enCours}
+                  className="accent-mint h-4 w-4"
+                />
+                Validés uniquement
+              </label>
+            )}
             <Button
               onClick={exporter}
               disabled={lignes.length === 0}
@@ -318,6 +377,14 @@ export function CongesPaiePage({
             onRegulariser={regulariser}
             onEnCoursChange={setEnCours}
             onValiderSucces={(id, message) => setToast({ id, message })}
+            previsionTransmission={
+              sourceTransmission
+                ? {
+                    jours: joursATransmettreParId[selection.id] ?? 0,
+                    total: selection.nbDemiJournees / 2,
+                  }
+                : undefined
+            }
           />
         )}
       </div>

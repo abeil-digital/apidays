@@ -12,7 +12,7 @@ interface UseCongesATransmettreResult {
 }
 
 /** Congés à transmettre (validés non totalement transmis, annulés à
- * corriger, en attente chevauchant la période) — Clôture paie > "Quels
+ * corriger, en attente chevauchant la période) — Transmissions paie > "Quels
  * congés transmettre". Même pattern que `useCongesConsommes`. */
 export function useCongesATransmettre(debut: string, fin: string): UseCongesATransmettreResult {
   const [demandes, setDemandes] = useState<CongeATransmettre[]>([]);

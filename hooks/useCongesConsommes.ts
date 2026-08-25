@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { DemandeEquipe } from "@/lib/types";
 import { fetchCongesConsommesPeriode } from "@/lib/data/demandes.repository";
+import { fetchCongesATransmettre } from "@/lib/data/exportsPaie.repository";
 
 interface UseCongesConsommesResult {
   demandes: DemandeEquipe[];
@@ -14,8 +15,23 @@ interface UseCongesConsommesResult {
 /** Congés validés (CP/RTT/CSS) sur une période — Espace Suivre > récap paie.
  * `refetch` permet de rafraîchir après une action locale (ex. valider/
  * dévalider une demande depuis "Export paie") sans dépendre d'un changement
- * de `debut`/`fin`. */
-export function useCongesConsommes(debut: string, fin: string): UseCongesConsommesResult {
+ * de `debut`/`fin`.
+ *
+ * `sourceTransmission` (25/08/2026) — opt-in : bascule sur
+ * `fetchCongesATransmettre` (backlog inclus, sans borne basse de date) au
+ * lieu de `fetchCongesConsommesPeriode` (strictement `date_debut` dans la
+ * période). Utilisé par l'onglet "Générer l'export" de `TransmissionsPaiePage`
+ * — sans ça, un congé du backlog (jamais transmis, démarré avant la
+ * période) était bien transmis au clic sur "Transmettre" (qui utilise déjà
+ * `fetchCongesATransmettre`) mais invisible dans cet aperçu/le CSV, un
+ * décalage trompeur entre ce qui est prévisualisé et ce qui part réellement.
+ * Défaut `false` : comportement inchangé, écran `/suivre/paie` autonome.
+ */
+export function useCongesConsommes(
+  debut: string,
+  fin: string,
+  sourceTransmission = false,
+): UseCongesConsommesResult {
   const [demandes, setDemandes] = useState<DemandeEquipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +40,11 @@ export function useCongesConsommes(debut: string, fin: string): UseCongesConsomm
   useEffect(() => {
     let cancelled = false;
 
-    fetchCongesConsommesPeriode(debut, fin)
+    const promise = sourceTransmission
+      ? fetchCongesATransmettre({ debut, fin })
+      : fetchCongesConsommesPeriode(debut, fin);
+
+    promise
       .then((data) => {
         if (!cancelled) {
           setDemandes(data);
@@ -41,7 +61,7 @@ export function useCongesConsommes(debut: string, fin: string): UseCongesConsomm
     return () => {
       cancelled = true;
     };
-  }, [debut, fin, version]);
+  }, [debut, fin, sourceTransmission, version]);
 
   return { demandes, loading, error, refetch: () => setVersion((v) => v + 1) };
 }

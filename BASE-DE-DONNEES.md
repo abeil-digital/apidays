@@ -25,6 +25,7 @@ Abeil, signalés plus bas.
 | `historique_soldes`      | Traçabilité des ajustements manuels de solde par Delphine — **non exploitée**, couplée à `soldes` (`solde_id`) donc inutilisable telle quelle avec le calcul à la volée ; voir `ajustements_solde` ci-dessous, sa remplaçante en usage réel               |
 | `ajustements_solde`      | Régulation manuelle du solde CP par Delphine (Espace Suivre) — indépendante de `soldes`/`historique_soldes`, intégrée au calcul comme un mouvement de plus (13/08/2026)                                                                                   |
 | `demandes_conges`        | Les demandes elles-mêmes — dates, statut, décision, dévalidation                                                                                                                                                                                          |
+| `decisions_demande`      | Journal complet des décisions d'une demande (25/08/2026) — une ligne par valider/refuser/régulariser/restaurer, jamais écrasée (contrairement à `demandes_conges.date_decision`, qui ne garde que la décision courante) |
 | `jours_feries`           | Référentiel des jours fériés (utilisé pour exclure du décompte, et écran Paramétrer > Calendrier)                                                                                                                                                         |
 | `parametrage_periode`    | Paramétrage annuel porté par le Manager — semaine du 15 août imposée, nombre cible et jour de semaine par défaut des DJ imposées                                                                                                                          |
 | `demi_journees_imposees` | Demi-journées imposées (DJ imposées) pour une période donnée — indépendant du solde RTT calculé dans Congés & RTT                                                                                                                                         |
@@ -33,7 +34,7 @@ Abeil, signalés plus bas.
 | `regles_anciennete`      | Jours supplémentaires selon l'ancienneté, rattachés aux CP uniquement, plusieurs règles non cumulables (la plus favorable s'applique)                                                                                                                     |
 | `historique_utilisateur` | Historique des changements de `taux_activite`/`nature_contrat` (21/08/2026) — une ligne par changement avec `date_effet`, pour prorater le calcul de solde mois par mois sans recalcul rétroactif |
 | `soldes_initiaux`        | Report de la dernière fiche de paie à la création d'un salarié (21/08/2026) — une ligne par utilisateur (upsert), remplace le report/accrual automatique tant que la période en cours est celle de la date de référence saisie |
-| `exports_paie`           | Transmission paie (Suivre > Clôture paie, 24/08/2026) — un enregistrement par clic sur "Transmettre", une seule transmission par période (`exports_paie_periode_unique`)                                                       |
+| `exports_paie`           | Transmission paie (Suivre > Transmissions paie, 24/08/2026) — un enregistrement par clic sur "Transmettre", une seule transmission par période (`exports_paie_periode_unique`)                                                       |
 | `export_paie_lignes`     | Ledger de transmission (24/08/2026) — combien de jours d'une demande sont partis dans quel export, avec son propre statut (`transmis`/`en_paye`/`ecart`) ; `jours_inclus` peut être négatif (ligne de correction)              |
 
 ## Points de modélisation notables
@@ -122,7 +123,7 @@ Abeil, signalés plus bas.
     contrainte FK en hint. Contournement retenu : requête séparée plutôt qu'embed pour ce cas
     précis (`fetchNomUtilisateur`, `utilisateurs.repository.ts`).
 - **Transmission paie — deux statuts orthogonaux, jamais confondus** (24/08/2026, `exports_paie`/
-  `export_paie_lignes`, écran Suivre > Clôture paie) :
+  `export_paie_lignes`, écran Suivre > Transmissions paie) :
   - **Statut de décision** (`demandes_conges.statut` : `en_attente`/`validee`/`refusee`/`annulee`)
     — répond à "ce congé a-t-il été accordé ?". Inchangé, c'est le statut historique de l'app.
   - **Statut de transmission** — répond à "ce congé a-t-il été envoyé à la paie, et le comptable

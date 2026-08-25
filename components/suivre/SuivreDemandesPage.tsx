@@ -15,15 +15,18 @@ import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
-type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés";
+type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés" | "Annulés";
 type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
 
-const FILTRES: Filtre[] = ["Tous les statuts", "En validation", "Validés", "Refusés"];
+// "Annulés" (25/08/2026) — régularisations, plutôt une exception qu'un flux
+// courant : placé en dernier, après les 3 statuts habituels.
+const FILTRES: Filtre[] = ["Tous les statuts", "En validation", "Validés", "Refusés", "Annulés"];
 
 const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
   "En validation": "en attente",
   Validés: "validé",
   Refusés: "refusé",
+  Annulés: "annulé",
 };
 
 const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
@@ -85,7 +88,7 @@ export function SuivreDemandesPage() {
     Record<string, LigneExportPaie[]>
   >({});
 
-  // Statut de transmission paie par demande (Clôture paie, 24/08/2026) —
+  // Statut de transmission paie par demande (Transmissions paie, 24/08/2026) —
   // seules les demandes validées/annulées peuvent avoir des lignes
   // `export_paie_lignes` (en attente/refusé n'en ont jamais).
   useEffect(() => {

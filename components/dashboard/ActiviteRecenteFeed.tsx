@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { Newspaper, X } from "lucide-react";
-import type { Demande } from "@/lib/types";
+import type { Demande, StatutDemande } from "@/lib/types";
 import { formatDateAction, formatJours } from "@/lib/format";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
@@ -58,6 +58,14 @@ const TONE_STABILO: Record<"warning" | "success" | "danger", string> = {
   warning: "bg-status-warning-bg text-status-warning-fg",
   success: "bg-status-success-bg text-status-success-fg",
   danger: "bg-status-danger-bg text-status-danger-fg",
+};
+
+// Tone du "stabilo" pour une décision — même mapping que `TEXTE_DECISION`
+// dans `DetailCongePanel.tsx` (annulé = danger, comme refusé).
+const STABILO_PAR_STATUT: Partial<Record<StatutDemande, "warning" | "success" | "danger">> = {
+  validé: "success",
+  refusé: "danger",
+  annulé: "danger",
 };
 
 function Stabilo({
@@ -128,13 +136,21 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
     },
   ];
 
-  if (demande.dateDecision && (demande.statut === "validé" || demande.statut === "refusé")) {
-    const estValide = demande.statut === "validé";
+  if (
+    demande.dateDecision &&
+    (demande.statut === "validé" || demande.statut === "refusé" || demande.statut === "annulé")
+  ) {
     const prenom = demande.validateur?.prenom ?? "Le manager";
     const possessif =
       jours === 1 || jours === 0.5
         ? `votre ${nomJournees(jours)}`
         : `vos ${formatJours(jours)} ${nomJournees(jours)}`;
+    // "annulé" ici = régularisation d'un congé déjà validé (retiré par
+    // Delphine après coup, ex. "congé finalement non pris") — `annulerDemande`
+    // (retrait par le salarié lui-même d'une demande encore en attente) n'a
+    // aucun appelant dans l'UI, donc ce cas ne se produit pas en pratique.
+    const verbe =
+      demande.statut === "validé" ? "validé" : demande.statut === "refusé" ? "refusé" : "retiré";
     evenements.push({
       id: `${demande.id}-decision`,
       demandeId: demande.id,
@@ -142,10 +158,7 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
       code,
       texte: (
         <>
-          {prenom} a{" "}
-          <Stabilo tone={estValide ? "success" : "danger"}>
-            {estValide ? "validé" : "refusé"}
-          </Stabilo>{" "}
+          {prenom} a <Stabilo tone={STABILO_PAR_STATUT[demande.statut] ?? "warning"}>{verbe}</Stabilo>{" "}
           {possessif} de <SemiBold>{code}</SemiBold>{" "}
           <SemiBold>{periodePhrase(demande, "du")}</SemiBold>
         </>

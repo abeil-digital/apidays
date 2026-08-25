@@ -17,7 +17,7 @@ import {
 } from "@/lib/data/demandes.repository";
 
 /**
- * Repository "Clôture paie" — transmission des congés vers la comptable
+ * Repository "Transmissions paie" — transmission des congés vers la comptable
  * (`exports_paie`/`export_paie_lignes`, voir BASE-DE-DONNEES.md). Le statut
  * de transmission vit sur une ligne de ledger, pas sur `demandes_conges` :
  * une demande peut être transmise en plusieurs tranches (congé à cheval sur
@@ -164,6 +164,36 @@ async function joursDansPeriode(
   const demiDebut = debut === demande.debut ? demande.demiDebut : "matin";
   const demiJournees = await calculerNbDemiJournees(supabase, debut, fin, demiDebut, "apres_midi");
   return demiJournees / 2;
+}
+
+/**
+ * Combien de jours d'un `CongeATransmettre` partiraient RÉELLEMENT si on
+ * cliquait "Transmettre" maintenant sur cette période — même calcul que la
+ * boucle de `genererExportPaie`, exposé séparément pour l'aperçu (colonne
+ * Durée de "Quels congés transmettre", récap par type) sans créer de
+ * lignes. Un congé annulé (correction) renvoie directement son reliquat
+ * négatif — pas de découpage par date pour une correction, voir
+ * `genererExportPaie`. Un congé "en attente" renvoie toujours 0 : ce n'est
+ * pas encore une décision accordée, `genererExportPaie` ne le prend jamais
+ * en compte (`fetchDemandesAvecSoldeTransmission` ne fetch que
+ * validée/annulée) tant qu'il n'a pas été validé — bug corrigé le
+ * 25/08/2026, signalé par Vincent : le récap par type comptait à tort ces
+ * jours-là dans son total (38 j affichés au lieu de 35, l'écart correspondant
+ * exactement aux deux demandes encore en attente de la période).
+ */
+export async function calculerJoursATransmettreMaintenant(
+  conge: CongeATransmettre,
+  periode: { debut: string; fin: string },
+): Promise<number> {
+  if (conge.statut === "en attente") return 0;
+  if (conge.statut === "annulé") return conge.joursRestants;
+  if (conge.joursRestants <= 0) return 0;
+  if (conge.debut > periode.fin) return 0;
+  if (conge.fin <= periode.fin) return conge.joursRestants;
+
+  const supabase = createClient();
+  const intersection = await joursDansPeriode(supabase, conge, periode);
+  return Math.min(intersection, conge.joursRestants);
 }
 
 /**
@@ -451,23 +481,39 @@ export async function poserCongePourCollaborateur(
     ? `Ajouté par ${auteur.prenom} ${auteur.nom}${input.note ? " — " + input.note : ""}`
     : input.note || null;
 
-  const { error } = await supabase.from("demandes_conges").insert({
-    utilisateur_id: input.utilisateurId,
-    type_absence_id: typeAbsenceId,
-    date_debut: input.debut,
-    date_fin: input.fin,
-    demi_debut: input.demiDebut,
-    demi_fin: input.demiFin,
-    nb_demi_journees: nbDemiJournees,
-    is_anticipation: input.isAnticipation,
-    commentaire_salarie: input.note || null,
-    statut: "validee",
-    validateur_id: auteurId,
-    commentaire_decision: commentaire,
-    date_decision: new Date().toISOString(),
-  });
+  const { data: demande, error } = await supabase
+    .from("demandes_conges")
+    .insert({
+      utilisateur_id: input.utilisateurId,
+      type_absence_id: typeAbsenceId,
+      date_debut: input.debut,
+      date_fin: input.fin,
+      demi_debut: input.demiDebut,
+      demi_fin: input.demiFin,
+      nb_demi_journees: nbDemiJournees,
+      is_anticipation: input.isAnticipation,
+      commentaire_salarie: input.note || null,
+      statut: "validee",
+      validateur_id: auteurId,
+      commentaire_decision: commentaire,
+      date_decision: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !demande) {
     throw new Error("Impossible d'ajouter ce congé.");
   }
+
+  // Journal des décisions (`decisions_demande`, 25/08/2026) — même principe
+  // que `deciderDemande` : best-effort, une erreur ici ne doit pas remonter
+  // (le congé est déjà créé et validé).
+  await supabase
+    .from("decisions_demande")
+    .insert({ demande_id: demande.id, statut: "validee", commentaire, decide_par: auteurId })
+    .then(({ error: erreurJournal }) => {
+      if (erreurJournal) {
+        console.error("Impossible d'enregistrer la décision dans le journal.", erreurJournal);
+      }
+    });
 }

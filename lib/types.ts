@@ -300,7 +300,7 @@ export interface CongeImposeInput {
   demiFin: DemiJournee;
 }
 
-// --- Espace Suivre > Clôture paie (transmission paie, 24/08/2026) ---
+// --- Espace Suivre > Transmissions paie (transmission paie, 24/08/2026) ---
 // Voir BASE-DE-DONNEES.md (`exports_paie`/`export_paie_lignes`) : le statut
 // de transmission vit sur une ligne de ledger, pas sur la demande elle-même
 // — une demande peut être transmise en plusieurs tranches (congé à cheval

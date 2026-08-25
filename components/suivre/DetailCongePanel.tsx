@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import type {
   CongeImpose,
@@ -13,6 +13,7 @@ import type {
   StatutTransmission,
 } from "@/lib/types";
 import { useSoldes } from "@/hooks/useSoldes";
+import { fetchHistoriqueDecisions, type DecisionHistorique } from "@/lib/data/demandes.repository";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
   classeBordureTypeBadge,
@@ -83,11 +84,21 @@ interface DetailCongePanelProps {
    * texte suffisent déjà à identifier le type sur ces cartes empilées. */
   masquerTypeBadgeBandeau?: boolean;
   /** Lignes de transmission paie de cette demande (`export_paie_lignes`,
-   * 24/08/2026) — optionnel, absent partout sauf depuis "Clôture paie".
+   * 24/08/2026) — optionnel, absent partout sauf depuis "Transmissions paie".
    * Ajoute une entrée "Transmis le"/"En paye le"/"Écart" au feed pour
    * chaque ligne (une demande à cheval sur deux périodes peut en avoir
    * plusieurs). */
   lignesTransmission?: LigneExportPaie[];
+  /** Prévision "si je transmets maintenant" (25/08/2026) — optionnel, absent
+   * partout sauf depuis "Quels congés transmettre" (Transmissions paie).
+   * Ajoute une entrée "Transmis paie le {aujourd'hui} : X j / Y j" en fin de
+   * feed, distincte visuellement des lignes réelles (`lignesTransmission`,
+   * `export_paie_lignes` déjà créées) — c'est une projection, rien n'a
+   * encore été transmis. Sert à clarifier, congé par congé, ce que
+   * contiendrait l'export si Delphine cliquait "Transmettre" maintenant
+   * (répond à la confusion notée sur l'aperçu global de "Générer l'export",
+   * qui n'affiche pas ce détail par congé). */
+  previsionTransmission?: { jours: number; total: number };
 }
 
 function formatJjMmAa(iso: string): string {
@@ -177,6 +188,7 @@ export function DetailCongePanel({
   masquerFermer = false,
   masquerTypeBadgeBandeau = false,
   lignesTransmission,
+  previsionTransmission,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
   const [regularisationOuverte, setRegularisationOuverte] = useState(false);
@@ -186,6 +198,22 @@ export function DetailCongePanel({
   const [confirmation, setConfirmation] = useState<{ question: string; action: () => void } | null>(
     null,
   );
+  const [historiqueDecisions, setHistoriqueDecisions] = useState<DecisionHistorique[]>([]);
+
+  // Journal complet des décisions (`decisions_demande`, 25/08/2026) — sans
+  // ça, une régularisation écrasait la trace de la validation d'origine
+  // (mêmes colonnes `demandes_conges.date_decision`/`validateur_id`
+  // réutilisées pour chaque décision). Vide pour une demande décidée avant
+  // l'introduction de cette table — repli plus bas sur `selection.dateDecision`.
+  useEffect(() => {
+    let cancelled = false;
+    fetchHistoriqueDecisions(selection.id).then((data) => {
+      if (!cancelled) setHistoriqueDecisions(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selection.id]);
 
   const code = selection.type === "CP" && selection.isAnticipation ? "CPA" : selection.type;
   const jours = selection.nbDemiJournees / 2;
@@ -367,26 +395,59 @@ export function DetailCongePanel({
               {selection.note}
             </div>
           )}
-          {selection.dateDecision && (
-            <div className="flex gap-2">
-              <div className="flex w-1.5 shrink-0 justify-center">
-                <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
-              </div>
-            </div>
-          )}
-          {selection.dateDecision && (
-            <div className="flex items-center gap-2">
-              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
-              <span className="text-[10px]">
-                <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
-                  {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
-                </span>
-                {selection.validateur && (
-                  <span className="text-ink-500"> par {selection.validateur.prenom}</span>
-                )}
-              </span>
-            </div>
-          )}
+          {historiqueDecisions.length > 0
+            ? // Journal complet (`decisions_demande`) — une entrée par
+              // décision réelle, dans l'ordre (ex. Validé le… puis Annulé
+              // le…), plutôt que la seule décision courante ci-dessous.
+              historiqueDecisions.map((decision) => (
+                <div key={decision.id}>
+                  <div className="flex gap-2">
+                    <div className="flex w-1.5 shrink-0 justify-center">
+                      <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
+                    />
+                    <span className="text-[10px]">
+                      <span className={`font-semibold ${TEXTE_DECISION[decision.statut]}`}>
+                        {LIBELLE_DECISION[decision.statut]} le{" "}
+                        {formatJjMmAa(decision.decideLe.slice(0, 10))}
+                      </span>
+                      {decision.decidePar && (
+                        <span className="text-ink-500"> par {decision.decidePar.prenom}</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              ))
+            : // Repli : demande décidée avant l'introduction de
+              // `decisions_demande`, aucune ligne de journal pour elle —
+              // seule la décision courante (mêmes colonnes que ci-dessus)
+              // est connue.
+              selection.dateDecision && (
+                <>
+                  <div className="flex gap-2">
+                    <div className="flex w-1.5 shrink-0 justify-center">
+                      <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
+                    />
+                    <span className="text-[10px]">
+                      <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
+                        {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
+                      </span>
+                      {selection.validateur && (
+                        <span className="text-ink-500"> par {selection.validateur.prenom}</span>
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
           {lignesTransmission
             ?.slice()
             .sort((a, b) => a.genereLe.localeCompare(b.genereLe))
@@ -433,6 +494,28 @@ export function DetailCongePanel({
                 )}
               </div>
             ))}
+          {previsionTransmission && (
+            <div>
+              <div className="flex gap-2">
+                <div className="flex w-1.5 shrink-0 justify-center">
+                  <span className={`h-2 w-px ${classeFondTypeBadge(code)}`} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full border border-dashed border-ink-500" />
+                <span className="text-[10px]">
+                  <span className="text-ink-500 font-semibold italic">
+                    Transmis paie le {formatJjMmAa(new Date().toISOString().slice(0, 10))}
+                  </span>
+                  <span className="text-ink-500 italic">
+                    {" "}
+                    : {formatJours(previsionTransmission.jours)} j /{" "}
+                    {formatJours(previsionTransmission.total)} j
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {selection.commentaireManager && (

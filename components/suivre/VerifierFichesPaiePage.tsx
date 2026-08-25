@@ -16,7 +16,7 @@ import { EmptyRow } from "@/components/ui/EmptyRow";
 import { Textarea } from "@/components/ui/Textarea";
 
 /**
- * Onglet "Vérifier les fiches de paie" (Clôture paie, 24/08/2026) — pour
+ * Onglet "Vérifier les fiches de paie" (Transmissions paie, 24/08/2026) — pour
  * chaque collaborateur transmis sur cet export : total de jours transmis
  * (ce qui est littéralement imprimé sur la fiche de paie reçue du
  * comptable) + action "Ça matche" en bloc. Détail par congé disponible en

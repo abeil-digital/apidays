@@ -1,4 +1,4 @@
-import { CloturePaiePage } from "@/components/suivre/CloturePaiePage";
+import { TransmissionsPaiePage } from "@/components/suivre/TransmissionsPaiePage";
 import { finDePeriode, libellePeriode } from "@/lib/periodePaie";
 
 interface PageProps {
@@ -9,5 +9,5 @@ export default async function Page({ params }: PageProps) {
   const { debut } = await params;
   const periode = { debut, fin: finDePeriode(debut) };
 
-  return <CloturePaiePage periode={periode} titre={libellePeriode(periode)} />;
+  return <TransmissionsPaiePage periode={periode} titre={libellePeriode(periode)} />;
 }

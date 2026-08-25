@@ -152,6 +152,33 @@ export function classeFondSurvolTypeBadge(code: TypeBadgeCode): string {
   return CODE_STYLES_HOVER[code];
 }
 
+// Même teinte que `CODE_STYLES_HOVER` (15%) mais sans le préfixe `hover:` —
+// pour piloter le survol en JS plutôt qu'en CSS pur (`HistoriqueTable`,
+// 25/08/2026 : une cellule fusionnée par `rowSpan` n'appartient qu'à la
+// première `<tr>` du groupe, un survol CSS `tr:hover` sur une autre ligne du
+// même groupe ne peut donc pas l'atteindre — l'état survolé doit être
+// recalculé côté React à partir de l'id survolé, pas du pseudo-état `:hover`).
+const CODE_STYLES_SURVOL_ACTIF: Record<TypeBadgeCode, string> = {
+  CP: "bg-cp/15",
+  RTT: "bg-rtt/15",
+  CPA: "bg-cpa/15",
+  CSS: "bg-css/15",
+  CE: "bg-ce/15",
+  RECUP: "bg-recup/15",
+  EVT_FAM: "bg-evtfam/15",
+  DJI: "bg-dji/15",
+  CPI: "bg-cpi/15",
+  FERIE: "bg-ferie/15",
+};
+
+/** Classe Tailwind `bg-…/15` (sans `hover:`) d'un code — même teinte que
+ * `classeFondSurvolTypeBadge` mais appliquée sur commande (état survolé
+ * piloté en JS), pour une cellule qui ne peut pas compter sur le `:hover`
+ * CSS natif de sa propre ligne (ex. cellule fusionnée par `rowSpan`). */
+export function classeFondSurvolTypeBadgeActif(code: TypeBadgeCode): string {
+  return CODE_STYLES_SURVOL_ACTIF[code];
+}
+
 // Teinte plus marquée que le survol (30% contre 15%) et permanente — état
 // "on" d'une ligne consultée (panneau de détail ouvert dessus,
 // `HistoriqueTable`, 24/08/2026), à distinguer du simple survol passager.

@@ -96,7 +96,7 @@ function dateVersIsoLocal(date: Date): string {
 }
 
 /**
- * "Poser pour un collaborateur" (Clôture paie, 24/08/2026) — Delphine crée
+ * "Poser pour un collaborateur" (Transmissions paie, 24/08/2026) — Delphine crée
  * une demande déjà validée au nom d'un collaborateur (oubli du salarié,
  * correction ponctuelle — maladie hors scope, décision actée). Dérivé de
  * `PoserDemandeModal`, mêmes mécaniques de sélection de période (`DatePicker`

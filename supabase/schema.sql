@@ -175,6 +175,27 @@ create table demandes_conges (
   updated_at timestamptz not null default now()
 );
 
+-- Historique des décisions d'une demande (25/08/2026) — une ligne par
+-- changement de statut (valider/refuser/régulariser/restaurer), jamais
+-- écrasée. `demandes_conges.statut`/`validateur_id`/`commentaire_decision`/
+-- `date_decision` restent la décision COURANTE (lecture rapide, inchangé) ;
+-- cette table est le journal complet, pour reconstituer le feed du panneau
+-- de détail ("Posé le / Validé le / Annulé le / Restauré le...") même après
+-- plusieurs allers-retours — une régularisation qui écrase la date de
+-- validation d'origine (mêmes colonnes réutilisées, voir plus haut) rendait
+-- l'étape "Validé le" invisible une fois la demande annulée (bug signalé
+-- par Vincent). Table démarrée vide : une demande décidée avant ce
+-- changement n'a pas de ligne ici tant qu'elle ne subit pas une NOUVELLE
+-- décision — voir le repli côté app sur `dateDecision` pour ce cas.
+create table decisions_demande (
+  id uuid primary key default gen_random_uuid(),
+  demande_id uuid not null references demandes_conges(id) on delete cascade,
+  statut statut_demande not null,
+  commentaire text,
+  decide_par uuid not null references utilisateurs(id),
+  decide_le timestamptz not null default now()
+);
+
 -- ------------------------------------------------------------
 -- JOURS FÉRIÉS
 -- ------------------------------------------------------------
@@ -377,6 +398,7 @@ create table export_paie_lignes (
 create index idx_demandes_utilisateur on demandes_conges(utilisateur_id);
 create index idx_demandes_statut on demandes_conges(statut);
 create index idx_demandes_dates on demandes_conges(date_debut, date_fin);
+create index idx_decisions_demande_demande on decisions_demande(demande_id);
 create index idx_soldes_utilisateur on soldes(utilisateur_id);
 create index idx_manager_salaries_salarie on manager_salaries(salarie_id);
 create index idx_manager_salaries_manager on manager_salaries(manager_id);
@@ -402,6 +424,7 @@ alter table types_absences enable row level security;
 alter table soldes enable row level security;
 alter table historique_soldes enable row level security;
 alter table demandes_conges enable row level security;
+alter table decisions_demande enable row level security;
 alter table jours_feries enable row level security;
 alter table parametrage_periode enable row level security;
 alter table demi_journees_imposees enable row level security;
@@ -633,6 +656,32 @@ create policy "demandes: admin gère tout (dont dévalidation)"
   with check (my_role() = 'admin');
 
 -- ------------------------------------------------------------
+-- POLICIES — decisions_demande
+-- ------------------------------------------------------------
+create policy "decisions_demande: salarié lit celles de ses propres demandes"
+  on decisions_demande for select
+  using (
+    exists (
+      select 1 from demandes_conges d
+      where d.id = decisions_demande.demande_id
+      and d.utilisateur_id = my_utilisateur_id()
+    )
+  );
+
+create policy "decisions_demande: manager et admin lisent tout"
+  on decisions_demande for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "decisions_demande: manager et admin créent"
+  on decisions_demande for insert
+  with check (my_role() in ('manager', 'admin'));
+
+create policy "decisions_demande: admin gère tout"
+  on decisions_demande for all
+  using (my_role() = 'admin')
+  with check (my_role() = 'admin');
+
+-- ------------------------------------------------------------
 -- POLICIES — jours_feries (référentiel, lecture large)
 -- ------------------------------------------------------------
 create policy "jours_feries: lecture par tout utilisateur authentifié"
@@ -797,6 +846,7 @@ grant select, insert, update, delete on
   soldes,
   historique_soldes,
   demandes_conges,
+  decisions_demande,
   jours_feries,
   parametrage_periode,
   demi_journees_imposees,

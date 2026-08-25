@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, TriangleAlert } from "lucide-react";
-import type { Demande, DemandeEquipe, LigneExportPaie } from "@/lib/types";
+import type { Demande, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
 import {
   formatDateAction,
   formatJours,
@@ -11,6 +11,7 @@ import {
   classeBordureTypeBadge,
   classeFondActifTypeBadge,
   classeFondSurvolTypeBadge,
+  classeFondSurvolTypeBadgeActif,
   classeFondTypeBadge,
   LABEL_COURT,
   LABEL_LONG,
@@ -64,7 +65,7 @@ interface HistoriqueTablePropsCommunes {
    * la relier visuellement au panneau ouvert. */
   selectedId?: string | null;
   /** Contenu de la colonne Durée — par défaut `{jours} j`. Utilisé par
-   * "Quels congés transmettre" (Clôture paie, 24/08/2026) pour afficher
+   * "Quels congés transmettre" (Transmissions paie, 24/08/2026) pour afficher
    * "X/Y j" sur un congé partiellement transmis (à cheval sur deux
    * périodes de paie). */
   renderDuree?: (demande: Demande) => ReactNode;
@@ -73,6 +74,15 @@ interface HistoriqueTablePropsCommunes {
    * "Suivre les demandes"). Absent = pas de colonne, comportement inchangé
    * ailleurs. */
   lignesTransmissionParDemande?: Record<string, LigneExportPaie[]>;
+  /** Colonne triée par défaut à l'ouverture (25/08/2026, "Quels congés
+   * transmettre" veut démarrer trié par collaborateur) — juste un état
+   * initial, l'en-tête reste cliquable ensuite comme d'habitude. Absent =
+   * pas de tri par défaut, comportement inchangé ailleurs. */
+  triParDefaut?: ColonneTriable;
+  /** Libellé de l'en-tête de la colonne Durée — par défaut "Durée"
+   * (`compact`) / "Nbre jours". "Quels congés transmettre" (25/08/2026) la
+   * renomme "Transmis", plus parlant une fois la colonne au format X/Y. */
+  libelleColonneDuree?: string;
 }
 
 type HistoriqueTableProps =
@@ -125,25 +135,95 @@ function periodeCourte(debut: string, fin: string): string {
 // actif à la fois : cliquer une autre colonne remplace le tri en cours
 // plutôt que de les cumuler — cliquer une colonne déjà triée reprend le même
 // cycle recent → ancien → aucun.
-type ColonneTriable = "posele" | "dates";
+type ColonneTriable = "posele" | "dates" | "statut" | "collaborateur";
 type DirectionTri = "recent" | "ancien";
 interface TriTable {
   colonne: ColonneTriable;
   direction: DirectionTri;
 }
 
-function champTri(colonne: ColonneTriable): "datePose" | "debut" {
+function champTri(colonne: "posele" | "dates"): "datePose" | "debut" {
   return colonne === "posele" ? "datePose" : "debut";
+}
+
+// Ordre métier du statut (25/08/2026, colonne "Statut" rendue triable) — pas
+// alphabétique : "en attente" en premier (ce qui demande une action), les 3
+// statuts décidés ensuite. `direction: "recent"` réutilise le même sens que
+// les colonnes de date (icône flèche vers le bas) pour rester cohérent,
+// même si "récent"/"ancien" n'a pas de sens littéral ici.
+const STATUT_ORDRE: Record<StatutDemande, number> = {
+  "en attente": 0,
+  validé: 1,
+  refusé: 2,
+  annulé: 3,
+};
+
+// Nom complet du collaborateur — uniquement appelée quand `tri.colonne ===
+// "collaborateur"`, ce qui n'arrive que via l'en-tête `avecCollaborateur`
+// (voir plus bas), donc `demandes` est garanti `DemandeEquipe[]` à ce
+// moment malgré la contrainte générique `T extends Demande` de la fonction.
+function nomCollaborateur(demande: Demande): string {
+  const equipe = demande as unknown as DemandeEquipe;
+  return `${equipe.demandeur.prenom} ${equipe.demandeur.nom}`;
 }
 
 function trierDemandes<T extends Demande>(demandes: T[], tri: TriTable | null): T[] {
   if (!tri) return demandes;
+  if (tri.colonne === "statut") {
+    return [...demandes].sort((a, b) =>
+      tri.direction === "recent"
+        ? STATUT_ORDRE[a.statut] - STATUT_ORDRE[b.statut]
+        : STATUT_ORDRE[b.statut] - STATUT_ORDRE[a.statut],
+    );
+  }
+  if (tri.colonne === "collaborateur") {
+    return [...demandes].sort((a, b) =>
+      tri.direction === "recent"
+        ? nomCollaborateur(a).localeCompare(nomCollaborateur(b))
+        : nomCollaborateur(b).localeCompare(nomCollaborateur(a)),
+    );
+  }
   const champ = champTri(tri.colonne);
   return [...demandes].sort((a, b) =>
     tri.direction === "recent"
       ? b[champ].localeCompare(a[champ])
       : a[champ].localeCompare(b[champ]),
   );
+}
+
+// Trie puis, uniquement quand le tri actif porte sur "collaborateur", fusionne
+// visuellement les lignes consécutives d'un même collaborateur (25/08/2026,
+// demande explicite) — `rowSpan` porte le nombre de lignes du groupe sur la
+// première ligne (la cellule Collaborateur s'étire dessus via l'attribut
+// HTML `rowSpan`), `rowSpan: 0` sur les suivantes indique de ne pas
+// re-render la cellule (déjà couverte par le `rowSpan` de la première).
+// Sans tri par collaborateur (tri absent ou sur une autre colonne), chaque
+// ligne garde `rowSpan: 1` — comportement inchangé, un même collaborateur
+// peut apparaître à des endroits non consécutifs de la liste. `groupeIds`
+// (les ids de toutes les demandes du groupe) sert à synchroniser le survol
+// de la cellule fusionnée avec n'importe quelle ligne du groupe — voir
+// `hoveredId` dans `HistoriqueTable`, un simple `tr:hover` CSS ne peut pas
+// l'atteindre depuis une ligne qui n'est pas la première du groupe.
+function trierEtGrouperParCollaborateur(
+  demandes: DemandeEquipe[],
+  tri: TriTable | null,
+): { demande: DemandeEquipe; rowSpan: number; groupeIds: string[] }[] {
+  const triees = trierDemandes(demandes, tri);
+  if (tri?.colonne !== "collaborateur") {
+    return triees.map((demande) => ({ demande, rowSpan: 1, groupeIds: [demande.id] }));
+  }
+
+  const resultat: { demande: DemandeEquipe; rowSpan: number; groupeIds: string[] }[] = [];
+  let i = 0;
+  while (i < triees.length) {
+    let j = i + 1;
+    while (j < triees.length && triees[j].demandeur.id === triees[i].demandeur.id) j++;
+    const groupeIds = triees.slice(i, j).map((d) => d.id);
+    resultat.push({ demande: triees[i], rowSpan: j - i, groupeIds });
+    for (let k = i + 1; k < j; k++) resultat.push({ demande: triees[k], rowSpan: 0, groupeIds });
+    i = j;
+  }
+  return resultat;
 }
 
 export function HistoriqueTable(props: HistoriqueTableProps) {
@@ -154,8 +234,16 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
     selectedId,
     renderDuree,
     lignesTransmissionParDemande,
+    triParDefaut,
+    libelleColonneDuree,
   } = props;
-  const [tri, setTri] = useState<TriTable | null>(null);
+  const [tri, setTri] = useState<TriTable | null>(
+    triParDefaut ? { colonne: triParDefaut, direction: "recent" } : null,
+  );
+  // Ligne actuellement survolée — uniquement pour synchroniser la cellule
+  // Collaborateur fusionnée (`rowSpan`) avec le survol de n'importe quelle
+  // ligne de son groupe, voir `trierEtGrouperParCollaborateur`.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   function handleToggleTri(colonne: ColonneTriable) {
     setTri((prev) => {
@@ -255,7 +343,18 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
       <table className="w-full text-left text-sm md:min-w-[760px]">
         <thead>
           <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
-            {props.avecCollaborateur && <th className="px-4 py-3">Collaborateur</th>}
+            {props.avecCollaborateur && (
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleToggleTri("collaborateur")}
+                  className="hover:text-ink-900 flex items-center gap-1"
+                >
+                  Collaborateur
+                  {iconeTri("collaborateur")}
+                </button>
+              </th>
+            )}
             <th className="px-4 py-3">Type</th>
             <th className="px-4 py-3">
               <button
@@ -267,7 +366,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("dates")}
               </button>
             </th>
-            <th className="px-4 py-3">{compact ? "Durée" : "Nbre jours"}</th>
+            <th className="px-4 py-3">
+              {libelleColonneDuree ?? (compact ? "Durée" : "Nbre jours")}
+            </th>
             <th className="hidden px-4 py-3 md:table-cell">
               <button
                 type="button"
@@ -279,30 +380,67 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
               </button>
             </th>
             {!compact && <th className="hidden px-4 py-3 md:table-cell">Validé le</th>}
-            <th className="px-4 py-3">Statut</th>
+            <th className="px-4 py-3">
+              <button
+                type="button"
+                onClick={() => handleToggleTri("statut")}
+                className="hover:text-ink-900 flex items-center gap-1"
+              >
+                Statut
+                {iconeTri("statut")}
+              </button>
+            </th>
             {lignesTransmissionParDemande && <th className="px-4 py-3">Paie</th>}
           </tr>
         </thead>
         <tbody>
           {props.avecCollaborateur
-            ? trierDemandes(props.demandes, tri).map((demande) => (
-                <tr
-                  key={demande.id}
-                  className={`transition-colors duration-150 ${classeLigne(demande)}`}
-                >
-                  <td className="px-4 py-3">
-                    <span className="flex items-center gap-1.5">
-                      <Avatar
-                        initiales={`${demande.demandeur.prenom[0]}${demande.demandeur.nom[0]}`.toUpperCase()}
-                      />
-                      <span className="text-ink-900 font-semibold">
-                        {demande.demandeur.prenom} {demande.demandeur.nom}
-                      </span>
-                    </span>
-                  </td>
-                  {cellulesCommunes(demande)}
-                </tr>
-              ))
+            ? trierEtGrouperParCollaborateur(props.demandes, tri).map(
+                ({ demande, rowSpan, groupeIds }) => {
+                  const code = codeDemande(demande);
+                  // La ligne qui porte la cellule fusionnée (rowSpan > 0)
+                  // reçoit déjà sa propre teinte via `classeLigne` sur son
+                  // `<tr>` (active ou survolée) — cette teinte native couvre
+                  // aussi la cellule fusionnée, puisqu'elle en est l'enfant.
+                  // N'ajouter la classe JS que si c'est une AUTRE ligne du
+                  // groupe qui est active, sinon les deux se cumulent et la
+                  // première ligne du groupe apparaît deux fois plus foncée.
+                  const autreLigneSelectionnee =
+                    selectedId != null && selectedId !== demande.id && groupeIds.includes(selectedId);
+                  const autreLigneSurvolee =
+                    hoveredId !== null && hoveredId !== demande.id && groupeIds.includes(hoveredId);
+                  const classeCollaborateur = autreLigneSelectionnee
+                    ? classeFondActifTypeBadge(code)
+                    : autreLigneSurvolee
+                      ? classeFondSurvolTypeBadgeActif(code)
+                      : "";
+                  return (
+                    <tr
+                      key={demande.id}
+                      className={`transition-colors duration-150 ${classeLigne(demande)}`}
+                      onMouseEnter={() => setHoveredId(demande.id)}
+                      onMouseLeave={() => setHoveredId((h) => (h === demande.id ? null : h))}
+                    >
+                      {rowSpan > 0 && (
+                        <td
+                          rowSpan={rowSpan}
+                          className={`px-4 py-3 align-top transition-colors duration-150 ${classeCollaborateur}`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Avatar
+                              initiales={`${demande.demandeur.prenom[0]}${demande.demandeur.nom[0]}`.toUpperCase()}
+                            />
+                            <span className="text-ink-900 font-semibold">
+                              {demande.demandeur.prenom} {demande.demandeur.nom}
+                            </span>
+                          </span>
+                        </td>
+                      )}
+                      {cellulesCommunes(demande)}
+                    </tr>
+                  );
+                },
+              )
             : trierDemandes(props.demandes, tri).map((demande) => (
                 <tr
                   key={demande.id}

@@ -233,6 +233,16 @@ export async function calculerNbDemiJournees(
  * sans argument, l'utilisateur connecté ; avec, n'importe quel collaborateur
  * — utilisé par `/suivre/calendrier` (manager/admin consultant le calendrier
  * d'un collaborateur), la RLS élargie manager/admin l'autorise déjà.
+ *
+ * Inclut les demandes `annulee` depuis le 25/08/2026 (le filtre `.neq`
+ * excluait auparavant TOUTE demande annulée, y compris une régularisation
+ * Delphine d'un congé déjà validé — invisible pour le salarié concerné,
+ * qui ne pouvait ni la voir dans son historique ni être notifié du
+ * changement ; signalé par Vincent avec Olivier comme exemple concret).
+ * `annulerDemande` (retrait par le salarié lui-même d'une demande encore en
+ * attente) n'a pour l'instant aucun appelant dans l'UI, donc en pratique
+ * toute demande `annulee` remontée ici est une régularisation, traçable via
+ * `dateDecision`/`validateur`.
  */
 export async function fetchDemandes(utilisateurId?: string): Promise<Demande[]> {
   const supabase = createClient();
@@ -243,7 +253,6 @@ export async function fetchDemandes(utilisateurId?: string): Promise<Demande[]> 
     .from("demandes_conges")
     .select(SELECT_DEMANDE)
     .eq("utilisateur_id", id)
-    .neq("statut", "annulee")
     .order("date_debut", { ascending: false });
 
   if (error) {
@@ -354,6 +363,12 @@ export function mapDemandeEquipeDepuisDb(row: DemandeEquipeRow): DemandeEquipe {
  * Inclut aussi les propres demandes du manager connecté : personne d'autre
  * n'est au-dessus pour les valider, donc un manager doit pouvoir
  * s'auto-valider ses propres congés depuis cet écran.
+ *
+ * Inclut les demandes `annulee` depuis le 25/08/2026 (même correction que
+ * `fetchDemandes`) — une régularisation qui n'a jamais été transmise (donc
+ * jamais listée dans "Transmissions paie > Congés passés en paye mais
+ * annulés", qui ne montre que les corrections à faire) n'avait plus aucun
+ * endroit où Delphine pouvait la retrouver pour vérifier sa traçabilité.
  */
 export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
   const supabase = createClient();
@@ -361,7 +376,6 @@ export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
   const { data, error } = await supabase
     .from("demandes_conges")
     .select(SELECT_DEMANDE_EQUIPE)
-    .neq("statut", "annulee")
     .order("date_debut", { ascending: false });
 
   if (error) {
@@ -438,6 +452,21 @@ async function deciderDemande(
   if (error) {
     throw new Error("Impossible d'enregistrer la décision (demande déjà traitée, ou introuvable).");
   }
+
+  // Journal complet des décisions (25/08/2026, `decisions_demande`) — ne
+  // remplace jamais une ligne précédente, contrairement aux colonnes
+  // `demandes_conges.statut`/`date_decision` mises à jour ci-dessus (qui ne
+  // gardent que la décision courante). Best-effort : une erreur d'écriture
+  // ici ne doit pas faire échouer la décision elle-même, déjà actée sur
+  // `demandes_conges` — juste une entrée manquante dans le feed détaillé.
+  await supabase
+    .from("decisions_demande")
+    .insert({ demande_id: id, statut, commentaire: commentaire || null, decide_par: utilisateurId })
+    .then(({ error: erreurJournal }) => {
+      if (erreurJournal) {
+        console.error("Impossible d'enregistrer la décision dans le journal.", erreurJournal);
+      }
+    });
 }
 
 export async function validerDemande(id: string, commentaire = ""): Promise<void> {
@@ -501,4 +530,58 @@ export async function marquerDemandeVue(id: string): Promise<void> {
   if (error) {
     throw new Error("Impossible de marquer la demande comme vue.");
   }
+}
+
+export interface DecisionHistorique {
+  id: string;
+  statut: StatutDemande;
+  commentaire: string | null;
+  decidePar: { prenom: string; nom: string } | null;
+  decideLe: string; // timestamptz ISO
+}
+
+interface DecisionDemandeRow {
+  id: string;
+  statut: string;
+  commentaire: string | null;
+  decide_le: string;
+  decide_par:
+    | { prenom: string; nom: string }
+    | { prenom: string; nom: string }[]
+    | null;
+}
+
+/**
+ * Journal complet des décisions d'une demande (`decisions_demande`,
+ * 25/08/2026) — chronologique, une entrée par valider/refuser/régulariser/
+ * restaurer. Alimente le feed de `DetailCongePanel` : `Validé le`/`Annulé
+ * le`/etc. affichés dans l'ordre réel, plutôt que la seule décision
+ * courante (`demandes_conges.date_decision`, écrasée à chaque changement).
+ * Best-effort : une demande décidée avant l'introduction de cette table n'a
+ * aucune ligne ici, l'appelant retombe alors sur l'affichage à partir de
+ * `selection.dateDecision` (voir `DetailCongePanel`).
+ */
+export async function fetchHistoriqueDecisions(demandeId: string): Promise<DecisionHistorique[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("decisions_demande")
+    .select("id, statut, commentaire, decide_le, decide_par:utilisateurs!decide_par(prenom, nom)")
+    .eq("demande_id", demandeId)
+    .order("decide_le", { ascending: true });
+
+  if (error) {
+    return [];
+  }
+
+  return ((data ?? []) as unknown as DecisionDemandeRow[]).map((row) => {
+    const decidePar = Array.isArray(row.decide_par) ? row.decide_par[0] : row.decide_par;
+    return {
+      id: row.id,
+      statut: STATUT_DEPUIS_DB[row.statut] ?? "en attente",
+      commentaire: row.commentaire,
+      decidePar: decidePar ?? null,
+      decideLe: row.decide_le,
+    };
+  });
 }

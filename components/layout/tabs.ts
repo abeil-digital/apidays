@@ -33,7 +33,7 @@ const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre/soldes", label: "Suivre les soldes", Icon: Wallet },
   { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/paie", label: "Export paie", Icon: Receipt },
-  { href: "/suivre/cloture-paie", label: "Clôture paie", Icon: ClipboardCheck },
+  { href: "/suivre/transmissions-paie", label: "Transmissions paie", Icon: ClipboardCheck },
 ];
 
 /**
