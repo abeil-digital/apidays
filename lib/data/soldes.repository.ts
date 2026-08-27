@@ -18,30 +18,42 @@ import { fetchHistoriqueUtilisateur, fetchSoldeInitial } from "@/lib/data/utilis
 
 /**
  * Repository des soldes de congés/RTT — calculé à la volée à partir de
- * `regles_acquisition`/`regles_anciennete` (Paramétrer > Congés & RTT) et des
- * demandes déjà décidées, plutôt que lu/maintenu dans la table `soldes` (pas
- * de job planifié dans cette appli pour la tenir à jour sans risque de
- * désynchronisation). Voir CONTEXTE.md pour le détail de la formule.
+ * `regles_acquisition`/`regles_anciennete` (Paramétrer > Congés & RTT), des
+ * demandes déjà décidées et des transmissions paie, plutôt que lu/maintenu
+ * dans la table `soldes` (pas de job planifié dans cette appli pour la tenir
+ * à jour sans risque de désynchronisation). Voir CONTEXTE.md pour le détail
+ * de la formule.
+ *
+ * Deux niveaux de solde exposés par catégorie (27/08/2026, refonte du modèle
+ * — voir CONTEXTE.md "Refonte du modèle solde théorique/réel") :
+ *
+ * - **`valeur` ("solde réel")** = capital − ce qui a été **effectivement
+ *   transmis en paie** (`export_paie_lignes`, voir `sommeTransmis`), pas le
+ *   statut `validee` des demandes. C'est le référentiel de Delphine pour
+ *   "Vérifier les fiches de paie" : ce nombre doit correspondre à ce qui est
+ *   écrit sur la fiche de paie du comptable. Il retarde naturellement sur la
+ *   validation tant qu'un export n'a pas été généré.
+ * - **`valeurApresAttente` ("solde théorique")** = capital − tout ce qui est
+ *   validé OU en attente sur la période (même traitement pour les deux,
+ *   via `sommeJours`). Répond à "combien il me reste à poser" — c'est le
+ *   solde affiché au collaborateur (Accueil) et celui qui plafonne la pose
+ *   d'une nouvelle demande.
  *
  * - **CP** : capital fixe pour la période en cours (acquis intégralement
  *   pendant la période précédente), + bonus ancienneté, + report du solde CP
  *   non consommé de la période précédente (un seul niveau de report, pas de
- *   cascade), − CP validés consommés sur la période en cours.
+ *   cascade).
  * - **CPA** ("Congés Payés en Acquisition") : accrual mensuel en cours pour
- *   la période CP SUIVANTE (pas encore commencée) − CP anticipés déjà
- *   validés dessus (`is_anticipation = true`).
- * - **RTT** : accrual mensuel depuis le début de la période RTT en cours −
- *   RTT validés sur cette période. Pas d'ancienneté, pas de report (perdus à
- *   la fin de la période).
- *
- * Chaque catégorie expose aussi `valeurApresAttente` (le solde ci-dessus
- * moins les jours encore en attente de validation) — indicatif, pas un
- * retrait définitif tant que la demande n'est pas décidée.
+ *   la période CP SUIVANTE (pas encore commencée), avec les mêmes deux
+ *   niveaux (`is_anticipation = true`).
+ * - **RTT** : accrual mensuel depuis le début de la période RTT en cours.
+ *   Pas d'ancienneté, pas de report (perdus à la fin de la période).
  *
  * `ajustements_solde` (régulation manuelle par Delphine, Espace Suivre) est
- * intégrée au calcul CP comme un mouvement de plus sur la période en cours —
- * table indépendante de `soldes`/`historique_soldes` (non exploitées, voir
- * plus haut), pas de risque de désynchronisation.
+ * intégrée au calcul CP comme un mouvement de plus sur la période en cours,
+ * compté dans les deux niveaux — table indépendante de
+ * `soldes`/`historique_soldes` (non exploitées, voir plus haut), pas de
+ * risque de désynchronisation.
  */
 
 interface Periode {
@@ -183,31 +195,30 @@ function accrualMensuelSomme(
   return total;
 }
 
-/** 1er jour du mois suivant `dateIsoRef` — toujours le mois d'après, même si
- * `dateIsoRef` est déjà un 1er (le solde saisi "à date" est supposé inclure
- * l'acquisition du mois en cours, l'accrual ne doit repartir qu'au mois
- * suivant). Utilisé par `resolverPointDepartAccrual` (solde initial). */
-function premierJourMoisSuivant(dateIsoRef: string): Date {
-  const d = new Date(`${dateIsoRef}T00:00:00Z`);
-  let annee = d.getUTCFullYear();
-  let mois = d.getUTCMonth() + 1;
-  if (mois > 11) {
-    mois = 0;
-    annee += 1;
-  }
-  return new Date(Date.UTC(annee, mois, 1));
-}
-
 /**
  * Point de départ et base de l'accrual RTT/CPA (21/08/2026, solde initial
- * lancement en prod) — si un solde initial existe et que sa date de
- * référence tombe dans la période en cours de calcul, l'accrual ne repart
- * plus du 1er jour de la période mais du mois suivant la référence, avec le
- * solde saisi comme base (au lieu de 0) : le report/accrual automatique
- * n'aurait aucune donnée fiable avant la référence (pas de `demandes_conges`
- * antérieures à l'usage de l'app). Une fois la référence dans une période
- * antérieure (période suivante entamée), l'app a tout suivi elle-même :
- * comportement normal repris (retombe sur `{ debut: periode.debut, base: 0 }`).
+ * lancement en prod ; revu le 27/08/2026) — si un solde initial existe et que
+ * sa date de référence tombe dans la période en cours de calcul, l'accrual ne
+ * repart plus du 1er jour de la période mais du mois de la référence
+ * elle-même, avec le solde saisi comme base (au lieu de 0) : le report/accrual
+ * automatique n'aurait aucune donnée fiable avant la référence (pas de
+ * `demandes_conges` antérieures à l'usage de l'app).
+ *
+ * `debut = soldeInitial.dateReference` directement (pas le mois suivant) —
+ * la saisie du solde initial est maintenant contrainte au mois (sélecteur de
+ * mois, pas de jour, voir `UtilisateurFichePage.tsx`) avec la convention
+ * explicite "solde = constaté fin du mois précédent" : la référence "01/06"
+ * désigne déjà le 1er jour du premier mois non couvert par la valeur saisie —
+ * juin est donc le premier mois dont le travail doit générer une acquisition
+ * (créditée au 1er juillet, `moisEntiersEcoules` compte juin comme complet dès
+ * qu'on atteint juillet), pas un mois à sauter. Un décalage supplémentaire
+ * d'un mois (ancien `premierJourMoisSuivant`) sautait cette toute première
+ * acquisition (bug remonté par Vincent : "je ne vois pas de RTT/CPA acquis en
+ * juin pour Delphine" alors que son solde initial est daté du 01/06).
+ *
+ * Une fois la référence dans une période antérieure (période suivante
+ * entamée), l'app a tout suivi elle-même : comportement normal repris
+ * (retombe sur `{ debut: periode.debut, base: 0 }`).
  */
 function resolverPointDepartAccrual(
   periode: Periode,
@@ -220,7 +231,7 @@ function resolverPointDepartAccrual(
     soldeInitial.dateReference <= dateIso(periode.fin)
   ) {
     return {
-      debut: premierJourMoisSuivant(soldeInitial.dateReference),
+      debut: new Date(`${soldeInitial.dateReference}T00:00:00Z`),
       base: soldeInitial[champ],
       dateAffichage: soldeInitial.dateReference,
     };
@@ -387,6 +398,109 @@ async function sommeJours(
   return total;
 }
 
+/**
+ * Somme signée des `export_paie_lignes.jours_inclus` déjà transmises en paie
+ * pour un type/période, à une date de référence donnée — base du "solde réel"
+ * (27/08/2026, refonte du modèle théorique/réel : le réel est ancré sur la
+ * transmission effective, pas sur le statut `validee` des demandes comme
+ * `sommeJours`). Une ligne positive (transmission normale) réduit le solde,
+ * une ligne négative (correction/retro après annulation) le restitue — pas de
+ * rejeu de journal nécessaire : une transmission est un fait acquis au moment
+ * où elle est générée, pas à la fin de la période qu'elle couvre — d'où le
+ * filtre sur `exports_paie.genere_le` (PAS `periode_fin`, bug trouvé le
+ * 27/08/2026 : un export généré en cours de mois, ex. le 26/08 pour la
+ * période du 01/08 au 31/08, doit compter dès le 26/08, pas seulement à
+ * partir du 31/08 — sinon le réel affiché "aujourd'hui" ignore des
+ * transmissions pourtant déjà faites).
+ */
+async function sommeTransmis(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  type: TypeDemande,
+  isAnticipation: boolean | null,
+  periode: Periode,
+  dateReference: Date,
+): Promise<number> {
+  const typeAbsenceId = await getTypeAbsenceId(supabase, type);
+
+  let query = supabase
+    .from("export_paie_lignes")
+    .select(
+      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le)",
+    )
+    .eq("demandes_conges.utilisateur_id", utilisateurId)
+    .eq("demandes_conges.type_absence_id", typeAbsenceId)
+    .gte("demandes_conges.date_debut", dateIso(periode.debut))
+    .lte("demandes_conges.date_debut", dateIso(periode.fin))
+    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`);
+
+  if (isAnticipation !== null) {
+    query = query.eq("demandes_conges.is_anticipation", isAnticipation);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error("Impossible de calculer le solde transmis.");
+  }
+
+  return (data ?? []).reduce((somme, row) => somme + Number(row.jours_inclus), 0);
+}
+
+interface LigneTransmise {
+  id: string;
+  date_debut: string;
+  date_fin: string;
+  jours_inclus: number;
+}
+
+/**
+ * Lignes `export_paie_lignes` déjà transmises pour un type/période, avec les
+ * dates de la demande portée — base des mouvements "réel" de
+ * `fetchHistoriqueCp`/`fetchHistoriqueRtt` (27/08/2026, refonte du modèle :
+ * le réel est ancré sur la transmission effective, pas sur le statut
+ * `validee`). Même filtre sur `exports_paie.genere_le` que `sommeTransmis`.
+ */
+async function fetchLignesTransmises(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  typeAbsenceId: string,
+  isAnticipation: boolean | null,
+  periode: Periode,
+  dateReference: Date,
+): Promise<LigneTransmise[]> {
+  let query = supabase
+    .from("export_paie_lignes")
+    .select(
+      "id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation), exports_paie!inner(genere_le)",
+    )
+    .eq("demandes_conges.utilisateur_id", utilisateurId)
+    .eq("demandes_conges.type_absence_id", typeAbsenceId)
+    .gte("demandes_conges.date_debut", dateIso(periode.debut))
+    .lte("demandes_conges.date_debut", dateIso(periode.fin))
+    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`);
+
+  if (isAnticipation !== null) {
+    query = query.eq("demandes_conges.is_anticipation", isAnticipation);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw new Error("Impossible de charger les lignes transmises.");
+  }
+
+  return (data ?? []).map((row) => {
+    const demande = (
+      Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges
+    ) as { date_debut: string; date_fin: string };
+    return {
+      id: row.id,
+      date_debut: demande.date_debut,
+      date_fin: demande.date_fin,
+      jours_inclus: Number(row.jours_inclus),
+    };
+  });
+}
+
 /** Somme des ajustements manuels (régulation Delphine) d'un type sur une période. */
 async function sommeAjustements(
   supabase: SupabaseClient,
@@ -544,11 +658,13 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       aujourdhui,
     );
     const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp);
-    const soldeCp = capitalCpTotal - consommeEnCours + ajustementsEnCours;
+    const transmisEnCours = await sommeTransmis(supabase, id, "CP", false, periodeConsoCp, aujourdhui);
+    const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
+    const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
 
     cp = {
-      valeur: soldeCp,
-      valeurApresAttente: soldeCp - enAttenteEnCours,
+      valeur: soldeCpTransmis,
+      valeurApresAttente: soldeCpValidee - enAttenteEnCours,
       conditionPrefixe: "À poser avant le",
       conditionAccent: formatDateCourte(periodeEnCours.fin),
     };
@@ -586,11 +702,13 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       periodeSuivante,
       aujourdhui,
     );
-    const soldeCpa = Math.max(0, accrualCpa - consommeCpa);
+    const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeSuivante, aujourdhui);
+    const soldeCpaValidee = Math.max(0, accrualCpa - consommeCpa);
+    const soldeCpaTransmis = Math.max(0, accrualCpa - transmisCpa);
 
     cpa = {
-      valeur: soldeCpa,
-      valeurApresAttente: soldeCpa - enAttenteCpa,
+      valeur: soldeCpaTransmis,
+      valeurApresAttente: soldeCpaValidee - enAttenteCpa,
       conditionPrefixe: "À poser à partir de",
       conditionAccent: formatMoisAnnee(periodeSuivante.debut),
     };
@@ -643,11 +761,13 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       periodeConsoRtt,
       aujourdhui,
     );
-    const solde = Math.max(0, accrual - consomme);
+    const transmis = await sommeTransmis(supabase, id, "RTT", null, periodeConsoRtt, aujourdhui);
+    const soldeValidee = Math.max(0, accrual - consomme);
+    const soldeTransmis = Math.max(0, accrual - transmis);
 
     rtt = {
-      valeur: solde,
-      valeurApresAttente: solde - enAttente,
+      valeur: soldeTransmis,
+      valeurApresAttente: soldeValidee - enAttente,
       conditionPrefixe: "À poser avant le",
       conditionAccent: formatDateCourte(periodeRtt.fin),
     };
@@ -855,19 +975,19 @@ export async function fetchHistoriqueCp(
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
   const [
-    { data: demandesRows, error: erreurDemandes },
+    lignesTransmises,
     { data: ajustementsRows, error: erreurAjustements },
     { data: enAttenteRows, error: erreurEnAttente },
+    { data: demandesValideesRows, error: erreurValidees },
   ] = await Promise.all([
-    supabase
-      .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
-      .eq("utilisateur_id", utilisateurId)
-      .eq("type_absence_id", typeAbsenceId)
-      .eq("is_anticipation", false)
-      .eq("statut", "validee")
-      .gte("date_debut", dateIso(periodeConsoCp.debut))
-      .lte("date_debut", dateIso(periodeEnCours.fin)),
+    fetchLignesTransmises(
+      supabase,
+      utilisateurId,
+      typeAbsenceId,
+      false,
+      { debut: periodeConsoCp.debut, fin: periodeEnCours.fin },
+      aujourdhui,
+    ),
     supabase
       .from("ajustements_solde")
       .select("id, delta_jours, motif, created_at")
@@ -884,11 +1004,35 @@ export async function fetchHistoriqueCp(
       .eq("statut", "en_attente")
       .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
+      .eq("statut", "validee")
+      .gte("date_debut", dateIso(periodeConsoCp.debut))
+      .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
 
-  if (erreurDemandes || erreurAjustements || erreurEnAttente) {
+  if (erreurAjustements || erreurEnAttente || erreurValidees) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
+
+  // Base du solde théorique (27/08/2026) — calculée séparément du "réel"
+  // (`cumul`, ci-dessous, qui part désormais des lignes transmises) : le
+  // théorique doit toujours retirer tout ce qui est validé, transmis ou non,
+  // pas seulement ce qui est déjà passé en paie. `demandesValideesRows`
+  // (toutes les demandes validées, pas seulement les transmises) sert à la
+  // fois au total et au détail par mouvement (`mouvementsTheorique`).
+  const ajustementsTotal = (ajustementsRows ?? []).reduce(
+    (somme, a) => somme + Number(a.delta_jours),
+    0,
+  );
+  const consommeValideeTotal = (demandesValideesRows ?? []).reduce(
+    (somme, d) => somme + Number(d.nb_demi_journees) / 2,
+    0,
+  );
 
   interface MouvementBrut {
     id: string;
@@ -900,12 +1044,12 @@ export async function fetchHistoriqueCp(
   }
 
   const mouvementsBruts: MouvementBrut[] = [
-    ...(demandesRows ?? []).map((d): MouvementBrut => ({
-      id: d.id,
+    ...lignesTransmises.map((l): MouvementBrut => ({
+      id: l.id,
       type: "demande",
-      date: d.date_debut,
-      libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
-      jours: -(Number(d.nb_demi_journees) / 2),
+      date: l.date_debut,
+      libelle: `CP : ${formatPeriodePillNumerique(l.date_debut, l.date_fin)}`,
+      jours: -l.jours_inclus,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
       id: a.id,
@@ -964,7 +1108,37 @@ export async function fetchHistoriqueCp(
     };
   });
 
-  let cumulTheorique = cumul;
+  // Mouvements du solde théorique (27/08/2026) — mêmes ajustements que le
+  // réel, mais TOUTES les demandes validées (transmises ou non), pas
+  // seulement `lignesTransmises` : sans ça, les lignes affichées dans la
+  // popin (mode "Théorique") ne totalisaient pas le même montant que
+  // `soldeTheorique` — un salarié pouvait voir "Solde N-1 62j, -1j, -1j" puis
+  // "Solde actuel 45j", incohérent en apparence (bug remonté par Vincent).
+  const mouvementsBrutsTheorique: MouvementBrut[] = [
+    ...(demandesValideesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+      jours: -(Number(d.nb_demi_journees) / 2),
+    })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
+      id: a.id,
+      type: "ajustement",
+      date: a.created_at.slice(0, 10),
+      libelle: a.motif,
+      jours: Number(a.delta_jours),
+      motif: a.motif,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  let cumulValidee = soldeDepart;
+  const mouvementsTheorique: MouvementSolde[] = mouvementsBrutsTheorique.map((m) => {
+    cumulValidee += m.jours;
+    return { ...m, soldeApres: cumulValidee };
+  });
+
+  let cumulTheorique = soldeDepart - consommeValideeTotal + ajustementsTotal;
   const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
     .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
     .map((d) => {
@@ -988,6 +1162,7 @@ export async function fetchHistoriqueCp(
     soldeActuel: cumul,
     enAttente,
     soldeTheorique: cumulTheorique,
+    mouvementsTheorique,
   };
 }
 
@@ -1049,17 +1224,18 @@ export async function fetchHistoriqueRtt(
   const typeAbsenceId = await getTypeAbsenceId(supabase, "RTT");
 
   const [
-    { data: demandesRows, error: erreurDemandes },
+    lignesTransmises,
     { data: enAttenteRows, error: erreurEnAttente },
+    { data: demandesValideesRows, error: erreurValidees },
   ] = await Promise.all([
-    supabase
-      .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
-      .eq("utilisateur_id", utilisateurId)
-      .eq("type_absence_id", typeAbsenceId)
-      .eq("statut", "validee")
-      .gte("date_debut", dateIso(periodeConsoRtt.debut))
-      .lte("date_debut", dateIso(periodeRtt.fin)),
+    fetchLignesTransmises(
+      supabase,
+      utilisateurId,
+      typeAbsenceId,
+      null,
+      { debut: periodeConsoRtt.debut, fin: periodeRtt.fin },
+      aujourdhui,
+    ),
     supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees")
@@ -1068,11 +1244,26 @@ export async function fetchHistoriqueRtt(
       .eq("statut", "en_attente")
       .gte("date_debut", dateIso(periodeConsoRtt.debut))
       .lte("date_debut", dateIso(periodeRtt.fin)),
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("statut", "validee")
+      .gte("date_debut", dateIso(periodeConsoRtt.debut))
+      .lte("date_debut", dateIso(periodeRtt.fin)),
   ]);
 
-  if (erreurDemandes || erreurEnAttente) {
+  if (erreurEnAttente || erreurValidees) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
+
+  // Base du solde théorique (27/08/2026) — voir `fetchHistoriqueCp`, même
+  // correctif : indépendante de `cumul` (réel, ancré transmission).
+  const consommeValideeTotal = (demandesValideesRows ?? []).reduce(
+    (somme, d) => somme + Number(d.nb_demi_journees) / 2,
+    0,
+  );
 
   interface MouvementBrut {
     id: string;
@@ -1099,12 +1290,12 @@ export async function fetchHistoriqueRtt(
 
   const mouvementsBruts: MouvementBrut[] = [
     ...accrualsBruts,
-    ...(demandesRows ?? []).map((d): MouvementBrut => ({
-      id: d.id,
+    ...lignesTransmises.map((l): MouvementBrut => ({
+      id: l.id,
       type: "demande",
-      date: d.date_debut,
-      libelle: `RTT : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
-      jours: -(Number(d.nb_demi_journees) / 2),
+      date: l.date_debut,
+      libelle: `RTT : ${formatPeriodePillNumerique(l.date_debut, l.date_fin)}`,
+      jours: -l.jours_inclus,
     })),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -1149,7 +1340,28 @@ export async function fetchHistoriqueRtt(
     };
   });
 
-  let cumulTheorique = cumul;
+  // Mouvements du solde théorique (27/08/2026) — voir `fetchHistoriqueCp` :
+  // mêmes acquisitions, mais TOUTES les demandes validées (transmises ou
+  // non), pas seulement `lignesTransmises`.
+  const mouvementsBrutsTheorique: MouvementBrut[] = [
+    ...accrualsBruts,
+    ...(demandesValideesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: `RTT : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+      jours: -(Number(d.nb_demi_journees) / 2),
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  let cumulValidee = baseRtt;
+  const mouvementsTheorique: MouvementSolde[] = mouvementsBrutsTheorique.map((m) => {
+    cumulValidee += m.jours;
+    return { ...m, soldeApres: cumulValidee };
+  });
+
+  const accrualTotal = accrualsBruts.reduce((somme, a) => somme + a.jours, 0);
+  let cumulTheorique = baseRtt + accrualTotal - consommeValideeTotal;
   const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
     .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
     .map((d) => {
@@ -1173,6 +1385,7 @@ export async function fetchHistoriqueRtt(
     soldeActuel: Math.max(0, cumul),
     enAttente,
     soldeTheorique: Math.max(0, cumulTheorique),
+    mouvementsTheorique,
   };
 }
 

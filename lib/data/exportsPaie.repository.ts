@@ -638,18 +638,22 @@ async function fetchMouvementsExport(
  * CSV) ; le comptable crée les fiches de paie en conséquence, qui contiennent
  * les soldes ; Delphine doit vérifier que les soldes sont ok, que les jours
  * consommés sont bien implémentés et que les jours acquis sont bien pris en
- * compte." Solde précédent/en cours "tel qu'il était" à ces dates
- * (`fetchSoldes` avec `dateReference`, calcul indépendant, capture donc aussi
- * l'acquisition du mois) ; **mouvement = exactement ce qui est dans CET
- * export** (`fetchMouvementsExport`, `export_paie_lignes`), pas un simple
- * différentiel de solde global — décision actée avec Vincent, pour que le
- * mouvement affiché soit strictement ce que le comptable a reçu ce mois-ci
- * (un congé validé ce mois-ci mais pas encore transmis, ou l'inverse, ne
- * doit pas se mélanger avec ce contrôle). Solde précédent/mouvement/solde en
- * cours restent 3 valeurs indépendantes plutôt que l'une dérivée des autres :
- * un écart entre elles est justement le signal à repérer ("chaque mois
- * contrôler qu'il n'y a pas un écart qui se crée entre le solde de l'outil et
- * les soldes comptable").
+ * compte."
+ *
+ * **Mise à jour du sens (27/08/2026, refonte du modèle solde théorique/réel,
+ * voir CONTEXTE.md)** : `moisPrecedent`/`moisEnCours` viennent de
+ * `fetchSoldes(...).valeur`, qui est désormais lui-même ancré sur ce qui a
+ * été transmis en paie (`export_paie_lignes`) — ce sont donc DIRECTEMENT les
+ * nombres que Delphine doit comparer à la fiche de paie papier du comptable,
+ * pas un solde recalculé en direct qu'il faudrait ensuite réconcilier.
+ * `mouvement` (`fetchMouvementsExport`) reste calculé mais n'est plus un
+ * contrôle indépendant censé "recouper" les deux soldes (par construction,
+ * une fois `valeur` ancré transmission, `moisEnCours - moisPrecedent` égale
+ * déjà `mouvement` pour un export unique sur la période) — c'est désormais
+ * une colonne de détail/lisibilité : "ce qui a précisément été transmis dans
+ * CET export" (utile par ex. pour repérer une ligne de correction au sein du
+ * total). Le vrai contrôle de cohérence à faire par Delphine est direct :
+ * `moisEnCours` correspond-il à ce qui est écrit sur la fiche de paie ?
  *
  * Tous les collaborateurs ACTIFS sont inclus, pas seulement ceux qui ont des
  * lignes transmises sur cet export — "le 0 mouvement est important" (Vincent) :

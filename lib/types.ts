@@ -58,8 +58,14 @@ export interface NouvelleDemandeInput {
 }
 
 export interface SoldeCategorie {
-  valeur: number; // solde à date : jours acquis moins jours déjà validés (retrait définitif)
-  valeurApresAttente: number; // valeur ci-dessus moins les jours en attente de validation (non définitif)
+  // "Solde réel" (27/08/2026, refonte du modèle) : jours acquis moins ce qui
+  // a été effectivement transmis en paie (`export_paie_lignes`), pas le
+  // statut de la demande — référentiel de "Vérifier les fiches de paie".
+  valeur: number;
+  // "Solde théorique" : jours acquis moins tout ce qui est validé OU en
+  // attente (même traitement) — "combien il me reste à poser", affiché au
+  // collaborateur et utilisé pour plafonner une nouvelle demande.
+  valeurApresAttente: number;
   conditionPrefixe: string;
   conditionAccent: string;
 }
@@ -95,12 +101,17 @@ export interface HistoriqueSolde {
   // affichait le 1er jour de la période, sans rapport avec la date
   // réellement saisie par l'admin).
   soldeDepartDate: string;
-  mois: MoisHistoriqueSolde[]; // du 1er mois de la période jusqu'au mois en cours
+  mois: MoisHistoriqueSolde[]; // du 1er mois de la période jusqu'au mois en cours — mouvements RÉELS (transmis en paie)
   soldeActuel: number;
   // Congés CP non validés sur la période de référence — solde "théorique" =
   // solde actuel une fois ces demandes décomptées (indicatif, réversible).
   enAttente: MouvementSolde[];
   soldeTheorique: number;
+  // Mouvements du solde théorique (27/08/2026, refonte du modèle) — TOUTES
+  // les demandes validées (transmises ou non), à distinguer de `mois` qui ne
+  // liste que celles déjà transmises. Optionnel : seuls CP/RTT (pas CPA,
+  // hors scope) le renseignent ; à défaut l'UI retombe sur `mois`.
+  mouvementsTheorique?: MouvementSolde[];
 }
 
 export interface AjustementSoldeInput {

@@ -2941,6 +2941,119 @@ l'export a fait remonter deux autres points, corrigés dans la foulée.
   (référençait encore l'ancien écran autonome "Export paie") ; doc de `previsionTransmission`
   (`DetailCongePanel`, gardait l'ancien format ":" au lieu du "-"/gras actuel).
 
+**Refonte du modèle solde théorique/réel — décision actée, implémentation pas commencée (27/08/2026)** :
+discussion déclenchée par un chiffre jugé "pas logique" par Vincent sur "Vérifier les fiches de paie"
+(Delphine : mois précédent 62, mois en cours 47, mouvement -1 — l'écart ne collait pas). Investigation :
+des congés de septembre, validés courant août, avaient fait bouger le solde théorique/réel calculé en
+direct par `soldes.repository.ts`, alors qu'ils n'avaient encore rien à voir avec ce qui avait été
+transmis en paie sur la période. Le modèle actuel confond deux besoins différents avec un seul niveau
+de distinction (validé vs en attente), sans jamais prendre en compte la transmission paie elle-même.
+
+**Nouveau modèle à 2 niveaux, acté avec Vincent** :
+
+- **Solde théorique** = dernier solde réel vérifié − tous les congés à venir, **validés ou en
+  attente confondus** (même traitement pour les deux, plus de distinction entre les deux). Répond à
+  la question du collaborateur : "combien il me reste à poser ?". C'est le solde affiché aujourd'hui
+  sur les cards Soldes d'Accueil et par défaut sur "Suivre mon solde".
+- **Solde réel** = solde ancré sur ce qui a été **effectivement transmis en paie**
+  (`export_paie_lignes`), pas sur le statut `validee` d'une demande ni sur une date calendaire de
+  congé. Répond à la question de Delphine : "est-ce que ce qui est sur la fiche de paie du comptable
+  est juste ?". **C'est ce solde réel qui sert de référentiel à toute la gestion de la transmission
+  paie** (Quels congés transmettre / Générer l'export / Vérifier les fiches de paie) — Vincent l'a
+  confirmé explicitement.
+
+**Implémenté et vérifié (27/08/2026)** : nouvelle fonction `sommeTransmis` (`lib/data/
+soldes.repository.ts`) qui somme les `export_paie_lignes.jours_inclus` déjà transmis (au lieu de
+rejouer le statut `validee`) ; `fetchSoldes`/`fetchHistoriqueCp`/`fetchHistoriqueRtt` restructurées
+pour dériver `valeur` (réel) du transmis et `valeurApresAttente` (théorique) — formule inchangée —
+d'un calcul local dédié (ne dépend plus de `valeur`). Plafond de pose (`PoserDemandeModal.tsx`,
+`PoserCongePourCollaborateurModal.tsx`) basculé de `.valeur` à `.valeurApresAttente` (le réel, désormais
+en retard sur la transmission, aurait laissé poser trop de jours). Copie FAQ (`FaqCard.tsx`) et
+commentaires (`lib/types.ts`, doc de `fetchComparaisonSoldes`) mis à jour. `tsc`/`eslint`/`npm run
+build` clean.
+
+**Vérifié en navigateur, le cas Delphine (62→47, mouvement -1) est résolu** : sur "Vérifier les fiches
+de paie" (Août 2026), Delphine affiche désormais mois précédent 62j → mois en cours 61j, mouvement -1j
+— les 3 valeurs reconcilient enfin (62 + (-1) = 61), au lieu de l'incohérence 62→47/-1 d'avant. Confirmé
+aussi que le solde théorique (Dashboard Accueil, 45j pour Delphine) diverge maintenant correctement du
+réel (62j sur Suivre les soldes) : ses congés de septembre déjà validés mais pas encore transmis
+réduisent le théorique sans toucher le réel — exactement le comportement voulu.
+
+**Bug trouvé et corrigé dans la foulée (27/08/2026)** : Vincent a signalé que la popin "Suivre mon
+solde" (`fetchHistoriqueCp`/`fetchHistoriqueRtt`) affichait un théorique incohérent avec la card
+Accueil — 60j dans la popin contre 45j sur la card, pour Delphine. Cause : ces deux fonctions
+re-dérivent indépendamment `soldeActuel`/`soldeTheorique` (pas de réutilisation de `fetchSoldes`), et
+mon premier passage avait fait démarrer `cumulTheorique` depuis `cumul` (= le nouveau "réel", basé sur
+les lignes transmises) au lieu de repartir d'une base validée indépendante — le théorique ne retirait
+donc plus les jours validés-mais-pas-encore-transmis, seulement les jours transmis + en attente.
+Corrigé en calculant `cumulTheorique` depuis une base dédiée (`soldeDepart/baseRtt − consommation
+validée totale (`sommeJours`) + ajustements`), indépendante de `cumul`. Revérifié en navigateur : la
+popin de Delphine affiche maintenant Théorique 45j (identique à la card) et Réel 62j (identique à
+"Suivre les soldes"/"Vérifier les fiches de paie"). `tsc`/`eslint`/`npm run build` clean.
+
+**Deux bugs supplémentaires trouvés et corrigés (27/08/2026)**, remontés par Vincent qui a pointé que
+l'addition ne tombait pas juste dans la popin ("Solde N-1 62j, -1j, -1j" mais "Solde actuel 45j") :
+
+1. **Mauvaise colonne de gating côté transmission** — `sommeTransmis`/`fetchLignesTransmises`
+   filtraient sur `exports_paie.periode_fin <= dateReference` : un export généré EN COURS de période
+   (ex. le 26/08 pour la période du 01/08 au 31/08) n'était compté qu'à partir du 31/08, jamais avant —
+   donc "aujourd'hui" (27/08), le réel de Delphine ignorait encore la transmission du 26/08. Corrigé en
+   filtrant sur `exports_paie.genere_le` (le moment réel de la transmission) plutôt que la fin de la
+   période couverte, avec borne de fin de journée (`T23:59:59.999Z`, même motif que le filtre
+   `ajustements_solde.created_at` existant) pour ne pas exclure un export généré plus tôt le jour même.
+2. **Popin "Suivre mon solde" incohérente en mode Théorique** — `fetchHistoriqueCp`/`fetchHistoriqueRtt`
+   n'affichaient, en mode théorique, que les demandes EN ATTENTE (`historique.enAttente`) en plus des
+   mouvements réels (transmis) — mais `soldeTheorique` retire aussi les demandes déjà VALIDÉES mais pas
+   encore transmises, jamais montrées comme ligne. Résultat : la liste affichée (-1j, -1j) ne
+   totalisait pas le solde affiché en bas (45j), écart de 15j invisible. Corrigé en ajoutant un nouveau
+   champ `HistoriqueSolde.mouvementsTheorique` (toutes les demandes validées, transmises ou non) que la
+   popin utilise à la place de `mois` quand le mode "Théorique" est sélectionné — les lignes
+   reconcilient maintenant exactement avec le total affiché. CPA (hors scope) n'a pas ce champ, la popin
+   retombe sur `mois` dans ce cas (comportement inchangé pour CPA).
+
+Revérifié en navigateur : popin de Delphine en Théorique liste 62→52,5→52→47→46→45 (reconcilie avec
+"45j" affiché) ; en Réel, 62→61j (reflète la transmission du 26/08, avant même la fin de période).
+"Vérifier les fiches de paie" (Août) toujours cohérent après ce correctif (Delphine 62→61/-1j, Olivier
+62→61,5/-0,5j, Salarie Test 47→36/-11j). `tsc`/`eslint`/`npm run build` clean.
+
+**Confirmation de règle — acquisitions RTT/CPA créditées au 1er du mois suivant (27/08/2026)** :
+Vincent a confirmé la règle métier ("0,25j de RTT de juin sont crédités le 1er juillet") en observant
+qu'un solde initial daté du 01/06/26 (Delphine) ne fait apparaître aucune "Acquisition juin" — comportement
+déjà correct, pas un bug : `resolverPointDepartAccrual` (`soldes.repository.ts:224`) fixe le point de
+départ de l'accrual à `premierJourMoisSuivant(dateReference)`, donc la première acquisition affichée
+("Acquisition juillet") EST le crédit de juin — un seul mouvement, pas un décalage en deux temps.
+Confirmé aussi que le CP du 15/01/27 d'Olivier (signalé comme "manquant" sur sa page d'accueil) existe
+et s'affiche bien — seulement sur l'onglet "Juin 26 → Mai 27" du calendrier, pas sur l'onglet "2026" par
+défaut (qui ne couvre que l'année calendaire en cours) — comportement des onglets existant, pas un bug,
+laissé tel quel (Vincent n'a pas demandé de changement).
+
+**"Soldes actuels" (solde initial) — sélecteur de mois au lieu d'une date (27/08/2026)** : le formulaire
+laissait saisir n'importe quel jour du mois, alors que le moteur de solde ne raisonne qu'en mois entiers
+(report CP, accrual RTT/CPA au 1er du mois suivant) — un jour précis n'avait aucun sens et pouvait laisser
+croire à une granularité que rien ne respecte. Remplacé par `<input type="month">` (stocké au 1er du mois
+choisi) aux deux endroits où le champ existe (`ModalModifierSoldeInitial` et la section "Soldes actuels"
+du formulaire de création, `components/parametrer/UtilisateurFichePage.tsx`), avec un texte de guidage
+explicite sous le champ : "Le solde saisi correspond au solde constaté à la fin du mois précédent (ex.
+juillet 2026 = solde au 30 juin 2026)". Vérifié en navigateur sur la fiche d'Olivier Test : le sélecteur
+de mois s'affiche et se remplit correctement. `tsc`/`eslint` clean.
+
+**Ce qui disparaît** : l'actuel "solde réel" de `soldes.repository.ts` (capital − tout ce qui est
+`validee`, peu importe la date du congé ou si c'est transmis) n'est **plus une valeur utile en soi** —
+ni le collaborateur (qui a besoin du théorique) ni Delphine (qui a besoin du réel ancré paie) ne s'en
+servent. Décision : le supprimer plutôt que le garder comme 3e valeur cachée, pas de rétro-compatibilité
+à préserver dessus.
+
+**Impact code attendu (pas encore implémenté)** : c'est un vrai changement de calcul, pas un
+renommage — le "réel" doit désormais se dériver de `export_paie_lignes` (cumul de ce qui a été
+transmis) au lieu du statut `validee` des `demandes_conges`. Touche `soldes.repository.ts` (moteur de
+calcul), et potentiellement `exportsPaie.repository.ts`/`VerifierFichesPaiePage.tsx` (le
+`fetchComparaisonSoldes`/`fetchMouvementsExport` construits le 25/08 reposaient sur l'hypothèse — dont
+on sait maintenant qu'elle était fausse — que le "mouvement" de l'export doit *reconcilier* un solde
+théorique recalculé en direct ; avec le nouveau modèle, le réel EST directement le cumul transmis, plus
+besoin de reconcilier deux calculs indépendants). Périmètre exact et plan de bascule à définir en
+implémentation — voir `questions.md` pour le point resté ouvert et `Backlog.md` pour le chantier en
+pause qui doit reprendre là-dessus.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
@@ -3150,6 +3263,43 @@ sur des cas concrets) :
 
 Voir aussi `Backlog.md` (item ajouté) et `questions.md` (les points ci-dessus qui nécessitent une
 décision de Vincent avant de reprendre).
+
+**Mise en cohérence design system — "Vérifier les fiches de paie" (25/08/2026)** : demande explicite
+de reprendre le tableau et la représentation des types de congé selon les conventions déjà établies
+ailleurs dans l'app (`components/demandes/TypeBadge.tsx`), avant de continuer sur le fond.
+
+- **Section Soldes** : la colonne "Type" affichait "CP"/"RTT"/"CPA" en texte brut — remplacée par une
+  pastille `TypeBadge` (`variant="pill"`, même code couleur que "Suivre les soldes"). Les valeurs
+  "Mois en cours"/"Mouvement" reprennent la couleur du type (`classeTexteTypeBadge`) plutôt qu'un gris
+  générique, et chaque ligne se teinte légèrement au survol (`classeFondSurvolTypeBadge`, même
+  mécanique que `HistoriqueTable`). Rendu refactoré en boucle sur `TYPES_SOLDE` (`["CP","RTT","CPA"]`)
+  plutôt que 3 blocs JSX dupliqués.
+- **Détail par congé** (liste dépliable sous chaque collaborateur) : le type de congé était en texte
+  brut ("CP" en gras) — remplacé par la même pastille `TypeBadge`, avec dérivation CPA
+  (`type === "CP" && isAnticipation`) comme partout ailleurs dans l'app.
+- Vérifié en navigateur : pastilles colorées (CP bleu, RTT vert, CPA gris) visibles dans les deux
+  sections, valeurs "Mois en cours"/"Mouvement" teintées par type. `tsc`/`eslint`/`npm run build`
+  clean.
+
+**Incohérence de fond trouvée et documentée (25/08/2026, chantier resté en pause — pas corrigée)** :
+Vincent, une fois août réellement transmis — "Delphine : mois précédent 62, mois en cours 47,
+mouvement -1. C'est pas logique." Investigation (`Suivre les demandes`, pas un bug de calcul) : les
+15 j d'écart (62 − 47) se retrouvent exactement dans 3 CP validés de Delphine entre les deux
+instantanés — 21/09→25/09 (5 j), 16/09 (0,5 j), 31/08→11/09 (9,5 j, celle avec 1 j transmis en août)
+= 15 j pile. Le "mouvement" (1 j) ne recolle pas avec le delta de solde (15 j) parce que ce sont deux
+notions différentes de "solde" mélangées dans le même tableau :
+- **Solde interne à l'outil** (`fetchSoldes`, moteur déjà utilisé partout ailleurs — Accueil, Suivre
+  les soldes) : décompte le CP dès la validation, y compris des congés dont la date est dans le
+  futur et jamais encore transmis au comptable (ici, les 2 congés de septembre).
+- **Ce que le comptable connaît réellement** : uniquement la somme des `export_paie_lignes`
+  effectivement envoyées jusqu'ici.
+
+Pour que "Solde précédent"/"Solde en cours" soient vraiment comparables à une fiche de paie, il
+faudraient les baser sur le cumul des exports réellement transmis (comme le "mouvement" l'est déjà
+depuis la clarification précédente), pas sur l'engagement live du moteur de solde général — sinon
+un écart comme celui-ci est structurellement garanti dès qu'un congé futur est validé avant d'être
+transmis. Corrélé à la question déjà ouverte dans `questions.md` ("Format Droit/Pris/Solde... à
+revalider") — non corrigé, chantier resté en pause à la demande de Vincent.
 
 ## À faire
 

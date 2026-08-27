@@ -16,7 +16,7 @@ const QUESTIONS: Question[] = [
     id: "solde-theorique-reel",
     question: "Solde théorique et Solde réel, c'est quoi ?",
     reponse:
-      "Le solde théorique inclut vos demandes en attente de validation (il anticipe leur acceptation), alors que le solde réel ne compte que les jours déjà validés. Le solde réel est toujours égal ou supérieur au solde théorique.",
+      "Le solde théorique est celui qui vous dit combien il vous reste à poser : il retire déjà vos demandes validées et celles en attente de validation. Le solde réel, lui, reflète ce qui a été effectivement transmis en paie — il évolue au rythme des transmissions, pas au moment de la validation.",
   },
   {
     id: "jours-imposes",

@@ -46,6 +46,13 @@ selon le cas).
   3 valeurs (pas de Droit/Pris détaillés séparément par catégorie) pour aller plus vite. À revalider
   une fois Vincent en usage réel sur une vraie fiche de paie, si ce niveau de détail suffit pour
   "checker que les jours sont bien pris en compte dans la FDP" comme demandé.
+- **Périmètre de bascule du modèle théorique/réel** (27/08/2026, tranché) — implémenté partout d'un
+  coup plutôt qu'en migration progressive : `fetchSoldes`/`fetchHistoriqueCp`/`fetchHistoriqueRtt`
+  dérivent désormais toutes `valeur` (réel) de `export_paie_lignes`, donc tous les écrans qui lisent
+  `.valeur` (`SuivreSoldesPage`, `SoldeDetailPanel`, `fetchComparaisonSoldes`...) en héritent
+  automatiquement. Le plafond de pose (`PoserDemandeModal`, `PoserCongePourCollaborateurModal`) a été
+  basculé sur `.valeurApresAttente` pour ne pas devenir trop permissif. Vérifié en navigateur sur le
+  cas Delphine (voir CONTEXTE.md) — comportement conforme.
 
 ## Paramétrer/Calendrier
 

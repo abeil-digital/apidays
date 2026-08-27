@@ -139,7 +139,16 @@ export function SoldeDetailPanel({
   const [idSelectionne, setIdSelectionne] = useState<string | null>(null);
   const [demandeSelectionnee, setDemandeSelectionnee] = useState<DemandeEquipe | null>(null);
   const [chargementDetail, setChargementDetail] = useState(false);
-  const evenements = historique?.mois.flatMap((m) => m.mouvements) ?? [];
+  // Réel : mouvements réellement transmis en paie (`historique.mois`).
+  // Théorique (27/08/2026, refonte du modèle) : TOUTES les demandes validées
+  // (transmises ou non) via `mouvementsTheorique` — sinon les lignes
+  // affichées ne totalisaient pas `soldeTheorique` (bug remonté par Vincent :
+  // "Solde N-1 62j, -1j, -1j" mais "Solde actuel 45j", incohérent). CPA n'a
+  // pas ce champ (hors scope) : on retombe sur `mois` dans ce cas.
+  const evenements =
+    mode === "theorique" && historique?.mouvementsTheorique
+      ? historique.mouvementsTheorique
+      : (historique?.mois.flatMap((m) => m.mouvements) ?? []);
   const enAttente = mode === "theorique" ? (historique?.enAttente ?? []) : [];
   const initiales = nomComplet
     .split(" ")

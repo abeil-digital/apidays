@@ -403,14 +403,26 @@ function ModalModifierSoldeInitial({
     <Modal title="Modifier les soldes actuels" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <FieldLabel htmlFor="solde-init-date">Date de référence</FieldLabel>
+          <FieldLabel htmlFor="solde-init-date">Mois de référence</FieldLabel>
           <Input
             id="solde-init-date"
-            type="date"
-            value={dateReference}
-            onChange={(e) => setDateReference(e.target.value)}
+            type="month"
+            value={dateReference.slice(0, 7)}
+            onChange={(e) => setDateReference(e.target.value ? `${e.target.value}-01` : "")}
             className="mt-2 w-full"
           />
+          {/* Sélecteur de mois, pas de jour (27/08/2026, demande explicite) —
+              le moteur de solde ne raisonne qu'en mois entiers (report CP,
+              accrual RTT/CPA au 1er du mois suivant), un jour précis n'aurait
+              aucun sens ici et pouvait laisser croire à une granularité que
+              rien ne respecte. Le mois choisi = le mois à COMPTER DUQUEL ce
+              solde s'applique (stocké au 1er de ce mois) ; d'où le solde
+              saisi = solde constaté fin du mois précédent. */}
+          <p className="text-ink-500 mt-1.5 text-xs">
+            Le solde saisi correspond au solde constaté à la fin du mois précédent. Par exemple,
+            choisir juillet 2026 revient à saisir le solde au 30 juin 2026 — les congés/RTT de
+            juillet ne sont pas encore acquis.
+          </p>
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
@@ -786,14 +798,20 @@ function Formulaire({
                 </span>
               </FieldLabel>
               <div>
-                <FieldLabel htmlFor="soldeInitDate">Date de référence</FieldLabel>
+                <FieldLabel htmlFor="soldeInitDate">Mois de référence</FieldLabel>
                 <Input
                   id="soldeInitDate"
-                  type="date"
-                  value={soldeInitDate}
-                  onChange={(e) => setSoldeInitDate(e.target.value)}
+                  type="month"
+                  value={soldeInitDate.slice(0, 7)}
+                  onChange={(e) => setSoldeInitDate(e.target.value ? `${e.target.value}-01` : "")}
                   className="mt-2 w-full"
                 />
+                {/* Sélecteur de mois (27/08/2026) — voir `ModalModifierSoldeInitial`,
+                    même raisonnement : le moteur ne gère que des mois entiers. */}
+                <p className="text-ink-500 mt-1.5 text-xs">
+                  Le solde saisi correspond au solde constaté à la fin du mois précédent. Par
+                  exemple, choisir juillet 2026 revient à saisir le solde au 30 juin 2026.
+                </p>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>

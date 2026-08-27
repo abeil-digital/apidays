@@ -282,11 +282,11 @@ export function PoserCongePourCollaborateurModal({
 
   const soldeActuel = soldes
     ? optionKey === "CP"
-      ? soldes.cp.valeur
+      ? soldes.cp.valeurApresAttente
       : optionKey === "RTT"
-        ? soldes.rtt.valeur
+        ? soldes.rtt.valeurApresAttente
         : optionKey === "CP_ANTICIPE"
-          ? soldes.cpa.valeur
+          ? soldes.cpa.valeurApresAttente
           : null
     : null;
 

@@ -11,11 +11,22 @@ import {
   type ComparaisonSoldeCollaborateur,
 } from "@/lib/data/exportsPaie.repository";
 import { formatDateAction, formatJours } from "@/lib/format";
+import {
+  classeFondSurvolTypeBadge,
+  classeTexteTypeBadge,
+  TypeBadge,
+  type TypeBadgeCode,
+} from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { Textarea } from "@/components/ui/Textarea";
+
+// Les 3 catégories suivies par ce comparatif (25/08/2026) — dans cet ordre,
+// même convention que "Suivre les soldes"/le récap collaborateur × type de
+// "Générer l'export".
+const TYPES_SOLDE: TypeBadgeCode[] = ["CP", "RTT", "CPA"];
 
 /**
  * Formate un mouvement de solde avec son signe explicite ("+2,5"/"-1"/"0") —
@@ -27,14 +38,28 @@ function formatMouvement(valeur: number): string {
   return `${valeur > 0 ? "+" : ""}${formatJours(valeur)}`;
 }
 
+function categorieSolde(c: ComparaisonSoldeCollaborateur, code: TypeBadgeCode) {
+  if (code === "RTT") return c.rtt;
+  if (code === "CPA") return c.cpa;
+  return c.cp;
+}
+
 /**
- * Section "Soldes" — comparaison CP/RTT mois précédent/mois en cours par
+ * Section "Soldes" — comparaison CP/RTT/CPA mois précédent/mois en cours par
  * collaborateur (25/08/2026, demande explicite de Vincent, en plus du
  * contrôle ligne par ligne existant plus bas) : vérifie que le SOLDE qui
  * découle de l'app est bien celui de la fiche de paie du comptable, pas
  * seulement que chaque congé a été transmis. Tous les collaborateurs actifs
  * apparaissent, y compris ceux sans aucun mouvement — "le 0 mouvement est
  * important", un collaborateur absent de la liste ne prouverait rien.
+ *
+ * Représentation par type (25/08/2026, mise en cohérence avec le design
+ * system — "Suivre les soldes"/le récap collaborateur × type de "Générer
+ * l'export") : le type n'est plus un libellé texte brut mais une pastille
+ * `TypeBadge` colorée (même code couleur partout dans l'app), les valeurs
+ * "Mois en cours"/"Mouvement" reprennent cette couleur (`classeTexteTypeBadge`)
+ * plutôt que du gris générique, et chaque ligne se teinte légèrement au
+ * survol (`classeFondSurvolTypeBadge`, même mécanique que `HistoriqueTable`).
  */
 function SectionSoldes({ comparaisons }: { comparaisons: ComparaisonSoldeCollaborateur[] }) {
   if (comparaisons.length === 0) {
@@ -63,40 +88,42 @@ function SectionSoldes({ comparaisons }: { comparaisons: ComparaisonSoldeCollabo
         <tbody>
           {comparaisons.map((c) => (
             <Fragment key={c.utilisateur.id}>
-              <tr className="border-ink-300/60 border-b">
-                <td className="px-3 py-3 align-top" rowSpan={3}>
-                  <div className="flex items-center gap-1.5">
-                    <Avatar
-                      initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()}
-                    />
-                    <span className="text-ink-900 font-semibold">
-                      {c.utilisateur.prenom} {c.utilisateur.nom}
-                    </span>
-                  </div>
-                </td>
-                <td className="text-ink-500 px-3 py-3 text-center font-semibold">CP</td>
-                <td className="px-3 py-3 text-center">{formatJours(c.cp.moisPrecedent)} j</td>
-                <td className="px-3 py-3 text-center font-semibold">
-                  {formatJours(c.cp.moisEnCours)} j
-                </td>
-                <td className="px-3 py-3 text-center">{formatMouvement(c.cp.mouvement)} j</td>
-              </tr>
-              <tr className="border-ink-300/60 border-b">
-                <td className="text-ink-500 px-3 py-3 text-center font-semibold">RTT</td>
-                <td className="px-3 py-3 text-center">{formatJours(c.rtt.moisPrecedent)} j</td>
-                <td className="px-3 py-3 text-center font-semibold">
-                  {formatJours(c.rtt.moisEnCours)} j
-                </td>
-                <td className="px-3 py-3 text-center">{formatMouvement(c.rtt.mouvement)} j</td>
-              </tr>
-              <tr className="border-ink-300/60 border-b last:border-b-0">
-                <td className="text-ink-500 px-3 py-3 text-center font-semibold">CPA</td>
-                <td className="px-3 py-3 text-center">{formatJours(c.cpa.moisPrecedent)} j</td>
-                <td className="px-3 py-3 text-center font-semibold">
-                  {formatJours(c.cpa.moisEnCours)} j
-                </td>
-                <td className="px-3 py-3 text-center">{formatMouvement(c.cpa.mouvement)} j</td>
-              </tr>
+              {TYPES_SOLDE.map((code, i) => {
+                const categorie = categorieSolde(c, code);
+                return (
+                  <tr
+                    key={code}
+                    className={`border-ink-300/60 border-b transition-colors duration-150 last:border-b-0 ${classeFondSurvolTypeBadge(code)}`}
+                  >
+                    {i === 0 && (
+                      <td className="px-3 py-3 align-top" rowSpan={TYPES_SOLDE.length}>
+                        <div className="flex items-center gap-1.5">
+                          <Avatar
+                            initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()}
+                          />
+                          <span className="text-ink-900 font-semibold">
+                            {c.utilisateur.prenom} {c.utilisateur.nom}
+                          </span>
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-3 py-3 text-center">
+                      <TypeBadge code={code} variant="pill" />
+                    </td>
+                    <td className="text-ink-500 px-3 py-3 text-center">
+                      {formatJours(categorie.moisPrecedent)} j
+                    </td>
+                    <td
+                      className={`px-3 py-3 text-center font-semibold ${classeTexteTypeBadge(code)}`}
+                    >
+                      {formatJours(categorie.moisEnCours)} j
+                    </td>
+                    <td className={`px-3 py-3 text-center font-semibold ${classeTexteTypeBadge(code)}`}>
+                      {formatMouvement(categorie.mouvement)} j
+                    </td>
+                  </tr>
+                );
+              })}
             </Fragment>
           ))}
         </tbody>
@@ -277,10 +304,16 @@ export function VerifierFichesPaiePage({
                           className="border-ink-300/60 flex flex-col gap-2 border-b px-4 py-3 last:border-b-0"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-sm">
-                              <span className="text-ink-900 font-semibold">{demande.type}</span>
+                            <div className="flex items-center gap-2 text-sm">
+                              <TypeBadge
+                                code={
+                                  demande.type === "CP" && demande.isAnticipation
+                                    ? "CPA"
+                                    : (demande.type as TypeBadgeCode)
+                                }
+                                variant="pill"
+                              />
                               <span className="text-ink-500">
-                                {" "}
                                 {demande.debut} → {demande.fin} ·{" "}
                                 {formatJours(Math.abs(ligne.joursInclus))} j
                                 {ligne.joursInclus < 0 ? " (retro)" : ""}
