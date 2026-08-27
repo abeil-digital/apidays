@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
 import type { DemandeEquipe } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
 import { fetchDemandeParId } from "@/lib/data/demandes.repository";
+import { ajouterAjustementSolde } from "@/lib/data/soldes.repository";
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
@@ -14,7 +15,11 @@ import {
   TypeBadgePillEnhanced,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
+import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
 
 export type ModeSolde = "reel" | "theorique";
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
@@ -71,6 +76,18 @@ interface SoldeDetailPanelProps {
    * Accueil pour l'instant — pas branché sur "Suivre les soldes" (vue
    * manager, docking déjà pris par la table de collaborateurs). */
   avecDetailConge?: boolean;
+  /** "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
+   * "Vérifier les fiches de paie") — opt-in, réservé à la vue manager
+   * ("Suivre les soldes 2") : jamais sur Accueil (vue salarié, RLS
+   * `ajustements_solde` réservée à l'admin de toute façon, mais l'action ne
+   * doit même pas apparaître). Ajoute le lien/formulaire de régulation sous
+   * le tableau, et rend les pills "ajustement" cliquables (ouvrent
+   * `DetailAjustementPanel`, même mécanique que les pills "demande"). */
+  avecAjustement?: boolean;
+  /** Style additionnel sur le conteneur racine (27/08/2026, "Suivre les
+   * soldes 2") — utilisé pour `marginTop`, calé dynamiquement sur la ligne
+   * CP/RTT/CPA cliquée (même mécanique que `VerifierFichesPaiePage2`). */
+  style?: CSSProperties;
 }
 
 function formatJjMm(iso: string): string {
@@ -133,8 +150,10 @@ export function SoldeDetailPanel({
   modeParDefaut = "reel",
   headerSimplifie = false,
   avecDetailConge = false,
+  avecAjustement = false,
+  style,
 }: SoldeDetailPanelProps) {
-  const { historique, loading, error } = useHistoriqueSolde(utilisateurId, code);
+  const { historique, loading, error, refetch } = useHistoriqueSolde(utilisateurId, code);
   const [mode, setMode] = useState<ModeSolde>(modeParDefaut);
   // `idSelectionne` distinct de `demandeSelectionnee` (20/08/2026) — mis à
   // jour dès le clic, AVANT la résolution du fetch, pour savoir sous quelle
@@ -143,6 +162,52 @@ export function SoldeDetailPanel({
   const [idSelectionne, setIdSelectionne] = useState<string | null>(null);
   const [demandeSelectionnee, setDemandeSelectionnee] = useState<DemandeEquipe | null>(null);
   const [chargementDetail, setChargementDetail] = useState(false);
+  // Ajustement sélectionné (27/08/2026, "Ajuster le solde") — pas de fetch
+  // async ici contrairement à `demandeSelectionnee` : la donnée est déjà
+  // entièrement dans `evenements` (m.motif/m.auteurNom), pas besoin d'un
+  // aller-retour serveur comme pour une demande.
+  const [ajustementSelectionne, setAjustementSelectionnee] = useState<{
+    date: string;
+    jours: number;
+    motif: string;
+    auteurNom: string;
+  } | null>(null);
+  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
+  const [sens, setSens] = useState<"ajouter" | "retirer">("ajouter");
+  const [montant, setMontant] = useState("");
+  const [motifAjustement, setMotifAjustement] = useState("");
+  const [envoiAjustement, setEnvoiAjustement] = useState(false);
+  const [erreurAjustement, setErreurAjustement] = useState<string | null>(null);
+
+  async function soumettreAjustement() {
+    const valeur = Number(montant.replace(",", "."));
+    if (!valeur || valeur <= 0) {
+      setErreurAjustement("Indique un nombre de jours supérieur à 0.");
+      return;
+    }
+    if (!motifAjustement.trim()) {
+      setErreurAjustement("Un commentaire est requis.");
+      return;
+    }
+    setEnvoiAjustement(true);
+    setErreurAjustement(null);
+    try {
+      await ajouterAjustementSolde(utilisateurId, {
+        code,
+        deltaJours: sens === "retirer" ? -valeur : valeur,
+        motif: motifAjustement.trim(),
+      });
+      setMontant("");
+      setMotifAjustement("");
+      setSens("ajouter");
+      setFormulaireOuvert(false);
+      refetch();
+    } catch {
+      setErreurAjustement("Impossible d'enregistrer l'ajustement.");
+    } finally {
+      setEnvoiAjustement(false);
+    }
+  }
   // Réel : mouvements réellement transmis en paie (`historique.mois`).
   // Théorique (27/08/2026, refonte du modèle) : TOUTES les demandes validées
   // (transmises ou non) via `mouvementsTheorique` — sinon les lignes
@@ -162,7 +227,8 @@ export function SoldeDetailPanel({
   const classeTexte = classeTexteTypeBadge(code);
   const classeBordure = classeBordureTypeBadge(code);
   const libelleDepart = code === "CP" ? "Solde N-1" : "Solde initial";
-  const detailOuvert = chargementDetail || demandeSelectionnee !== null;
+  const detailOuvert =
+    chargementDetail || demandeSelectionnee !== null || ajustementSelectionne !== null;
 
   async function ouvrirDetail(id: string) {
     // `setDemandeSelectionnee(null)` avant le fetch (20/08/2026) — sinon,
@@ -172,6 +238,7 @@ export function SoldeDetailPanel({
     // ligne cliquée plutôt qu'un état "chargement" propre.
     setIdSelectionne(id);
     setDemandeSelectionnee(null);
+    setAjustementSelectionnee(null);
     setChargementDetail(true);
     try {
       const demande = await fetchDemandeParId(id);
@@ -184,8 +251,20 @@ export function SoldeDetailPanel({
     }
   }
 
+  function ouvrirDetailAjustement(m: { id: string; date: string; jours: number; motif?: string; auteurNom?: string }) {
+    setDemandeSelectionnee(null);
+    setChargementDetail(false);
+    setIdSelectionne((prev) => (prev === m.id ? null : m.id));
+    setAjustementSelectionnee((prev) =>
+      prev && idSelectionne === m.id
+        ? null
+        : { date: m.date, jours: m.jours, motif: m.motif ?? "", auteurNom: m.auteurNom ?? "" },
+    );
+  }
+
   function fermerDetail() {
     setDemandeSelectionnee(null);
+    setAjustementSelectionnee(null);
     setIdSelectionne(null);
   }
 
@@ -195,11 +274,27 @@ export function SoldeDetailPanel({
   // directement sous la ligne cliquée via `colSpan`, au lieu d'apparaître en
   // colonne à droite (réservée à `sm:` et plus, voir plus bas).
   function ligneDetailMobile(id: string) {
-    if (!avecDetailConge || idSelectionne !== id) return null;
+    if (idSelectionne !== id) return null;
+    if (!avecDetailConge && !ajustementSelectionne) return null;
     return (
       <tr key={`${id}-detail-mobile`} className="sm:hidden">
         <td colSpan={3} className="bg-surface-app px-3 py-3">
-          {demandeSelectionnee ? (
+          {ajustementSelectionne ? (
+            <div className="animate-detail-fade-in">
+              <DetailAjustementPanel
+                ajustement={{
+                  code,
+                  nomComplet,
+                  deltaJours: ajustementSelectionne.jours,
+                  date: ajustementSelectionne.date,
+                  auteurNom: ajustementSelectionne.auteurNom,
+                  motif: ajustementSelectionne.motif,
+                }}
+                onClose={fermerDetail}
+                pleineLargeur
+              />
+            </div>
+          ) : demandeSelectionnee ? (
             <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
               <DetailCongePanel selection={demandeSelectionnee} onClose={fermerDetail} />
             </div>
@@ -267,9 +362,6 @@ export function SoldeDetailPanel({
               <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
                 <th className="bg-surface-card sticky top-0 z-10 px-4 py-3">Événement</th>
                 <th className="bg-surface-card sticky top-0 z-10 px-4 py-3 text-center">Jours</th>
-                <th className="bg-surface-card sticky top-0 right-0 z-20 px-4 py-3 text-center">
-                  Solde
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -289,40 +381,60 @@ export function SoldeDetailPanel({
                     {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
                   </span>
                 </td>
-                <td className="text-ink-500 px-4 py-3 text-center">—</td>
-                <td className="bg-surface-card text-ink-900 sticky right-0 px-4 py-3 text-center font-semibold">
+                <td className="text-ink-900 px-4 py-3 text-center font-semibold">
                   {formatJours(historique.soldeDepart)} j
                 </td>
               </tr>
               {evenements.map((m) => {
-                const active = avecDetailConge && m.type === "demande" && idSelectionne === m.id;
+                const ajustementCliquable = avecAjustement && m.type === "ajustement";
+                // `m.demandeId` (27/08/2026) — en mode réel, `m.id` est l'id
+                // de la ligne `export_paie_lignes` (pas la demande, pour
+                // éviter les collisions quand une demande génère plusieurs
+                // lignes de transmission) : `fetchDemandeParId` a besoin de
+                // l'id demande, pas de celui de la ligne — sans ce champ, le
+                // détail d'un congé ne s'ouvrait jamais en mode réel (bug
+                // remonté par Vincent : "la card de détail d'un congé ne
+                // s'affiche pas").
+                const idDemande = m.demandeId ?? m.id;
+                const active =
+                  (avecDetailConge && m.type === "demande" && idSelectionne === idDemande) ||
+                  (ajustementCliquable && idSelectionne === m.id);
                 // Acquisition (accrual mensuel RTT/CPA) dissociée comme
                 // "Solde N-1" (20/08/2026, même affordance) : bords carrés,
-                // fond plein couleur du type, pas de bordure — jamais
-                // cliquable, pas de notion d'état actif ici. Traitée comme un
-                // badge d'information, pas une pill : pas d'effet de survol
-                // (20/08/2026) — contrairement à la pill congé ci-dessous,
-                // qui elle est cliquable et garde le survol calé sur les
-                // cards Soldes.
+                // fond plein couleur du type, pas de bordure, jamais
+                // cliquable — un badge d'information, pas une pill. Ajustement
+                // manuel (27/08/2026, "Pills regul = coins carré" — repris de
+                // `PanelJoursMouvement`, "Vérifier les fiches de paie") :
+                // contour + coins carrés (PAS `rounded-full` comme la pill
+                // congé), cliquable + hover/état "on" quand `avecAjustement`.
+                const carre = m.type === "acquisition" || m.type === "ajustement";
                 const pill = (
                   <span
                     className={`flex w-fit items-center gap-1 px-2.5 py-1 font-semibold ${
                       m.type === "acquisition"
                         ? `text-sm ${classeFondTypeBadge(code)} text-white`
-                        : `rounded-full border text-xs transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
-                            active
-                              ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
-                              : `bg-surface-app text-ink-900 ${classeBordure} ${HOVER_BG_CONGE[code]}`
-                          }`
+                        : m.type === "ajustement"
+                          ? `border text-xs transition-[scale,background-color,filter] duration-200 ${
+                              ajustementCliquable ? "hover:scale-105" : ""
+                            } ${
+                              active
+                                ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
+                                : `bg-surface-card ${classeBordure} ${classeTexte}`
+                            }`
+                          : `rounded-full border text-xs transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
+                              active
+                                ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
+                                : `bg-surface-app text-ink-900 ${classeBordure} ${HOVER_BG_CONGE[code]}`
+                            }`
                     }`}
                   >
                     {m.type === "acquisition" ? (
                       <Plus size={10} className="shrink-0 text-white" />
-                    ) : (
+                    ) : !carre ? (
                       <span
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
                       />
-                    )}
+                    ) : null}
                     {libelleEvenement(m)}
                   </span>
                 );
@@ -339,7 +451,22 @@ export function SoldeDetailPanel({
                   >
                     <td className="px-4 py-3">
                       {avecDetailConge && m.type === "demande" ? (
-                        <button type="button" onClick={() => ouvrirDetail(m.id)}>
+                        <button type="button" onClick={() => ouvrirDetail(idDemande)}>
+                          {pill}
+                        </button>
+                      ) : ajustementCliquable ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            ouvrirDetailAjustement({
+                              id: m.id,
+                              date: m.date,
+                              jours: m.jours,
+                              motif: m.motif,
+                              auteurNom: m.auteurNom,
+                            })
+                          }
+                        >
                           {pill}
                         </button>
                       ) : (
@@ -356,20 +483,8 @@ export function SoldeDetailPanel({
                       {m.jours > 0 ? "+" : ""}
                       {formatJours(m.jours)} j
                     </td>
-                    <td
-                      className={`sticky right-0 px-4 py-3 text-center font-semibold ${
-                        m.type === "demande" ? "text-ink-500" : "text-ink-900"
-                      }`}
-                      style={{
-                        backgroundColor: active
-                          ? `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`
-                          : "var(--color-surface-card)",
-                      }}
-                    >
-                      {formatJours(m.soldeApres)} j
-                    </td>
                   </tr>,
-                  ligneDetailMobile(m.id),
+                  ligneDetailMobile(m.type === "demande" ? idDemande : m.id),
                 ];
               })}
               {enAttente.map((m) => {
@@ -411,16 +526,6 @@ export function SoldeDetailPanel({
                     <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
                       {formatJours(m.jours)} j
                     </td>
-                    <td
-                      className="text-ink-500 sticky right-0 px-4 py-3 text-center font-semibold"
-                      style={{
-                        backgroundColor: active
-                          ? `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`
-                          : "var(--color-surface-card)",
-                      }}
-                    >
-                      {formatJours(m.soldeApres)} j
-                    </td>
                   </tr>,
                   ligneDetailMobile(m.id),
                 ];
@@ -430,7 +535,71 @@ export function SoldeDetailPanel({
         </div>
       )}
 
-      {!loading && historique && (
+      {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
+          "Vérifier les fiches de paie") — réservé à `avecAjustement`
+          (manager, "Suivre les soldes 2"), jamais sur Accueil. */}
+      {avecAjustement &&
+        (!formulaireOuvert ? (
+          <button
+            type="button"
+            onClick={() => setFormulaireOuvert(true)}
+            className="text-ink-500 hover:text-ink-900 border-ink-300/60 block w-full border-t px-4 py-2.5 text-left text-xs font-semibold underline decoration-dotted underline-offset-2"
+          >
+            Ajuster le solde
+          </button>
+        ) : (
+          <div className="border-ink-300/60 flex flex-col gap-2 border-t px-4 py-3">
+            <div className="flex gap-3 text-xs font-semibold">
+              <label className="flex items-center gap-1.5">
+                <input type="radio" checked={sens === "ajouter"} onChange={() => setSens("ajouter")} />
+                Ajouter
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input type="radio" checked={sens === "retirer"} onChange={() => setSens("retirer")} />
+                Retirer
+              </label>
+            </div>
+            <Input
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              placeholder="Nombre de jours"
+              value={montant}
+              onChange={(e) => setMontant(e.target.value)}
+              className="text-sm"
+            />
+            <Textarea
+              placeholder="Commentaire"
+              value={motifAjustement}
+              onChange={(e) => setMotifAjustement(e.target.value)}
+              rows={2}
+              className="text-sm"
+            />
+            {erreurAjustement && <p className="text-status-danger-fg text-xs">{erreurAjustement}</p>}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                className="px-3 py-1.5 text-xs"
+                onClick={() => {
+                  setFormulaireOuvert(false);
+                  setErreurAjustement(null);
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                className="px-3 py-1.5 text-xs"
+                disabled={envoiAjustement}
+                onClick={soumettreAjustement}
+              >
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        ))}
+
+      {!loading && historique && !avecAjustement && (
         <div className="border-ink-300/60 flex items-center justify-between border-t px-4 py-3">
           <span className="text-ink-900 flex items-center gap-1 text-sm font-semibold">
             Solde actuel
@@ -460,6 +629,7 @@ export function SoldeDetailPanel({
 
   const panneau = (
     <div
+      style={style}
       className={`bg-surface-card w-full xl:sticky xl:top-4 xl:w-96 ${avecDetailConge ? "max-w-sm shrink-0" : "xl:shrink-0"} ${arrondi ? "overflow-hidden rounded-xl" : ""}`}
     >
       {headerJsx}
@@ -467,7 +637,60 @@ export function SoldeDetailPanel({
     </div>
   );
 
-  if (!avecDetailConge) return panneau;
+  if (!avecDetailConge && !avecAjustement) return panneau;
+
+  // "Suivre les soldes 2" (27/08/2026, "ça ne doit pas être encapsulé dans
+  // une popin, réfère-toi au fonctionnement exact de Vérifier les fiches de
+  // paie 2") — reprend `PanelJoursMouvement` à l'identique : pas de bandeau
+  // ("Détail du solde CP" redondant, le nom est déjà visible sur la card
+  // cliquée juste à côté), pas de conteneur arrondi/ombre englobant (`bg-
+  // surface-app rounded-2xl shadow-lg`, réservé à "Suivre mon solde" sur
+  // Accueil) — juste la card tableau (`bg-surface-card shadow-sm`) et sa
+  // colonne détail animée, à plat.
+  if (avecAjustement) {
+    return (
+      <div
+        className="flex items-stretch transition-[gap] duration-300 ease-in-out"
+        style={{ ...style, gap: detailOuvert ? "5px" : "0px" }}
+      >
+        <div className="bg-surface-card w-72 shrink-0 overflow-hidden shadow-sm">{bodyJsx}</div>
+        <div
+          className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
+        >
+          <div className="w-64">
+            {ajustementSelectionne ? (
+              <div className="animate-detail-fade-in">
+                <DetailAjustementPanel
+                  ajustement={{
+                    code,
+                    nomComplet,
+                    deltaJours: ajustementSelectionne.jours,
+                    date: ajustementSelectionne.date,
+                    auteurNom: ajustementSelectionne.auteurNom,
+                    motif: ajustementSelectionne.motif,
+                  }}
+                  onClose={fermerDetail}
+                  pleineLargeur
+                />
+              </div>
+            ) : demandeSelectionnee ? (
+              <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
+                <DetailCongePanel
+                  selection={demandeSelectionnee}
+                  onClose={fermerDetail}
+                  pleineLargeur
+                />
+              </div>
+            ) : chargementDetail ? (
+              <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in p-8 text-center text-sm">
+                Chargement…
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Bandeau "Suivre mon solde" étiré sur toute la largeur de la popin
   // (20/08/2026, demande explicite) — sort de `panneau` pour devenir un
@@ -498,7 +721,7 @@ export function SoldeDetailPanel({
   // deux blocs s'empilent (`flex-col`) au lieu de se placer côte à côte —
   // `DetailCongePanel` a de toute façon son propre `w-full` sous `xl:`.
   return (
-    <div className="bg-surface-app overflow-hidden rounded-2xl shadow-lg">
+    <div style={style} className="bg-surface-app overflow-hidden rounded-2xl shadow-lg">
       {headerJsx}
       <div
         className="flex flex-col items-stretch p-3 pr-3 transition-[gap] duration-300 ease-in-out sm:flex-row sm:items-start sm:pr-[15px]"
@@ -527,7 +750,22 @@ export function SoldeDetailPanel({
           }`}
         >
           <div className="sm:w-[256px]">
-            {demandeSelectionnee ? (
+            {ajustementSelectionne ? (
+              <div className="animate-detail-fade-in">
+                <DetailAjustementPanel
+                  ajustement={{
+                    code,
+                    nomComplet,
+                    deltaJours: ajustementSelectionne.jours,
+                    date: ajustementSelectionne.date,
+                    auteurNom: ajustementSelectionne.auteurNom,
+                    motif: ajustementSelectionne.motif,
+                  }}
+                  onClose={fermerDetail}
+                  pleineLargeur
+                />
+              </div>
+            ) : demandeSelectionnee ? (
               <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
                 <DetailCongePanel selection={demandeSelectionnee} onClose={fermerDetail} />
               </div>

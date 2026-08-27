@@ -82,6 +82,12 @@ export interface MouvementSolde {
   jours: number; // signé : négatif = consommation, positif = recrédit/acquisition
   soldeApres: number;
   motif?: string; // demande refusée par le salarié (note) ou motif de l'ajustement
+  auteurNom?: string; // 27/08/2026 — qui a créé l'ajustement (type "ajustement" uniquement)
+  // 27/08/2026 — id de la DEMANDE pour un événement "demande" (distinct de
+  // `id`, qui est l'id de la ligne `export_paie_lignes` en mode réel, pour
+  // éviter les collisions quand une demande génère plusieurs lignes de
+  // transmission). Manquant en théorique : `id` y est déjà l'id demande.
+  demandeId?: string;
 }
 
 export interface MoisHistoriqueSolde {
@@ -115,6 +121,7 @@ export interface HistoriqueSolde {
 }
 
 export interface AjustementSoldeInput {
+  code: "CP" | "RTT" | "CPA"; // 27/08/2026 — extension RTT/CPA (was CP-only)
   deltaJours: number; // positif = recrédit, négatif = correction à la baisse
   motif: string;
 }

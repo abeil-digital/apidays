@@ -3069,6 +3069,85 @@ partagée dans `components/ui/` pour l'instant — construit directement dans `S
 extraire si un futur écran a besoin du même composant. Revérifié en navigateur : bascule fonctionne,
 `tsc`/`eslint`/`npm run build` clean.
 
+**"Vérifier les fiches de paie" — libellé "Soldes réels" (27/08/2026)** : titre de la section
+renommé de "Soldes" à "Soldes réels" (`VerifierFichesPaiePage.tsx`) pour lever toute ambiguïté — ce
+tableau montre bien le réel (ancré transmission), pas le théorique, ce que le nom générique
+"Soldes" ne précisait pas. Changement de libellé seul, vérifié en navigateur (Delphine 30→29/-1j,
+Olivier 62→61,5/-0,5j, Salarie Test 47→36/-11j, cohérent). `tsc`/`eslint` clean.
+
+**"Vérifier les fiches de paie" — colonnes nommées par le mois réel (27/08/2026)** : "Mois précédent"/
+"Mois en cours" remplacés par "Solde juillet"/"Solde août" (noms dérivés dynamiquement de
+`periode.debut`, `nomMois`/`moisPrecedentIso` ajoutés à `VerifierFichesPaiePage.tsx`). Vérifié en
+navigateur : colonnes "SOLDE JUILLET"/"SOLDE AOÛT" pour la période Août 2026, valeurs inchangées et
+toujours cohérentes. `tsc`/`eslint` clean.
+
+**"Vérifier les fiches de paie" — panneau latéral "jours du mouvement" (27/08/2026, demande explicite,
+"on va tenter un truc")** : le tableau "Soldes réels" est resserré (`min-w-[480px]`, était `640px`) et
+passe en grille 2 colonnes (`xl:grid-cols-[minmax(0,560px)_24rem]`, uniquement quand un mouvement est
+sélectionné) dès qu'on clique sur une valeur "Mouvement" (devenue un bouton soulignée cliquable, avant
+texte brut). Le panneau latéral (`PanelJoursMouvement`) liste les jours `export_paie_lignes` de cet
+export pour ce collaborateur/type précis — **aucune nouvelle donnée chargée** : simple filtre sur
+`collaborateurs` (déjà fetché par `fetchCheckFichesPaie` pour le contrôle ligne par ligne existant plus
+bas). Cliquer un jour dans cette liste ouvre `DetailCongePanel` ("suivi de congé") en ligne, juste en
+dessous — la `demande` du filtre est déjà un `DemandeEquipe` complet, pas de fetch supplémentaire
+nécessaire pour ça non plus. Vérifié en navigateur (via clic direct sur le bouton, l'inspection DOM a
+montré un délai de montage du bouton après le changement d'onglet — pas un bug, juste un besoin
+d'attendre le fetch de `comparaisons`) : clic sur "-1 j" (Delphine, CP) ouvre le panneau avec la ligne
+"31 août → 11 sept. 2026, -1j", clic sur cette ligne ouvre bien `DetailCongePanel`. `tsc`/`eslint`/
+`npm run build` clean.
+
+**Duplication en onglet séparé pour itérer (27/08/2026)** : Vincent veut retravailler l'UI et la
+logique globale de "Vérifier les fiches de paie" sans risquer de casser la version utilisée pour la
+vraie vérification de paie — `VerifierFichesPaiePage.tsx` dupliqué à l'identique dans
+`VerifierFichesPaiePage2.tsx` (export renommé `VerifierFichesPaiePage2`), câblé sur un **4e onglet**
+"Vérifier les fiches de paie 2" ajouté dans `TransmissionsPaiePage.tsx` (`Onglet` type +
+`onglets`/rendu), à côté de l'original — pas un remplacement silencieux (Vincent l'a explicitement
+demandé après un premier essai de bascule directe). L'original reste inchangé et branché sur son
+propre onglet. Vérifié en navigateur : les deux onglets coexistent, "Vérifier les fiches de paie 2"
+affiche le même contenu (Soldes réels + panneau latéral) que l'original. `tsc`/`eslint`/`npm run build`
+clean. Toute itération à venir se fait sur `VerifierFichesPaiePage2.tsx` uniquement — voir ce fichier
+pour le détail au fur et à mesure des changements.
+
+**Itérations UI supplémentaires sur `VerifierFichesPaiePage2.tsx` (27/08/2026, "on va bosser sur l'UI
+du truc et la logique globale")** — chaîne de petits ajustements demandés au fil de l'eau, tous vérifiés
+en navigateur :
+- Colonnes "Solde N-1"/"Solde N"/"Mouvement" plafonnées à `150px` chacune (`minmax(0,150px)`), colonne
+  "Type" resserrée à `4.5rem` (fixe, pas `auto` — chaque ligne est sa propre grille CSS, `auto` aurait
+  donné une largeur différente par ligne selon CP/RTT/CPA).
+- Card et en-tête de colonnes (sorti des cards, affiché une fois sur le fond de page) calés sur la
+  largeur du contenu (`w-fit`), plus d'étirement à 900px.
+- Typo "Solde N-1" alignée sur celle de la pill "Solde N" (`text-xs font-bold` de `TypeBadge`), puis
+  agrandie (`text-sm`) sur demande.
+- **Correction de fond** (pas juste du style) : "Mouvement" recalculé en delta (`moisEnCours −
+  moisPrecedent`) plutôt que via `fetchMouvementsExport` — ce dernier ne somme que les
+  `export_paie_lignes` transmises, sans les acquisitions RTT/CPA du mois ("les mouvements totalisent
+  les acquisitions et les consommés", Vincent). Résultat concret : RTT de Delphine passe de "0 j" à
+  "+0,25 j".
+- Nom/prénom du collaborateur passés en `text-xs` (calé sur la typo des cards "Congés consommés" plus
+  bas), puis en `text-base` (16px) sur demande explicite suivante.
+- **Nouvelle prop `pleineLargeur` sur `DetailCongePanel`** (`DetailCongePanel.tsx`, changement partagé
+  — pas cantonné à la V2) : sans elle, le composant s'impose `xl:sticky xl:w-64 xl:shrink-0`, pensé
+  pour un docking pleine page (`SoldeDetailPanel`) — incohérent une fois affiché en ligne dans le
+  panneau "jours du mouvement" déjà étroit (`PanelJoursMouvement`). `pleineLargeur` neutralise juste
+  ça, sans toucher le bandeau coloré (contrairement à `masquerBandeau`/`masquerTypeBadgeBandeau`, qui
+  changent aussi son style) — changement additif, aucun appelant existant impacté.
+
+**"Jours du mouvement" — refonte reprenant "Suivre mon solde" (27/08/2026, demande explicite)** :
+`PanelJoursMouvement` passe d'une liste plate à un tableau ÉVÉNEMENT/JOURS repris de
+`SoldeDetailPanel.tsx`, adapté à un seul mois — **pas de colonne SOLDE** (demande explicite, pas de
+sens ici où on ne montre qu'un mois isolé). Ligne "Solde {mois précédent}" en tête (pill pleine couleur,
+valeur = `categorie.moisPrecedent`). Jours transmis en pill contour + point vert (style repris de
+`SoldeDetailPanel`), cliquables → `DetailCongePanel` en ligne (`pleineLargeur`). **Acquisition RTT/CPA
+du mois** ajoutée comme "événement" à part (pill pleine + icône `Plus`, même style que
+`SoldeDetailPanel`) — pas de ligne dédiée dans `export_paie_lignes` pour ça, déduite par résidu
+(`mouvementTotal − somme des jours de ligne affichés`, `mouvementTotal = moisEnCours − moisPrecedent`,
+déjà calculé pour l'affichage de "Mouvement"). Libellé date des pills via `formatPeriodePillNumerique`
+(convention existante, pas de date ISO brute) ; pas de rappel du type dans le libellé (le panneau est
+déjà scopé à un seul type via son bandeau). Vérifié en navigateur : Delphine RTT (+0,25j, aucun jour
+transmis) affiche "Acquisition août 2026 +0,25j" seule ; Delphine CP (-1j) affiche la ligne "31/08 au
+11/09/26 -9,5j" (jour réel transmis, aucune acquisition CP — cohérent, le CP n'a pas d'accrual mensuel).
+`tsc`/`eslint`/`npm run build` clean.
+
 **Ce qui disparaît** : l'actuel "solde réel" de `soldes.repository.ts` (capital − tout ce qui est
 `validee`, peu importe la date du congé ou si c'est transmis) n'est **plus une valeur utile en soi** —
 ni le collaborateur (qui a besoin du théorique) ni Delphine (qui a besoin du réel ancré paie) ne s'en

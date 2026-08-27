@@ -30,6 +30,9 @@ const PARAMETRER_TABS: NavTab[] = [
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   { href: "/suivre/soldes", label: "Suivre les soldes", Icon: Wallet },
+  // Duplication expérimentale (27/08/2026) — voir `SuivreSoldesPage2.tsx`,
+  // point de départ pour itérer sans risquer de casser l'original.
+  { href: "/suivre/soldes2", label: "Suivre les soldes 2", Icon: Wallet },
   { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/transmissions-paie", label: "Transmissions paie", Icon: ClipboardCheck },
 ];

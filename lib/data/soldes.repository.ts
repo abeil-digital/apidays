@@ -448,6 +448,7 @@ async function sommeTransmis(
 
 interface LigneTransmise {
   id: string;
+  demande_id: string;
   date_debut: string;
   date_fin: string;
   jours_inclus: number;
@@ -471,7 +472,7 @@ async function fetchLignesTransmises(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation), exports_paie!inner(genere_le)",
+      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation), exports_paie!inner(genere_le)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
@@ -494,6 +495,7 @@ async function fetchLignesTransmises(
     ) as { date_debut: string; date_fin: string };
     return {
       id: row.id,
+      demande_id: row.demande_id,
       date_debut: demande.date_debut,
       date_fin: demande.date_fin,
       jours_inclus: Number(row.jours_inclus),
@@ -501,12 +503,16 @@ async function fetchLignesTransmises(
   });
 }
 
-/** Somme des ajustements manuels (régulation Delphine) d'un type sur une période. */
+/** Somme des ajustements manuels (régulation Delphine) d'un type sur une période.
+ * `isAnticipation` (27/08/2026, extension RTT/CPA) — distingue CP de CPA, qui
+ * partagent le même `type_absence_id` (même convention que `demandes_conges`) ;
+ * RTT n'a pas cette notion, toujours `false`. */
 async function sommeAjustements(
   supabase: SupabaseClient,
   utilisateurId: string,
   type: TypeDemande,
   periode: Periode,
+  isAnticipation: boolean,
 ): Promise<number> {
   const typeAbsenceId = await getTypeAbsenceId(supabase, type);
 
@@ -515,6 +521,7 @@ async function sommeAjustements(
     .select("delta_jours")
     .eq("utilisateur_id", utilisateurId)
     .eq("type_absence_id", typeAbsenceId)
+    .eq("is_anticipation", isAnticipation)
     .gte("created_at", periode.debut.toISOString())
     .lte("created_at", `${dateIso(periode.fin)}T23:59:59.999Z`);
 
@@ -657,7 +664,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       periodeConsoCp,
       aujourdhui,
     );
-    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp);
+    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp, false);
     const transmisEnCours = await sommeTransmis(supabase, id, "CP", false, periodeConsoCp, aujourdhui);
     const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
     const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
@@ -703,8 +710,9 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       aujourdhui,
     );
     const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeSuivante, aujourdhui);
-    const soldeCpaValidee = Math.max(0, accrualCpa - consommeCpa);
-    const soldeCpaTransmis = Math.max(0, accrualCpa - transmisCpa);
+    const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeSuivante, true);
+    const soldeCpaValidee = Math.max(0, accrualCpa - consommeCpa + ajustementsCpa);
+    const soldeCpaTransmis = Math.max(0, accrualCpa - transmisCpa + ajustementsCpa);
 
     cpa = {
       valeur: soldeCpaTransmis,
@@ -762,8 +770,9 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       aujourdhui,
     );
     const transmis = await sommeTransmis(supabase, id, "RTT", null, periodeConsoRtt, aujourdhui);
-    const soldeValidee = Math.max(0, accrual - consomme);
-    const soldeTransmis = Math.max(0, accrual - transmis);
+    const ajustementsRtt = await sommeAjustements(supabase, id, "RTT", periodeConsoRtt, false);
+    const soldeValidee = Math.max(0, accrual - consomme + ajustementsRtt);
+    const soldeTransmis = Math.max(0, accrual - transmis + ajustementsRtt);
 
     rtt = {
       valeur: soldeTransmis,
@@ -990,9 +999,10 @@ export async function fetchHistoriqueCp(
     ),
     supabase
       .from("ajustements_solde")
-      .select("id, delta_jours, motif, created_at")
+      .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
       .gte("created_at", periodeConsoCp.debut.toISOString())
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
     supabase
@@ -1036,29 +1046,36 @@ export async function fetchHistoriqueCp(
 
   interface MouvementBrut {
     id: string;
+    demandeId?: string;
     type: "demande" | "ajustement";
     date: string;
     libelle: string;
     jours: number;
     motif?: string;
+    auteurNom?: string;
   }
 
   const mouvementsBruts: MouvementBrut[] = [
     ...lignesTransmises.map((l): MouvementBrut => ({
       id: l.id,
+      demandeId: l.demande_id,
       type: "demande",
       date: l.date_debut,
       libelle: `CP : ${formatPeriodePillNumerique(l.date_debut, l.date_fin)}`,
       jours: -l.jours_inclus,
     })),
-    ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
-      id: a.id,
-      type: "ajustement",
-      date: a.created_at.slice(0, 10),
-      libelle: a.motif,
-      jours: Number(a.delta_jours),
-      motif: a.motif,
-    })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   // Un bloc par mois, du 1er mois de la période jusqu'au mois en cours —
@@ -1122,14 +1139,18 @@ export async function fetchHistoriqueCp(
       libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
-    ...(ajustementsRows ?? []).map((a): MouvementBrut => ({
-      id: a.id,
-      type: "ajustement",
-      date: a.created_at.slice(0, 10),
-      libelle: a.motif,
-      jours: Number(a.delta_jours),
-      motif: a.motif,
-    })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   let cumulValidee = soldeDepart;
@@ -1225,6 +1246,7 @@ export async function fetchHistoriqueRtt(
 
   const [
     lignesTransmises,
+    { data: ajustementsRows, error: erreurAjustements },
     { data: enAttenteRows, error: erreurEnAttente },
     { data: demandesValideesRows, error: erreurValidees },
   ] = await Promise.all([
@@ -1236,6 +1258,14 @@ export async function fetchHistoriqueRtt(
       { debut: periodeConsoRtt.debut, fin: periodeRtt.fin },
       aujourdhui,
     ),
+    supabase
+      .from("ajustements_solde")
+      .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
+      .gte("created_at", periodeConsoRtt.debut.toISOString())
+      .lte("created_at", `${dateIso(periodeRtt.fin)}T23:59:59.999Z`),
     supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees")
@@ -1254,12 +1284,16 @@ export async function fetchHistoriqueRtt(
       .lte("date_debut", dateIso(periodeRtt.fin)),
   ]);
 
-  if (erreurEnAttente || erreurValidees) {
+  if (erreurAjustements || erreurEnAttente || erreurValidees) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
 
   // Base du solde théorique (27/08/2026) — voir `fetchHistoriqueCp`, même
   // correctif : indépendante de `cumul` (réel, ancré transmission).
+  const ajustementsTotal = (ajustementsRows ?? []).reduce(
+    (somme, a) => somme + Number(a.delta_jours),
+    0,
+  );
   const consommeValideeTotal = (demandesValideesRows ?? []).reduce(
     (somme, d) => somme + Number(d.nb_demi_journees) / 2,
     0,
@@ -1267,10 +1301,13 @@ export async function fetchHistoriqueRtt(
 
   interface MouvementBrut {
     id: string;
-    type: "demande" | "acquisition";
+    demandeId?: string;
+    type: "demande" | "acquisition" | "ajustement";
     date: string;
     libelle: string;
     jours: number;
+    motif?: string;
+    auteurNom?: string;
   }
 
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
@@ -1292,11 +1329,24 @@ export async function fetchHistoriqueRtt(
     ...accrualsBruts,
     ...lignesTransmises.map((l): MouvementBrut => ({
       id: l.id,
+      demandeId: l.demande_id,
       type: "demande",
       date: l.date_debut,
       libelle: `RTT : ${formatPeriodePillNumerique(l.date_debut, l.date_fin)}`,
       jours: -l.jours_inclus,
     })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   // Voir `fetchHistoriqueCp` — même correctif (18/08/2026) : borne haute au
@@ -1352,6 +1402,18 @@ export async function fetchHistoriqueRtt(
       libelle: `RTT : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   let cumulValidee = baseRtt;
@@ -1361,7 +1423,7 @@ export async function fetchHistoriqueRtt(
   });
 
   const accrualTotal = accrualsBruts.reduce((somme, a) => somme + a.jours, 0);
-  let cumulTheorique = baseRtt + accrualTotal - consommeValideeTotal;
+  let cumulTheorique = baseRtt + accrualTotal - consommeValideeTotal + ajustementsTotal;
   const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
     .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
     .map((d) => {
@@ -1446,6 +1508,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const [
     { data: demandesRows, error: erreurDemandes },
+    { data: ajustementsRows, error: erreurAjustements },
     { data: enAttenteRows, error: erreurEnAttente },
   ] = await Promise.all([
     supabase
@@ -1458,6 +1521,14 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .gte("date_debut", dateIso(periodeSuivante.debut))
       .lte("date_debut", dateIso(periodeSuivante.fin)),
     supabase
+      .from("ajustements_solde")
+      .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", true)
+      .gte("created_at", debutCpa.toISOString())
+      .lte("created_at", `${dateIso(aujourdhui)}T23:59:59.999Z`),
+    supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees")
       .eq("utilisateur_id", utilisateurId)
@@ -1468,16 +1539,19 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .lte("date_debut", dateIso(periodeSuivante.fin)),
   ]);
 
-  if (erreurDemandes || erreurEnAttente) {
+  if (erreurDemandes || erreurAjustements || erreurEnAttente) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
 
   interface MouvementBrut {
     id: string;
-    type: "demande" | "acquisition";
+    demandeId?: string;
+    type: "demande" | "acquisition" | "ajustement";
     date: string;
     libelle: string;
     jours: number;
+    motif?: string;
+    auteurNom?: string;
   }
 
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
@@ -1504,6 +1578,18 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       libelle: `CPA : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
       jours: -(Number(d.nb_demi_journees) / 2),
     })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
   const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
@@ -1552,7 +1638,10 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   };
 }
 
-/** Régulation manuelle du solde CP par Delphine — RLS réservée à l'admin. */
+/** Régulation manuelle du solde CP/RTT/CPA par Delphine — RLS réservée à
+ * l'admin. `code` (27/08/2026, extension RTT/CPA — était CP uniquement) :
+ * CPA partage le `type_absence_id` de CP, distingué par `is_anticipation`
+ * (même convention que `demandes_conges`) ; RTT est un type à part entière. */
 export async function ajouterAjustementSolde(
   utilisateurId: string,
   input: AjustementSoldeInput,
@@ -1560,13 +1649,14 @@ export async function ajouterAjustementSolde(
   const supabase = createClient();
 
   const [typeAbsenceId, auteurId] = await Promise.all([
-    getTypeAbsenceId(supabase, "CP"),
+    getTypeAbsenceId(supabase, input.code === "RTT" ? "RTT" : "CP"),
     getUtilisateurIdCourant(supabase),
   ]);
 
   const { error } = await supabase.from("ajustements_solde").insert({
     utilisateur_id: utilisateurId,
     type_absence_id: typeAbsenceId,
+    is_anticipation: input.code === "CPA",
     delta_jours: input.deltaJours,
     motif: input.motif,
     auteur_id: auteurId,
@@ -1575,4 +1665,101 @@ export async function ajouterAjustementSolde(
   if (error) {
     throw new Error("Impossible d'enregistrer l'ajustement.");
   }
+}
+
+/** Liste des ajustements manuels d'un collaborateur/type sur une période
+ * (27/08/2026) — pour l'affichage dans la popin "Liste des événements" de
+ * "Vérifier les fiches de paie" (`VerifierFichesPaiePage2`), à côté des
+ * jours transmis et de l'acquisition. Périmètre volontairement minimal (pas
+ * de `Periode`/dates internes) : bornes en ISO, mêmes que `periode` déjà
+ * manipulée par cette page. */
+export async function fetchAjustementsSolde(
+  utilisateurId: string,
+  code: "CP" | "RTT" | "CPA",
+  periode: { debut: string; fin: string },
+): Promise<
+  { id: string; deltaJours: number; motif: string; date: string; auteurNom: string }[]
+> {
+  const supabase = createClient();
+  const typeAbsenceId = await getTypeAbsenceId(supabase, code === "RTT" ? "RTT" : "CP");
+
+  const { data, error } = await supabase
+    .from("ajustements_solde")
+    .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
+    .eq("utilisateur_id", utilisateurId)
+    .eq("type_absence_id", typeAbsenceId)
+    .eq("is_anticipation", code === "CPA")
+    .gte("created_at", `${periode.debut}T00:00:00.000Z`)
+    .lte("created_at", `${periode.fin}T23:59:59.999Z`);
+
+  if (error) {
+    throw new Error("Impossible de charger les ajustements.");
+  }
+
+  return (data ?? []).map((a) => {
+    const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+    return {
+      id: a.id,
+      deltaJours: Number(a.delta_jours),
+      motif: a.motif,
+      date: a.created_at.slice(0, 10),
+      auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+    };
+  });
+}
+
+/** Un ajustement manuel, toute l'entreprise (27/08/2026) — pour les filtres
+ * "Régul CP"/"Régul RTT"/"Régul CPA" de "Suivre les demandes". */
+export interface AjustementEquipe {
+  id: string;
+  utilisateurId: string;
+  nomComplet: string;
+  code: "CP" | "RTT" | "CPA";
+  deltaJours: number;
+  motif: string;
+  date: string;
+  auteurNom: string;
+}
+
+/** Ajustements manuels de toute l'équipe (27/08/2026) — même principe que
+ * `fetchDemandesEquipe` (pas de filtre `utilisateur_id`, la RLS restreint déjà
+ * aux manager/admin). `code` résolu depuis `types_absences.code` +
+ * `is_anticipation` (CPA = CP + is_anticipation). Deux FK vers `utilisateurs`
+ * (`utilisateur_id`/`auteur_id`) — aliasées explicitement (`utilisateur:`/
+ * `auteur:`), sinon PostgREST renvoie les deux sous la même clé `utilisateurs`
+ * et écrase l'une avec l'autre (même piège que noté dans BASE-DE-DONNEES.md
+ * pour les auto-références). */
+export async function fetchAjustementsEquipe(): Promise<AjustementEquipe[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("ajustements_solde")
+    .select(
+      "id, delta_jours, motif, created_at, is_anticipation, utilisateur_id, utilisateur:utilisateurs!utilisateur_id(prenom, nom), auteur:utilisateurs!auteur_id(prenom, nom), types_absences!type_absence_id(code)",
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error("Impossible de charger les ajustements de l'équipe.");
+  }
+
+  return (data ?? []).map((row) => {
+    const utilisateur = Array.isArray(row.utilisateur) ? row.utilisateur[0] : row.utilisateur;
+    const auteur = Array.isArray(row.auteur) ? row.auteur[0] : row.auteur;
+    const typeAbsence = Array.isArray(row.types_absences)
+      ? row.types_absences[0]
+      : row.types_absences;
+    const code: "CP" | "RTT" | "CPA" =
+      typeAbsence?.code === "RTT" ? "RTT" : row.is_anticipation ? "CPA" : "CP";
+    return {
+      id: row.id,
+      utilisateurId: row.utilisateur_id,
+      nomComplet: `${utilisateur?.prenom ?? ""} ${utilisateur?.nom ?? ""}`.trim(),
+      code,
+      deltaJours: Number(row.delta_jours),
+      motif: row.motif,
+      date: row.created_at.slice(0, 10),
+      auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+    };
+  });
 }

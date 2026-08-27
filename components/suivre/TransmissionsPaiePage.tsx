@@ -32,10 +32,19 @@ import { Toast } from "@/components/ui/Toast";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { CongesPaiePage, type CongesPaiePageHandle } from "@/components/suivre/CongesPaiePage";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
+import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
+import { TableauAjustements } from "@/components/suivre/TableauAjustements";
+import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
 import { PoserCongePourCollaborateurModal } from "@/components/suivre/PoserCongePourCollaborateurModal";
 import { VerifierFichesPaiePage } from "@/components/suivre/VerifierFichesPaiePage";
+// Onglet expérimental (27/08/2026, "on va bosser sur l'UI du truc et la
+// logique globale") — duplicata de `VerifierFichesPaiePage` pour itérer sans
+// toucher à la version utilisée pour la vraie vérification de paie ; les deux
+// coexistent en onglets séparés le temps de l'itération, voir
+// `VerifierFichesPaiePage2.tsx`.
+import { VerifierFichesPaiePage2 } from "@/components/suivre/VerifierFichesPaiePage2";
 
-type Onglet = "transmettre" | "export" | "verifier";
+type Onglet = "transmettre" | "export" | "verifier" | "verifier2";
 
 // Codes de type suivis par le récap (25/08/2026) — mêmes 7 codes que le
 // sélecteur "Poser pour un collaborateur", CPA dérivé de CP + isAnticipation.
@@ -135,6 +144,21 @@ function QuelsCongesTransmettre({
   const [lignesTransmissionParId, setLignesTransmissionParId] = useState<
     Record<string, LigneExportPaie[]>
   >({});
+  const [ajustementsEquipe, setAjustementsEquipe] = useState<AjustementEquipe[]>([]);
+  const [selectionAjustementId, setSelectionAjustementId] = useState<string | null>(null);
+
+  // Régularisations manuelles de la période (27/08/2026, "faut prévoir une
+  // catégorie régulation aussi") — même principe que `CongesPaiePage`
+  // (équipe entière, filtrées côté client sur `debut`/`fin`).
+  useEffect(() => {
+    let cancelled = false;
+    fetchAjustementsEquipe().then((data) => {
+      if (!cancelled) setAjustementsEquipe(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Combien de jours partiraient réellement pour chaque ligne si on
   // transmettait maintenant (calcul async, tient compte du découpage sur un
@@ -169,6 +193,9 @@ function QuelsCongesTransmettre({
   }, [demandes]);
 
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
+  const ajustementsFiltres = ajustementsEquipe.filter((a) => a.date >= debut && a.date <= fin);
+  const ajustementSelectionne =
+    ajustementsFiltres.find((a) => a.id === selectionAjustementId) ?? null;
 
   async function valider(commentaire: string) {
     if (!selection) return;
@@ -264,7 +291,10 @@ function QuelsCongesTransmettre({
                 demandes={moisEnCours}
                 avecCollaborateur
                 compact
-                onDateClick={setSelectionId}
+                onDateClick={(id) => {
+                    setSelectionAjustementId(null);
+                    setSelectionId(id);
+                  }}
                 selectedId={selectionId}
                 renderDuree={(d) =>
                   renderDureeATransmettre(d as CongeATransmettre, joursATransmettreParId[d.id])
@@ -290,7 +320,10 @@ function QuelsCongesTransmettre({
                   demandes={repechage}
                   avecCollaborateur
                   compact
-                  onDateClick={setSelectionId}
+                  onDateClick={(id) => {
+                    setSelectionAjustementId(null);
+                    setSelectionId(id);
+                  }}
                   selectedId={selectionId}
                   renderDuree={(d) =>
                     renderDureeATransmettre(d as CongeATransmettre, joursATransmettreParId[d.id])
@@ -315,7 +348,10 @@ function QuelsCongesTransmettre({
                   demandes={corrections}
                   avecCollaborateur
                   compact
-                  onDateClick={setSelectionId}
+                  onDateClick={(id) => {
+                    setSelectionAjustementId(null);
+                    setSelectionId(id);
+                  }}
                   selectedId={selectionId}
                   renderDuree={(d) =>
                     renderDureeATransmettre(d as CongeATransmettre, joursATransmettreParId[d.id])
@@ -326,7 +362,38 @@ function QuelsCongesTransmettre({
               )}
             </div>
           </div>
+
+          <div className="bg-surface-card w-full min-w-0 shadow-sm">
+            <div className="px-4 pt-3 pb-1">
+              <h2 className="text-ink-900 text-sm font-bold">Régularisations</h2>
+            </div>
+            <div className="border-ink-300/60 border-t">
+              <TableauAjustements
+                ajustements={ajustementsFiltres}
+                selectionId={selectionAjustementId}
+                onSelect={(id) => {
+                  setSelectionId(null);
+                  setSelectionAjustementId(id);
+                }}
+              />
+            </div>
+          </div>
         </div>
+
+        {ajustementSelectionne && (
+          <DetailAjustementPanel
+            key={ajustementSelectionne.id}
+            ajustement={{
+              code: ajustementSelectionne.code,
+              nomComplet: ajustementSelectionne.nomComplet,
+              deltaJours: ajustementSelectionne.deltaJours,
+              date: ajustementSelectionne.date,
+              auteurNom: ajustementSelectionne.auteurNom,
+              motif: ajustementSelectionne.motif,
+            }}
+            onClose={() => setSelectionAjustementId(null)}
+          />
+        )}
 
         {selection && (
           <DetailCongePanel
@@ -588,6 +655,11 @@ export function TransmissionsPaiePage({
     { id: "transmettre", label: "Quels congés transmettre" },
     { id: "export", label: "Générer l'export" },
     { id: "verifier", label: "Vérifier les fiches de paie" },
+    // Onglet expérimental (27/08/2026, voir `VerifierFichesPaiePage2.tsx`) —
+    // à retirer une fois l'itération terminée, soit en supprimant cet onglet
+    // (retour à l'originale), soit en remplaçant l'originale par la V2 une
+    // fois validée.
+    { id: "verifier2", label: "Vérifier les fiches de paie 2" },
   ];
 
   return (
@@ -630,6 +702,9 @@ export function TransmissionsPaiePage({
       )}
       {onglet === "verifier" && !chargementExport && (
         <VerifierFichesPaiePage exportId={exportPaie?.id ?? null} periode={periode} />
+      )}
+      {onglet === "verifier2" && !chargementExport && (
+        <VerifierFichesPaiePage2 exportId={exportPaie?.id ?? null} periode={periode} />
       )}
     </div>
   );

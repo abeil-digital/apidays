@@ -12,6 +12,10 @@ interface UseHistoriqueSoldeResult {
   historique: HistoriqueSolde | null;
   loading: boolean;
   error: string | null;
+  /** Force un rechargement (27/08/2026, "Ajuster le solde" — `SoldeDetailPanel`)
+   * sans remonter le composant : incrémente une clé interne dont dépend
+   * l'effet de fetch. */
+  refetch: () => void;
 }
 
 /**
@@ -34,6 +38,7 @@ export function useHistoriqueSolde(
   const [historique, setHistorique] = useState<HistoriqueSolde | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +62,7 @@ export function useHistoriqueSolde(
     return () => {
       cancelled = true;
     };
-  }, [utilisateurId, code]);
+  }, [utilisateurId, code, refreshKey]);
 
-  return { historique, loading, error };
+  return { historique, loading, error, refetch: () => setRefreshKey((k) => k + 1) };
 }

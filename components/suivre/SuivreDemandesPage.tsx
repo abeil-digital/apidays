@@ -8,12 +8,15 @@ import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
+import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
+import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
+import { TableauAjustements } from "@/components/suivre/TableauAjustements";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés" | "Annulés";
 type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
@@ -39,6 +42,17 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
 // Types de congés sélectionnables — mêmes codes que la colonne Type du
 // tableau (CPA dérivé de CP + isAnticipation, voir HistoriqueTable).
 const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
+
+// Régularisations manuelles (27/08/2026, "Ajuster le solde") — pas des
+// demandes (pas de workflow de validation), donc pas des `TypeBadgeCode` :
+// pseudo-types dédiés dans le même filtre, rendus séparément de
+// `HistoriqueTable` (voir plus bas, `TableauAjustements`).
+type TypeFiltreRegul = "REGUL_CP" | "REGUL_RTT" | "REGUL_CPA";
+const TYPES_REGUL: { valeur: TypeFiltreRegul; label: string; code: "CP" | "RTT" | "CPA" }[] = [
+  { valeur: "REGUL_CP", label: "Régul CP", code: "CP" },
+  { valeur: "REGUL_RTT", label: "Régul RTT", code: "RTT" },
+  { valeur: "REGUL_CPA", label: "Régul CPA", code: "CPA" },
+];
 
 // `?statut=`/`?periode=` → filtres pré-sélectionnés (22/08/2026) — lien
 // depuis l'encart "Demandes à étudier" d'Accueil (manager), même principe
@@ -82,11 +96,26 @@ export function SuivreDemandesPage() {
   const [debutPerso, setDebutPerso] = useState("");
   const [finPerso, setFinPerso] = useState("");
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
-  const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
+  const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | TypeFiltreRegul | "tous">("tous");
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [lignesTransmissionParDemande, setLignesTransmissionParDemande] = useState<
     Record<string, LigneExportPaie[]>
   >({});
+  const [ajustementsEquipe, setAjustementsEquipe] = useState<AjustementEquipe[]>([]);
+  const regulSelectionne = TYPES_REGUL.find((r) => r.valeur === typeFiltre) ?? null;
+
+  // Ajustements manuels de l'équipe (27/08/2026) — chargés une seule fois
+  // (pas de refetch par filtre, la liste complète est légère), filtrés
+  // ensuite côté client comme `demandes`.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAjustementsEquipe().then((data) => {
+      if (!cancelled) setAjustementsEquipe(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Statut de transmission paie par demande (Transmissions paie, 24/08/2026) —
   // seules les demandes validées/annulées peuvent avoir des lignes
@@ -141,7 +170,22 @@ export function SuivreDemandesPage() {
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
+  // Régularisations filtrées avec les mêmes critères période/collaborateur
+  // que les demandes (27/08/2026) — pas de filtre "Filtre" (statut), les
+  // ajustements n'ont pas de workflow de validation.
+  const ajustementsFiltres = regulSelectionne
+    ? ajustementsEquipe
+        .filter((a) => a.code === regulSelectionne.code)
+        .filter((a) => !debut || a.date >= debut)
+        .filter((a) => !fin || a.date <= fin)
+        .filter((a) => collaborateurFiltre === "tous" || a.utilisateurId === collaborateurFiltre)
+        .sort((a, b) => b.date.localeCompare(a.date))
+    : [];
+
   const selection = demandes.find((d) => d.id === selectionId) ?? null;
+  const ajustementSelectionne = regulSelectionne
+    ? (ajustementsFiltres.find((a) => a.id === selectionId) ?? null)
+    : null;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
@@ -159,12 +203,17 @@ export function SuivreDemandesPage() {
             <div className="flex flex-wrap items-end gap-2">
               <SelectFiltrePill
                 value={typeFiltre}
-                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | TypeFiltreRegul | "tous")}
               >
                 <option value="tous">Tous les types</option>
                 {TYPES_FILTRABLES.map((code) => (
                   <option key={code} value={code}>
                     {LABEL_LONG[code]}
+                  </option>
+                ))}
+                {TYPES_REGUL.map((r) => (
+                  <option key={r.valeur} value={r.valeur}>
+                    {r.label}
                   </option>
                 ))}
               </SelectFiltrePill>
@@ -226,17 +275,40 @@ export function SuivreDemandesPage() {
           </div>
 
           <div className="border-ink-300/60 border-t">
-            <HistoriqueTable
-              demandes={filtered}
-              emptyText="Aucune demande sur cette période."
-              avecCollaborateur
-              compact
-              onDateClick={setSelectionId}
-              selectedId={selectionId}
-              lignesTransmissionParDemande={lignesTransmissionParDemande}
-            />
+            {regulSelectionne ? (
+              <TableauAjustements
+                ajustements={ajustementsFiltres}
+                selectionId={selectionId}
+                onSelect={setSelectionId}
+              />
+            ) : (
+              <HistoriqueTable
+                demandes={filtered}
+                emptyText="Aucune demande sur cette période."
+                avecCollaborateur
+                compact
+                onDateClick={setSelectionId}
+                selectedId={selectionId}
+                lignesTransmissionParDemande={lignesTransmissionParDemande}
+              />
+            )}
           </div>
         </div>
+
+        {ajustementSelectionne && (
+          <DetailAjustementPanel
+            key={ajustementSelectionne.id}
+            ajustement={{
+              code: ajustementSelectionne.code,
+              nomComplet: ajustementSelectionne.nomComplet,
+              deltaJours: ajustementSelectionne.deltaJours,
+              date: ajustementSelectionne.date,
+              auteurNom: ajustementSelectionne.auteurNom,
+              motif: ajustementSelectionne.motif,
+            }}
+            onClose={() => setSelectionId(null)}
+          />
+        )}
 
         {selection && (
           <DetailCongePanel

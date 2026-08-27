@@ -18,6 +18,7 @@ import {
   fetchLignesTransmissionParDemande,
 } from "@/lib/data/exportsPaie.repository";
 import { classeBordureTypeBadge } from "@/components/demandes/TypeBadge";
+import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
@@ -142,6 +143,41 @@ function grouperParCollaborateur(
       label: libelle(d),
       statut: d.statut,
       aCheval: estACheval(d),
+    });
+  }
+
+  return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom));
+}
+
+/**
+ * Même regroupement que `grouperParCollaborateur`, mais pour les
+ * régularisations manuelles (27/08/2026, "Ajuster le solde") — pas des
+ * `DemandeEquipe` (pas de statut de validation), `statut: "validé"` fixe pour
+ * un point vert (une régularisation est un fait acquis, jamais "en attente"/
+ * "refusé"). Pas de notion "à cheval" ni de détail associé (pas de
+ * `DetailCongePanel` pour un ajustement) : `onSelect` de
+ * `TableauCollaborateurType` reste un no-op pour ce tableau, voir l'appelant.
+ */
+function grouperAjustementsParCollaborateur(ajustements: AjustementEquipe[]): LigneCollab[] {
+  const parId = new Map<string, LigneCollab>();
+
+  for (const a of ajustements) {
+    if (!parId.has(a.utilisateurId)) {
+      const [prenom = "", nom = ""] = a.nomComplet.split(" ");
+      parId.set(a.utilisateurId, {
+        id: a.utilisateurId,
+        nom: a.nomComplet,
+        initiales: `${prenom[0] ?? ""}${nom[0] ?? ""}`.toUpperCase(),
+        parType: ligneVide(),
+      });
+    }
+    const ligne = parId.get(a.utilisateurId)!;
+    ligne.parType[a.code].jours += a.deltaJours;
+    ligne.parType[a.code].dates.push({
+      id: a.id,
+      label: `Régul (${new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit" }).format(new Date(`${a.date}T00:00:00Z`))})`,
+      statut: "validé",
+      aCheval: false,
     });
   }
 
@@ -391,6 +427,23 @@ export const CongesPaiePage = forwardRef<
     Record<string, LigneExportPaie[]>
   >({});
 
+  // Régularisations manuelles de la période (27/08/2026, "faut prévoir une
+  // catégorie régulation aussi") — équipe entière, filtrées côté client sur
+  // `debut`/`fin` (liste légère, pas de requête serveur dédiée par période).
+  // `sourceTransmission` uniquement : pas pertinent sur l'export personnel
+  // "Congés & RTT" du collaborateur (hors scope de cette page-là).
+  const [ajustementsEquipe, setAjustementsEquipe] = useState<AjustementEquipe[]>([]);
+  useEffect(() => {
+    if (!sourceTransmission) return;
+    let cancelled = false;
+    fetchAjustementsEquipe().then((data) => {
+      if (!cancelled) setAjustementsEquipe(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sourceTransmission]);
+
   // Contenu figé de l'export réel (25/08/2026, bug signalé : "la demi journée
   // d'Olivier est quand même affichée dans l'export de juillet" — une fois
   // une période transmise, cet écran continuait d'afficher le backlog LIVE
@@ -559,8 +612,16 @@ export const CongesPaiePage = forwardRef<
         )
       : [];
 
+  const lignesRegularisations = sourceTransmission
+    ? grouperAjustementsParCollaborateur(
+        ajustementsEquipe.filter((a) => a.date >= debut && a.date <= fin),
+      )
+    : [];
+
   function exporter() {
-    const csv = genererCsv(fusionnerLignes(lignes, lignesRepechage, lignesCorrections));
+    const csv = genererCsv(
+      fusionnerLignes(lignes, lignesRepechage, lignesCorrections, lignesRegularisations),
+    );
     const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -716,6 +777,21 @@ export const CongesPaiePage = forwardRef<
                   emptyText="Aucune correction à transmettre."
                 />
               )}
+            </div>
+          )}
+
+          {sourceTransmission && (
+            <div className="bg-surface-card w-full shadow-sm">
+              <div className="px-4 pt-3 pb-1">
+                <h2 className="text-ink-900 text-sm font-bold">Régularisations</h2>
+              </div>
+              <TableauCollaborateurType
+                lignes={lignesRegularisations}
+                selectionId={null}
+                onSelect={() => {}}
+                enCours={enCours}
+                emptyText="Aucune régularisation sur cette période."
+              />
             </div>
           )}
         </div>

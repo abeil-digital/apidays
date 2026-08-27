@@ -83,6 +83,13 @@ interface DetailCongePanelProps {
    * "Listing" d'Accueil (`ListingTiroir`, 18/08/2026) : le fond coloré + le
    * texte suffisent déjà à identifier le type sur ces cartes empilées. */
   masquerTypeBadgeBandeau?: boolean;
+  /** Neutralise `xl:sticky xl:w-64 xl:shrink-0` — opt-in, bandeau conservé
+   * tel quel (contrairement à `masquerBandeau`/`masquerTypeBadgeBandeau`, qui
+   * changent aussi son style). Ajouté le 27/08/2026 pour l'usage inline dans
+   * `PanelJoursMouvement` (`VerifierFichesPaiePage2.tsx`) : le panneau qui
+   * héberge ce composant est déjà étroit et non scrollant, la largeur/le
+   * sticky pensés pour un docking pleine page n'ont pas lieu d'être ici. */
+  pleineLargeur?: boolean;
   /** Lignes de transmission paie de cette demande (`export_paie_lignes`,
    * 24/08/2026) — optionnel, absent partout sauf depuis "Transmissions paie".
    * Ajoute une entrée "Transmis le"/"En paye le"/"Écart" au feed pour
@@ -188,6 +195,7 @@ export function DetailCongePanel({
   masquerBandeau = false,
   masquerFermer = false,
   masquerTypeBadgeBandeau = false,
+  pleineLargeur = false,
   lignesTransmission,
   previsionTransmission,
 }: DetailCongePanelProps) {
@@ -425,7 +433,9 @@ export function DetailCongePanel({
   return (
     <div
       className={`flex w-full flex-col gap-[3px] ${
-        masquerBandeau || masquerTypeBadgeBandeau ? "" : "xl:sticky xl:top-4 xl:w-64 xl:shrink-0"
+        masquerBandeau || masquerTypeBadgeBandeau || pleineLargeur
+          ? ""
+          : "xl:sticky xl:top-4 xl:w-64 xl:shrink-0"
       }`}
     >
       <div
