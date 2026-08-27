@@ -16,7 +16,7 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
-type ModeSolde = "reel" | "theorique";
+export type ModeSolde = "reel" | "theorique";
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
 
 // Nom de la variable CSS du token couleur du type — pour foncer une couleur
@@ -49,10 +49,14 @@ interface SoldeDetailPanelProps {
    * d'Accueil (`Dashboard2Page`), pas pour le docking latéral de "Suivre les
    * soldes" (vue manager, bords carrés contre le bord de l'écran). */
   arrondi?: boolean;
-  /** Mode de solde initial (20/08/2026) — Accueil (vue salarié) démarre sur
-   * "théorique" (compte les demandes en attente). "Suivre les soldes" (vue
-   * manager) démarre aussi sur "théorique" depuis le 24/08/2026 (décision
-   * explicite — passait par "réel" par défaut jusque-là). */
+  /** Mode de solde initial (20/08/2026, revu le 27/08/2026) — Accueil (vue
+   * salarié, "combien il me reste à poser") démarre sur "théorique". "Suivre
+   * les soldes" (vue manager) transmet désormais le mode actuellement
+   * sélectionné dans son propre sélecteur réel/théorique (par défaut
+   * "théorique") — la popin doit s'ouvrir sur le même chiffre que celui
+   * affiché dans le tableau, pas basculer silencieusement sur un autre mode
+   * (confusion remontée par Vincent). Le réel/théorique reste bien sûr
+   * togglable ensuite dans la popin, indépendamment du tableau. */
   modeParDefaut?: ModeSolde;
   /** En-tête simplifié (20/08/2026) — opt-in : Accueil (vue salarié, "mon
    * solde") remplace l'avatar + nom du collaborateur par le `TypeBadge` du

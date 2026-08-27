@@ -11,10 +11,14 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { SelectFiltrePill } from "@/components/ui/FiltrePill";
-import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
+import { SoldeDetailPanel, type ModeSolde } from "@/components/suivre/SoldeDetailPanel";
 
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
 type ColonneTri = "nom" | "cp" | "rtt" | "cpa";
+
+function valeurSolde(soldes: Soldes, colonne: "cp" | "rtt" | "cpa", mode: ModeSolde): number {
+  return mode === "theorique" ? soldes[colonne].valeurApresAttente : soldes[colonne].valeur;
+}
 
 interface Selection {
   utilisateurId: string;
@@ -36,11 +40,13 @@ function LigneSolde({
   utilisateur,
   soldes,
   selection,
+  mode,
   onClickSolde,
 }: {
   utilisateur: UtilisateurAdmin;
   soldes: Soldes | undefined;
   selection: Selection | null;
+  mode: ModeSolde;
   onClickSolde: (code: CodeSoldeDetail) => void;
 }) {
   const initiales = `${utilisateur.prenom.charAt(0)}${utilisateur.nom.charAt(0)}`.toUpperCase();
@@ -76,7 +82,7 @@ function LigneSolde({
               <TypeBadge
                 code="CP"
                 variant={actif && selection?.code === "CP" ? "outline" : "pill"}
-                label={`${formatJours(soldes.cp.valeur)} j`}
+                label={`${formatJours(valeurSolde(soldes, "cp", mode))} j`}
               />
             </button>
           </td>
@@ -89,7 +95,7 @@ function LigneSolde({
               <TypeBadge
                 code="RTT"
                 variant={actif && selection?.code === "RTT" ? "outline" : "pill"}
-                label={`${formatJours(soldes.rtt.valeur)} j`}
+                label={`${formatJours(valeurSolde(soldes, "rtt", mode))} j`}
               />
             </button>
           </td>
@@ -102,7 +108,7 @@ function LigneSolde({
               <TypeBadge
                 code="CPA"
                 variant={actif && selection?.code === "CPA" ? "outline" : "pill"}
-                label={`${formatJours(soldes.cpa.valeur)} j`}
+                label={`${formatJours(valeurSolde(soldes, "cpa", mode))} j`}
               />
             </button>
           </td>
@@ -114,13 +120,13 @@ function LigneSolde({
 
 // Même convention que l'export CSV d'Export paie (`CongesPaiePage.genererCsv`)
 // — BOM UTF-8 côté appelant, point-virgule comme séparateur (Excel FR).
-function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[]): string {
+function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[], mode: ModeSolde): string {
   const entetes = ["Collaborateur", "CP", "RTT", "CPA"];
   const rangs = lignes.map((l) => [
     l.nom,
-    l.soldes ? `${formatJours(l.soldes.cp.valeur)} j` : "",
-    l.soldes ? `${formatJours(l.soldes.rtt.valeur)} j` : "",
-    l.soldes ? `${formatJours(l.soldes.cpa.valeur)} j` : "",
+    l.soldes ? `${formatJours(valeurSolde(l.soldes, "cp", mode))} j` : "",
+    l.soldes ? `${formatJours(valeurSolde(l.soldes, "rtt", mode))} j` : "",
+    l.soldes ? `${formatJours(valeurSolde(l.soldes, "cpa", mode))} j` : "",
   ]);
 
   return [entetes, ...rangs]
@@ -151,6 +157,15 @@ function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[]): stri
  * **Export CSV** (bouton "Exporter", même gabarit que `CongesPaiePage`) :
  * exporte les lignes actuellement affichées, dans l'ordre affiché (filtre
  * collaborateur + tri actif compris).
+ *
+ * **Toggle réel/théorique** (27/08/2026, demande explicite — avant ça le
+ * tableau affichait toujours `.valeur`/réel sans distinction) : par défaut
+ * sur "théorique", sorti du tableau et placé au niveau du titre de page (pas
+ * mêlé aux filtres de la table) — un vrai switch binaire (piste + poignée),
+ * pas un sélecteur/des onglets. Le tri, l'export CSV et la popin
+ * `SoldeDetailPanel` ouverte au clic (son `modeParDefaut`) suivent tous le
+ * mode sélectionné ici — un seul état partagé, pas de risque d'incohérence
+ * entre le tableau et la popin.
  */
 export function SuivreSoldesPage() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
@@ -158,6 +173,10 @@ export function SuivreSoldesPage() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [soldesParId, setSoldesParId] = useState<Record<string, Soldes>>({});
   const [tri, setTri] = useState<Tri | null>(null);
+  // Réel/théorique (27/08/2026, demande explicite) — le tableau affichait
+  // toujours le réel (`.valeur`), sans sélecteur ; par défaut sur théorique
+  // maintenant, cohérent avec la popin qui démarre sur le même mode.
+  const [mode, setMode] = useState<ModeSolde>("theorique");
 
   const actifs = utilisateurs.filter((u) => u.statut === "actif");
 
@@ -199,8 +218,10 @@ export function SuivreSoldesPage() {
           const comparaison = `${a.prenom} ${a.nom}`.localeCompare(`${b.prenom} ${b.nom}`);
           return tri.direction === "desc" ? -comparaison : comparaison;
         }
-        const va = soldesParId[a.id]?.[tri.colonne].valeur ?? 0;
-        const vb = soldesParId[b.id]?.[tri.colonne].valeur ?? 0;
+        const soldeA = soldesParId[a.id];
+        const soldeB = soldesParId[b.id];
+        const va = soldeA ? valeurSolde(soldeA, tri.colonne, mode) : 0;
+        const vb = soldeB ? valeurSolde(soldeB, tri.colonne, mode) : 0;
         return tri.direction === "desc" ? vb - va : va - vb;
       })
     : filtresBase;
@@ -211,7 +232,7 @@ export function SuivreSoldesPage() {
       nom: `${u.prenom} ${u.nom}`,
       soldes: soldesParId[u.id],
     }));
-    const csv = genererCsv(lignes);
+    const csv = genererCsv(lignes, mode);
     const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -223,7 +244,42 @@ export function SuivreSoldesPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Suivre les soldes</h1>
+      <div className="flex flex-col gap-2 px-1">
+        <h1 className="text-ink-900 text-2xl font-semibold">Suivre les soldes</h1>
+        {/* Toggle réel/théorique (27/08/2026, sorti du tableau — demande
+            explicite : "un toggle", pas un sélecteur/onglets ; placé sous le
+            titre plutôt qu'à côté, en plus petit) — un vrai switch binaire
+            (piste + poignée), pas encore de primitive partagée dans
+            `components/ui/` pour ça, construit ici. */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-xs font-semibold ${mode === "reel" ? "text-ink-900" : "text-ink-500"}`}
+          >
+            Réel
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={mode === "theorique"}
+            aria-label="Basculer entre solde réel et solde théorique"
+            onClick={() => setMode(mode === "theorique" ? "reel" : "theorique")}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150 ${
+              mode === "theorique" ? "bg-mint/90" : "bg-ink-300"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-150 ${
+                mode === "theorique" ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
+          <span
+            className={`text-xs font-semibold ${mode === "theorique" ? "text-ink-900" : "text-ink-500"}`}
+          >
+            Théorique
+          </span>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -314,6 +370,7 @@ export function SuivreSoldesPage() {
                         utilisateur={u}
                         soldes={soldesParId[u.id]}
                         selection={selection}
+                        mode={mode}
                         onClickSolde={(code) => setSelection({ utilisateurId: u.id, code })}
                       />
                     ))}
@@ -331,7 +388,7 @@ export function SuivreSoldesPage() {
             utilisateurId={utilisateurSelectionne.id}
             nomComplet={`${utilisateurSelectionne.prenom} ${utilisateurSelectionne.nom}`}
             onClose={() => setSelection(null)}
-            modeParDefaut="theorique"
+            modeParDefaut={mode}
           />
         )}
       </div>

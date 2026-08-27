@@ -3037,6 +3037,38 @@ explicite sous le champ : "Le solde saisi correspond au solde constaté à la fi
 juillet 2026 = solde au 30 juin 2026)". Vérifié en navigateur sur la fiche d'Olivier Test : le sélecteur
 de mois s'affiche et se remplit correctement. `tsc`/`eslint` clean.
 
+**"Suivre les soldes" — popin par défaut remise en cohérence avec le tableau (27/08/2026)** : Vincent a
+signalé que "dans le tableau on affiche les soldes théoriques" — en fait le tableau affiche bien `.valeur`
+(réel, ex. Delphine CP 29j), mais la popin `SoldeDetailPanel` ouverte au clic sur une pill démarrait sur
+"Théorique" (`modeParDefaut="theorique"`, décision du 24/08/2026, antérieure à la refonte du modèle) —
+un chiffre différent (19,5j pour Delphine) s'affichait donc silencieusement à l'ouverture, sans lien
+visible avec la valeur du tableau. Remis sur `modeParDefaut="reel"` dans `SuivreSoldesPage.tsx` (seul
+l'usage manager change ; Accueil/`Dashboard2Page`, vue salarié, reste sur "théorique", toujours pertinent
+pour "combien il me reste à poser"). Vérifié en navigateur : popin de Delphine ouvre maintenant sur
+Réel 29j, identique au tableau. `tsc`/`eslint` clean.
+
+**Correction du correctif précédent — sélecteur réel/théorique ajouté au tableau (27/08/2026)** :
+Vincent a précisé juste après que c'est l'inverse qu'il voulait — "dans le tableau par défaut on
+affiche les soldes théoriques" : pas juste rebasculer la popin sur réel pour matcher un tableau figé
+sur réel, mais ajouter un vrai sélecteur réel/théorique **au tableau lui-même** (par défaut théorique).
+Fait : nouveau `SelectFiltrePill` "Solde théorique"/"Solde réel" à côté du filtre collaborateur
+(`SuivreSoldesPage.tsx`), un seul état `mode` partagé qui pilote l'affichage des 3 colonnes CP/RTT/CPA,
+le tri, l'export CSV, et le `modeParDefaut` de la popin `SoldeDetailPanel` ouverte au clic — plus de
+risque d'incohérence entre le tableau et la popin, quel que soit le mode choisi. `ModeSolde` exporté
+depuis `SoldeDetailPanel.tsx` pour être réutilisé. Vérifié en navigateur : bascule théorique ↔ réel
+change bien les 3 colonnes (ex. Delphine CP 13j théorique / 29j réel), et la popin ouverte dans chaque
+mode affiche le même chiffre que le tableau. `tsc`/`eslint`/`npm run build` clean.
+
+**Itération sur la forme du contrôle (27/08/2026)** : deux ajustements de style demandés juste après —
+(1) "tu me le sors du tableau et tu le passe en toggle" : `SelectFiltrePill` retiré de la ligne de
+filtres du tableau, remplacé par un vrai switch binaire (piste + poignée, pas un `<select>`) placé au
+niveau du titre de page ; (2) "sous le titre et en un peu plus petit" : repositionné sur sa propre
+ligne sous le H1 (au lieu d'aligné à droite dessus) et réduit (piste `h-5 w-9`/poignée `h-4 w-4` au lieu
+de `h-6 w-11`/`h-5 w-5`, texte `text-xs` au lieu de `text-sm`). Pas de primitive `Toggle`/`Switch`
+partagée dans `components/ui/` pour l'instant — construit directement dans `SuivreSoldesPage.tsx` ; à
+extraire si un futur écran a besoin du même composant. Revérifié en navigateur : bascule fonctionne,
+`tsc`/`eslint`/`npm run build` clean.
+
 **Ce qui disparaît** : l'actuel "solde réel" de `soldes.repository.ts` (capital − tout ce qui est
 `validee`, peu importe la date du congé ou si c'est transmis) n'est **plus une valeur utile en soi** —
 ni le collaborateur (qui a besoin du théorique) ni Delphine (qui a besoin du réel ancré paie) ne s'en
