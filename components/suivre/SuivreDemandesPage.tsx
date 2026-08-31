@@ -7,6 +7,7 @@ import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
@@ -73,10 +74,19 @@ const PERIODE_PAR_PARAM: Record<string, PeriodeFiltre> = {
  * reste de `/suivre` (bloqué pour les salarié·es dans `proxy.ts`).
  */
 export function SuivreDemandesPage() {
-  const { demandes, valider, refuser, regulariser, remettreEnAttente } = useDemandesEquipe();
+  const { demandes, valider, refuser, regulariser, remettreEnAttente, retirer } =
+    useDemandesEquipe();
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const { reglesAcquisition } = useReglesConges();
   const searchParams = useSearchParams();
+  // Rôle admin (28/08/2026, "simplifier la partie admin") — perd le pouvoir
+  // de Valider/Refuser/Régulariser une demande sur cet écran, ne garde que
+  // "Annuler cette demande" (même mécanisme que côté collaborateur). Manager
+  // garde tout inchangé. Changement UI seulement — la policy RLS reste large
+  // pour admin (voir plan), donc `retirer` fonctionne déjà sans migration.
+  const { utilisateur } = useUtilisateur();
+  const estManager = utilisateur?.role === "manager";
+  const estAdmin = utilisateur?.role === "admin";
 
   // Données calendrier (courant + suivant) pour le lien "Voir" du panneau de
   // détail (`DetailCongePanel`) sur une demande "en attente" — mêmes données
@@ -186,10 +196,21 @@ export function SuivreDemandesPage() {
   const ajustementSelectionne = regulSelectionne
     ? (ajustementsFiltres.find((a) => a.id === selectionId) ?? null)
     : null;
+  // Manager sur une demande validée non transmise (28/08/2026, "on cale le
+  // comportement admin") — remplace "Signaler comme non pris" par "Annuler
+  // cette demande" (même flow léger que côté collaborateur/admin) tant que
+  // rien n'a été transmis. Sur "en attente" ou une fois transmise, le manager
+  // garde son parcours existant (Décision / Régularisation) inchangé.
+  const managerPeutAnnuler =
+    estManager &&
+    selection?.statut === "validé" &&
+    (lignesTransmissionParDemande[selection.id] ?? []).length === 0;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Suivre les demandes</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+        Suivre les demandes
+      </h1>
 
       <div className="hidden px-1 print:block">
         <h1 className="text-ink-900 text-2xl font-semibold">
@@ -197,13 +218,18 @@ export function SuivreDemandesPage() {
         </h1>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block">
+      <div
+        className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
+        style={{ animationDelay: "90ms" }}
+      >
         <div className="bg-surface-card w-full min-w-0">
           <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
             <div className="flex flex-wrap items-end gap-2">
               <SelectFiltrePill
                 value={typeFiltre}
-                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | TypeFiltreRegul | "tous")}
+                onChange={(e) =>
+                  setTypeFiltre(e.target.value as TypeBadgeCode | TypeFiltreRegul | "tous")
+                }
               >
                 <option value="tous">Tous les types</option>
                 {TYPES_FILTRABLES.map((code) => (
@@ -315,9 +341,19 @@ export function SuivreDemandesPage() {
             key={selection.id}
             selection={selection}
             onClose={() => setSelectionId(null)}
-            onValider={(commentaire) => valider(selection.id, commentaire)}
-            onRefuser={(commentaire) => refuser(selection.id, commentaire)}
-            onRegulariser={(commentaire) => regulariser(selection.id, commentaire)}
+            onValider={estManager ? (commentaire) => valider(selection.id, commentaire) : undefined}
+            onRefuser={estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined}
+            onRegulariser={
+              estManager && !managerPeutAnnuler
+                ? (commentaire) => regulariser(selection.id, commentaire)
+                : undefined
+            }
+            onRetirer={
+              estAdmin || managerPeutAnnuler
+                ? (commentaire) => retirer(selection.id, commentaire)
+                : undefined
+            }
+            peutAnnulerDejaTransmis={estAdmin}
             onValiderSucces={(id, message) => setToast({ id, message })}
             joursFeries={joursFeries}
             congesImposes={congesImposes}

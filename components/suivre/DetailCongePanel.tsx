@@ -10,9 +10,9 @@ import type {
   JourFerie,
   LigneExportPaie,
   StatutDemande,
-  StatutTransmission,
 } from "@/lib/types";
 import { useSoldes } from "@/hooks/useSoldes";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { fetchHistoriqueDecisions, type DecisionHistorique } from "@/lib/data/demandes.repository";
 import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import {
@@ -49,6 +49,30 @@ interface DetailCongePanelProps {
   onValider?: (commentaire: string) => Promise<void>;
   onRefuser?: (commentaire: string) => Promise<void>;
   onRegulariser?: (commentaire: string) => Promise<void>;
+  /** Retrait d'une demande "en attente" par le collaborateur lui-même
+   * (28/08/2026, "Annuler cette demande" — `HistoriquePage`, wording unifié
+   * entre le lien et le titre du panneau) — absent partout ailleurs, le lien
+   * ne s'affiche alors pas. Contrairement à
+   * `onValider`/`onRefuser` (décision manager), n'a jamais besoin de
+   * `demandeur`/`validateur` pour s'afficher : c'est toujours "sa propre"
+   * demande côté collaborateur. */
+  onRetirer?: (commentaire: string) => Promise<void>;
+  /** Autorise `onRetirer` même sur un congé déjà transmis en paie
+   * (28/08/2026, admin uniquement) — par défaut, un congé "validé" avec des
+   * `lignesTransmission` reste bloqué (mention "Passé en paie..."), voir
+   * `dejaTransmis`. La correction (ligne négative dans `export_paie_lignes`)
+   * est générée automatiquement au prochain "Transmettre"
+   * (`genererExportPaie`, même mécanisme que pour une régularisation
+   * manager) — rien de plus à faire ici que débloquer l'action. */
+  peutAnnulerDejaTransmis?: boolean;
+  /** Libellé du lien/titre "Annuler cette demande" (28/08/2026) — opt-in,
+   * "Transmissions paie" veut "Annuler ce congé" (les lignes de cet écran
+   * sont déjà décidées, jamais des demandes en attente d'une décision).
+   * Défaut inchangé partout ailleurs. */
+  libelleRetirer?: string;
+  /** Texte explicatif affiché entre le titre et le commentaire du bloc
+   * "Annuler cette demande" (28/08/2026) — opt-in, absent par défaut. */
+  texteRetirer?: string;
   /** Remonte l'état "action en cours" à l'appelant — `CongesPaiePage` verrouille
    * aussi ses propres contrôles (pills, champs Du/Au...) pendant ce temps, pour
    * éviter qu'une autre action ne parte en même temps (course déjà rencontrée
@@ -96,17 +120,6 @@ interface DetailCongePanelProps {
    * chaque ligne (une demande à cheval sur deux périodes peut en avoir
    * plusieurs). */
   lignesTransmission?: LigneExportPaie[];
-  /** Prévision "si je transmets maintenant" (25/08/2026) — optionnel, absent
-   * partout sauf depuis "Quels congés transmettre"/"Générer l'export"
-   * (Transmissions paie). Ajoute une entrée "Transmis paie le {aujourd'hui} -
-   * X j/Y j" en fin de feed (orange, `X j` en gras — 25/08/2026, demande
-   * explicite), distincte visuellement des lignes réelles
-   * (`lignesTransmission`, `export_paie_lignes` déjà créées) — c'est une
-   * projection, rien n'a encore été transmis. Sert à clarifier, congé par
-   * congé, ce que contiendrait l'export si Delphine cliquait "Transmettre"
-   * maintenant (répond à la confusion notée sur l'aperçu global de "Générer
-   * l'export", qui n'affiche pas ce détail par congé). */
-  previsionTransmission?: { jours: number; total: number };
 }
 
 function formatJjMmAa(iso: string): string {
@@ -131,18 +144,6 @@ const TEXTE_DECISION: Record<StatutDemande, string> = {
   validé: "text-status-success-fg",
   refusé: "text-status-danger-fg",
   annulé: "text-status-danger-fg",
-};
-
-const LIBELLE_TRANSMISSION: Record<StatutTransmission, string> = {
-  transmis: "Transmis",
-  en_paye: "En paye",
-  ecart: "Écart signalé",
-};
-
-const TEXTE_TRANSMISSION: Record<StatutTransmission, string> = {
-  transmis: "text-status-warning-fg",
-  en_paye: "text-status-success-fg",
-  ecart: "text-status-danger-fg",
 };
 
 // Nom de la variable CSS du token couleur du type — pour teinter un fond via
@@ -186,6 +187,10 @@ export function DetailCongePanel({
   onValider,
   onRefuser,
   onRegulariser,
+  onRetirer,
+  peutAnnulerDejaTransmis = false,
+  libelleRetirer = "Annuler cette demande",
+  texteRetirer,
   onEnCoursChange,
   onValiderSucces,
   joursFeries,
@@ -197,7 +202,6 @@ export function DetailCongePanel({
   masquerTypeBadgeBandeau = false,
   pleineLargeur = false,
   lignesTransmission,
-  previsionTransmission,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
   const [regularisationOuverte, setRegularisationOuverte] = useState(false);
@@ -208,6 +212,7 @@ export function DetailCongePanel({
     null,
   );
   const [historiqueDecisions, setHistoriqueDecisions] = useState<DecisionHistorique[]>([]);
+  const [retraitOuvert, setRetraitOuvert] = useState(false);
 
   // Journal complet des décisions (`decisions_demande`, 25/08/2026) — sans
   // ça, une régularisation écrasait la trace de la validation d'origine
@@ -224,14 +229,60 @@ export function DetailCongePanel({
     };
   }, [selection.id]);
 
+  // Rafraîchit le journal après une action qui laisse le panneau ouvert
+  // (Refuser/Signaler comme non pris/Retirer/Restaurer, via `executer`
+  // ci-dessous) — sans ça, la nouvelle ligne ("Refusé le"/"Retirée le"...)
+  // n'apparaissait qu'après fermeture/réouverture du panneau : l'effet
+  // ci-dessus ne se redéclenche pas puisque `selection.id` ne change pas
+  // (28/08/2026, signalé par Vincent en testant "Annuler cette demande" sur
+  // un congé validé — mais touchait déjà Refuser/Signaler comme non pris).
+  async function rafraichirHistorique() {
+    const data = await fetchHistoriqueDecisions(selection.id);
+    setHistoriqueDecisions(data);
+  }
+
   const code = selection.type === "CP" && selection.isAnticipation ? "CPA" : selection.type;
   const jours = selection.nbDemiJournees / 2;
+  // "Retirée" vs "Annulée" (28/08/2026) — même statut `annulé` en base (choix
+  // acté, voir BASE-DE-DONNEES.md), distingué uniquement à l'affichage : une
+  // décision dont l'auteur est le demandeur lui-même signale un retrait
+  // salarié plutôt qu'une régularisation manager. `selection.demandeur`
+  // n'existe que côté manager (`DemandeEquipe`) — côté collaborateur
+  // (`HistoriquePage`), c'est toujours "sa" demande, donc l'utilisateur
+  // courant (`useUtilisateur`) sert de repli pour connaître l'id du
+  // demandeur. Sans ce repli, toute décision vue depuis son propre historique
+  // (y compris une régularisation manager) aurait été affichée "Retirée" à
+  // tort, faute d'un id de demandeur à comparer.
+  const { utilisateur: utilisateurCourant } = useUtilisateur();
+  const demandeurId = selection.demandeur?.id ?? utilisateurCourant?.id ?? null;
+  function estRetraitParSoiMeme(auteurId: string | undefined): boolean {
+    return demandeurId != null && auteurId === demandeurId;
+  }
+  const retireeParSoiMeme =
+    selection.statut === "annulé" &&
+    selection.validateur != null &&
+    estRetraitParSoiMeme(selection.validateur.id);
+  // "Annuler cette demande" étendu aux congés validés non transmis
+  // (28/08/2026) — un congé validé jamais passé dans un export n'a aucune
+  // ligne `export_paie_lignes` (même signal que le badge Transmis/En paye/
+  // Écart utilisé ailleurs dans l'app).
+  const peutAnnulerValide =
+    selection.statut === "validé" && (lignesTransmission ?? []).length === 0;
+  // Congé déjà transmis/passé en paie (28/08/2026) — le collaborateur ne
+  // peut plus l'annuler lui-même (RLS : hors du cas "validé non transmis"),
+  // simple mention plutôt qu'un lien d'action absent. Seul l'admin peut
+  // passer outre (`peutAnnulerDejaTransmis`).
+  const dejaTransmis = selection.statut === "validé" && (lignesTransmission ?? []).length > 0;
+  const peutAnnulerCetteDemande =
+    selection.statut === "en attente" ||
+    peutAnnulerValide ||
+    (dejaTransmis && peutAnnulerDejaTransmis);
   // Solde avant/après (17/08/2026 → 24/08/2026, ajout demandé) — uniquement
   // pour les 3 types suivis par `useSoldes` (mêmes que "Suivre les soldes"),
   // pas de notion de solde pour CSS/CE/RECUP/EVT_FAM. `valeurApresAttente`
   // (déjà calculé par `fetchSoldes`) tient compte de TOUTES les demandes en
   // attente de ce type, pas seulement celle-ci — approximation acceptée,
-  // cohérente avec son usage existant (`Dashboard2Page`).
+  // cohérente avec son usage existant (`DashboardPage`).
   const codeSolde = code === "CP" || code === "RTT" || code === "CPA" ? code : null;
   const { soldes: soldesDemandeur } = useSoldes(selection.demandeur?.id);
   const { tone: toneStatut, Icon: IconStatut } = STATUT_CONFIG[selection.statut];
@@ -271,6 +322,7 @@ export function DetailCongePanel({
     try {
       await action(commentaire.trim());
       setCommentaire("");
+      await rafraichirHistorique();
     } catch {
       setErreurAction(messageErreur);
     } finally {
@@ -323,18 +375,22 @@ export function DetailCongePanel({
     date: string;
     node: ReactNode;
     note?: ReactNode;
-    previsionnel?: boolean;
   }[] = [];
 
   if (historiqueDecisions.length > 0) {
     for (const decision of historiqueDecisions) {
+      const decisionRetireeParSoiMeme =
+        decision.statut === "annulé" &&
+        decision.decidePar != null &&
+        estRetraitParSoiMeme(decision.decidePar.id);
       entreesFeed.push({
         key: `decision-${decision.id}`,
         date: decision.decideLe,
         node: (
           <>
             <span className={`font-semibold ${TEXTE_DECISION[decision.statut]}`}>
-              {LIBELLE_DECISION[decision.statut]} le {formatJjMmAa(decision.decideLe.slice(0, 10))}
+              {decisionRetireeParSoiMeme ? "Retirée" : LIBELLE_DECISION[decision.statut]} le{" "}
+              {formatJjMmAa(decision.decideLe.slice(0, 10))}
             </span>
             {decision.decidePar && (
               <span className="text-ink-500"> par {decision.decidePar.prenom}</span>
@@ -360,9 +416,12 @@ export function DetailCongePanel({
       node: (
         <>
           <span className={`font-semibold ${TEXTE_DECISION[selection.statut]}`}>
-            {LIBELLE_DECISION[selection.statut]} le {formatJjMmAa(selection.dateDecision)}
+            {retireeParSoiMeme ? "Retirée" : LIBELLE_DECISION[selection.statut]} le{" "}
+            {formatJjMmAa(selection.dateDecision)}
           </span>
-          {selection.validateur && <span className="text-ink-500"> par {selection.validateur.prenom}</span>}
+          {selection.validateur && (
+            <span className="text-ink-500"> par {selection.validateur.prenom}</span>
+          )}
         </>
       ),
       note: selection.commentaireManager || undefined,
@@ -376,9 +435,10 @@ export function DetailCongePanel({
       date: ligne.genereLe,
       node: (
         <>
-          <span className="font-semibold text-status-warning-fg">
+          <span className="text-status-warning-fg font-semibold">
             {retro ? "Transmis (retro)" : "Transmis"} le {formatJjMmAa(ligne.genereLe.slice(0, 10))}
           </span>
+          {ligne.genereParNom && <span className="text-ink-500"> par {ligne.genereParNom}</span>}
           <span className="text-ink-500">
             {" "}
             : {retro ? "-" : ""}
@@ -386,45 +446,6 @@ export function DetailCongePanel({
           </span>
         </>
       ),
-    });
-    if (ligne.statut !== "transmis" && ligne.verifieLe) {
-      entreesFeed.push({
-        key: `verifie-${ligne.id}`,
-        date: ligne.verifieLe,
-        node: (
-          <span className={`font-semibold ${TEXTE_TRANSMISSION[ligne.statut]}`}>
-            {ligne.statut === "en_paye" && retro ? "En paye (retro)" : LIBELLE_TRANSMISSION[ligne.statut]}{" "}
-            le {formatJjMmAa(ligne.verifieLe.slice(0, 10))}
-          </span>
-        ),
-        note: ligne.statut === "ecart" && ligne.motifEcart ? ligne.motifEcart : undefined,
-      });
-    }
-  }
-
-  if (previsionTransmission) {
-    const retro = previsionTransmission.jours < 0;
-    entreesFeed.push({
-      key: "prevision",
-      date: new Date().toISOString(),
-      // Orange, avec emphase sur le nombre de jours transmis (25/08/2026,
-      // demande explicite : "Transmis paie le jj/mm/AA - 1J/NNj en orange
-      // avec une emphase sur le nombre de jours transmis") — distingue cette
-      // ligne, purement prévisionnelle (rien n'est encore réellement
-      // transmis), des lignes réelles ci-dessus (`lignesTransmission`, en
-      // orange atténué "warning" également, mais sans le gras).
-      node: (
-        <span className="text-status-warning-fg italic">
-          {retro ? "Transmis (retro)" : "Transmis paie"} le{" "}
-          {formatJjMmAa(new Date().toISOString().slice(0, 10))} -{" "}
-          <span className="font-bold not-italic">
-            {retro ? "-" : ""}
-            {formatJours(Math.abs(previsionTransmission.jours))} j
-          </span>
-          /{formatJours(previsionTransmission.total)} j
-        </span>
-      ),
-      previsionnel: true,
     });
   }
 
@@ -537,11 +558,7 @@ export function DetailCongePanel({
               </div>
               <div className="flex items-center gap-2">
                 <span
-                  className={
-                    entree.previsionnel
-                      ? "h-1.5 w-1.5 shrink-0 rounded-full border border-dashed border-ink-500"
-                      : `h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`
-                  }
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
                 />
                 <span className="text-[10px]">{entree.node}</span>
               </div>
@@ -566,7 +583,7 @@ export function DetailCongePanel({
         }
       </div>
 
-      {peutDecider && (selection.statut === "validé" || selection.statut === "annulé") && (
+      {peutDecider && selection.statut === "validé" && (
         <>
           <button
             type="button"
@@ -599,11 +616,7 @@ export function DetailCongePanel({
                   value={commentaire}
                   onChange={(e) => setCommentaire(e.target.value)}
                   rows={2}
-                  placeholder={
-                    selection.statut === "validé"
-                      ? "Ex. congé finalement non pris…"
-                      : "Ex. annulation faite par erreur…"
-                  }
+                  placeholder="Ex. congé finalement non pris…"
                   className="w-full rounded-md text-xs placeholder:text-xs"
                 />
               </div>
@@ -615,34 +628,18 @@ export function DetailCongePanel({
               )}
 
               <div className="px-4 pb-4">
-                {selection.statut === "validé" ? (
-                  <Button
-                    variant={commentaire.trim() ? "primary" : "secondary"}
-                    onClick={() =>
-                      demanderConfirmation("signaler comme non pris", () =>
-                        executer(onRegulariser, "Impossible de signaler ce congé comme non pris."),
-                      )
-                    }
-                    disabled={enCours || !commentaire.trim()}
-                    className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    Signaler comme non pris
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() =>
-                      demanderConfirmation("restaurer", () =>
-                        executer(onValider, "Impossible de restaurer cette demande."),
-                      )
-                    }
-                    disabled={enCours || !commentaire.trim()}
-                    className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                  >
-                    <Check size={16} />
-                    Restaurer
-                    <Check size={16} className="invisible" aria-hidden />
-                  </Button>
-                )}
+                <Button
+                  variant={commentaire.trim() ? "primary" : "secondary"}
+                  onClick={() =>
+                    demanderConfirmation("signaler comme non pris", () =>
+                      executer(onRegulariser, "Impossible de signaler ce congé comme non pris."),
+                    )
+                  }
+                  disabled={enCours || !commentaire.trim()}
+                  className="w-full justify-center rounded-full px-4 py-2 text-xs"
+                >
+                  Signaler comme non pris
+                </Button>
               </div>
             </div>
           )}
@@ -707,6 +704,86 @@ export function DetailCongePanel({
             </Button>
           </div>
         </div>
+      )}
+
+      {onRetirer && peutAnnulerCetteDemande && (
+        <>
+          <button
+            type="button"
+            onClick={() => setRetraitOuvert((v) => !v)}
+            className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
+          >
+            {libelleRetirer}
+            {retraitOuvert ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          {retraitOuvert && (
+            <div
+              className="w-full shadow-sm"
+              style={{
+                backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[code]}) 5%, white)`,
+              }}
+            >
+              <div className={`px-4 pt-3 pb-1 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+                {libelleRetirer}
+              </div>
+              {texteRetirer && <p className="text-ink-500 px-4 pb-1 text-[12px]">{texteRetirer}</p>}
+              {dejaTransmis && peutAnnulerDejaTransmis && (
+                <p className="text-ink-500 px-4 pb-1 text-[11px]">
+                  Déjà transmis en paie : une correction sera envoyée automatiquement au prochain
+                  export.
+                </p>
+              )}
+              <div className="px-4 pt-1.5 pb-2">
+                <label
+                  htmlFor="commentaire-retrait"
+                  className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+                >
+                  {selection.statut === "validé"
+                    ? "Commentaire (obligatoire)"
+                    : "Commentaire (facultatif)"}
+                </label>
+                <Textarea
+                  id="commentaire-retrait"
+                  value={commentaire}
+                  onChange={(e) => setCommentaire(e.target.value)}
+                  rows={2}
+                  placeholder="Ex. finalement pas besoin de ce congé…"
+                  className="w-full rounded-md text-xs placeholder:text-xs"
+                />
+              </div>
+
+              {erreurAction && (
+                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
+                  {erreurAction}
+                </div>
+              )}
+
+              <div className="px-4 pb-4">
+                <Button
+                  variant={
+                    selection.statut !== "validé" || commentaire.trim() ? "primary" : "secondary"
+                  }
+                  onClick={() =>
+                    demanderConfirmation("retirer", () =>
+                      executer(onRetirer, "Impossible de retirer cette demande."),
+                    )
+                  }
+                  disabled={enCours || (selection.statut === "validé" && !commentaire.trim())}
+                  className="w-full justify-center rounded-full px-4 py-2 text-xs"
+                >
+                  Confirmer
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {onRetirer && dejaTransmis && !peutAnnulerDejaTransmis && (
+        <p className="text-ink-500 px-4 py-1 text-[11px]">
+          Passé en paie : contactez l&apos;administrateur pour modifier ce congé
+        </p>
       )}
 
       {peutDecider && selection.statut === "en attente" && peutVoirDetail && (

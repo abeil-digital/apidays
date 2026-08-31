@@ -158,7 +158,8 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
       code,
       texte: (
         <>
-          {prenom} a <Stabilo tone={STABILO_PAR_STATUT[demande.statut] ?? "warning"}>{verbe}</Stabilo>{" "}
+          {prenom} a{" "}
+          <Stabilo tone={STABILO_PAR_STATUT[demande.statut] ?? "warning"}>{verbe}</Stabilo>{" "}
           {possessif} de <SemiBold>{code}</SemiBold>{" "}
           <SemiBold>{periodePhrase(demande, "du")}</SemiBold>
         </>
@@ -271,27 +272,35 @@ export function ActiviteRecenteFeed({
   if (!tiroirOuvert) return null;
 
   return (
-    <div className="bg-ink-900/50 fixed inset-0 z-50 flex justify-end" onClick={onFermerTiroir}>
-      <div
-        className="bg-surface-card animate-drawer-in-right flex h-full w-full max-w-sm flex-col shadow-lg"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="border-ink-300/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
-          <h2 className="text-ink-900 flex items-center gap-1.5 text-base font-bold">
-            <Newspaper size={16} className="text-ink-500" />
-            Mon journal
-          </h2>
-          <button
-            type="button"
-            onClick={onFermerTiroir}
-            aria-label="Fermer"
-            className="text-ink-500 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <ListeEvenements evenements={evenements} />
+    <div className="bg-ink-900/50 fixed inset-0 z-50" onClick={onFermerTiroir}>
+      {/* Centré horizontalement sur le conteneur `max-w-[1180px]` de l'app
+          (28/08/2026, "tiroir mal calé — plaqué sur le bord de l'écran") :
+          le fond assombri `inset-0` couvre bien tout le viewport (cliquer
+          n'importe où hors du panneau ferme le tiroir), mais le panneau
+          lui-même reste centré sur le CONTENU de l'app, pas sur le bord
+          physique de l'écran. */}
+      <div className="mx-auto flex h-full w-full justify-end md:max-w-[1180px]">
+        <div
+          className="bg-surface-card animate-drawer-in-right flex h-full w-full max-w-sm flex-col shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="border-ink-300/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
+            <h2 className="text-ink-900 flex items-center gap-1.5 text-base font-bold">
+              <Newspaper size={16} className="text-ink-500" />
+              Mon journal
+            </h2>
+            <button
+              type="button"
+              onClick={onFermerTiroir}
+              aria-label="Fermer"
+              className="text-ink-500 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <ListeEvenements evenements={evenements} />
+          </div>
         </div>
       </div>
     </div>

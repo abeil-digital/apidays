@@ -3165,6 +3165,274 @@ besoin de reconcilier deux calculs indépendants). Périmètre exact et plan de 
 implémentation — voir `questions.md` pour le point resté ouvert et `Backlog.md` pour le chantier en
 pause qui doit reprendre là-dessus.
 
+**Statut/commentaire des demandes — deux règles resserrées (28/08/2026)** : (1) plus de régularisation
+possible une fois un congé refusé ou annulé, pour tous les profils — le bloc "Régularisation" de
+`DetailCongePanel.tsx` (qui permettait "Restaurer" un congé annulé, réutilisant `onValider`) ne
+s'affiche désormais que pour `statut === "validé"` (ancienne condition : `"validé" || "annulé"`) ;
+l'état `annulé` devient un vrai statut terminal, sans action. (2) le commentaire devient obligatoire
+pour "Annuler cette demande" quand la demande est `validée` (comportement déjà en place pour la
+régularisation "Signaler comme non pris", désormais harmonisé) — reste facultatif pour une demande
+"en attente". `tsc`/`eslint`/`prettier` clean.
+
+**Suppression de la granularité transmis/en_paye/écart sur `export_paie_lignes` (28/08/2026,
+"je me demande si on a besoin d'avoir deux statuts transmis et pris en compte")** : en creusant,
+confirmé que cette distinction n'a jamais été fonctionnelle — `validerCheckPaie` (la fonction censée
+faire passer une ligne de `transmis` à `en_paye`) n'avait aucun appelant, le bouton "Valider" de
+"Vérifier les fiches de paie" étant câblé à vide depuis sa conception (discussion restée en pause).
+Décision : tout retirer plutôt que garder un statut mort. Colonnes `statut`/`motif_ecart`/
+`verifie_le`/`verifie_par` supprimées d'`export_paie_lignes` (migration fournie à Vincent, exécutée),
+type `statut_transmission` supprimé, policy RLS `"export_paie_lignes: manager et admin mettent à
+jour le statut"` (devenue sans objet) supprimée. Côté code : `StatutTransmission` retiré de
+`lib/types.ts` (`LigneExportPaie` perd `statut`/`motifEcart`/`verifieLe`), `validerCheckPaie` supprimé
+de `exportsPaie.repository.ts`, le feed de `DetailCongePanel.tsx` n'affiche plus qu'une entrée
+"Transmis"/"Transmis (retro)" (fini la distinction "En paye"/"Écart signalé" en 2e ligne), et le badge
+"Paie" de `HistoriqueTable.tsx` simplifié à Transmis (✓)/— (icône `Check` ajoutée, `TriangleAlert`
+retiré). Une ligne dans `export_paie_lignes` = congé transmis, point — plus de sous-état. Avant cette
+suppression, Vincent a fait vider `exports_paie`/`export_paie_lignes` (`delete from exports_paie`,
+cascade) pour repartir d'un jeu de données propre et refaire l'exercice de transmission lui-même.
+`tsc`/`eslint`/`prettier`/`npm run build` clean à chaque étape.
+
+**Annulation par l'admin d'un congé déjà transmis en paie (28/08/2026, "on va s'intéresser à la
+gestion des annulations des congés déjà passés en paye")** : cas resté bloqué jusqu'ici — même
+l'admin ne pouvait pas annuler un congé validé une fois `export_paie_lignes` non vide (mention "Passé
+en paie : contactez l'administrateur..." affichée à tout le monde, y compris l'admin). En creusant,
+découverte que le mécanisme de correction existe déjà et est branché : `genererExportPaie`
+(`exportsPaie.repository.ts`) détecte automatiquement, au prochain "Transmettre", toute demande
+`annulée` dont le solde de transmission est positif, et génère une ligne négative de correction — ce
+mécanisme a été construit pour la régularisation manager ("Signaler comme non pris" après
+transmission), mais ne dépend que du statut `annulé`, peu importe qui l'a mis. Donc : juste débloquer
+l'UI pour l'admin, sans rien construire de neuf côté génération. Nouveau prop
+`peutAnnulerDejaTransmis` (opt-in, admin uniquement) sur `DetailCongePanel.tsx` — étend
+`onRetirer`/le commentaire obligatoire au cas `dejaTransmis`, ajoute une note "Déjà transmis en
+paie : une correction sera envoyée automatiquement au prochain export." dans le bloc ouvert. Câblé à
+`estAdmin` dans `SuivreDemandesPage.tsx`, `SoldeDetailPanel.tsx`/`SuivreSoldesPage2.tsx` (via une
+nouvelle prop traversante) et `TransmissionsPaiePage.tsx`. RLS inchangée (la policy large
+`"demandes: admin gère tout"` couvrait déjà ce cas). `tsc`/`eslint`/`prettier`/`npm run build` clean.
+
+**Suppression de la ligne "prévisionnelle" du feed (28/08/2026)** : en testant le rattrapage de
+juillet, Vincent relève que la ligne "Transmis paie le {jj/mm/AA} - Xj/Yj" du feed de
+`DetailCongePanel` (ajoutée le 25/08, uniquement sur "Quels congés transmettre"/"Générer l'export")
+affiche la date du jour réel (28/08) plutôt que la période traitée (juillet) — comportement voulu à
+l'origine (`genererExportPaie` horodate bien l'export avec `now()`, pas avec la période), mais jugé
+trompeur à l'usage pour un rattrapage de backlog. Décision : la retirer entièrement plutôt que
+l'ajuster. Prop `previsionTransmission` retirée de `DetailCongePanel.tsx` (interface, destructure,
+bloc de rendu, champ `previsionnel` du feed et son style pointillé), et son câblage retiré de
+`TransmissionsPaiePage.tsx`/`CongesPaiePage.tsx`. Le calcul sous-jacent
+(`calculerJoursATransmettreMaintenant`/`joursATransmettreParId`) reste en place, toujours utilisé
+pour la colonne Durée "X/Y j". `tsc`/`eslint`/`prettier`/`npm run build` clean.
+
+**Refonte de "Quels congés transmettre" (28/08/2026)** — plusieurs chantiers enchaînés dans la même
+session :
+- **Décision/Régularisation retirées de cet écran** ("on va supprimer les blocs régulation de cette
+  vue et décision pour le remplacer par le bloc qui permet de supprimer un congé") : composant
+  `CarteDecisionRapide` (Valider/Refuser/Pending, construit le 25/08) supprimé, ainsi que le bloc
+  Régularisation intégré (`onRegulariser` retiré du câblage) — remplacés par `onRetirer` ("Annuler
+  cette demande"/"Annuler ce congé" ici, voir wording plus bas) avec `peutAnnulerDejaTransmis={estAdmin}`
+  systématique. Fonctions `valider`/`refuser`/`regulariser`/`annulerValidation` (+ le toast d'annulation
+  de validation associé) devenues mortes, supprimées. Cohérent avec la règle actée le 28/08 pour
+  "Suivre les demandes"/"Suivre les soldes 2" : admin ne décide plus jamais, seulement annuler.
+- **Tri par collaborateur puis type** ("Pour chaque section... organiser : Collaborateur / CP / RTT /
+  CSS / CPA / puis les autres") : nouvelle fonction `trierParCollaborateurPuisType` (tri stable,
+  s'appuie sur le regroupement par collaborateur déjà fait par `HistoriqueTable` via
+  `triParDefaut="collaborateur"`) appliquée aux 3 tableaux ("Congés consommés sur la période",
+  "...des périodes précédentes", "...passés en paye mais annulés").
+- **Refonte du format CSV** ("Export congés {Mois}" + période, puis un bloc par collaborateur —
+  liste des CP, liste des RTT, etc. — par section, "Régularisations" gardant des colonnes dédiées) :
+  nouveau format en sections + blocs par collaborateur (une ligne "Nom", puis une ligne par type
+  effectivement consommé — plus de ligne "0"), remplace l'ancienne grille fusionnée
+  collaborateur × type. Décisions actées via questions posées : titre sur 2 lignes ("Export congés
+  {mois année}" / "Période de prise en compte : jj/mm/aaaa - jj/mm/aaaa"), Régularisations en
+  colonnes dédiées (Collaborateur/Type/Date/Jours/Motif) plutôt qu'en blocs.
+- **Wording** : lien/titre "Annuler cette demande" → "Annuler ce congé" sur cet écran uniquement
+  (nouveau prop `libelleRetirer` sur `DetailCongePanel`, défaut inchangé partout ailleurs) ; texte
+  "Ce congé n'a pas été pris par le collaborateur" ajouté entre le titre et le commentaire (nouveau
+  prop `texteRetirer`, opt-in) ; modale de confirmation de transmission reformulée en "Transmettre ces
+  données" / "Confirmez-vous que vous allez envoyer ces données à la paie ? L'historique sera
+  consultable dans Apidays."
+- `tsc`/`eslint`/`prettier`/`npm run build` clean à chaque étape.
+
+**Transmission directe + suppression de l'onglet "Générer l'export" (28/08/2026)** : Vincent doutait
+depuis un moment de l'utilité de cet onglet ("juste une mise en page différente de ce qui se passe
+ici") — décision actée en 2 temps. D'abord, le bouton "Valider et générer l'export" de "Quels congés
+transmettre" transmet désormais directement (au lieu de juste changer d'onglet) : modale de
+confirmation forte (reprise de l'ancien "Générer l'export"), `genererExportPaie(periode)`, gel de
+l'écran une fois transmis — sélecteurs Du/Au désactivés, cards congé en lecture seule (`onRetirer`
+non câblé), bandeau "Transmis le {date} à {heure}" sous les onglets (`formatDateHeureAction`,
+finalement scopé à cet onglet seulement, pas "Vérifier les fiches de paie"), colonne "Paie" avec coche
+ajoutée aux 3 tableaux (`lignesTransmissionParDemande`), feed de `DetailCongePanel` enrichi d'un "par
+{prénom}" sur l'entrée "Transmis le" (nouveau champ `genereParNom` sur `LigneExportPaie`, alimenté par
+un join `export_paie_lignes → exports_paie → utilisateurs(prenom)` dans `fetchCheckFichesPaie`/
+`fetchLignesTransmissionParDemande`). Ensuite, l'onglet "Générer l'export" (`GenererExport`) est
+supprimé entièrement, ainsi que `components/suivre/CongesPaiePage.tsx` (devenu orphelin, plus aucun
+appelant) — la génération CSV qu'il portait via `ref`/`useImperativeHandle` est portée directement
+dans `TransmissionsPaiePage.tsx` (types/fonctions `LigneCollab`/`grouperParCollaborateur`/
+`genererCsv`/... copiés depuis `CongesPaiePage.tsx`, `codeRecap`/`ordreType`/
+`trierParCollaborateurPuisType` généralisés de `CongeATransmettre` à `DemandeEquipe` pour rester
+utilisables sur les deux sources de données), le lien "Exporter (CSV)" rejoint le bouton "Valider et
+générer l'export" dans le même bandeau sticky. `TransmissionsPaiePage` ne garde plus que 2 onglets
+("Quels congés transmettre", "Vérifier les fiches de paie 2").
+
+**Bug "plus aucune donnée dans le tableau après la validation" (28/08/2026, signalé en testant)** :
+`useCongesATransmettre` liste ce qui RESTE à transmettre — une fois tout envoyé, forcément vide. Le
+gel de l'écran (sélecteurs/lecture seule) masquait ce problème sans le résoudre : les 3 tableaux et le
+CSV se retrouvaient vides après un "Transmettre" réussi. Correctif : port du mécanisme
+`figeParExport` de l'ancien `CongesPaiePage.tsx` — une fois `exportPaie` connu, un nouvel effet
+appelle `fetchCheckFichesPaie(exportPaie.id)` et bascule `demandesPourAffichage`
+(`demandesFigees`/`joursParDemandeFigee`, signé) à la place du backlog live pour tout le calcul en
+aval (bucketing des 3 tableaux par signe plutôt que par statut, `totaux`, colonne Durée via un nouveau
+`renderDureeFigee`, CSV via `joursPourCsv`). **Exigence explicite de Vincent en cours de route** ("les
+données qu'un export contient doivent être historisées" — exemple : un CP transmis en juillet puis
+annulé en août doit rester visible dans les 2 transmissions, juillet ET août) : confirmé que ce
+mécanisme la satisfait nativement, `fetchCheckFichesPaie` étant scopé par `export_paie_id`, jamais par
+le statut live de la demande — un export figé est immuable. Un bug annexe corrigé dans la foulée :
+`grouperParCollaborateur` (utilisé pour le total du CSV) excluait à tort une demande dont le statut
+LIVE était passé à "annulé" depuis, même dans une section qui la comptait historiquement comme
+positive — nouveau paramètre `ignorerStatutLive` (activé quand `estTransmis`) pour ne plus dépendre du
+statut courant une fois l'export figé. `tsc`/`eslint`/`prettier`/`npm run build` clean.
+
+**"Vérifier les fiches de paie 2" — vérification du calcul de solde (28/08/2026)** : Vincent demande
+confirmation que les jours transmis via "Quels congés transmettre" sont bien pris en compte dans le
+calcul des soldes affichés ici. Confirmé après lecture du code : `fetchSoldes`/`sommeTransmis`
+(`soldes.repository.ts`) sont bien ancrés sur `export_paie_lignes`, filtrés par
+`exports_paie.genere_le <= dateReference` (date de génération réelle de l'export, pas la période
+qu'il couvre) — mécanisme déjà en place depuis le 27/08, `fetchComparaisonSoldes` refetch déjà
+automatiquement au changement d'`exportId`. **Effet de bord découvert en testant** : un rattrapage
+tardif (congé de juillet transmis le 28/08 en régularisant le backlog) ne compte donc ni dans le solde
+de juillet ni avant le 28/08 dans celui d'août — seulement à partir de sa date de génération réelle.
+Question posée à Vincent (ancrer sur la période de l'export plutôt que sur `genere_le` ?) — **décision :
+garder `genere_le`, ne rien changer** ; cohérent avec le reste de l'app (repêchage/à cheval atterrissent
+toujours dans la période où ils sont réellement transmis, jamais réinjectés rétroactivement dans le
+passé). Reste un vrai bug d'affichage identifié mais pas corrigé : dans ce cas de figure, le panneau
+"jours du mouvement" de `VerifierFichesPaiePage2.tsx` invente une "Acquisition" fantôme
+(`acquisition = mouvement − somme des lignes`, résidu de calcul) pour un type qui n'en a pas (CP) —
+Vincent a proposé de la corriger plus tard, pas encore fait. Pour tester ce scénario, Vincent a
+antidaté manuellement (SQL fourni par l'agent, exécuté par Vincent) le `genere_le` d'un export de test
+au 29/07/2026 (dans juillet lui-même, volontairement, pour vérifier l'effet inverse). Item ajouté au
+Backlog : "Gestion des jours à cheval : à revoir" (Moyenne, priorité).
+
+**Tiroir "Mon journal" — tentative de bascule vers une entrée par le bas, abandonnée (28/08/2026)** :
+sur demande explicite ("on va remplacer la transition droite gauche pour une basse ahaute"),
+`ActiviteRecenteFeed.tsx` a été modifié pour ancrer le tiroir en bas de l'écran (`items-end
+justify-center`, `max-h-[85vh]`, coins arrondis en haut) avec une nouvelle animation dédiée
+`--animate-drawer-in-bottom`/`@keyframes drawer-in-bottom` (`translateY`) ajoutée dans
+`globals.css`, en gardant `max-w-sm` (pas plein écran) — confirmé par Vincent après une question de
+cadrage. Revenu en arrière presque aussitôt ("on garde comme avant") : wrapper et panneau repassés à
+leur état d'origine (`justify-end`, `animate-drawer-in-right`, hauteur pleine), le token et les
+keyframes `drawer-in-bottom` supprimés de `globals.css` (n'existent donc plus dans le code).
+
+**"Acquisition" fantôme — diagnostic technique complet (28/08/2026)** : approfondissement de l'item
+Backlog identifié le 28/08 plus haut (voir juste au-dessus). Racine confirmée avec précision : dans
+`VerifierFichesPaiePage2.tsx:265-266`, `sommeJoursLignes` vient de `fetchCheckFichesPaie(exportId)`
+(`exportsPaie.repository.ts:374-377`) — TOUTES les lignes rattachées à cet export précis, y compris
+un repêchage d'un mois antérieur transmis tardivement dans cet export — alors que `mouvementTotal`
+vient de `fetchSoldes(u.id, finMoisEnCours)`, qui filtre `exports_paie.genere_le <= periode.fin`
+(`soldes.repository.ts:472`) : si l'export a été généré après la fin de la période affichée (cas
+courant), ses propres lignes tombent hors de ce filtre. Le résidu (`mouvementTotal −
+sommeJoursLignes`) invente alors une "Acquisition" pour un type qui n'en a pas (CP). Piste de
+correctif documentée dans Backlog.md (filtrer `lignes` sur la période affichée avant de calculer le
+résidu) — **pas implémenté, Vincent doit vérifier la logique avant tout correctif** (touche du
+calcul de solde).
+
+**Apparition échelonnée des blocs d'écran (28/08/2026, item Backlog "Affichage progressif des
+composants")** : nouvelle convention d'entrée de page — classe utilitaire `animate-stagger-in`
+(`--animate-stagger-in`/`@keyframes stagger-in` dans `globals.css`, fondu + `translateY` de 14px,
+durée 450ms) appliquée aux blocs de premier niveau de chaque page, avec un `animationDelay` inline
+croissant par bloc (généralement 0/90/180/270ms) pour créer un effet de cascade au montage plutôt
+qu'un rendu en bloc. Réglage de l'intensité en plusieurs passes : 400ms/8px jugé imperceptible par
+Vincent, vérifié techniquement correct malgré tout (`getAnimations()` en JS confirme l'animation
+appliquée) — la limite venant du round-trip de l'outil de capture d'écran (screenshot toujours pris
+après la fin de l'animation, jamais pendant) plutôt qu'un vrai bug ; passage temporaire à 2500ms pour
+confirmation visuelle par Vincent en conditions réelles, puis réglage final à 450ms/14px avec délais
+resserrés (70-90ms par palier). Déployé sur toutes les pages principales : Accueil (`DashboardPage`,
+6 blocs), Historique, Suivre les demandes, Suivre les soldes 2, Suivre le calendrier, Transmissions
+paie (shell + les 4 cards de "Quels congés transmettre"), Vérifier les fiches de paie 2, Paramétrer >
+Utilisateurs/Congés & RTT/Calendrier. Les panneaux de détail ouverts par clic (`DetailCongePanel`,
+`SoldeDetailPanel`...) et les bandeaux sticky de bas de page ne sont volontairement pas animés (pas
+de remontage au clic, l'effet de cascade ne concerne que le chargement initial de la page). Vérifié
+`tsc`/`eslint`/`prettier`/`npm run build` clean sur l'ensemble des fichiers touchés, testé en
+navigateur sur chaque page sans régression visuelle.
+
+**Poursuite de la revue du Backlog (28/08/2026)** : passage complet ligne par ligne sur les items
+restants après la session précédente (repris à la ligne "Affichage progressif"). Tranchés/traités :
+apparition échelonnée (fait, voir ci-dessus), item "Uniformisation UI des icônes 'à cheval'" renommé
+et réécrit en "Gestion des demandes à cheval : clarté de la transmission (UI) et suivi de ces jours"
+(priorité relevée à Haute, absorbe l'ancien item séparé "Gestion des jours à cheval" du 28/08, jugé
+doublon), "Finir le chantier Vérifier les fiches de paie" marqué traité, "Suite de l'Espace Delphine"
+supprimé (obsolète), "Unifier les boutons Exporter" fusionné dans "Uniformisation des éléments UI".
+Item "Dépouiller documentation-conges/" jugé caduc et remplacé par un nouveau point priorité Haute :
+"Paramétrage des congés" (définition de la semaine de CP, intégration des zones de congés scolaires,
+modification de l'intitulé des compteurs RTT) — le cadrage CPI/DJI/RTT imposées détaillé dans
+`questions.md` reste comme référence historique mais n'est plus la base de travail directe.
+
+**Revue complète du Backlog + nettoyage technique (28/08/2026)** : après la documentation ci-dessus,
+passage exhaustif ligne par ligne sur `Backlog.md` avec Vincent, générant plusieurs correctifs et
+suppressions concrets, en plus des mises à jour de statut :
+- **`HistoriqueTable.tsx`** : la ligne entière (`<tr>`) devient cliquable dans les deux variantes de
+  rendu (groupée par collaborateur avec `rowSpan`, et plate), pas seulement la pastille de dates —
+  celle-ci perd son wrapper `<button>` dédié. Audit fait sur toute l'app pour repérer un éventuel
+  conflit (deux actions distinctes dans une même ligne) : seuls `SuivreSoldesPage2.tsx`
+  (boutons Théorique/Réel) et `CongesRttPage.tsx` (icônes Modifier/Supprimer) laissés inchangés.
+- **`HistoriquePage.tsx`** : filtres "Validés non vus"/"Refusés non vus" retirés du menu `Filtre`
+  (aucun lien nulle part ne pointait vers ces valeurs — le compteur Accueil censé les déclencher
+  n'existe pas) ; le mécanisme `vu`/`marquerVue` sous-jacent reste utilisé par le Journal (Accueil).
+- **Composants dashboard orphelins supprimés** : `ActiviteRecenteTable.tsx`, `ActiviteRecenteListe.tsx`,
+  `ActiviteRecenteCard.tsx` et la route `app/(app)/preview-orphelins/` (aucun vrai import ailleurs,
+  juste des mentions en commentaires) — `ProchainsJoursOffCard.tsx` explicitement conservé (utilisé
+  sur Accueil).
+- **`SuivreSoldesPage.tsx` (V1) supprimé**, avec sa route `app/(app)/suivre/soldes/` — Vincent a
+  tranché de ne garder que `SuivreSoldesPage2.tsx` (`/suivre/soldes2`), qui reste sur son URL/libellé
+  "2" pour l'instant (même logique que l'ancien `Dashboard2Page`, voir point suivant) ;
+  `components/layout/tabs.ts` mis à jour pour ne plus lister l'onglet "Suivre les soldes" (V1).
+- **`Dashboard2Page.tsx` → `DashboardPage.tsx`** : fichier renommé (`git mv`), export renommé
+  `Dashboard2Page` → `DashboardPage`, seul vrai import mis à jour (`app/(app)/page.tsx`) ; les
+  mentions en commentaire JSDoc dans 12 autres fichiers (`tabs.ts`, `SoldeDetailPanel.tsx`,
+  `SuivreCalendrierPage.tsx`, `DemandesAEtudierCard.tsx`, `DetailCongePanel.tsx`,
+  `compterTypologies.ts`, `CalendrierCollaborateur.tsx`, `SnippetJourCalendrier.tsx`,
+  `ProchainsJoursOffCard.tsx`, `periodeReferenceCp.ts`, `PoserDemandeModal.tsx`,
+  `DesignSystemPage.tsx`) mises à jour en masse puis vérifiées une à une.
+- **`SideNav.tsx` — passage en `fixed`, sur plusieurs itérations** : bug signalé, "sticky au scroll"
+  ne fonctionnait pas — en cause, un `absolute top-0 bottom-0` qui défilait avec la page faute de
+  conteneur de scroll interne dans `AppShell`. Remplacé par `fixed inset-0` avec une enveloppe
+  `mx-auto max-w-[1180px]` (deux calques `pointer-events-none`, seule la nav elle-même
+  `pointer-events-auto`) pour rejouer le centrage perdu par le passage en `fixed`, plus un espaceur
+  `w-16 shrink-0` dans le flux flex de `AppShell` pour réserver la largeur du rail replié. Rail
+  d'abord ancré sous `HeaderBar` (`top-14`), puis remonté jusqu'à `top: 0` sur demande explicite
+  ("faudrait qu'il reste sticky en haut... pour compenser la disparition du header général" —
+  Vincent a explicitement refusé de fixer le header lui-même, tentative revertée immédiatement :
+  "non pas le header sticky, non !"). `HeaderBar.tsx` reçoit `relative z-50` (pas sticky) pour
+  rester visuellement au-dessus du rail (`z-40`) tant que les deux sont à l'écran ensemble ; une fois
+  le header défilé hors du viewport, plus rien ne recouvre le haut du rail. Bug de suivi signalé par
+  Vincent ("sans scroll, les premiers items de la nav latérale sont masqués par le header") : le
+  premier item de nav démarrait dans la zone des 56px recouverte par le header au repos — corrigé en
+  passant le padding interne de la nav de `py-6` à `pt-20 pb-6` (80px = 56px header + 24px marge
+  d'origine), qui pousse tout le contenu sous le header quelle que soit la position de scroll.
+- **Tiroir "Mon journal" (`ActiviteRecenteFeed.tsx`) — recentrage** : le panneau était bien
+  positionné dans l'absolu mais aligné sur le bord droit du vrai viewport plutôt que sur le
+  conteneur centré `max-w-[1180px]` de l'app (grand vide gris visible entre le contenu et le tiroir
+  à 1920px) — corrigé avec le même principe d'enveloppe `mx-auto max-w-[1180px]` que `SideNav`,
+  backdrop `fixed inset-0` conservé pour fermer au clic n'importe où hors du panneau.
+- Vérifié à chaque étape `tsc`/`eslint`/`prettier`/`npm run build` clean, testé en navigateur
+  (multiples redémarrages du serveur dev nécessaires : `rm -rf .next` pendant que le serveur tourne
+  corrompt son cache de build — symptôme récurrent cette session, `Module not found`/`ReferenceError`
+  sur du code pourtant correct en disque, résolu à chaque fois par `preview_stop` → `rm -rf .next` →
+  `preview_start`).
+
+Backlog lui-même mis à jour en continu pendant la revue (dizaines d'items tranchés/fusionnés/
+supprimés/renommés — voir `Backlog.md` directement pour l'état détaillé), notamment : "Uniformisation
+UI des icônes 'à cheval'" renommé "Gestion des demandes à cheval : clarté de la transmission (UI) et
+suivi de ces jours" (priorité relevée à Haute), "Dépouiller documentation-conges/" remplacé par
+"Paramétrage des congés" (semaine de CP, zones scolaires, intitulé RTT — Haute), "Suite de l'Espace
+Delphine" supprimé (obsolète), "Unifier les boutons Exporter" fusionné dans "Uniformisation des
+éléments UI".
+
+**Fond de la card FAQ — test de couleur conservé (28/08/2026)** : sur demande de test rapide,
+plusieurs couleurs essayées en navigateur (header `--color-slate` → teal `#245554`, fond de page
+`--color-surface-app` → vert clair `#F3FCF1`, fond de `FaqCard.tsx` → jaune sable `#FCEFB3`) — seul
+le fond de la FAQ conservé, en couleur arbitraire ponctuelle (`bg-[#FCEFB3]`) plutôt qu'en modifiant
+le token partagé (`--color-surface-card`, utilisé par toutes les cards blanches de l'app). Le header
+teal et le fond de page vert restent aussi actifs (non explicitement annulés par Vincent) — seul le
+fond de page général a été remis au gris d'origine sur demande explicite ("le gris en fond steup").
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

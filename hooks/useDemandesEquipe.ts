@@ -7,6 +7,7 @@ import {
   refuserDemande,
   regulariserDemande,
   remettreEnAttenteDemande,
+  retirerDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
 
@@ -18,6 +19,11 @@ interface UseDemandesEquipeResult {
   refuser: (id: string, commentaire?: string) => Promise<void>;
   regulariser: (id: string, commentaire?: string) => Promise<void>;
   remettreEnAttente: (id: string) => Promise<void>;
+  /** Annulation par un admin (28/08/2026, "Suivre les demandes") — même
+   * `retirerDemande` générique que côté collaborateur, RLS gère déjà
+   * l'autorisation (n'importe quelle demande de l'entreprise, pas seulement
+   * celles de l'appelant). */
+  retirer: (id: string, commentaire?: string) => Promise<void>;
 }
 
 /**
@@ -93,5 +99,13 @@ export function useDemandesEquipe(): UseDemandesEquipeResult {
     [refetch],
   );
 
-  return { demandes, loading, error, valider, refuser, regulariser, remettreEnAttente };
+  const retirer = useCallback(
+    async (id: string, commentaire = "") => {
+      await retirerDemande(id, commentaire);
+      refetch();
+    },
+    [refetch],
+  );
+
+  return { demandes, loading, error, valider, refuser, regulariser, remettreEnAttente, retirer };
 }

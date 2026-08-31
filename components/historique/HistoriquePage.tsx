@@ -3,43 +3,37 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
-import type { StatutDemande } from "@/lib/types";
+import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
+import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 
-type Filtre =
-  | "Tous les statuts"
-  | "En validation"
-  | "Validés"
-  | "Validés non vus"
-  | "Refusés"
-  | "Refusés non vus";
-type PeriodeFiltre = "annee_en_cours" | "periode_reference" | "personnalisee";
+type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés" | "Annulés";
+type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
 
-const FILTRES: Filtre[] = [
-  "Tous les statuts",
-  "En validation",
-  "Validés",
-  "Validés non vus",
-  "Refusés",
-  "Refusés non vus",
-];
+const FILTRES: Filtre[] = ["Tous les statuts", "En validation", "Validés", "Refusés", "Annulés"];
 
+// "Annulés" (28/08/2026) — même filtre déjà présent sur Suivre les demandes,
+// manquait ici : couvre aussi bien les demandes retirées par le
+// collaborateur (`onRetirer`, DetailCongePanel) que les régularisations
+// manager, les deux partageant le même statut `annulé` (voir
+// `retireeParSoiMeme` dans DetailCongePanel.tsx pour la distinction
+// d'affichage, purement au niveau du feed).
 const STATUT_PAR_FILTRE: Partial<Record<Filtre, StatutDemande>> = {
   "En validation": "en attente",
   Validés: "validé",
-  "Validés non vus": "validé",
   Refusés: "refusé",
-  "Refusés non vus": "refusé",
+  Annulés: "annulé",
 };
 
 const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
+  toutes_dates: "Toutes les dates",
   annee_en_cours: "Année en cours",
   periode_reference: "Période de référence",
   personnalisee: "Sélectionner une période",
@@ -50,18 +44,19 @@ const LABEL_PERIODE: Record<PeriodeFiltre, string> = {
 // liste que le filtre équivalent de Suivre les demandes.
 const TYPES_FILTRABLES: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", "EVT_FAM"];
 
-// `?statut=` → `Filtre` pré-sélectionné — lien depuis les pills "Mes
-// demandes" d'Accueil (`en_attente` : compteur "En attente" ; `valide_non_vu`
-// / `refuse_non_vu` : compteurs "Validées"/"Refusé", voir
-// `marquerDemandeVue`/`Demande.vu`). Même principe que `?demande=<id>` plus bas.
+// `?statut=` → `Filtre` pré-sélectionné — lien depuis la pill "En attente"
+// d'Accueil. Même principe que `?demande=<id>` plus bas. Les variantes
+// `valide_non_vu`/`refuse_non_vu` (compteurs "Validées"/"Refusé" jamais
+// construits sur Accueil) ont été retirées le 28/08/2026, avec les options
+// de filtre "Validés non vus"/"Refusés non vus" — aucun lien n'y menait,
+// et ce n'est pas un critère qu'un utilisateur choisit manuellement. Le
+// mécanisme `vu`/`marquerVue` reste utilisé par le Journal (Accueil).
 const FILTRE_PAR_PARAM_STATUT: Record<string, Filtre> = {
   en_attente: "En validation",
-  valide_non_vu: "Validés non vus",
-  refuse_non_vu: "Refusés non vus",
 };
 
 export function HistoriquePage() {
-  const { demandes, marquerVue } = useDemandes();
+  const { demandes, marquerVue, retirer } = useDemandes();
   const { utilisateur } = useUtilisateur();
   const { reglesAcquisition } = useReglesConges();
   const searchParams = useSearchParams();
@@ -69,30 +64,53 @@ export function HistoriquePage() {
     FILTRE_PAR_PARAM_STATUT[searchParams.get("statut") ?? ""] ?? "Tous les statuts",
   );
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | "tous">("tous");
-  const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("annee_en_cours");
+  const [periodeFiltre, setPeriodeFiltre] = useState<PeriodeFiltre>("toutes_dates");
   const [debutPerso, setDebutPerso] = useState("");
   const [finPerso, setFinPerso] = useState("");
   // Pré-sélection via `?demande=<id>` — lien "cliquable" depuis l'encart
   // Activité récente d'Accueil2, qui ouvre directement le panneau déployé
   // sur cette demande plutôt que de renvoyer sur un historique "à plat".
   const [selectionId, setSelectionId] = useState<string | null>(searchParams.get("demande"));
+  const [lignesTransmissionParId, setLignesTransmissionParId] = useState<
+    Record<string, LigneExportPaie[]>
+  >({});
+
+  // Statut de transmission paie par demande (28/08/2026, "Annuler cette
+  // demande" étendu aux congés validés non transmis) — même fetch que
+  // `SuivreDemandesPage.tsx`, seules les demandes validées/annulées peuvent
+  // avoir des lignes `export_paie_lignes` (en attente/refusé n'en ont jamais).
+  useEffect(() => {
+    let cancelled = false;
+    const ids = demandes
+      .filter((d) => d.statut === "validé" || d.statut === "annulé")
+      .map((d) => d.id);
+    fetchLignesTransmissionParDemande(ids)
+      .then((data) => {
+        if (!cancelled) setLignesTransmissionParId(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [demandes]);
 
   const anneeActuelle = new Date().getFullYear();
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const periodeReference = periodeReferenceCp(regleCp);
 
   const { debut, fin } =
-    periodeFiltre === "annee_en_cours"
-      ? { debut: `${anneeActuelle}-01-01`, fin: `${anneeActuelle}-12-31` }
-      : periodeFiltre === "periode_reference"
-        ? periodeReference
-        : { debut: debutPerso, fin: finPerso };
+    periodeFiltre === "toutes_dates"
+      ? { debut: "", fin: "" }
+      : periodeFiltre === "annee_en_cours"
+        ? { debut: `${anneeActuelle}-01-01`, fin: `${anneeActuelle}-12-31` }
+        : periodeFiltre === "periode_reference"
+          ? periodeReference
+          : { debut: debutPerso, fin: finPerso };
 
   const filtered = demandes
     .filter((d) => {
       const statutAttendu = STATUT_PAR_FILTRE[filtre];
       if (statutAttendu && d.statut !== statutAttendu) return false;
-      if ((filtre === "Validés non vus" || filtre === "Refusés non vus") && d.vu) return false;
       if (debut && d.debut < debut) return false;
       if (fin && d.debut > fin) return false;
       if (typeFiltre !== "tous") {
@@ -123,7 +141,9 @@ export function HistoriquePage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold print:hidden">Historique</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+        Historique
+      </h1>
 
       <div className="hidden px-1 print:block">
         <h1 className="text-ink-900 text-2xl font-semibold">
@@ -131,7 +151,10 @@ export function HistoriquePage() {
         </h1>
       </div>
 
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-start print:block">
+      <div
+        className="animate-stagger-in flex flex-col gap-5 xl:flex-row xl:items-start print:block"
+        style={{ animationDelay: "90ms" }}
+      >
         <div
           className={`bg-surface-card w-full xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
         >
@@ -209,6 +232,8 @@ export function HistoriquePage() {
             key={selection.id}
             selection={selection}
             onClose={() => setSelectionId(null)}
+            onRetirer={(commentaire) => retirer(selection.id, commentaire)}
+            lignesTransmission={lignesTransmissionParId[selection.id]}
           />
         )}
       </div>

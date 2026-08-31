@@ -650,7 +650,7 @@ export function DesignSystemPage() {
 
         {/* Convention de pill "date" — même classes littérales (pas un composant
             dédié, chaque écran les reconstruit) sur HistoriqueTable, Export paie,
-            SoldeDetailPanel et les 4 popins de Dashboard2Page (CPI/DJI/Fériés/PERSO) :
+            SoldeDetailPanel et les 4 popins de DashboardPage (CPI/DJI/Fériés/PERSO) :
             bg-surface-app + rounded-full border px-2.5 py-1 text-xs font-semibold +
             classeBordureTypeBadge(code) pour la couleur du contour. Unifié le
             14/08/2026 (deux variantes avaient dérivé : px-2 py-0.5 et px-2.5 py-0.5). */}

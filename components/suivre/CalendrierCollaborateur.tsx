@@ -46,7 +46,7 @@ function formatMoisAnneeCourt(dateIso: string): string {
 }
 
 /** Sélecteur "Débute : {mois en cours} / {début de la période}" — même
- * composant que `Dashboard2Page`. */
+ * composant que `DashboardPage`. */
 function SelectAffichage({
   actif,
   onChange,
@@ -99,7 +99,7 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
-// Voir Dashboard2Page.tsx (même constante, duplication assumée entre les
+// Voir DashboardPage.tsx (même constante, duplication assumée entre les
 // deux variantes de calendrier, comme le reste de leurs helpers).
 const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
   CP: "--color-cp",
@@ -117,13 +117,13 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
 /**
  * Calendrier d'un collaborateur, pour `/suivre/calendrier` (24/08/2026,
  * manager/admin) — reprend le gabarit du calendrier "nouvelle version"
- * d'Accueil (`Dashboard2Page`, section "Mon Calendrier" : onglets Année en
+ * d'Accueil (`DashboardPage`, section "Mon Calendrier" : onglets Année en
  * cours/Période de référence CP/Année suivante, colonne "Prochains jours
  * off" + grille `MiniCalendrier` 3/ligne), PAS l'ancienne page dédiée
  * `/mon-calendrier` (`MonCalendrierPage.tsx`, gabarit différent — colonne
  * légende CPI/DJI/Fériés au lieu de "Prochains jours off").
  *
- * Différences volontaires avec `Dashboard2Page` : pas de bouton "+"/clic sur
+ * Différences volontaires avec `DashboardPage` : pas de bouton "+"/clic sur
  * un jour vide pour poser un congé (un manager ne pose pas de congé à la
  * place d'un collaborateur depuis cet écran, hors scope), pas de cartes
  * Soldes/FAQ/activité récente — uniquement le bloc calendrier, `utilisateurId`
@@ -167,7 +167,7 @@ export function CalendrierCollaborateur({
   const todayIso = todayISO();
   const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
   const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
-  // Voir Dashboard2Page.tsx — même fix (25/08/2026) : la vue "mois en cours"
+  // Voir DashboardPage.tsx — même fix (25/08/2026) : la vue "mois en cours"
   // doit démarrer le 1er du mois, pas littéralement aujourd'hui.
   const debutMoisActuel = isoDate(anneeActuelle, new Date().getMonth(), 1);
 
@@ -266,7 +266,7 @@ export function CalendrierCollaborateur({
   }
 
   // Demi-journée rendue comme telle, pas un fond plein — même fix que
-  // Dashboard2Page.tsx (25/08/2026, bug signalé par Vincent).
+  // DashboardPage.tsx (25/08/2026, bug signalé par Vincent).
   function tipoDuJour(iso: string): PastilleJour | null {
     const demande = demandeDuJour(iso);
     if (demande) {

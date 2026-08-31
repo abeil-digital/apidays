@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface ModalProps {
@@ -44,7 +45,20 @@ export function Modal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  return (
+  // `document.body` n'existe pas côté serveur (SSR/prerendering) — sans
+  // conséquence pour l'hydratation : le contenu part de toute façon dans un
+  // portail hors de la position de ce composant dans l'arbre, rien n'est
+  // rendu ICI ni côté serveur ni côté client.
+  if (typeof document === "undefined") return null;
+
+  // Portail vers `document.body` (28/08/2026, même pattern que le popover de
+  // `DatePicker.tsx`) — sans ça, une modale ouverte depuis un ancêtre
+  // `position: sticky` (ex. `DetailCongePanel` non `pleineLargeur`) reste
+  // piégée dans le contexte d'empilement local de cet ancêtre : son `z-50`
+  // ne compte alors que localement, et un élément `fixed` sans z-index élevé
+  // ailleurs dans la page (ex. le rail de navigation `SideNav`, `z-40`) peut
+  // rester visible/cliquable par-dessus l'overlay censé tout bloquer.
+  return createPortal(
     <div
       className={`bg-ink-900/50 fixed inset-0 z-50 flex justify-center px-4 ${
         align === "top" ? "items-start pt-12" : "items-center"
@@ -82,6 +96,7 @@ export function Modal({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

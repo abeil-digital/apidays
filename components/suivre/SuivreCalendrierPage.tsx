@@ -9,7 +9,7 @@ import { CalendrierCollaborateur } from "@/components/suivre/CalendrierCollabora
 /**
  * "Calendrier" (`/suivre/calendrier`, 24/08/2026) — permet au manager/admin
  * de consulter le calendrier d'un collaborateur. Reprend le gabarit du
- * calendrier "nouvelle version" d'Accueil (`Dashboard2Page`, section "Mon
+ * calendrier "nouvelle version" d'Accueil (`DashboardPage`, section "Mon
  * Calendrier") via `CalendrierCollaborateur` — PAS l'ancienne page dédiée
  * `/mon-calendrier` (gabarit différent, retenu dans un premier temps puis
  * explicitement écarté par Vincent). Un simple menu déroulant sélectionne le
@@ -34,7 +34,7 @@ export function SuivreCalendrierPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Calendrier</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
 
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -42,7 +42,7 @@ export function SuivreCalendrierPage() {
         </div>
       )}
 
-      <div className="px-1">
+      <div className="animate-stagger-in px-1" style={{ animationDelay: "90ms" }}>
         <SelectFiltrePill
           value={collaborateurId}
           onChange={(e) => setCollaborateurId(e.target.value)}

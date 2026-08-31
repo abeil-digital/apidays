@@ -49,11 +49,25 @@ function categorieSolde(c: ComparaisonSoldeCollaborateur, code: TypeBadgeCode) {
   return c.cp;
 }
 
-/** Nom du mois en toutes lettres (ex. "juillet") — colonnes "Solde <mois>"
- * de `SectionSoldes` (27/08/2026, demande explicite : remplacer les libellés
- * génériques "Mois précédent"/"Mois en cours" par le nom réel du mois). */
+// Abrégés (28/08/2026, demande explicite) — seuls les mois dont le nom
+// complet déborde des colonnes serrées de `CardSoldeCollaborateur` (75px) le
+// sont ; les autres (juin, juillet, août, mai...) restent en toutes lettres.
+const MOIS_ABREGES: Record<number, string> = {
+  8: "sept.",
+  9: "oct.",
+  10: "nov.",
+  11: "déc.",
+};
+
+/** Nom du mois en toutes lettres (ex. "juillet"), abrégé pour les mois trop
+ * longs (`MOIS_ABREGES`) — colonnes "Solde <mois>" de `SectionSoldes`
+ * (27/08/2026, demande explicite : remplacer les libellés génériques "Mois
+ * précédent"/"Mois en cours" par le nom réel du mois). */
 function nomMois(dateIso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", { month: "long" }).format(new Date(`${dateIso}T00:00:00Z`));
+  const date = new Date(`${dateIso}T00:00:00Z`);
+  const abrege = MOIS_ABREGES[date.getUTCMonth()];
+  if (abrege) return abrege;
+  return new Intl.DateTimeFormat("fr-FR", { month: "long" }).format(date);
 }
 
 function moisPrecedentIso(periodeDebutIso: string): string {
@@ -111,85 +125,95 @@ interface SelectionMouvement {
  */
 function CardSoldeCollaborateur({
   c,
+  periode,
   selection,
   onSelect,
 }: {
   c: ComparaisonSoldeCollaborateur;
+  periode: { debut: string; fin: string };
   selection: SelectionMouvement | null;
   onSelect: (utilisateurId: string, code: TypeBadgeCode) => void;
 }) {
+  const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
+  const libelleMoisEnCours = nomMois(periode.debut);
+
   return (
-    <div
-      data-carte-collaborateur={c.utilisateur.id}
-      className="bg-surface-card flex w-fit flex-col overflow-hidden shadow-sm"
-    >
-      <div className="border-ink-300/60 flex items-center gap-2 border-b px-3 py-2.5">
-        <Avatar initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()} />
-        <span className="text-ink-900 text-base font-semibold">
-          {c.utilisateur.prenom} {c.utilisateur.nom}
-        </span>
+    <div className="flex w-fit flex-col">
+      <div className="text-ink-500 flex w-fit items-stretch text-xs font-semibold tracking-wide uppercase">
+        <div className="w-[150px] shrink-0" />
+        <div className="grid flex-1 grid-cols-[4.5rem_75px_75px_75px_90px]">
+          <span className="px-4 py-2" />
+          <span className="px-2 py-2 text-center">{libelleMoisPrecedent}</span>
+          <span className="px-2 py-2 text-center">{libelleMoisEnCours}</span>
+          <span className="px-2 py-2 text-center">Mvt</span>
+          <span className="px-2 py-2 text-center">En paie</span>
+        </div>
       </div>
-      <div>
-        {TYPES_SOLDE.map((code) => {
-          const categorie = categorieSolde(c, code);
-          const active = selection?.utilisateurId === c.utilisateur.id && selection.code === code;
-          return (
-            <div
-              key={code}
-              data-mouvement-row={`${c.utilisateur.id}:${code}`}
-              className={`border-ink-300/60 grid grid-cols-[4.5rem_minmax(0,150px)_minmax(0,150px)_minmax(0,150px)] items-center border-b transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
-            >
-              <div className="px-4 py-2.5">
-                <TypeBadge code={code} variant="pill" />
-              </div>
-              <div
-                className={`px-2 py-2.5 text-center text-sm font-bold ${classeTexteTypeBadge(code)}`}
+      <div
+        data-carte-collaborateur={c.utilisateur.id}
+        className="bg-surface-card flex w-fit items-stretch overflow-hidden shadow-sm"
+      >
+        <div className="border-ink-300/60 flex w-[150px] shrink-0 flex-col items-start justify-center gap-1 border-r px-3 py-3 text-left">
+          <Avatar initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()} />
+          <span className="text-ink-900 text-base font-semibold">{c.utilisateur.prenom}</span>
+          <span className="text-ink-900 text-base font-semibold">{c.utilisateur.nom}</span>
+        </div>
+        <div className="flex-1">
+          {TYPES_SOLDE.map((code) => {
+            const categorie = categorieSolde(c, code);
+            const active = selection?.utilisateurId === c.utilisateur.id && selection.code === code;
+            return (
+              <button
+                type="button"
+                key={code}
+                data-mouvement-row={`${c.utilisateur.id}:${code}`}
+                onClick={() => onSelect(c.utilisateur.id, code)}
+                className={`border-ink-300/60 grid w-full grid-cols-[4.5rem_75px_75px_75px_90px] items-center border-b text-left transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
               >
-                {formatJours(categorie.moisPrecedent)} j
-              </div>
-              <div className="px-2 py-2.5 text-center">
-                <TypeBadge
-                  code={code}
-                  variant="pill"
-                  label={`${formatJours(categorie.moisEnCours)} j`}
-                />
-              </div>
-              <div className="px-2 py-2.5 text-center">
-                <button
-                  type="button"
-                  onClick={() => onSelect(c.utilisateur.id, code)}
-                  className={`rounded-control font-semibold underline decoration-dotted underline-offset-2 ${classeTexteTypeBadge(code)}`}
+                <div className={`px-4 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+                  {code}
+                </div>
+                <div
+                  className={`px-2 py-2.5 text-center text-sm font-bold ${classeTexteTypeBadge(code)}`}
                 >
-                  {formatMouvement(categorie.moisEnCours - categorie.moisPrecedent)} j
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  {formatJours(categorie.moisPrecedent)} j
+                </div>
+                <div className="px-2 py-2.5 text-center">
+                  <TypeBadge
+                    code={code}
+                    variant="pill"
+                    label={`${formatJours(categorie.moisEnCours)} j`}
+                  />
+                </div>
+                <div className="px-2 py-2.5 text-center">
+                  <span
+                    className={`rounded-control text-xs font-bold underline decoration-dotted underline-offset-2 ${classeTexteTypeBadge(code)}`}
+                  >
+                    {formatMouvement(categorie.moisEnCours - categorie.moisPrecedent)} j
+                  </span>
+                </div>
+                <div className="px-2 py-2.5 text-center">
+                  <span className="text-status-success-fg inline-flex items-center gap-1 text-sm font-semibold">
+                    <Check size={14} />
+                    ok
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * Titre "Soldes réels" + intitulés de colonnes — affichés une seule fois,
- * pleine largeur, au-dessus de la liste des cards (27/08/2026).
+ * Titre "Soldes réels" — affiché une seule fois, pleine largeur, au-dessus
+ * de la liste des cards (27/08/2026). Intitulés de colonnes repris dans le
+ * header de chaque card (28/08/2026, style "Suivre les soldes 2").
  */
-function EnTeteSoldes({ periode }: { periode: { debut: string; fin: string } }) {
-  const libelleMoisPrecedent = `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
-  const libelleMoisEnCours = `Solde ${nomMois(periode.debut)}`;
-
-  return (
-    <div className="flex w-full min-w-0 flex-col">
-      <h2 className="text-ink-900 mb-2 px-1 text-sm font-bold">Soldes réels</h2>
-      <div className="text-ink-500 mb-1 grid w-fit grid-cols-[4.5rem_minmax(0,150px)_minmax(0,150px)_minmax(0,150px)] text-xs font-semibold tracking-wide uppercase">
-        <span className="px-4 py-2">Type</span>
-        <span className="px-2 py-2 text-center">{libelleMoisPrecedent}</span>
-        <span className="px-2 py-2 text-center">{libelleMoisEnCours}</span>
-        <span className="px-2 py-2 text-center">Mouvement</span>
-      </div>
-    </div>
-  );
+function EnTeteSoldes() {
+  return <h2 className="text-ink-900 mb-2 px-1 text-sm font-bold">Soldes réels</h2>;
 }
 
 /**
@@ -229,9 +253,13 @@ function PanelJoursMouvement({
   onAjustementCree: () => void;
 }) {
   const [demandeOuverte, setDemandeOuverte] = useState<DemandeEquipe | null>(null);
-  const [ajustementOuvert, setAjustementOuvert] = useState<
-    { id: string; deltaJours: number; motif: string; date: string; auteurNom: string } | null
-  >(null);
+  const [ajustementOuvert, setAjustementOuvert] = useState<{
+    id: string;
+    deltaJours: number;
+    motif: string;
+    date: string;
+    auteurNom: string;
+  } | null>(null);
   const libelleMoisPrecedent = `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
 
   const sommeJoursLignes = lignes.reduce((somme, { ligne }) => somme - ligne.joursInclus, 0);
@@ -310,91 +338,97 @@ function PanelJoursMouvement({
     // (16px) reste sur le `sticky` pour garder le panneau visible une fois
     // qu'on scrolle plus bas que sa position initiale.
     <div
-      className="flex items-stretch xl:sticky xl:top-4 xl:shrink-0 transition-[gap] duration-300 ease-in-out"
-      style={{ gap: demandeOuverte ? "10px" : "0px", marginTop: topOffset }}
+      className="flex items-stretch transition-[gap] duration-300 ease-in-out xl:sticky xl:top-4 xl:shrink-0"
+      style={{ gap: demandeOuverte ? "5px" : "0px", marginTop: topOffset }}
     >
-        <div className="bg-surface-card w-72 shrink-0 overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
-                <th className="px-4 py-2">Événement</th>
-                <th className="px-2 py-2 text-center">Jours</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-ink-300/60 border-b">
-                <td className="px-4 py-2.5">
-                  <span
-                    className={`flex w-fit items-center px-2.5 py-1 text-xs font-semibold text-white ${classeFondTypeBadge(code)}`}
-                  >
-                    {libelleMoisPrecedent}
-                  </span>
-                </td>
-                <td className="text-ink-900 px-2 py-2.5 text-center font-semibold">
-                  {formatJours(soldeDepart)} j
-                </td>
-              </tr>
-              {lignes.map(({ ligne, demande }) => {
-                const active = demandeOuverte?.id === demande.id;
-                return (
-                  <tr key={ligne.id} className="border-ink-300/60 border-b last:border-b-0">
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAjustementOuvert(null);
-                            setDemandeOuverte(active ? null : demande);
-                          }}
-                          className={`flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-[scale,background-color] duration-200 hover:scale-105 ${
-                            active
-                              ? `${classeFondTypeBadge(code)} border-transparent text-white`
-                              : `${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`
-                          }`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
-                          />
-                          {formatPeriodePillNumerique(demande.debut, demande.fin)}
-                        </button>
-                        {demande.fin > periode.fin && (
-                          <span
-                            title="Transmission partielle"
-                            className="bg-status-warning-fg flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full"
-                          >
-                            <SquareSplitHorizontal size={10} strokeWidth={2.5} className="text-white" />
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td
-                      className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}
-                    >
-                      {ligne.joursInclus < 0 ? "+" : "-"}
-                      {formatJours(Math.abs(ligne.joursInclus))}
-                    </td>
-                  </tr>
-                );
-              })}
-              {acquisition !== 0 && (
-                <tr className="border-ink-300/60 border-b last:border-b-0">
+      <div className="bg-surface-card w-72 shrink-0 overflow-hidden shadow-sm">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+              <th className="px-4 py-2">Événement</th>
+              <th className="px-2 py-2 text-center">Jours</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-ink-300/60 border-b">
+              <td className="px-4 py-2.5">
+                <span
+                  className={`flex w-fit items-center px-2.5 py-1 text-xs font-semibold text-white ${classeFondTypeBadge(code)}`}
+                >
+                  {libelleMoisPrecedent}
+                </span>
+              </td>
+              <td className="text-ink-900 px-2 py-2.5 text-center font-semibold">
+                {formatJours(soldeDepart)} j
+              </td>
+            </tr>
+            {lignes.map(({ ligne, demande }) => {
+              const active = demandeOuverte?.id === demande.id;
+              return (
+                <tr key={ligne.id} className="border-ink-300/60 border-b last:border-b-0">
                   <td className="px-4 py-2.5">
-                    <span
-                      className={`flex w-fit items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white ${classeFondTypeBadge(code)}`}
-                    >
-                      <Plus size={10} className="shrink-0 text-white" />
-                      Acquisition {nomMoisAnnee(periode.debut)}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAjustementOuvert(null);
+                          setDemandeOuverte(active ? null : demande);
+                        }}
+                        className={`flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-[scale,background-color] duration-200 hover:scale-105 ${
+                          active
+                            ? `${classeFondTypeBadge(code)} border-transparent text-white`
+                            : `${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
+                        />
+                        {formatPeriodePillNumerique(demande.debut, demande.fin)}
+                      </button>
+                      {demande.fin > periode.fin && (
+                        <span
+                          title="Transmission partielle"
+                          className="bg-status-warning-fg flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full"
+                        >
+                          <SquareSplitHorizontal
+                            size={10}
+                            strokeWidth={2.5}
+                            className="text-white"
+                          />
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}>
-                    {acquisition > 0 ? "+" : ""}
-                    {formatJours(acquisition)}
+                  <td
+                    className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}
+                  >
+                    {ligne.joursInclus < 0 ? "+" : "-"}
+                    {formatJours(Math.abs(ligne.joursInclus))}
                   </td>
                 </tr>
-              )}
-              {ajustements.map((a) => {
-                const active = ajustementOuvert?.id === a.id;
-                return (
+              );
+            })}
+            {acquisition !== 0 && (
+              <tr className="border-ink-300/60 border-b last:border-b-0">
+                <td className="px-4 py-2.5">
+                  <span
+                    className={`flex w-fit items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white ${classeFondTypeBadge(code)}`}
+                  >
+                    <Plus size={10} className="shrink-0 text-white" />
+                    Acquisition {nomMoisAnnee(periode.debut)}
+                  </span>
+                </td>
+                <td
+                  className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}
+                >
+                  {acquisition > 0 ? "+" : ""}
+                  {formatJours(acquisition)}
+                </td>
+              </tr>
+            )}
+            {ajustements.map((a) => {
+              const active = ajustementOuvert?.id === a.id;
+              return (
                 <tr key={a.id} className="border-ink-300/60 border-b last:border-b-0">
                   <td className="px-4 py-2.5">
                     <button
@@ -413,115 +447,117 @@ function PanelJoursMouvement({
                       Régul ({formatJjMmAjustement(a.date)})
                     </button>
                   </td>
-                  <td className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}>
+                  <td
+                    className={`px-2 py-2.5 text-center font-semibold ${classeTexteTypeBadge(code)}`}
+                  >
                     {a.deltaJours > 0 ? "+" : ""}
                     {formatJours(a.deltaJours)}
                   </td>
                 </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {aucunEvenement && <EmptyRow text="Aucun jour ni acquisition sur cette période." />}
-          {!formulaireOuvert ? (
-            <button
-              type="button"
-              onClick={() => setFormulaireOuvert(true)}
-              className="text-ink-500 hover:text-ink-900 block w-full px-4 py-2.5 text-left text-xs font-semibold underline decoration-dotted underline-offset-2"
-            >
-              Ajuster le solde
-            </button>
-          ) : (
-            <div className="border-ink-300/60 flex flex-col gap-2 border-t px-4 py-3">
-              <div className="flex gap-3 text-xs font-semibold">
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    checked={sens === "ajouter"}
-                    onChange={() => setSens("ajouter")}
-                  />
-                  Ajouter
-                </label>
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    checked={sens === "retirer"}
-                    onChange={() => setSens("retirer")}
-                  />
-                  Retirer
-                </label>
-              </div>
-              <Input
-                type="number"
-                step="any"
-                min="0"
-                inputMode="decimal"
-                placeholder="Nombre de jours"
-                value={montant}
-                onChange={(e) => setMontant(e.target.value)}
-                className="text-sm"
+              );
+            })}
+          </tbody>
+        </table>
+        {aucunEvenement && <EmptyRow text="Aucun jour ni acquisition sur cette période." />}
+        {!formulaireOuvert ? (
+          <button
+            type="button"
+            onClick={() => setFormulaireOuvert(true)}
+            className="text-ink-500 hover:text-ink-900 block w-full px-4 py-2.5 text-left text-xs font-semibold underline decoration-dotted underline-offset-2"
+          >
+            Ajuster le solde
+          </button>
+        ) : (
+          <div className="border-ink-300/60 flex flex-col gap-2 border-t px-4 py-3">
+            <div className="flex gap-3 text-xs font-semibold">
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={sens === "ajouter"}
+                  onChange={() => setSens("ajouter")}
+                />
+                Ajouter
+              </label>
+              <label className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  checked={sens === "retirer"}
+                  onChange={() => setSens("retirer")}
+                />
+                Retirer
+              </label>
+            </div>
+            <Input
+              type="number"
+              step="any"
+              min="0"
+              inputMode="decimal"
+              placeholder="Nombre de jours"
+              value={montant}
+              onChange={(e) => setMontant(e.target.value)}
+              className="text-sm"
+            />
+            <Textarea
+              placeholder="Commentaire"
+              value={motif}
+              onChange={(e) => setMotif(e.target.value)}
+              rows={2}
+              className="text-sm"
+            />
+            {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                className="px-3 py-1.5 text-xs"
+                onClick={() => {
+                  setFormulaireOuvert(false);
+                  setErreur(null);
+                }}
+              >
+                Annuler
+              </Button>
+              <Button
+                className="px-3 py-1.5 text-xs"
+                disabled={envoi}
+                onClick={soumettreAjustement}
+              >
+                Enregistrer
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+      <div
+        className={`overflow-hidden transition-[width] duration-300 ease-in-out ${demandeOuverte || ajustementOuvert ? "w-64" : "w-0"}`}
+      >
+        <div className="w-64">
+          {demandeOuverte && (
+            <div key={demandeOuverte.id} className="animate-detail-fade-in">
+              <DetailCongePanel
+                selection={demandeOuverte}
+                onClose={() => setDemandeOuverte(null)}
+                pleineLargeur
               />
-              <Textarea
-                placeholder="Commentaire"
-                value={motif}
-                onChange={(e) => setMotif(e.target.value)}
-                rows={2}
-                className="text-sm"
+            </div>
+          )}
+          {ajustementOuvert && (
+            <div key={ajustementOuvert.id} className="animate-detail-fade-in">
+              <DetailAjustementPanel
+                ajustement={{
+                  code: codeAjustement,
+                  nomComplet,
+                  deltaJours: ajustementOuvert.deltaJours,
+                  date: ajustementOuvert.date,
+                  auteurNom: ajustementOuvert.auteurNom,
+                  motif: ajustementOuvert.motif,
+                }}
+                onClose={() => setAjustementOuvert(null)}
+                pleineLargeur
               />
-              {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  className="px-3 py-1.5 text-xs"
-                  onClick={() => {
-                    setFormulaireOuvert(false);
-                    setErreur(null);
-                  }}
-                >
-                  Annuler
-                </Button>
-                <Button
-                  className="px-3 py-1.5 text-xs"
-                  disabled={envoi}
-                  onClick={soumettreAjustement}
-                >
-                  Enregistrer
-                </Button>
-              </div>
             </div>
           )}
         </div>
-        <div
-          className={`overflow-hidden transition-[width] duration-300 ease-in-out ${demandeOuverte || ajustementOuvert ? "w-64" : "w-0"}`}
-        >
-          <div className="w-64">
-            {demandeOuverte && (
-              <div key={demandeOuverte.id} className="animate-detail-fade-in">
-                <DetailCongePanel
-                  selection={demandeOuverte}
-                  onClose={() => setDemandeOuverte(null)}
-                  pleineLargeur
-                />
-              </div>
-            )}
-            {ajustementOuvert && (
-              <div key={ajustementOuvert.id} className="animate-detail-fade-in">
-                <DetailAjustementPanel
-                  ajustement={{
-                    code: codeAjustement,
-                    nomComplet,
-                    deltaJours: ajustementOuvert.deltaJours,
-                    date: ajustementOuvert.date,
-                    auteurNom: ajustementOuvert.auteurNom,
-                    motif: ajustementOuvert.motif,
-                  }}
-                  onClose={() => setAjustementOuvert(null)}
-                  pleineLargeur
-                />
-              </div>
-            )}
-          </div>
-        </div>
+      </div>
     </div>
   );
 }
@@ -544,6 +580,11 @@ export function VerifierFichesPaiePage2({
 }) {
   const [collaborateurs, setCollaborateurs] = useState<CheckFichePaieCollaborateur[]>([]);
   const [comparaisons, setComparaisons] = useState<ComparaisonSoldeCollaborateur[]>([]);
+  // `loadingComparaisons` (27/08/2026, "chargement progressif") — distingue
+  // "pas encore chargé" de "vraiment aucun collaborateur actif" : sans ça,
+  // `comparaisons` démarre à `[]` et affiche un flash "Aucun collaborateur
+  // actif." avant que le premier fetch ne résolve (signalé par Vincent).
+  const [loadingComparaisons, setLoadingComparaisons] = useState(true);
   const [selectionMouvement, setSelectionMouvement] = useState<SelectionMouvement | null>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
   const [panelTop, setPanelTop] = useState(0);
@@ -584,7 +625,10 @@ export function VerifierFichesPaiePage2({
   useEffect(() => {
     let cancelled = false;
     fetchComparaisonSoldes(periode, exportId).then((data) => {
-      if (!cancelled) setComparaisons(data);
+      if (!cancelled) {
+        setComparaisons(data);
+        setLoadingComparaisons(false);
+      }
     });
     return () => {
       cancelled = true;
@@ -624,21 +668,26 @@ export function VerifierFichesPaiePage2({
 
   return (
     <div className="flex flex-col gap-3">
-      {comparaisons.length === 0 ? (
+      {loadingComparaisons ? (
+        <div className="bg-surface-card w-full shadow-sm">
+          <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
+        </div>
+      ) : comparaisons.length === 0 ? (
         <div className="bg-surface-card w-full shadow-sm">
           <EmptyRow text="Aucun collaborateur actif." />
         </div>
       ) : (
         <>
-          <EnTeteSoldes periode={periode} />
+          <EnTeteSoldes />
           <div
-            className={`grid grid-cols-1 items-start gap-[10px] ${selectionMouvement ? "xl:grid-cols-[max-content_max-content]" : ""}`}
+            className={`animate-stagger-in grid grid-cols-1 items-start gap-[5px] ${selectionMouvement ? "xl:grid-cols-[max-content_max-content]" : ""}`}
           >
             <div ref={cardsRef} className="flex min-w-0 flex-col gap-3">
               {comparaisons.map((c) => (
                 <CardSoldeCollaborateur
                   key={c.utilisateur.id}
                   c={c}
+                  periode={periode}
                   selection={selectionMouvement}
                   onSelect={(utilisateurId, code) =>
                     setSelectionMouvement((prev) =>

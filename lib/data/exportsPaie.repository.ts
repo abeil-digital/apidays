@@ -4,7 +4,6 @@ import type {
   DemandeEquipe,
   LigneExportPaie,
   NouvelleDemandeInput,
-  StatutTransmission,
 } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
@@ -28,7 +27,6 @@ import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 
 interface LigneExportPaieRow {
   jours_inclus: number;
-  statut: StatutTransmission;
 }
 
 interface DemandeAvecLignesRow extends DemandeEquipeRow {
@@ -344,8 +342,6 @@ export interface CheckFichePaieCollaborateur {
 interface LigneCheckRow extends LigneExportPaieRow {
   id: string;
   demande_id: string;
-  motif_ecart: string | null;
-  verifie_le: string | null;
   demandes_conges: DemandeEquipeRow | DemandeEquipeRow[] | null;
 }
 
@@ -362,7 +358,7 @@ export async function fetchCheckFichesPaie(
 
   const { data: exportPaie, error: errorExport } = await supabase
     .from("exports_paie")
-    .select("genere_le, periode_debut, periode_fin")
+    .select("genere_le, periode_debut, periode_fin, utilisateurs(prenom)")
     .eq("id", exportId)
     .single();
 
@@ -370,11 +366,14 @@ export async function fetchCheckFichesPaie(
     throw new Error("Export introuvable.");
   }
 
+  const genereParUtilisateur = Array.isArray(exportPaie.utilisateurs)
+    ? exportPaie.utilisateurs[0]
+    : exportPaie.utilisateurs;
+  const genereParNom = genereParUtilisateur?.prenom ?? "";
+
   const { data, error } = await supabase
     .from("export_paie_lignes")
-    .select(
-      `id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, demandes_conges(${SELECT_DEMANDE_EQUIPE})`,
-    )
+    .select(`id, demande_id, jours_inclus, demandes_conges(${SELECT_DEMANDE_EQUIPE})`)
     .eq("export_paie_id", exportId);
 
   if (error) {
@@ -394,10 +393,8 @@ export async function fetchCheckFichesPaie(
       id: row.id,
       demandeId: row.demande_id,
       joursInclus: Number(row.jours_inclus),
-      statut: row.statut,
-      motifEcart: row.motif_ecart,
-      verifieLe: row.verifie_le,
       genereLe: exportPaie.genere_le,
+      genereParNom,
       periodeDebut: exportPaie.periode_debut,
       periodeFin: exportPaie.periode_fin,
     };
@@ -420,17 +417,18 @@ export async function fetchCheckFichesPaie(
   );
 }
 
+interface ExportPaieAvecAuteur {
+  genere_le: string;
+  periode_debut: string;
+  periode_fin: string;
+  utilisateurs: { prenom: string } | { prenom: string }[] | null;
+}
+
 interface LigneTransmissionRow {
   id: string;
   demande_id: string;
   jours_inclus: number;
-  statut: StatutTransmission;
-  motif_ecart: string | null;
-  verifie_le: string | null;
-  exports_paie:
-    | { genere_le: string; periode_debut: string; periode_fin: string }
-    | { genere_le: string; periode_debut: string; periode_fin: string }[]
-    | null;
+  exports_paie: ExportPaieAvecAuteur | ExportPaieAvecAuteur[] | null;
 }
 
 /**
@@ -448,7 +446,7 @@ export async function fetchLignesTransmissionParDemande(
   const { data, error } = await supabase
     .from("export_paie_lignes")
     .select(
-      "id, demande_id, jours_inclus, statut, motif_ecart, verifie_le, exports_paie(genere_le, periode_debut, periode_fin)",
+      "id, demande_id, jours_inclus, exports_paie(genere_le, periode_debut, periode_fin, utilisateurs(prenom))",
     )
     .in("demande_id", demandeIds);
 
@@ -460,54 +458,21 @@ export async function fetchLignesTransmissionParDemande(
   for (const row of (data ?? []) as unknown as LigneTransmissionRow[]) {
     const exportPaie = Array.isArray(row.exports_paie) ? row.exports_paie[0] : row.exports_paie;
     if (!exportPaie) continue;
+    const genereParUtilisateur = Array.isArray(exportPaie.utilisateurs)
+      ? exportPaie.utilisateurs[0]
+      : exportPaie.utilisateurs;
     const ligne: LigneExportPaie = {
       id: row.id,
       demandeId: row.demande_id,
       joursInclus: Number(row.jours_inclus),
-      statut: row.statut,
-      motifEcart: row.motif_ecart,
-      verifieLe: row.verifie_le,
       genereLe: exportPaie.genere_le,
+      genereParNom: genereParUtilisateur?.prenom ?? "",
       periodeDebut: exportPaie.periode_debut,
       periodeFin: exportPaie.periode_fin,
     };
     (parDemande[row.demande_id] ??= []).push(ligne);
   }
   return parDemande;
-}
-
-export async function validerCheckPaie(ligneIds: string[]): Promise<void> {
-  if (ligneIds.length === 0) return;
-  const supabase = createClient();
-  const utilisateurId = await getUtilisateurId(supabase);
-
-  const { error } = await supabase
-    .from("export_paie_lignes")
-    .update({ statut: "en_paye", verifie_le: new Date().toISOString(), verifie_par: utilisateurId })
-    .in("id", ligneIds);
-
-  if (error) {
-    throw new Error("Impossible de valider ces lignes.");
-  }
-}
-
-export async function signalerEcart(ligneId: string, motif: string): Promise<void> {
-  const supabase = createClient();
-  const utilisateurId = await getUtilisateurId(supabase);
-
-  const { error } = await supabase
-    .from("export_paie_lignes")
-    .update({
-      statut: "ecart",
-      motif_ecart: motif,
-      verifie_le: new Date().toISOString(),
-      verifie_par: utilisateurId,
-    })
-    .eq("id", ligneId);
-
-  if (error) {
-    throw new Error("Impossible de signaler cet écart.");
-  }
 }
 
 /**
@@ -615,7 +580,9 @@ async function fetchMouvementsExport(
       | { utilisateur_id: string; type_absence_id: string; is_anticipation: boolean }[]
       | null;
   }[]) {
-    const demande = Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges;
+    const demande = Array.isArray(row.demandes_conges)
+      ? row.demandes_conges[0]
+      : row.demandes_conges;
     if (!demande) continue;
 
     const entree = (parUtilisateur[demande.utilisateur_id] ??= { cp: 0, rtt: 0, cpa: 0 });

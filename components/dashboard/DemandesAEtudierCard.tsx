@@ -6,7 +6,7 @@ import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 
 /**
  * Encart alerte "Demandes à étudier" (22/08/2026, Accueil) — visible manager
- * uniquement (rendu conditionnel côté `Dashboard2Page`), signale les
+ * uniquement (rendu conditionnel côté `DashboardPage`), signale les
  * demandes de congés de l'équipe en attente de décision. Largeur ciblée aux
  * 2/3 de la grille "Suivre mes soldes" (3 `SoldeCard` de 200px = 600px, sur
  * les 900px de la grille avec le bouton "Poser un congé" inclus). Même

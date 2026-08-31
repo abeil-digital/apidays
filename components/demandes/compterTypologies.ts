@@ -43,7 +43,7 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
 
 /**
  * Compteur de jours par typologie sur une période active (24/08/2026,
- * Accueil/`Dashboard2Page` et `/suivre/calendrier`/`CalendrierCollaborateur`)
+ * Accueil/`DashboardPage` et `/suivre/calendrier`/`CalendrierCollaborateur`)
  * — un total par type de "day off" réellement présent sur la période
  * (`rangeActive`), zéro affiché nulle part (types absents filtrés en amont
  * par l'appelant). Les listes `congesImposes`/`djImposees`/`joursFeries`

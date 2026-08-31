@@ -115,11 +115,11 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
  * (`jourSurligne`, introduit le 20/08/2026) a été retiré le 24/08/2026 —
  * décision explicite de supprimer l'interaction entre le clic sur le
  * calendrier et cette liste, au profit d'un overlay unique (voir
- * `SnippetJourCalendrier`, `Dashboard2Page`/`CalendrierCollaborateur`).
+ * `SnippetJourCalendrier`, `DashboardPage`/`CalendrierCollaborateur`).
  * `finPeriode`/`debutPeriode` (20/08/2026, demande explicite) — le filtre de
  * "Mon Calendrier" (onglets Année en cours / Période de référence CP /
  * Année suivante) chapote aussi cette liste : bornes de la période active
- * (`rangeActive` côté `Dashboard2Page`). `debutPeriode` est nécessaire
+ * (`rangeActive` côté `DashboardPage`). `debutPeriode` est nécessaire
  * (pas seulement `finPeriode`) : pour l'onglet "Année suivante", le début
  * de période est dans le FUTUR (1er janvier de l'année suivante), donc sans
  * cette borne basse les jours de l'année en cours restent affichés (ils
@@ -276,7 +276,7 @@ export function ProchainsJoursOffCard({
 
   // CI/DJI de l'année suivante masqués tant que son calendrier n'est pas
   // publié (20/08/2026, demande explicite — même garde que
-  // `anneeVisiblePourCommuns` côté `Dashboard2Page`/grille de calendrier) :
+  // `anneeVisiblePourCommuns` côté `DashboardPage`/grille de calendrier) :
   // `useCalendrier` charge ces données dès qu'un paramétrage existe, même en
   // brouillon (`valideLe` null), donc sans ce filtre un CI en brouillon
   // apparaissait déjà dans cette liste — y compris pour Delphine (admin), qui

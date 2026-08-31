@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Demande, NouvelleDemandeInput } from "@/lib/types";
-import { creerDemande, fetchDemandes, marquerDemandeVue } from "@/lib/data/demandes.repository";
+import {
+  creerDemande,
+  fetchDemandes,
+  marquerDemandeVue,
+  retirerDemande,
+} from "@/lib/data/demandes.repository";
 
 // Clés de stockage pour le principe "vu depuis votre dernière connexion" —
 // voir le commentaire sur l'effet correspondant plus bas.
@@ -15,6 +20,7 @@ interface UseDemandesResult {
   error: string | null;
   ajouterDemande: (input: NouvelleDemandeInput) => Promise<Demande>;
   marquerVue: (id: string) => Promise<void>;
+  retirer: (id: string, commentaire: string) => Promise<void>;
   refetch: () => void;
 }
 
@@ -140,12 +146,23 @@ export function useDemandes(utilisateurId?: string): UseDemandesResult {
     await marquerDemandeVue(id);
   }, []);
 
+  // Retrait d'une demande "en attente" par le collaborateur lui-même
+  // (28/08/2026, `DetailCongePanel` — "Retirer cette demande") — refetch
+  // plutôt qu'une mise à jour optimiste : `validateur`/`dateDecision`
+  // (nécessaires pour le feed, voir `retireeParSoiMeme`) viennent du serveur,
+  // pas reconstructibles proprement côté client.
+  const retirer = useCallback(async (id: string, commentaire: string) => {
+    await retirerDemande(id, commentaire);
+    setVersion((v) => v + 1);
+  }, []);
+
   return {
     demandes,
     loading,
     error,
     ajouterDemande,
     marquerVue,
+    retirer,
     refetch: () => setVersion((v) => v + 1),
   };
 }

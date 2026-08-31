@@ -4,9 +4,16 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import type { Soldes, UtilisateurAdmin } from "@/lib/types";
 import { formatJours } from "@/lib/format";
+import { retirerDemande } from "@/lib/data/demandes.repository";
 import { fetchSoldes } from "@/lib/data/soldes.repository";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
-import { classeFondActifTypeBadge, classeFondSurvolTypeBadge, classeTexteTypeBadge, TypeBadge } from "@/components/demandes/TypeBadge";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
+import {
+  classeFondActifTypeBadge,
+  classeFondSurvolTypeBadge,
+  classeTexteTypeBadge,
+  TypeBadge,
+} from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
@@ -73,49 +80,55 @@ function CardSoldeCollaborateur({
           <span className="text-ink-900 text-base font-semibold">{utilisateur.nom}</span>
         </div>
         <div className="flex-1">
-        {TYPES_SOLDE.map((code) => {
-          const active = selection?.utilisateurId === utilisateur.id && selection.code === code;
-          const categorie = soldes ? categorieSolde(soldes, code) : null;
-          return (
-            <div
-              key={code}
-              data-mouvement-row={`${utilisateur.id}:${code}`}
-              className={`border-ink-300/60 grid grid-cols-[4.5rem_minmax(0,150px)_minmax(0,150px)] items-center border-b transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
-            >
-              <div className={`px-4 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>{code}</div>
-              <div className="px-2 py-2.5 text-center">
-                {categorie ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelect(utilisateur.id, code, "theorique")}
-                    className="rounded-full transition-opacity duration-150 hover:opacity-70"
-                  >
-                    <TypeBadge
-                      code={code}
-                      variant="pill"
-                      label={`${formatJours(categorie.valeurApresAttente)} j`}
-                    />
-                  </button>
-                ) : (
-                  <span className="text-ink-500">…</span>
-                )}
+          {TYPES_SOLDE.map((code) => {
+            const active = selection?.utilisateurId === utilisateur.id && selection.code === code;
+            const categorie = soldes ? categorieSolde(soldes, code) : null;
+            return (
+              <div
+                key={code}
+                data-mouvement-row={`${utilisateur.id}:${code}`}
+                className={`border-ink-300/60 grid grid-cols-[4.5rem_minmax(0,150px)_minmax(0,150px)] items-center border-b transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
+              >
+                <div className={`px-4 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+                  {code}
+                </div>
+                <div className="px-2 py-2.5 text-center">
+                  {categorie ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(utilisateur.id, code, "theorique")}
+                      className="rounded-full transition-opacity duration-150 hover:opacity-70"
+                    >
+                      <TypeBadge
+                        code={code}
+                        variant="pill"
+                        label={`${formatJours(categorie.valeurApresAttente)} j`}
+                      />
+                    </button>
+                  ) : (
+                    <span className="text-ink-500">…</span>
+                  )}
+                </div>
+                <div className="px-2 py-2.5 text-center">
+                  {categorie ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelect(utilisateur.id, code, "reel")}
+                      className="rounded-full transition-opacity duration-150 hover:opacity-70"
+                    >
+                      <TypeBadge
+                        code={code}
+                        variant="pill"
+                        label={`${formatJours(categorie.valeur)} j`}
+                      />
+                    </button>
+                  ) : (
+                    <span className="text-ink-500">…</span>
+                  )}
+                </div>
               </div>
-              <div className="px-2 py-2.5 text-center">
-                {categorie ? (
-                  <button
-                    type="button"
-                    onClick={() => onSelect(utilisateur.id, code, "reel")}
-                    className="rounded-full transition-opacity duration-150 hover:opacity-70"
-                  >
-                    <TypeBadge code={code} variant="pill" label={`${formatJours(categorie.valeur)} j`} />
-                  </button>
-                ) : (
-                  <span className="text-ink-500">…</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -139,7 +152,10 @@ function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[]): stri
     ...TYPES_SOLDE.flatMap((code) => {
       if (!l.soldes) return ["", ""];
       const categorie = categorieSolde(l.soldes, code);
-      return [`${formatJours(categorie.valeurApresAttente)} j`, `${formatJours(categorie.valeur)} j`];
+      return [
+        `${formatJours(categorie.valeurApresAttente)} j`,
+        `${formatJours(categorie.valeur)} j`,
+      ];
     }),
   ]);
 
@@ -170,6 +186,16 @@ function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[]): stri
  */
 export function SuivreSoldesPage2() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
+  const { utilisateur } = useUtilisateur();
+  // "Suivre les soldes 2" n'a jamais eu de bloc Décision/Régularisation
+  // séparé par rôle (popin en lecture + "Annuler cette demande" uniquement)
+  // — admin et manager y ont donc le même comportement (28/08/2026, "on cale
+  // le comportement admin" pour manager sur validé non transmis, rien à
+  // préserver de différent ici pour "en attente").
+  const peutAnnulerDepuisSoldes = utilisateur?.role === "admin" || utilisateur?.role === "manager";
+  // Annuler un congé déjà transmis en paie reste admin-only (28/08/2026),
+  // contrairement au cas non-transmis ci-dessus.
+  const estAdmin = utilisateur?.role === "admin";
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [soldesParId, setSoldesParId] = useState<Record<string, Soldes>>({});
@@ -177,6 +203,15 @@ export function SuivreSoldesPage2() {
   const [panelTop, setPanelTop] = useState(0);
 
   const actifs = utilisateurs.filter((u) => u.statut === "actif");
+
+  // Extrait en fonction nommée (28/08/2026, "Annuler cette demande" pour
+  // admin) — relancée après une annulation, pas seulement au montage.
+  async function rafraichirSoldes() {
+    const paires = await Promise.all(
+      actifs.map((u) => fetchSoldes(u.id).then((s) => [u.id, s] as const)),
+    );
+    setSoldesParId(Object.fromEntries(paires));
+  }
 
   useEffect(() => {
     let annule = false;
@@ -242,7 +277,9 @@ export function SuivreSoldesPage2() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Suivre les soldes 2</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
+        Suivre les soldes 2
+      </h1>
 
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -250,7 +287,10 @@ export function SuivreSoldesPage2() {
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3 px-1">
+      <div
+        className="animate-stagger-in flex flex-wrap items-end justify-between gap-3 px-1"
+        style={{ animationDelay: "90ms" }}
+      >
         <SelectFiltrePill
           value={collaborateurFiltre}
           onChange={(e) => setCollaborateurFiltre(e.target.value)}
@@ -262,7 +302,11 @@ export function SuivreSoldesPage2() {
             </option>
           ))}
         </SelectFiltrePill>
-        <Button onClick={exporter} disabled={filtres.length === 0} className="rounded-full px-4 py-2">
+        <Button
+          onClick={exporter}
+          disabled={filtres.length === 0}
+          className="rounded-full px-4 py-2"
+        >
           <Download size={16} />
           Exporter (CSV)
         </Button>
@@ -279,7 +323,8 @@ export function SuivreSoldesPage2() {
       ) : (
         <>
           <div
-            className={`grid grid-cols-1 items-start gap-[5px] ${selection ? "xl:grid-cols-[max-content_max-content]" : ""}`}
+            className={`animate-stagger-in grid grid-cols-1 items-start gap-[5px] ${selection ? "xl:grid-cols-[max-content_max-content]" : ""}`}
+            style={{ animationDelay: "180ms" }}
           >
             <div ref={cardsRef} className="flex min-w-0 flex-col gap-3">
               {filtres.map((u) => (
@@ -311,6 +356,15 @@ export function SuivreSoldesPage2() {
                 avecDetailConge
                 avecAjustement
                 style={{ marginTop: panelTop }}
+                onRetirer={
+                  peutAnnulerDepuisSoldes
+                    ? async (demandeId, commentaire) => {
+                        await retirerDemande(demandeId, commentaire);
+                        await rafraichirSoldes();
+                      }
+                    : undefined
+                }
+                peutAnnulerDejaTransmis={estAdmin}
               />
             )}
           </div>

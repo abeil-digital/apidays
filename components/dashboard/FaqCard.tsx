@@ -95,7 +95,7 @@ export function FaqCard() {
   return (
     <div
       ref={conteneurRef}
-      className="bg-surface-card overflow-hidden px-8 py-8 md:px-12 md:py-12"
+      className="overflow-hidden bg-[#FCEFB3] px-8 py-8 md:px-12 md:py-12"
       style={{ width: dimensions.largeur || "100%", marginLeft: dimensions.margeGauche }}
     >
       <div className="flex flex-col gap-8 md:flex-row md:gap-16">

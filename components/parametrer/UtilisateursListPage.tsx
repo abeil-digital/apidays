@@ -107,7 +107,7 @@ export function UtilisateursListPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <div className="flex items-center justify-between px-1">
+      <div className="animate-stagger-in flex items-center justify-between px-1">
         <h1 className="text-ink-900 text-2xl font-semibold">Utilisateurs</h1>
         <Button
           href="/parametrer/utilisateurs/nouveau"
@@ -130,7 +130,7 @@ export function UtilisateursListPage() {
           `px-4 py-3`, séparateur `border-ink-300/60 border-t` avant le
           contenu) plutôt que des filtres nus au-dessus d'une card
           `shadow-sm` séparée pour le seul tableau. */}
-      <div className="bg-surface-card w-full">
+      <div className="animate-stagger-in bg-surface-card w-full" style={{ animationDelay: "90ms" }}>
         <div className="flex flex-wrap items-center gap-2 px-4 py-3">
           <InputFiltrePill
             type="search"

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Check } from "lucide-react";
 import type { Demande, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
 import {
   formatDateAction,
@@ -21,36 +21,14 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
-// Statut de paie le plus significatif d'une demande, quand elle a plusieurs
-// lignes de transmission (congé à cheval) — un écart sur une seule tranche
-// doit rester visible même si les autres tranches sont en paye.
-function statutTransmissionAgrege(lignes: LigneExportPaie[]): LigneExportPaie["statut"] | null {
-  if (lignes.length === 0) return null;
-  if (lignes.some((l) => l.statut === "ecart")) return "ecart";
-  if (lignes.every((l) => l.statut === "en_paye")) return "en_paye";
-  return "transmis";
-}
-
 function BadgeTransmission({ lignes }: { lignes: LigneExportPaie[] }) {
-  const statut = statutTransmissionAgrege(lignes);
-  if (!statut) return <span className="text-ink-500">—</span>;
-  if (statut === "ecart") {
-    return (
-      <Badge tone="danger">
-        <TriangleAlert size={12} strokeWidth={2.5} />
-        <span>Écart</span>
-      </Badge>
-    );
-  }
-  if (statut === "en_paye") {
-    return (
-      <Badge tone="success">
-        <Check size={12} strokeWidth={2.5} />
-        <span>En paye</span>
-      </Badge>
-    );
-  }
-  return <Badge tone="warning">Transmis</Badge>;
+  if (lignes.length === 0) return <span className="text-ink-500">—</span>;
+  return (
+    <Badge tone="warning">
+      <Check size={12} strokeWidth={2.5} />
+      <span>Transmis</span>
+    </Badge>
+  );
 }
 
 interface HistoriqueTablePropsCommunes {
@@ -302,19 +280,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             <span className="text-ink-900 font-semibold">{libelleType}</span>
           </span>
         </td>
-        <td className="px-4 py-3">
-          {onDateClick ? (
-            <button
-              type="button"
-              onClick={() => onDateClick(demande.id)}
-              className="transition-opacity duration-150 hover:opacity-70"
-            >
-              {pillDates}
-            </button>
-          ) : (
-            pillDates
-          )}
-        </td>
+        <td className="px-4 py-3">{pillDates}</td>
         <td className="text-ink-500 px-4 py-3">
           {renderDuree ? renderDuree(demande) : `${formatJours(jours)} j`}
         </td>
@@ -406,7 +372,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                   // groupe qui est active, sinon les deux se cumulent et la
                   // première ligne du groupe apparaît deux fois plus foncée.
                   const autreLigneSelectionnee =
-                    selectedId != null && selectedId !== demande.id && groupeIds.includes(selectedId);
+                    selectedId != null &&
+                    selectedId !== demande.id &&
+                    groupeIds.includes(selectedId);
                   const autreLigneSurvolee =
                     hoveredId !== null && hoveredId !== demande.id && groupeIds.includes(hoveredId);
                   const classeCollaborateur = autreLigneSelectionnee
@@ -417,7 +385,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                   return (
                     <tr
                       key={demande.id}
-                      className={`transition-colors duration-150 ${classeLigne(demande)}`}
+                      className={`transition-colors duration-150 ${classeLigne(demande)} ${onDateClick ? "cursor-pointer" : ""}`}
+                      onClick={onDateClick ? () => onDateClick(demande.id) : undefined}
                       onMouseEnter={() => setHoveredId(demande.id)}
                       onMouseLeave={() => setHoveredId((h) => (h === demande.id ? null : h))}
                     >
@@ -444,7 +413,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
             : trierDemandes(props.demandes, tri).map((demande) => (
                 <tr
                   key={demande.id}
-                  className={`transition-colors duration-150 ${classeLigne(demande)}`}
+                  className={`transition-colors duration-150 ${classeLigne(demande)} ${onDateClick ? "cursor-pointer" : ""}`}
+                  onClick={onDateClick ? () => onDateClick(demande.id) : undefined}
                 >
                   {cellulesCommunes(demande)}
                 </tr>

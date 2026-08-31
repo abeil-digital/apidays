@@ -324,16 +324,12 @@ export interface CongeImposeInput {
 // — une demande peut être transmise en plusieurs tranches (congé à cheval
 // sur deux périodes de paie).
 
-export type StatutTransmission = "transmis" | "en_paye" | "ecart";
-
 export interface LigneExportPaie {
   id: string;
   demandeId: string;
   joursInclus: number; // signé : négatif = ligne de correction
-  statut: StatutTransmission;
-  motifEcart: string | null;
-  verifieLe: string | null;
   genereLe: string; // timestamptz ISO — date de l'export auquel cette ligne appartient
+  genereParNom: string; // prénom de qui a déclenché "Transmettre" pour cet export
   periodeDebut: string; // date ISO — période de l'export auquel cette ligne appartient
   periodeFin: string;
 }

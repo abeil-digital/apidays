@@ -29,9 +29,10 @@ const PARAMETRER_TABS: NavTab[] = [
 
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
-  { href: "/suivre/soldes", label: "Suivre les soldes", Icon: Wallet },
-  // Duplication expérimentale (27/08/2026) — voir `SuivreSoldesPage2.tsx`,
-  // point de départ pour itérer sans risquer de casser l'original.
+  // Ex-duplication expérimentale (27/08/2026) devenue l'unique écran
+  // (28/08/2026, "Suivre les soldes" V1 supprimé) — garde son nom/URL "2"
+  // historique, jamais renommé en pratique (même situation que
+  // `DashboardPage`, voir Backlog.md).
   { href: "/suivre/soldes2", label: "Suivre les soldes 2", Icon: Wallet },
   { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/transmissions-paie", label: "Transmissions paie", Icon: ClipboardCheck },

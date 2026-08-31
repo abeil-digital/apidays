@@ -154,7 +154,7 @@ export function PoserDemandeModal({
   onSuccess?: () => void;
   /**
    * Pré-remplit la date de début (20/08/2026) — ex. clic sur un jour vide du
-   * calendrier côté `Dashboard2Page`. La date de fin reste vide (l'appelant
+   * calendrier côté `DashboardPage`. La date de fin reste vide (l'appelant
    * ne connaît que le jour cliqué, pas la durée souhaitée). Opt-in, sans
    * effet sur les appelants qui ne le passent pas (ouverture "vierge" via
    * le bouton "Poser un congé").
@@ -447,7 +447,7 @@ export function PoserDemandeModal({
       align="top"
       header={
         // Bandeau calqué sur les popins de légende CPI/DJI/Fériés/PERSO de
-        // "Mes Congés" (Accueil, `headerLegende` dans `Dashboard2Page`) —
+        // "Mes Congés" (Accueil, `headerLegende` dans `DashboardPage`) —
         // `TypeBadge` cerclé de blanc, teinte du bandeau = couleur du type
         // sélectionné. Titre ferré à gauche à côté du badge (18/08/2026,
         // essai centré abandonné), grossi (+30%, `text-lg` au lieu de

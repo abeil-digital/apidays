@@ -21,7 +21,7 @@
   --color-brand-foreground: #ffffff;
 
   /* Slate — header, texte d'accent, éléments forts */
-  --color-slate: #496580;
+  --color-slate: #245554;
 
   /* Fond d'app / cartes */
   --color-surface-app: #fafbfc;
@@ -75,6 +75,13 @@
      sans jamais démonter le composant entre les deux (une `transition` ne
      se relance pas sur un remount déjà visible, une `animation` si). */
   --animate-detail-fade-in: detail-fade-in 200ms ease-out;
+
+  /* Apparition échelonnée des blocs d'une page (28/08/2026, Backlog "Affichage
+     progressif des composants") — `both` conserve l'état `from` avant que le
+     délai (`animationDelay` inline, par bloc appelant) ne démarre l'animation,
+     sinon le bloc serait visible en plein (état final du DOM) pendant tout le
+     délai au lieu de rester masqué. */
+  --animate-stagger-in: stagger-in 450ms ease-out both;
 }
 
 @keyframes drawer-in-right {
@@ -90,6 +97,17 @@
   from {
     opacity: 0;
     transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
   }
   to {
     opacity: 1;

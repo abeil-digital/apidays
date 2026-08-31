@@ -1018,9 +1018,9 @@ export function Calendrier2Page() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Calendrier</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
 
-      <div className="flex gap-2 px-1">
+      <div className="animate-stagger-in flex gap-2 px-1" style={{ animationDelay: "60ms" }}>
         <button
           type="button"
           onClick={() => setAnnee(anneeEnCours)}
@@ -1052,7 +1052,9 @@ export function Calendrier2Page() {
         </div>
       )}
 
-      <VueCalendrierGrille key={annee} annee={annee} />
+      <div className="animate-stagger-in" style={{ animationDelay: "120ms" }}>
+        <VueCalendrierGrille key={annee} annee={annee} />
+      </div>
     </div>
   );
 }

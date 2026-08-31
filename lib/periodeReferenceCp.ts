@@ -15,7 +15,7 @@ function ajouterJoursIso(dateIso: string, n: number): string {
  * par défaut) — ex. pour "1er juin → 31 mai", si on est en août la période
  * va du 01/06 cette année au 31/05 l'an prochain ; si on est en mars, elle
  * va du 01/06 l'an dernier au 31/05 cette année. Sans règle CP configurée,
- * retombe sur l'année civile. Utilisé par `Dashboard2Page` (onglet "Période
+ * retombe sur l'année civile. Utilisé par `DashboardPage` (onglet "Période
  * de référence") et le filtre temporel de `/historique` — un seul calcul
  * partagé plutôt que deux copies qui pourraient diverger.
  */

@@ -239,10 +239,11 @@ export async function calculerNbDemiJournees(
  * Delphine d'un congé déjà validé — invisible pour le salarié concerné,
  * qui ne pouvait ni la voir dans son historique ni être notifié du
  * changement ; signalé par Vincent avec Olivier comme exemple concret).
- * `annulerDemande` (retrait par le salarié lui-même d'une demande encore en
- * attente) n'a pour l'instant aucun appelant dans l'UI, donc en pratique
- * toute demande `annulee` remontée ici est une régularisation, traçable via
- * `dateDecision`/`validateur`.
+ * `retirerDemande` (retrait par le salarié lui-même d'une demande encore en
+ * attente, branché le 28/08/2026) partage le même statut `annulee` qu'une
+ * régularisation manager — les deux restent distinguables via
+ * `dateDecision`/`validateur` (le `validateur` est alors le demandeur
+ * lui-même), voir `retireeParSoiMeme` dans `DetailCongePanel.tsx`.
  */
 export async function fetchDemandes(utilisateurId?: string): Promise<Demande[]> {
   const supabase = createClient();
@@ -320,29 +321,20 @@ export async function creerDemande(input: NouvelleDemandeInput): Promise<Demande
 }
 
 /**
- * Annule une demande en attente (retrait par le salarié lui-même). La policy
- * RLS "demandes: salarié modifie une demande en attente" n'autorise déjà que
- * ça — pas de vérification de statut à refaire ici. `.select().single()`
- * force une erreur si la ligne n'a pas été affectée (déjà traitée par un
- * manager, id inconnu...), au lieu du succès silencieux à 0 ligne que
- * renverrait un `update()` filtré par la RLS.
- *
- * Pas encore appelée par un hook/composant (aucune UI d'annulation pour
- * l'instant) — prête pour quand cette fonctionnalité sera spécifiée.
+ * Retire une demande en attente (28/08/2026, branchée pour la 1ère fois —
+ * "Retirer cette demande" côté collaborateur, `HistoriquePage`). Passe par
+ * `deciderDemande` plutôt qu'un `update` minimal (l'ancienne `annulerDemande`,
+ * jamais appelée par aucune UI, ne posait ni `validateur_id` ni
+ * `date_decision`) : même statut `annulee` qu'une régularisation manager
+ * (choix acté, voir BASE-DE-DONNEES.md — pas de statut dédié), mais
+ * `validateur_id` posé sur le salarié lui-même sert de signal pour que le
+ * feed de `DetailCongePanel` affiche "Retirée" plutôt que "Annulée" quand
+ * l'auteur de la décision est le demandeur (voir `retireeParSoiMeme`).
+ * La policy RLS "demandes: salarié modifie une demande en attente"
+ * (`for update`, sans restriction de colonne) couvre déjà cette écriture.
  */
-export async function annulerDemande(id: string): Promise<void> {
-  const supabase = createClient();
-
-  const { error } = await supabase
-    .from("demandes_conges")
-    .update({ statut: "annulee" })
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error("Impossible d'annuler la demande (déjà traitée, ou introuvable).");
-  }
+export async function retirerDemande(id: string, commentaire = ""): Promise<void> {
+  await deciderDemande(id, "annulee", commentaire);
 }
 
 // Exporté pour `exportsPaie.repository.ts`.
@@ -536,7 +528,7 @@ export interface DecisionHistorique {
   id: string;
   statut: StatutDemande;
   commentaire: string | null;
-  decidePar: { prenom: string; nom: string } | null;
+  decidePar: { id: string; prenom: string; nom: string } | null;
   decideLe: string; // timestamptz ISO
 }
 
@@ -546,8 +538,8 @@ interface DecisionDemandeRow {
   commentaire: string | null;
   decide_le: string;
   decide_par:
-    | { prenom: string; nom: string }
-    | { prenom: string; nom: string }[]
+    | { id: string; prenom: string; nom: string }
+    | { id: string; prenom: string; nom: string }[]
     | null;
 }
 
@@ -566,7 +558,9 @@ export async function fetchHistoriqueDecisions(demandeId: string): Promise<Decis
 
   const { data, error } = await supabase
     .from("decisions_demande")
-    .select("id, statut, commentaire, decide_le, decide_par:utilisateurs!decide_par(prenom, nom)")
+    .select(
+      "id, statut, commentaire, decide_le, decide_par:utilisateurs!decide_par(id, prenom, nom)",
+    )
     .eq("demande_id", demandeId)
     .order("decide_le", { ascending: true });
 

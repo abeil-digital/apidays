@@ -632,7 +632,9 @@ export function CongesRttPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Congés &amp; RTT</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
+        Congés &amp; RTT
+      </h1>
 
       {(error || erreurObjectifs) && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -644,44 +646,50 @@ export function CongesRttPage() {
         <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
       ) : (
         <>
-          <BlocAcquisition
-            key={regleCp?.id ?? "cp-nouveau"}
-            titre="Congés Payés"
-            type="CP"
-            ordrePresets={ORDRE_PRESETS_CP}
-            regle={regleCp}
-            titreReport="Congés reportés"
-            guidanceReport="Les congés non posés sur une année sont reportés l'année suivante"
-            titreAnticipation="Congés anticipés"
-            guidanceAnticipation="Les collaborateurs peuvent poser des congés anticipés"
-            onEnregistrer={enregistrerAcquisition}
-          >
-            <BlocAnciennete
-              regles={reglesAnciennete}
-              onAjouter={ajouterRegleAnciennete}
-              onModifier={modifierRegleAnciennete}
-              onSupprimer={retirerRegleAnciennete}
+          <div className="animate-stagger-in">
+            <BlocAcquisition
+              key={regleCp?.id ?? "cp-nouveau"}
+              titre="Congés Payés"
+              type="CP"
+              ordrePresets={ORDRE_PRESETS_CP}
+              regle={regleCp}
+              titreReport="Congés reportés"
+              guidanceReport="Les congés non posés sur une année sont reportés l'année suivante"
+              titreAnticipation="Congés anticipés"
+              guidanceAnticipation="Les collaborateurs peuvent poser des congés anticipés"
+              onEnregistrer={enregistrerAcquisition}
+            >
+              <BlocAnciennete
+                regles={reglesAnciennete}
+                onAjouter={ajouterRegleAnciennete}
+                onModifier={modifierRegleAnciennete}
+                onSupprimer={retirerRegleAnciennete}
+              />
+            </BlocAcquisition>
+          </div>
+
+          <div className="animate-stagger-in" style={{ animationDelay: "90ms" }}>
+            <BlocObjectifsCalendrier
+              key={objectifs ? "objectifs-charges" : "objectifs-chargement"}
+              objectifs={objectifs}
+              onEnregistrer={enregistrerObjectifs}
             />
-          </BlocAcquisition>
+          </div>
 
-          <BlocObjectifsCalendrier
-            key={objectifs ? "objectifs-charges" : "objectifs-chargement"}
-            objectifs={objectifs}
-            onEnregistrer={enregistrerObjectifs}
-          />
-
-          <BlocAcquisition
-            key={regleRtt?.id ?? "rtt-nouveau"}
-            titre="RTT"
-            type="RTT"
-            ordrePresets={ORDRE_PRESETS_RTT}
-            regle={regleRtt}
-            titreReport="RTT reportées"
-            guidanceReport="Les RTT non posées sur une année sont reportées l'année suivante"
-            titreAnticipation="RTT anticipées"
-            guidanceAnticipation="Les collaborateurs peuvent poser des RTT anticipées"
-            onEnregistrer={enregistrerAcquisition}
-          />
+          <div className="animate-stagger-in" style={{ animationDelay: "180ms" }}>
+            <BlocAcquisition
+              key={regleRtt?.id ?? "rtt-nouveau"}
+              titre="RTT"
+              type="RTT"
+              ordrePresets={ORDRE_PRESETS_RTT}
+              regle={regleRtt}
+              titreReport="RTT reportées"
+              guidanceReport="Les RTT non posées sur une année sont reportées l'année suivante"
+              titreAnticipation="RTT anticipées"
+              guidanceAnticipation="Les collaborateurs peuvent poser des RTT anticipées"
+              onEnregistrer={enregistrerAcquisition}
+            />
+          </div>
         </>
       )}
     </div>

@@ -311,16 +311,22 @@ async function getUtilisateurIdCourant(supabase: SupabaseClient): Promise<string
 }
 
 /**
- * Somme en jours des demandes d'un type/statut donné dont `date_debut` tombe
- * dans la période — le statut pris en compte est celui **tel qu'il était à
- * `dateReference`**, pas le statut actuel en base (25/08/2026, bug signalé
- * par Vincent : "on ne prend pas en compte les congés exportés ?" — pour
- * `fetchSoldes(id, dateReference)` avec une date passée, filtrer sur le
- * statut ACTUEL donnait le même résultat quelle que soit `dateReference`,
- * puisqu'une régularisation ultérieure — ex. Salarié Test, annulée le 25/08
- * après avoir été validée puis transmise — repassait rétroactivement la
- * demande hors du calcul même pour une date antérieure à cette
- * régularisation, faisant disparaître tout mouvement).
+ * Résout, pour un jeu de demandes déjà chargées, le statut de chacune **tel
+ * qu'il était à `dateReference`**, pas le statut actuel en base (25/08/2026,
+ * bug signalé par Vincent : "on ne prend pas en compte les congés
+ * exportés ?" — pour un calcul avec une date passée, filtrer sur le statut
+ * ACTUEL donnait le même résultat quelle que soit `dateReference`, puisqu'une
+ * régularisation ultérieure — ex. Salarié Test, annulée le 25/08 après avoir
+ * été validée puis transmise — repassait rétroactivement la demande hors du
+ * calcul même pour une date antérieure à cette régularisation, faisant
+ * disparaître tout mouvement). Extrait de `sommeJours` le 28/08/2026 pour être
+ * réutilisé par `fetchHistoriqueCp`/`fetchHistoriqueRtt`/`fetchHistoriqueCpa`,
+ * qui reconstruisaient jusque-là leur propre ledger via un filtre direct sur
+ * `demandes_conges.statut` — jamais mis à jour par ce correctif, d'où un
+ * solde théorique différent de celui de la home (`fetchSoldes`) dès qu'une
+ * demande a une colonne `statut` désynchronisée de sa dernière décision
+ * journalisée (ex. une demande retirée par le salarié lui-même, jamais
+ * journalisée dans `decisions_demande`, policy insert réservée manager/admin).
  *
  * Statut à `dateReference` = la dernière ligne de `decisions_demande` avec
  * `decide_le <= dateReference` ; à défaut (demande décidée avant
@@ -329,6 +335,62 @@ async function getUtilisateurIdCourant(supabase: SupabaseClient): Promise<string
  * attente" (pas encore décidée à cette date). Pour un appel "maintenant"
  * (`dateReference = aujourd'hui`), résultat identique à l'ancien filtre par
  * statut courant — aucune décision ne peut avoir lieu dans le futur.
+ */
+async function resoudreStatutsADate(
+  supabase: SupabaseClient,
+  demandes: { id: string; statut: string; date_decision: string | null }[],
+  dateReference: Date,
+): Promise<Map<string, string>> {
+  const statutsResolus = new Map<string, string>();
+  if (demandes.length === 0) return statutsResolus;
+
+  // Fin de journée (28/08/2026, bug trouvé via "Retirer cette demande" — des
+  // congés annulés/retirés le jour même apparaissaient comme "en attente")
+  // — `dateReference` est construite par les appelants à minuit UTC
+  // (`aujourdhui`, pour les calculs de période), mais `decide_le`/
+  // `date_decision` sont des timestamps avec heure. Comparer contre minuit
+  // excluait à tort toute décision prise plus tard dans la même journée
+  // (autrement dit : quasi toute décision "d'aujourd'hui"), qui retombait
+  // alors sur le repli "en attente" par défaut. Même convention que
+  // `sommeTransmis` (`exports_paie.genere_le`, plus haut dans ce fichier).
+  const dateReferenceIso = `${dateIso(dateReference)}T23:59:59.999Z`;
+  const { data: decisions, error: erreurDecisions } = await supabase
+    .from("decisions_demande")
+    .select("demande_id, statut, decide_le")
+    .in(
+      "demande_id",
+      demandes.map((d) => d.id),
+    )
+    .lte("decide_le", dateReferenceIso)
+    .order("decide_le", { ascending: false });
+
+  if (erreurDecisions) {
+    throw new Error("Impossible de calculer le solde.");
+  }
+
+  const derniereDecisionParDemande = new Map<string, string>();
+  for (const d of decisions ?? []) {
+    if (!derniereDecisionParDemande.has(d.demande_id)) {
+      derniereDecisionParDemande.set(d.demande_id, d.statut);
+    }
+  }
+
+  for (const d of demandes) {
+    const decisionJournal = derniereDecisionParDemande.get(d.id);
+    const statutAReference: string =
+      decisionJournal ??
+      (d.date_decision && d.date_decision <= dateReferenceIso
+        ? (d.statut ?? "en_attente")
+        : "en_attente");
+    statutsResolus.set(d.id, statutAReference);
+  }
+  return statutsResolus;
+}
+
+/**
+ * Somme en jours des demandes d'un type/statut donné dont `date_debut` tombe
+ * dans la période — le statut pris en compte est celui résolu à
+ * `dateReference` (voir `resoudreStatutsADate`), pas le statut actuel en base.
  */
 async function sommeJours(
   supabase: SupabaseClient,
@@ -361,36 +423,11 @@ async function sommeJours(
   const demandes = data ?? [];
   if (demandes.length === 0) return 0;
 
-  const dateReferenceIso = dateReference.toISOString();
-  const { data: decisions, error: erreurDecisions } = await supabase
-    .from("decisions_demande")
-    .select("demande_id, statut, decide_le")
-    .in(
-      "demande_id",
-      demandes.map((d) => d.id),
-    )
-    .lte("decide_le", dateReferenceIso)
-    .order("decide_le", { ascending: false });
-
-  if (erreurDecisions) {
-    throw new Error("Impossible de calculer le solde.");
-  }
-
-  const derniereDecisionParDemande = new Map<string, string>();
-  for (const d of decisions ?? []) {
-    if (!derniereDecisionParDemande.has(d.demande_id)) {
-      derniereDecisionParDemande.set(d.demande_id, d.statut);
-    }
-  }
+  const statutsResolus = await resoudreStatutsADate(supabase, demandes, dateReference);
 
   let total = 0;
   for (const d of demandes) {
-    const decisionJournal = derniereDecisionParDemande.get(d.id);
-    const statutAReference: string =
-      decisionJournal ??
-      (d.date_decision && d.date_decision <= dateReferenceIso
-        ? (d.statut ?? "en_attente")
-        : "en_attente");
+    const statutAReference = statutsResolus.get(d.id) ?? "en_attente";
     if (statuts.includes(statutAReference)) {
       total += Number(d.nb_demi_journees) / 2;
     }
@@ -665,7 +702,14 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       aujourdhui,
     );
     const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp, false);
-    const transmisEnCours = await sommeTransmis(supabase, id, "CP", false, periodeConsoCp, aujourdhui);
+    const transmisEnCours = await sommeTransmis(
+      supabase,
+      id,
+      "CP",
+      false,
+      periodeConsoCp,
+      aujourdhui,
+    );
     const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
     const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
 
@@ -986,8 +1030,7 @@ export async function fetchHistoriqueCp(
   const [
     lignesTransmises,
     { data: ajustementsRows, error: erreurAjustements },
-    { data: enAttenteRows, error: erreurEnAttente },
-    { data: demandesValideesRows, error: erreurValidees },
+    { data: demandesRows, error: erreurDemandes },
   ] = await Promise.all([
     fetchLignesTransmises(
       supabase,
@@ -1007,27 +1050,29 @@ export async function fetchHistoriqueCp(
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
     supabase
       .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", false)
-      .eq("statut", "en_attente")
-      .gte("date_debut", dateIso(periodeConsoCp.debut))
-      .lte("date_debut", dateIso(periodeEnCours.fin)),
-    supabase
-      .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
-      .eq("utilisateur_id", utilisateurId)
-      .eq("type_absence_id", typeAbsenceId)
-      .eq("is_anticipation", false)
-      .eq("statut", "validee")
       .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
 
-  if (erreurAjustements || erreurEnAttente || erreurValidees) {
+  if (erreurAjustements || erreurDemandes) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
+
+  // Statut résolu à `aujourdhui` (28/08/2026, voir `resoudreStatutsADate`) —
+  // remplace les deux requêtes séparées `.eq("statut", ...)` d'origine, qui
+  // divergeaient de `fetchSoldes`/`sommeJours` dès qu'une demande avait un
+  // statut brut désynchronisé de sa dernière décision journalisée.
+  const statutsResolus = await resoudreStatutsADate(supabase, demandesRows ?? [], aujourdhui);
+  const enAttenteRows = (demandesRows ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "en_attente",
+  );
+  const demandesValideesRows = (demandesRows ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "validee",
+  );
 
   // Base du solde théorique (27/08/2026) — calculée séparément du "réel"
   // (`cumul`, ci-dessous, qui part désormais des lignes transmises) : le
@@ -1247,8 +1292,7 @@ export async function fetchHistoriqueRtt(
   const [
     lignesTransmises,
     { data: ajustementsRows, error: erreurAjustements },
-    { data: enAttenteRows, error: erreurEnAttente },
-    { data: demandesValideesRows, error: erreurValidees },
+    { data: demandesRows, error: erreurDemandes },
   ] = await Promise.all([
     fetchLignesTransmises(
       supabase,
@@ -1268,25 +1312,25 @@ export async function fetchHistoriqueRtt(
       .lte("created_at", `${dateIso(periodeRtt.fin)}T23:59:59.999Z`),
     supabase
       .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
-      .eq("statut", "en_attente")
-      .gte("date_debut", dateIso(periodeConsoRtt.debut))
-      .lte("date_debut", dateIso(periodeRtt.fin)),
-    supabase
-      .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
-      .eq("utilisateur_id", utilisateurId)
-      .eq("type_absence_id", typeAbsenceId)
-      .eq("statut", "validee")
       .gte("date_debut", dateIso(periodeConsoRtt.debut))
       .lte("date_debut", dateIso(periodeRtt.fin)),
   ]);
 
-  if (erreurAjustements || erreurEnAttente || erreurValidees) {
+  if (erreurAjustements || erreurDemandes) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
+
+  // Statut résolu à `aujourdhui` — voir `fetchHistoriqueCp`, même correctif.
+  const statutsResolus = await resoudreStatutsADate(supabase, demandesRows ?? [], aujourdhui);
+  const enAttenteRows = (demandesRows ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "en_attente",
+  );
+  const demandesValideesRows = (demandesRows ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "validee",
+  );
 
   // Base du solde théorique (27/08/2026) — voir `fetchHistoriqueCp`, même
   // correctif : indépendante de `cumul` (réel, ancré transmission).
@@ -1507,17 +1551,15 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
   const [
-    { data: demandesRows, error: erreurDemandes },
+    { data: demandesRowsBrutes, error: erreurDemandes },
     { data: ajustementsRows, error: erreurAjustements },
-    { data: enAttenteRows, error: erreurEnAttente },
   ] = await Promise.all([
     supabase
       .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", true)
-      .eq("statut", "validee")
       .gte("date_debut", dateIso(periodeSuivante.debut))
       .lte("date_debut", dateIso(periodeSuivante.fin)),
     supabase
@@ -1528,20 +1570,20 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .eq("is_anticipation", true)
       .gte("created_at", debutCpa.toISOString())
       .lte("created_at", `${dateIso(aujourdhui)}T23:59:59.999Z`),
-    supabase
-      .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees")
-      .eq("utilisateur_id", utilisateurId)
-      .eq("type_absence_id", typeAbsenceId)
-      .eq("is_anticipation", true)
-      .eq("statut", "en_attente")
-      .gte("date_debut", dateIso(periodeSuivante.debut))
-      .lte("date_debut", dateIso(periodeSuivante.fin)),
   ]);
 
-  if (erreurDemandes || erreurAjustements || erreurEnAttente) {
+  if (erreurDemandes || erreurAjustements) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
+
+  // Statut résolu à `aujourdhui` — voir `fetchHistoriqueCp`, même correctif.
+  const statutsResolus = await resoudreStatutsADate(supabase, demandesRowsBrutes ?? [], aujourdhui);
+  const demandesRows = (demandesRowsBrutes ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "validee",
+  );
+  const enAttenteRows = (demandesRowsBrutes ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "en_attente",
+  );
 
   interface MouvementBrut {
     id: string;
@@ -1677,9 +1719,7 @@ export async function fetchAjustementsSolde(
   utilisateurId: string,
   code: "CP" | "RTT" | "CPA",
   periode: { debut: string; fin: string },
-): Promise<
-  { id: string; deltaJours: number; motif: string; date: string; auteurNom: string }[]
-> {
+): Promise<{ id: string; deltaJours: number; motif: string; date: string; auteurNom: string }[]> {
   const supabase = createClient();
   const typeAbsenceId = await getTypeAbsenceId(supabase, code === "RTT" ? "RTT" : "CP");
 

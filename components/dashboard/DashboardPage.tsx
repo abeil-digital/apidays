@@ -137,10 +137,9 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
 
 /**
  * Accueil collaborateur — écran unique, route `/` (14/08/2026 : remplace
- * l'ancien `DashboardPage`, supprimé ; le nom de fichier/composant
- * `Dashboard2Page` reste tel quel pour l'instant, pas de renommage fait —
- * voir Backlog.md si on veut nettoyer ça un jour, même logique que
- * `Calendrier2Page`).
+ * l'ancien `DashboardPage` d'origine, supprimé ; le composant a repris ce
+ * nom le 28/08/2026, après avoir porté le nom historique "Dashboard2Page"
+ * — même logique que `Calendrier2Page`, déjà renommé le 18/08/2026).
  *
  * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier en
  * 3 onglets — Année en cours / Période de référence CP / Année suivante —
@@ -158,7 +157,7 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
  * CONTEXTE.md. "En attente de validation" est un encart stabilo séparé
  * au-dessus du calendrier (ouvre sa propre popin).
  */
-export function Dashboard2Page() {
+export function DashboardPage() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes, refetch: refetchSoldes } = useSoldes();
   const { demandes, loading: loadingDemandes, refetch: refetchDemandes } = useDemandes();
@@ -433,11 +432,14 @@ export function Dashboard2Page() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
-      <div className="px-1 pt-5 md:pt-0">
+      <div className="animate-stagger-in px-1 pt-5 md:pt-0">
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
-      <div className="flex w-fit flex-col gap-1 rounded-xl bg-transparent px-3 py-2">
+      <div
+        className="animate-stagger-in flex w-fit flex-col gap-1 rounded-xl bg-transparent px-3 py-2"
+        style={{ animationDelay: "70ms" }}
+      >
         <span className="text-ink-500 text-xs font-semibold">Depuis ma dernière visite</span>
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
           <span className="flex items-center gap-0.5">
@@ -483,7 +485,11 @@ export function Dashboard2Page() {
         </div>
       </div>
 
-      {utilisateur.role === "manager" && <DemandesAEtudierCard />}
+      {utilisateur.role === "manager" && (
+        <div className="animate-stagger-in" style={{ animationDelay: "140ms" }}>
+          <DemandesAEtudierCard />
+        </div>
+      )}
 
       {/* Titre de section réduit + interlignage resserré (20/08/2026, demande
           explicite) — le h2 passe de text-lg/text-ink-900 à text-sm/text-ink-500
@@ -493,7 +499,10 @@ export function Dashboard2Page() {
           au-dessus, et `gap-[11px]` (au lieu de `gap-4`) réduit de 30%
           l'interlignage avec la grille de cards Soldes en dessous. Valeurs
           arbitraires ad hoc, pas de token dédié. */}
-      <div className="-mt-[12.24px] flex flex-col gap-[11px] rounded-2xl py-4 md:py-5">
+      <div
+        className="animate-stagger-in -mt-[12.24px] flex flex-col gap-[11px] rounded-2xl py-4 md:py-5"
+        style={{ animationDelay: "210ms" }}
+      >
         <div className="flex flex-col gap-1 px-1">
           <h2 className="text-ink-500 text-sm font-bold">Suivre mes soldes</h2>
         </div>
@@ -536,7 +545,7 @@ export function Dashboard2Page() {
           filtre aussi "Prochains jours off" (`debutPeriode`/`finPeriode`), le
           filtre ne concerne plus seulement le calendrier — le caler à gauche
           au-dessus des deux colonnes le rend visuellement plus clair. */}
-      <div>
+      <div className="animate-stagger-in" style={{ animationDelay: "280ms" }}>
         <h2 className="text-ink-500 mb-[14px] px-1 text-sm font-bold">Mon Calendrier</h2>
         {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
             même ligne que les onglets de sélection de période, poussé à
@@ -611,7 +620,10 @@ export function Dashboard2Page() {
           (200px → 230px, `max-w-[706px]` sur la grille) — retour à `gap-3`/
           pas de marge pour laisser à la grille la place de grandir plutôt
           que de la lui reprendre. */}
-      <div className="flex flex-col gap-3 md:flex-row">
+      <div
+        className="animate-stagger-in flex flex-col gap-3 md:flex-row"
+        style={{ animationDelay: "350ms" }}
+      >
         {/* Hauteur plafonnée à 604px (20/08/2026, demande explicite) = 2
             lignes de cards mois (290px × 2 + 24px de gap) pour que le bas de
             cette card s'aligne sur le bas de 2 lignes de calendrier — le
@@ -674,7 +686,9 @@ export function Dashboard2Page() {
         </div>
       </div>
 
-      <FaqCard />
+      <div className="animate-stagger-in" style={{ animationDelay: "420ms" }}>
+        <FaqCard />
+      </div>
 
       {snippet && (
         <SnippetJourCalendrier

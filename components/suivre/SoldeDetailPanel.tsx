@@ -2,10 +2,11 @@
 
 import { useState, type CSSProperties } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
-import type { DemandeEquipe } from "@/lib/types";
+import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
 import { fetchDemandeParId } from "@/lib/data/demandes.repository";
+import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { ajouterAjustementSolde } from "@/lib/data/soldes.repository";
 import {
   classeBordureTypeBadge,
@@ -51,7 +52,7 @@ interface SoldeDetailPanelProps {
   nomComplet: string;
   onClose: () => void;
   /** Bords arrondis (20/08/2026) — opt-in : utilisé pour la popin overlay
-   * d'Accueil (`Dashboard2Page`), pas pour le docking latéral de "Suivre les
+   * d'Accueil (`DashboardPage`), pas pour le docking latéral de "Suivre les
    * soldes" (vue manager, bords carrés contre le bord de l'écran). */
   arrondi?: boolean;
   /** Mode de solde initial (20/08/2026, revu le 27/08/2026) — Accueil (vue
@@ -88,6 +89,17 @@ interface SoldeDetailPanelProps {
    * soldes 2") — utilisé pour `marginTop`, calé dynamiquement sur la ligne
    * CP/RTT/CPA cliquée (même mécanique que `VerifierFichesPaiePage2`). */
   style?: CSSProperties;
+  /** "Annuler cette demande" pour un admin (28/08/2026, "Suivre les soldes
+   * 2") — opt-in, absent partout ailleurs (Accueil collaborateur a déjà son
+   * propre "Annuler cette demande" via `/historique`). Signature avec
+   * `demandeId` explicite car l'appelant ne connaît pas la demande ouverte
+   * À L'INTÉRIEUR de ce panneau — c'est un état interne
+   * (`demandeSelectionnee`), contrairement à `DetailCongePanel.onRetirer`
+   * qui n'a besoin que du commentaire. */
+  onRetirer?: (demandeId: string, commentaire: string) => Promise<void>;
+  /** Autorise `onRetirer` même sur un congé déjà transmis en paie (28/08/2026,
+   * admin uniquement) — transmis tel quel à `DetailCongePanel`. */
+  peutAnnulerDejaTransmis?: boolean;
 }
 
 function formatJjMm(iso: string): string {
@@ -152,6 +164,8 @@ export function SoldeDetailPanel({
   avecDetailConge = false,
   avecAjustement = false,
   style,
+  onRetirer,
+  peutAnnulerDejaTransmis = false,
 }: SoldeDetailPanelProps) {
   const { historique, loading, error, refetch } = useHistoriqueSolde(utilisateurId, code);
   const [mode, setMode] = useState<ModeSolde>(modeParDefaut);
@@ -162,6 +176,11 @@ export function SoldeDetailPanel({
   const [idSelectionne, setIdSelectionne] = useState<string | null>(null);
   const [demandeSelectionnee, setDemandeSelectionnee] = useState<DemandeEquipe | null>(null);
   const [chargementDetail, setChargementDetail] = useState(false);
+  // Lignes de transmission de la demande ouverte (28/08/2026, "Annuler cette
+  // demande" pour admin) — nécessaire pour que `DetailCongePanel` sache si
+  // une demande validée a déjà été transmise en paie (sinon toute demande
+  // validée semblerait "non transmise").
+  const [lignesTransmission, setLignesTransmission] = useState<LigneExportPaie[]>([]);
   // Ajustement sélectionné (27/08/2026, "Ajuster le solde") — pas de fetch
   // async ici contrairement à `demandeSelectionnee` : la donnée est déjà
   // entièrement dans `evenements` (m.motif/m.auteurNom), pas besoin d'un
@@ -229,6 +248,10 @@ export function SoldeDetailPanel({
   const libelleDepart = code === "CP" ? "Solde N-1" : "Solde initial";
   const detailOuvert =
     chargementDetail || demandeSelectionnee !== null || ajustementSelectionne !== null;
+  const onRetirerDemande =
+    onRetirer && demandeSelectionnee
+      ? (commentaire: string) => onRetirer(demandeSelectionnee.id, commentaire)
+      : undefined;
 
   async function ouvrirDetail(id: string) {
     // `setDemandeSelectionnee(null)` avant le fetch (20/08/2026) — sinon,
@@ -239,10 +262,15 @@ export function SoldeDetailPanel({
     setIdSelectionne(id);
     setDemandeSelectionnee(null);
     setAjustementSelectionnee(null);
+    setLignesTransmission([]);
     setChargementDetail(true);
     try {
-      const demande = await fetchDemandeParId(id);
+      const [demande, lignesParId] = await Promise.all([
+        fetchDemandeParId(id),
+        fetchLignesTransmissionParDemande([id]),
+      ]);
       setDemandeSelectionnee(demande);
+      setLignesTransmission(lignesParId[id] ?? []);
     } catch {
       setDemandeSelectionnee(null);
       setIdSelectionne(null);
@@ -251,7 +279,13 @@ export function SoldeDetailPanel({
     }
   }
 
-  function ouvrirDetailAjustement(m: { id: string; date: string; jours: number; motif?: string; auteurNom?: string }) {
+  function ouvrirDetailAjustement(m: {
+    id: string;
+    date: string;
+    jours: number;
+    motif?: string;
+    auteurNom?: string;
+  }) {
     setDemandeSelectionnee(null);
     setChargementDetail(false);
     setIdSelectionne((prev) => (prev === m.id ? null : m.id));
@@ -296,7 +330,13 @@ export function SoldeDetailPanel({
             </div>
           ) : demandeSelectionnee ? (
             <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-              <DetailCongePanel selection={demandeSelectionnee} onClose={fermerDetail} />
+              <DetailCongePanel
+                selection={demandeSelectionnee}
+                onClose={fermerDetail}
+                onRetirer={onRetirerDemande}
+                peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+                lignesTransmission={lignesTransmission}
+              />
             </div>
           ) : (
             <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in rounded-xl border p-8 text-center text-sm">
@@ -551,11 +591,19 @@ export function SoldeDetailPanel({
           <div className="border-ink-300/60 flex flex-col gap-2 border-t px-4 py-3">
             <div className="flex gap-3 text-xs font-semibold">
               <label className="flex items-center gap-1.5">
-                <input type="radio" checked={sens === "ajouter"} onChange={() => setSens("ajouter")} />
+                <input
+                  type="radio"
+                  checked={sens === "ajouter"}
+                  onChange={() => setSens("ajouter")}
+                />
                 Ajouter
               </label>
               <label className="flex items-center gap-1.5">
-                <input type="radio" checked={sens === "retirer"} onChange={() => setSens("retirer")} />
+                <input
+                  type="radio"
+                  checked={sens === "retirer"}
+                  onChange={() => setSens("retirer")}
+                />
                 Retirer
               </label>
             </div>
@@ -576,7 +624,9 @@ export function SoldeDetailPanel({
               rows={2}
               className="text-sm"
             />
-            {erreurAjustement && <p className="text-status-danger-fg text-xs">{erreurAjustement}</p>}
+            {erreurAjustement && (
+              <p className="text-status-danger-fg text-xs">{erreurAjustement}</p>
+            )}
             <div className="flex justify-end gap-2">
               <Button
                 variant="ghost"
@@ -679,6 +729,9 @@ export function SoldeDetailPanel({
                   selection={demandeSelectionnee}
                   onClose={fermerDetail}
                   pleineLargeur
+                  onRetirer={onRetirerDemande}
+                  peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+                  lignesTransmission={lignesTransmission}
                 />
               </div>
             ) : chargementDetail ? (
@@ -767,7 +820,13 @@ export function SoldeDetailPanel({
               </div>
             ) : demandeSelectionnee ? (
               <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-                <DetailCongePanel selection={demandeSelectionnee} onClose={fermerDetail} />
+                <DetailCongePanel
+                  selection={demandeSelectionnee}
+                  onClose={fermerDetail}
+                  onRetirer={onRetirerDemande}
+                  peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+                  lignesTransmission={lignesTransmission}
+                />
               </div>
             ) : chargementDetail ? (
               <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in rounded-xl border p-8 text-center text-sm">

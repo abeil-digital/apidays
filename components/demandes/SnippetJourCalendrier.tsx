@@ -19,7 +19,7 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
 
 /**
  * Overlay "typologie de congé" au clic sur un jour du calendrier (24/08/2026)
- * — comportement unifié entre Accueil (`Dashboard2Page`) et
+ * — comportement unifié entre Accueil (`DashboardPage`) et
  * `/suivre/calendrier` (`CalendrierCollaborateur`), remplace l'ancien
  * `SnippetDemande` local à chacun (qui ne réagissait qu'aux demandes
  * personnelles, pas aux congés imposés) et l'interaction retirée avec

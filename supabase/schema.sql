@@ -20,7 +20,6 @@ create type nature_contrat as enum ('cdi', 'cdd', 'alternance', 'stage');
 create type type_absence_code as enum ('CP', 'RTT', 'CSS', 'CE', 'RECUP', 'EVT_FAM', 'DJ_IMPOSEE', 'CP_IMPOSE');
 create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
-create type statut_transmission as enum ('transmis', 'en_paye', 'ecart');
 
 -- ------------------------------------------------------------
 -- UTILISATEURS
@@ -371,24 +370,21 @@ create table exports_paie (
 create unique index exports_paie_periode_unique on exports_paie (periode_debut, periode_fin);
 
 -- Ledger de transmission (24/08/2026) — combien de jours d'une demande sont
--- partis dans quel export, avec son propre statut de transmission
--- (transmis/en_paye/ecart). Porté ici plutôt que sur `demandes_conges`
+-- partis dans quel export. Porté ici plutôt que sur `demandes_conges`
 -- elle-même : un congé à cheval sur deux périodes de paie peut être transmis
--- en plusieurs fois (une tranche par export), chaque tranche évoluant
--- ensuite indépendamment (`en_paye` une fois vérifiée sur la fiche de paie
--- reçue, `ecart` si ça ne correspond pas). `jours_inclus` peut être négatif
--- (ligne de correction, quand une demande déjà transmise est régularisée
--- après coup — voir `regulariserDemande`) : la somme des `jours_inclus`
--- d'une demande sur toutes ses lignes est son "solde de transmission".
+-- en plusieurs fois (une tranche par export). `jours_inclus` peut être
+-- négatif (ligne de correction, quand une demande déjà transmise est
+-- régularisée après coup — voir `regulariserDemande`) : la somme des
+-- `jours_inclus` d'une demande sur toutes ses lignes est son "solde de
+-- transmission". L'existence d'une ligne suffit à marquer une demande
+-- "transmise" — pas de sous-statut (transmis/en_paye/écart, retiré le
+-- 28/08/2026 : jamais mis à jour en pratique, `validerCheckPaie` n'avait
+-- aucun appelant).
 create table export_paie_lignes (
   id uuid primary key default gen_random_uuid(),
   export_paie_id uuid not null references exports_paie(id) on delete cascade,
   demande_id uuid not null references demandes_conges(id) on delete cascade,
   jours_inclus numeric(5,1) not null,
-  statut statut_transmission not null default 'transmis',
-  motif_ecart text,
-  verifie_le timestamptz,
-  verifie_par uuid references utilisateurs(id),
   created_at timestamptz not null default now()
 );
 
@@ -642,6 +638,21 @@ create policy "demandes: salarié modifie une demande en attente"
   using (utilisateur_id = my_utilisateur_id() and statut = 'en_attente')
   with check (utilisateur_id = my_utilisateur_id());
 
+-- 28/08/2026 — "Annuler cette demande" étendu aux congés validés pas encore
+-- transmis en paie (aucune ligne export_paie_lignes) : même principe que la
+-- policy ci-dessus pour "en attente", combinée en OR avec elle sur la même
+-- commande UPDATE.
+create policy "demandes: salarié annule un congé validé non transmis"
+  on demandes_conges for update
+  using (
+    utilisateur_id = my_utilisateur_id()
+    and statut = 'validee'
+    and not exists (
+      select 1 from export_paie_lignes el where el.demande_id = demandes_conges.id
+    )
+  )
+  with check (utilisateur_id = my_utilisateur_id());
+
 create policy "demandes: manager lit toutes les demandes"
   on demandes_conges for select
   using (my_role() = 'manager');
@@ -816,13 +827,9 @@ create policy "export_paie_lignes: manager et admin lisent tout"
   on export_paie_lignes for select
   using (my_role() in ('manager', 'admin'));
 
-create policy "export_paie_lignes: manager et admin créent/modifient (check paie)"
+create policy "export_paie_lignes: manager et admin créent"
   on export_paie_lignes for insert
   with check (my_role() in ('manager', 'admin'));
-
-create policy "export_paie_lignes: manager et admin mettent à jour le statut"
-  on export_paie_lignes for update
-  using (my_role() in ('manager', 'admin'));
 
 create policy "export_paie_lignes: admin gère tout"
   on export_paie_lignes for all
