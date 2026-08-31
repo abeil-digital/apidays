@@ -3433,6 +3433,72 @@ le token partagé (`--color-surface-card`, utilisé par toutes les cards blanche
 teal et le fond de page vert restent aussi actifs (non explicitement annulés par Vincent) — seul le
 fond de page général a été remis au gris d'origine sur demande explicite ("le gris en fond steup").
 
+**"Calendrier des employés" — heatmap consolidée sur `/suivre/calendrier` (28/08/2026, item Backlog
+priorité Urgente)** : nouveau composant `components/suivre/CalendrierGlobal.tsx`, vue par défaut de
+l'écran (le sélecteur de collaborateur existant bascule toujours vers `CalendrierCollaborateur` en
+cas de sélection explicite — rien retiré, uniquement ajouté). Reprend le même système d'onglets de
+période (Année en cours / Période de référence CP / Année suivante) que les autres calendriers.
+
+*Modèle d'intensité* : ratio = MAX de deux sources (jamais la somme, pour ne pas dépasser 100% ni
+compter deux fois une même fermeture) — (1) congés personnels validés/en attente, pondérés en
+demi-journées (0,5/1 par collaborateur selon `demiDebut`/`demiFin`, même granularité que
+`DashboardPage`/`CalendrierCollaborateur`) divisé par l'effectif actif ; (2) fériés/CPI/DJI, communs
+à TOUS les actifs (même liste pour tout le monde, pas une notion par personne) — un férié ou un CPI
+vaut 100% (entreprise fermée), une DJI vaut 50%. Plancher à 15% dès qu'au moins une personne est
+concernée, pour rester visible sur un gros effectif.
+
+*Rendu de la heatmap* : extension du DS partagé `MiniCalendrier.tsx` avec une nouvelle variante
+`PastilleJour.plein` (couleur CSS calculée dynamiquement — `color-mix`/interpolation par jour,
+qu'aucune classe Tailwind littérale ne peut représenter à l'avance) plutôt qu'un composant dédié
+bypassant `MiniCalendrier` (premier essai, revenu en arrière sur demande explicite : "on doit avoir
+une identité graphique entre la vue consolidée et la vue individuelle, ça passe aussi par la même
+grille" — la heatmap utilise donc la même card `h-[290px]`, mêmes breakpoints, même typo que
+`CalendrierCollaborateur`). `plein` remplit toute la largeur de sa case (`w-full`, comme une barre
+groupée) plutôt qu'une pastille centrée, pour que les jours consécutifs se touchent horizontalement
+(jamais fusionné avec un voisin pour autant — chaque jour garde sa propre intensité). Dégradé orange
+clair → rouge foncé (échelle "OrRd" de ColorBrewer, 5 paliers interpolés manuellement — un simple
+`color-mix` à 2 couleurs glisse vers le rose, jamais l'orange intermédiaire voulu). Les fériés
+restent en couleur dédiée `--color-ferie` plutôt que fondus dans le dégradé (identifiables au premier
+coup d'œil, même sur un jour qui coïncide avec des congés personnels).
+
+*États d'interaction, plusieurs itérations* : survol → chiffre en gras + léger grossissement (pas
+d'éclaircissement `brightness-110`, jugé "jaunâtre" sur un fond orange/rouge saturé) + bulle
+"n Collab. off · n demi-jour."/"Jour férié" en fond `--color-slate` ; sélection (clic) → état
+"déclenché" séparé et stable (fond blanc, bordure + texte dans la couleur du jour), corrige un bug
+réel où la bulle de survol disparaissait juste après le clic (l'ouverture du panneau provoque un
+reflow qui déclenche un `mouseleave` involontaire sur la case). Jours vides totalement
+non-interactifs (`PastilleJour.plein.interactif`, défaut `true`) — ni clic, ni curseur, ni survol.
+
+*Panneau de détail (clic sur une date)* : redessiné en s'inspirant explicitement de
+`DetailCongePanel` (même largeur `xl:w-64`) — bandeau coloré (couleur heatmap du jour, pas une
+couleur de type fixe) avec `JourBadge` (abréviation 2 lettres, ex. "Ma") devant 2 lignes empilées
+(date sans le nom du jour, déjà porté par le badge + stats "n Collab. off · n demi-jour."), corps à
+coins carrés groupé par section Journée entière/Matin/Après-midi, une ligne par collaborateur avec sa
+pill de congé au format `SoldeDetailPanel` (point de statut validé/en attente + "CODE : dates", ex.
+"CP : 21/09 au 25/09/26" — période COMPLÈTE de la demande, pas juste le jour cliqué). DJI intégrée
+comme ligne "fluo" (`bg-dji/15 text-dji`) dans la section Matin/Après-midi correspondante plutôt
+qu'un bandeau séparé (bandeau restant réservé au CPI) ; jour férié → message dédié centré "Personne
+ne travaille aujourd'hui !".
+
+*Mise en page, plusieurs itérations de resserrement* : grille des mois recentrée dans le corps de
+page puis repassée en colonnes calées à gauche (le centrage par ligne recentrait à tort la dernière
+ligne incomplète, ex. 5 mois affichés → 2 sur la 2e ligne visuellement décalés) ; espacement resserré
+à 10px entre cards et entre la grille et le panneau ; largeur des cards plafonnée à 256-259px (valeur
+du palier 3 colonnes, "la plus haute résolution", pour éviter l'étirement à ~391px au palier 2
+colonnes). Bug de mise en page non trivial rencontré en resserrant le gap grille/panneau à 10px : la
+colonne de grille `xl:grid-cols-[minmax(0,900px)_16rem]` (motif partagé avec les autres écrans
+Suivre) réserve jusqu'à 900px de large INDÉPENDAMMENT du contenu réel (`minmax(0,900px)` participe à
+la distribution de l'espace libre du grid comme une piste flexible) — un vide invisible restait donc
+avant le panneau malgré le `gap` réduit. Corrigé en passant la colonne de CalendrierGlobal (elle
+seule, pas le motif partagé ailleurs) en `max-content`, qui épouse la largeur réelle du contenu
+(797px, la grille des mois plafonnée) sans stretch.
+
+Titre de page renommé "Calendrier consolidé" (sous-titre "Calendrier des employés" retiré). Chantier
+mené par petites itérations verbales successives (~25 échanges), vérifié à chaque étape
+`tsc`/`eslint`/`prettier`/`npm run build` clean + test navigateur (mesures DOM précises via JS pour
+les questions de spacing, `computer`/hover peu fiable pour ce genre de vérif — voir gotchas plus
+haut).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

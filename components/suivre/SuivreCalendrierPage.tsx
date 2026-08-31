@@ -1,26 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays } from "lucide-react";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { CalendrierCollaborateur } from "@/components/suivre/CalendrierCollaborateur";
+import { CalendrierGlobal } from "@/components/suivre/CalendrierGlobal";
 
 /**
- * "Calendrier" (`/suivre/calendrier`, 24/08/2026) — permet au manager/admin
- * de consulter le calendrier d'un collaborateur. Reprend le gabarit du
- * calendrier "nouvelle version" d'Accueil (`DashboardPage`, section "Mon
- * Calendrier") via `CalendrierCollaborateur` — PAS l'ancienne page dédiée
- * `/mon-calendrier` (gabarit différent, retenu dans un premier temps puis
- * explicitement écarté par Vincent). Un simple menu déroulant sélectionne le
- * collaborateur (mêmes conventions que `SuivreSoldesPage`/
- * `SuivreDemandesPage` — `SelectFiltrePill`, liste dérivée des utilisateurs
- * actifs chargés, triée alphabétiquement).
- *
- * Aucune sélection par défaut : le calendrier d'un collaborateur en
- * particulier n'a pas de choix "évident" à pré-sélectionner (contrairement à
- * `SuivreDemandesPage`/`SuivreSoldesPage`, qui affichent d'emblée toute
- * l'équipe) — un état vide invite explicitement à choisir.
+ * "Calendrier" (`/suivre/calendrier`, 24/08/2026, refonte du 28/08/2026 —
+ * Backlog "Calendrier des employés : vue globale", priorité Urgente) permet
+ * au manager/admin de consulter soit une heatmap globale de l'équipe
+ * (`CalendrierGlobal`, vue par défaut), soit le calendrier détaillé d'un
+ * collaborateur précis (`CalendrierCollaborateur`, sur sélection explicite
+ * via le menu déroulant — mêmes conventions que `SuivreSoldesPage`/
+ * `SuivreDemandesPage`, liste dérivée des utilisateurs actifs, triée
+ * alphabétiquement). Pas d'état vide invitant à choisir : la heatmap est
+ * toujours affichable, avec ou sans collaborateur sélectionné.
  */
 export function SuivreCalendrierPage() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
@@ -34,7 +29,9 @@ export function SuivreCalendrierPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
+        Calendrier consolidé
+      </h1>
 
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -64,12 +61,7 @@ export function SuivreCalendrierPage() {
           nomComplet={`${collaborateurSelectionne.prenom} ${collaborateurSelectionne.nom}`}
         />
       ) : (
-        !loading && (
-          <div className="text-ink-500 flex flex-col items-center gap-3 py-20 text-center text-sm">
-            <CalendarDays size={32} className="text-ink-300" />
-            Sélectionnez un collaborateur pour afficher son calendrier.
-          </div>
-        )
+        !loading && <CalendrierGlobal />
       )}
     </div>
   );

@@ -96,6 +96,28 @@ export interface PastilleJour {
    * qu'une seule couleur (l'autre moitié étant sa version alpha 45%).
    */
   partage?: { gauche: string; droite: string };
+  /**
+   * Fond plein en couleur CSS calculée dynamiquement (28/08/2026, heatmap
+   * "Calendrier des employés") — équivalent de `classeFond` mais pour une
+   * valeur continue (ex. `color-mix` avec un pourcentage variable par jour)
+   * qu'aucune classe Tailwind littérale ne peut représenter à l'avance.
+   * `texteSombre` bascule le chiffre du jour en encre foncée plutôt que
+   * blanche quand le fond est trop clair pour rester lisible en blanc.
+   * Case en largeur pleine (`w-full`, comme une barre groupée) plutôt qu'une
+   * pastille centrée avec de l'espace autour — les jours consécutifs se
+   * touchent horizontalement. Jamais fusionné avec un voisin malgré tout
+   * (chaque jour reste sa propre case, l'intensité variant au jour le jour).
+   * Rendu volontairement différent des autres variantes au survol (28/08/2026,
+   * demande explicite "on évite jaune") : pas d'éclaircissement
+   * (`brightness-110`, vire au jaunâtre sur un fond orange/rouge saturé) —
+   * le chiffre du jour passe en gras avec un léger effet de grossissement à
+   * la place. `etiquette` (optionnelle) affiche une bulle au survol
+   * au-dessus de la case (fond `--color-slate`, texte blanc).
+   * `interactif` (défaut `true`) — à `false` sur un jour vide (28/08/2026,
+   * demande explicite "aucune interaction sur les jours vides") : ni clic
+   * (`onJourClick` neutralisé), ni curseur pointeur, ni survol.
+   */
+  plein?: { couleur: string; texteSombre?: boolean; etiquette?: string; interactif?: boolean };
 }
 
 interface CelluleJour {
@@ -141,7 +163,7 @@ function jourAdjacent(iso: string, delta: number): string {
 }
 
 function memePastille(a: PastilleJour, b: PastilleJour): boolean {
-  if (a.moitie || b.moitie) return false;
+  if (a.moitie || b.moitie || a.plein || b.plein) return false;
   return a.classeFond === b.classeFond;
 }
 
@@ -155,7 +177,7 @@ function memePastille(a: PastilleJour, b: PastilleJour): boolean {
  */
 function apparenceKey(pastille: PastilleJour | null, iso: string): string | null {
   if (!pastille) return null;
-  if (pastille.moitie || pastille.partage) return `m:${iso}`;
+  if (pastille.moitie || pastille.partage || pastille.plein) return `m:${iso}`;
   return `f:${pastille.classeFond}`;
 }
 
@@ -166,6 +188,7 @@ function JourPastille({
   isStart,
   isEnd,
   isHovered,
+  estSelectionne,
   estAujourdhui,
   agrandi,
   texteJour,
@@ -180,6 +203,18 @@ function JourPastille({
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
+  /**
+   * Jour sélectionné (28/08/2026, heatmap "Calendrier des employés") — état
+   * "déclenché" distinct du survol : contrairement à `isHovered` (mélange
+   * survol réel ET mise en avant via `estMisEnAvant`, qui reste vrai tant
+   * que la sélection ne change pas), ce booléen sert uniquement à la
+   * variante `plein` pour figer un rendu stable (bordure + texte dans la
+   * couleur de la case, fond blanc) qui ne dépend plus du survol réel —
+   * la bulle d'étiquette au survol disparaissait sinon au clic (le mouvement
+   * de souris provoqué par l'ouverture du panneau de détail déclenche un
+   * `mouseleave` involontaire juste après le `onClick`).
+   */
+  estSelectionne?: boolean;
   estAujourdhui: boolean;
   agrandi?: boolean;
   texteJour?: string;
@@ -279,14 +314,18 @@ function JourPastille({
   // Jours isolés → pastille ronde ; jours consécutifs du même groupe → barre
   // continue (coins arrondis seulement aux extrémités du groupe, façon pilule).
   // Carrée plutôt que ronde en mode `agrandi` (16/08/2026, card "Calendrier"
-  // d'Accueil2) — pas d'arrondi, ni aux extrémités de groupe.
+  // d'Accueil2) — pas d'arrondi, ni aux extrémités de groupe. Carrée aussi
+  // pour `plein` (28/08/2026, heatmap "Calendrier des employés") — largeur
+  // pleine (`w-full`, comme une barre groupée) pour que les cases se touchent
+  // horizontalement d'un jour à l'autre, hauteur inchangée (`h-7`/`h-9`).
   const groupe = !(isStart && isEnd);
-  const forme = agrandi
-    ? "rounded-none"
-    : groupe
-      ? `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`
-      : "rounded-full";
-  const taille = groupe ? `${hauteur} w-full` : `${hauteur} ${largeur}`;
+  const forme =
+    agrandi || pastille.plein
+      ? "rounded-none"
+      : groupe
+        ? `${isStart ? "rounded-l-full" : ""} ${isEnd ? "rounded-r-full" : ""}`
+        : "rounded-full";
+  const taille = groupe || pastille.plein ? `${hauteur} w-full` : `${hauteur} ${largeur}`;
   // Le survol met en avant toute la période (pas juste le jour survolé) —
   // luminosité plutôt qu'un scale, pour ne pas casser la continuité visuelle
   // d'une barre groupée.
@@ -308,6 +347,49 @@ function JourPastille({
     return (
       <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
         {contenuJour("ring-white")}
+      </span>
+    );
+  }
+
+  if (pastille.plein) {
+    const { couleur, texteSombre, etiquette } = pastille.plein;
+    // Jour sélectionné (28/08/2026) — rendu figé (bordure + texte dans la
+    // couleur de la case, fond blanc), indépendant du survol réel : voir
+    // `estSelectionne` plus haut pour le détail du bug que ça corrige.
+    if (estSelectionne) {
+      return (
+        <span
+          className={`flex ${taille} items-center justify-center border-2 ${forme} ${texte} font-bold ${curseur}`}
+          style={{ background: "#ffffff", borderColor: couleur, color: couleur }}
+          {...evenements}
+        >
+          {contenuJour("ring-current")}
+        </span>
+      );
+    }
+    // `etiquette` absente = jour vide (28/08/2026, demande explicite "pas de
+    // over sur les jours vides") — ni bulle, ni grossissement du chiffre.
+    const survolActif = isHovered && Boolean(etiquette);
+    return (
+      <span
+        className={`relative flex ${taille} items-center justify-center ${forme} ${texte} ${curseur} ${
+          texteSombre ? "text-ink-900" : "text-white"
+        }`}
+        style={{ background: couleur }}
+        {...evenements}
+      >
+        {survolActif && (
+          <span className="bg-slate pointer-events-none absolute -top-7 left-1/2 z-10 -translate-x-1/2 rounded-md px-2 py-1 text-xs font-semibold whitespace-nowrap text-white shadow-lg">
+            {etiquette}
+          </span>
+        )}
+        <span
+          className={`inline-block transition-transform duration-150 ${
+            survolActif ? "scale-125 font-bold" : "font-normal"
+          }`}
+        >
+          {contenuJour(texteSombre ? "ring-ink-900" : "ring-white")}
+        </span>
       </span>
     );
   }
@@ -807,11 +889,16 @@ export function MiniCalendrier({
                     (item.groupeId !== null && item.groupeId === groupeSurvole) ||
                     (estMisEnAvant?.(item.iso) ?? false)
                   }
+                  estSelectionne={estMisEnAvant?.(item.iso) ?? false}
                   estAujourdhui={estAujourdhui?.(item.iso) ?? false}
                   agrandi={agrandi}
                   texteJour={texteJour}
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
-                  onJourClick={item.pastille ? onJourClick : undefined}
+                  onJourClick={
+                    item.pastille && (item.pastille.plein?.interactif ?? true)
+                      ? onJourClick
+                      : undefined
+                  }
                   onJourVideClick={item.pastille ? undefined : onJourVideClick}
                   onJourSupprimerClick={
                     item.pastille && (estJourSupprimable?.(item.iso) ?? true)
