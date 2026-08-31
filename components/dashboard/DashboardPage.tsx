@@ -433,7 +433,7 @@ export function DashboardPage() {
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
       <div className="animate-stagger-in px-1 pt-5 md:pt-0">
-        <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
+        <h1 className="text-slate text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
       <div
@@ -504,7 +504,7 @@ export function DashboardPage() {
         style={{ animationDelay: "210ms" }}
       >
         <div className="flex flex-col gap-1 px-1">
-          <h2 className="text-ink-500 text-sm font-bold">Suivre mes soldes</h2>
+          <h2 className="text-slate text-sm font-bold">Suivre mes soldes</h2>
         </div>
 
         <div className="grid max-w-[900px] grid-cols-2 gap-3 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
@@ -514,6 +514,7 @@ export function DashboardPage() {
             conditionAccent={soldes.cp.conditionAccent}
             tone="cp"
             onClick={() => setSoldeDetailOuvert("CP")}
+            classeValeur="text-slate"
           />
           <SoldeCard
             valeur={soldes.rtt.valeurApresAttente}
@@ -521,6 +522,7 @@ export function DashboardPage() {
             conditionAccent={soldes.rtt.conditionAccent}
             tone="rtt"
             onClick={() => setSoldeDetailOuvert("RTT")}
+            classeValeur="text-slate"
           />
           <SoldeCard
             valeur={soldes.cpa.valeurApresAttente}
@@ -528,6 +530,7 @@ export function DashboardPage() {
             conditionAccent={soldes.cpa.conditionAccent}
             tone="cpa"
             onClick={() => setSoldeDetailOuvert("CPA")}
+            classeValeur="text-slate"
           />
           <button
             type="button"
@@ -546,7 +549,7 @@ export function DashboardPage() {
           filtre ne concerne plus seulement le calendrier — le caler à gauche
           au-dessus des deux colonnes le rend visuellement plus clair. */}
       <div className="animate-stagger-in" style={{ animationDelay: "280ms" }}>
-        <h2 className="text-ink-500 mb-[14px] px-1 text-sm font-bold">Mon Calendrier</h2>
+        <h2 className="text-slate mb-[14px] px-1 text-sm font-bold">Mon Calendrier</h2>
         {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
             même ligne que les onglets de sélection de période, poussé à
             droite (`justify-between`) : un total par typologie de "day off"
@@ -558,8 +561,8 @@ export function DashboardPage() {
               onClick={() => setOnglet("en_cours")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "en_cours"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {anneeActuelle}
@@ -577,8 +580,8 @@ export function DashboardPage() {
               onClick={() => setOnglet("periode_cp")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "periode_cp"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
@@ -596,8 +599,8 @@ export function DashboardPage() {
               onClick={() => setOnglet("annee_suivante")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "annee_suivante"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {anneeSuivante}
@@ -679,6 +682,7 @@ export function DashboardPage() {
                   className="h-[290px] w-full sm:w-[calc(50%-12px)] lg:w-[calc((100%-48px)/3)]"
                   texteJour="text-base"
                   paddingClassName="p-6"
+                  classeTitreMois="text-slate text-base"
                 />
               ))}
             </div>

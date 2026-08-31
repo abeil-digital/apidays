@@ -3499,6 +3499,71 @@ mené par petites itérations verbales successives (~25 échanges), vérifié à
 les questions de spacing, `computer`/hover peu fiable pour ce genre de vérif — voir gotchas plus
 haut).
 
+**"Congé à cheval" — bandeau de suivi dans `DetailCongePanel` + teinte header étendue au calendrier
+et à l'Accueil collaborateur (29/08/2026)**
+
+Reprise du backlog "Gestion des demandes à cheval" (priorité Haute) : constat de départ, une demande
+qui chevauche deux mois calendaires (= deux périodes de paie, voir `lib/periodePaie.ts`) n'avait
+aucune indication visuelle dans `DetailCongePanel` — ni depuis "Suivre les demandes", ni "Suivre les
+soldes 2", ni même "Quels congés transmettre" (qui affiche pourtant déjà la fraction "X/Y j" dans son
+tableau). Seule "Vérifier les fiches de paie 2" avait un badge dédié (`SquareSplitHorizontal`,
+"Transmission partielle").
+
+Ajout d'un bandeau "Congé sur N mois" (fond `bg-status-warning-bg`, sans icône — un essai avec
+`ChessKnight` en pictogramme a été retiré à la demande de Vincent) dans `DetailCongePanel`,
+affiché dès que `selection.debut`/`selection.fin` ne tombent pas dans le même mois calendaire. Le
+détail par mois ("4 j en paie août / 3 j en septembre") vient d'une nouvelle fonction
+`repartitionParMoisCalendaire` (`lib/data/exportsPaie.repository.ts`) qui découpe la demande en
+segments par mois calendaire et recalcule chaque segment via `calculerNbDemiJournees` (même moteur
+que le reste de l'app — fériés/CPI/DJI déduits). Le mois correspondant au mois calendaire RÉEL
+(`todayISO()`) est mis en avant en vert (`text-status-success-fg`, "en paie {mois}"), les autres
+restent en `text-ink-500` ("en {mois}"). Fonctionne automatiquement partout où `DetailCongePanel`
+s'ouvre — aucun câblage supplémentaire côté appelants (`SuivreDemandesPage`, `SoldeDetailPanel`,
+`TransmissionsPaiePage`).
+
+Bug connexe corrigé au passage : le feed de `DetailCongePanel` (entrées "Transmis le [date] : X j")
+ne s'affichait JAMAIS depuis "Vérifier les fiches de paie 2" (`VerifierFichesPaiePage2.tsx`,
+`PanelJoursMouvement`) — son appel à `DetailCongePanel` ne passait pas `lignesTransmission`, alors
+que les données existaient déjà localement (`lignes: {ligne, demande}[]`, prop du composant). Corrigé
+en filtrant `lignes` sur `demande.id === demandeOuverte.id`. Le libellé de ces entrées est passé de
+"Transmis le" à "**Transmis en paie le**" (demande explicite, plus clair sur ce qui s'est
+effectivement passé), partout où `DetailCongePanel` affiche ce feed.
+
+Discussion annexe (documentée mais pas implémentée, mise en pause) : le bouton "Valider" de
+"Vérifier les fiches de paie 2" reste câblé à vide (voir commentaire existant dans
+`VerifierFichesPaiePage2.tsx` — décision de comportement pas encore tranchée avec Vincent). Le vrai
+transfert de jours vers la paie continue de se faire uniquement via "Valider et générer l'export"
+dans "Quels congés transmettre". Autre point clarifié : un mois futur (ex. septembre alors qu'on est
+en août) n'apparaît nulle part dans "Transmissions paie" avant que la date réelle n'y arrive —
+`periodePaieParDefaut()` se cale sur `new Date()`, pas de navigation manuelle vers un mois à venir.
+
+En parallèle, plusieurs petits ajustements demandés sur "Calendrier consolidé"
+(`CalendrierGlobal`/`SuivreCalendrierPage`) et repris à l'identique sur l'Accueil collaborateur
+(`DashboardPage`) :
+- Le panneau de détail du jour s'ouvre désormais par défaut sur AUJOURD'HUI au chargement de la page
+  (`dateSelectionnee` initialisé à `todayISO()` plutôt qu'à `null`).
+- Le titre de page, les sous-titres de section, les montants de solde (`SoldeCard`, nouveau prop
+  opt-in `classeValeur`) et les noms de mois des mini-calendriers (`MiniCalendrier`, nouveau prop
+  opt-in `classeTitreMois`) passent de `text-ink-900`/`text-ink-500` à `text-slate` (le vert foncé du
+  bandeau `HeaderBar`, `#245554`) — un essai volontairement scopé à ces deux écrans pour l'instant,
+  pas une refonte globale de la charte.
+- Les pills de sélection de période (année en cours / période de référence CP / année suivante),
+  jusque-là en `mint`, repassent en `slate` sur ces mêmes écrans ET sur `CalendrierCollaborateur`
+  (calendrier détaillé d'un collaborateur depuis "Suivre") — mêmes classes partout
+  (`bg-slate/90 hover:bg-slate text-white` actif, `border-slate text-slate hover:bg-slate/10` inactif),
+  pas de nouveau token CSS créé (`slate-hover`/`slate-tint` n'existent pas, remplacés par des
+  variantes d'opacité `/90`/`/10` sur le token `slate` existant).
+
+Refonte du sélecteur de collaborateur sur "Calendrier" (`SuivreCalendrierPage`) : l'ancienne pill
+`SelectFiltrePill` "Sélectionner un collaborateur" sous le titre est retirée, remplacée par un simple
+chevron à côté du `h1` (même principe que `SelectFiltrePill` : un `<select>` natif rendu invisible et
+superposé au chevron, pour garder l'accessibilité du `<select>` sans popover custom). Le titre reflète
+la sélection : "Calendrier consolidé" par défaut, "Calendrier de {Prénom} {Initiale du Nom}." une fois
+un collaborateur choisi (ex. "Calendrier de Delphine A."). Le sous-titre "Calendrier de {nom complet}"
+qu'affichait `CalendrierCollaborateur` en interne a été supprimé (devenu redondant avec le nouveau
+titre de page) — son prop `nomComplet`, plus utilisé nulle part dans le composant, a été retiré de son
+interface et de l'appelant.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

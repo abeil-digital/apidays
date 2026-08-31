@@ -775,6 +775,13 @@ export interface MiniCalendrierProps {
    * existants qui ne le passent pas.
    */
   paddingClassName?: string;
+  /**
+   * Override explicite de la couleur du titre du mois (29/08/2026, essai sur
+   * "Calendrier consolidé" uniquement) — remplace entièrement
+   * `text-ink-500`/`text-ink-900` par défaut. Opt-in, sans effet sur les
+   * autres appelants.
+   */
+  classeTitreMois?: string;
 }
 
 export function MiniCalendrier({
@@ -795,6 +802,7 @@ export function MiniCalendrier({
   className,
   texteJour,
   paddingClassName,
+  classeTitreMois,
 }: MiniCalendrierProps) {
   const [groupeSurvole, setGroupeSurvole] = useState<string | null>(null);
   const semaines = genererSemaines(annee, moisIndex, tipoDuJour);
@@ -840,7 +848,7 @@ export function MiniCalendrier({
           noir en mode `agrandi` — titre secondaire, pas la donnée principale
           de la card. */}
       <div
-        className={`mb-3 shrink-0 text-center font-bold ${agrandi ? "text-ink-500 text-base" : "text-ink-900 text-base"}`}
+        className={`mb-3 shrink-0 text-center font-bold ${classeTitreMois ?? (agrandi ? "text-ink-500 text-base" : "text-ink-900 text-base")}`}
       >
         {MOIS_FR[moisIndex]}
       </div>

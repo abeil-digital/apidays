@@ -130,13 +130,7 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
  * pilote quelles demandes sont affichées (`useDemandes`/`ProchainsJoursOffCard`
  * acceptent tous deux ce prop depuis cette date).
  */
-export function CalendrierCollaborateur({
-  utilisateurId,
-  nomComplet,
-}: {
-  utilisateurId: string;
-  nomComplet: string;
-}) {
+export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: string }) {
   const { demandes, loading: loadingDemandes } = useDemandes(utilisateurId);
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [snippet, setSnippet] = useState<{ jour: JourCalendrierClique; ancre: DOMRect } | null>(
@@ -332,9 +326,6 @@ export function CalendrierCollaborateur({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-ink-500 mb-[14px] px-1 text-sm font-bold">
-          {`Calendrier de ${nomComplet}`}
-        </h2>
         {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
             même ligne que les onglets de sélection de période, poussé à
             droite (`justify-between`) : un total par typologie de "day off"
@@ -346,8 +337,8 @@ export function CalendrierCollaborateur({
               onClick={() => setOnglet("en_cours")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "en_cours"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {anneeActuelle}
@@ -365,8 +356,8 @@ export function CalendrierCollaborateur({
               onClick={() => setOnglet("periode_cp")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "periode_cp"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
@@ -384,8 +375,8 @@ export function CalendrierCollaborateur({
               onClick={() => setOnglet("annee_suivante")}
               className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
                 onglet === "annee_suivante"
-                  ? "bg-mint/90 hover:bg-mint-hover text-white"
-                  : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                  ? "bg-slate/90 hover:bg-slate text-white"
+                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
               }`}
             >
               {anneeSuivante}

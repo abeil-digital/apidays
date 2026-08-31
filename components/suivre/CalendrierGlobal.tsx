@@ -183,7 +183,10 @@ export function CalendrierGlobal() {
   const [onglet, setOnglet] = useState<Onglet>("en_cours");
   const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
   const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
-  const [dateSelectionnee, setDateSelectionnee] = useState<string | null>(null);
+  // Jour du panneau détail ouvert par défaut au chargement (29/08/2026) —
+  // "aujourd'hui" plutôt qu'aucune sélection, cohérent avec `estMisEnAvant`/
+  // `estAujourdhui` déjà mis en avant sur la grille dès l'ouverture.
+  const [dateSelectionnee, setDateSelectionnee] = useState<string | null>(() => todayISO());
 
   const anneeActuelle = new Date().getFullYear();
   const anneePrecedente = anneeActuelle - 1;
@@ -391,8 +394,8 @@ export function CalendrierGlobal() {
             onClick={() => setOnglet("en_cours")}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
               onglet === "en_cours"
-                ? "bg-mint/90 hover:bg-mint-hover text-white"
-                : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                ? "bg-slate/90 hover:bg-slate text-white"
+                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
             }`}
           >
             {anneeActuelle}
@@ -415,8 +418,8 @@ export function CalendrierGlobal() {
             onClick={() => setOnglet("periode_cp")}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
               onglet === "periode_cp"
-                ? "bg-mint/90 hover:bg-mint-hover text-white"
-                : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                ? "bg-slate/90 hover:bg-slate text-white"
+                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
             }`}
           >
             {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
@@ -439,8 +442,8 @@ export function CalendrierGlobal() {
             onClick={() => setOnglet("annee_suivante")}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
               onglet === "annee_suivante"
-                ? "bg-mint/90 hover:bg-mint-hover text-white"
-                : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                ? "bg-slate/90 hover:bg-slate text-white"
+                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
             }`}
           >
             {anneeSuivante}
@@ -470,6 +473,7 @@ export function CalendrierGlobal() {
                 className="h-[290px] w-full max-w-[259px] sm:w-[calc(50%-5px)] lg:w-[calc((100%-20px)/3)]"
                 texteJour="text-base"
                 paddingClassName="p-6"
+                classeTitreMois="text-slate text-base"
               />
             ))}
           </div>

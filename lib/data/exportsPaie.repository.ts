@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CongeATransmettre,
   DemandeEquipe,
+  DemiJournee,
   LigneExportPaie,
   NouvelleDemandeInput,
 } from "@/lib/types";
@@ -140,6 +141,62 @@ export async function fetchCongesATransmettre(periode: {
   }
 
   return resultat.sort((a, b) => a.debut.localeCompare(b.debut));
+}
+
+function finDuMoisCalendaire(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const fin = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
+  return fin.toISOString().slice(0, 10);
+}
+
+function lendemain(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Répartit les jours d'une demande par mois calendaire (= période de paie,
+ * voir `lib/periodePaie.ts`) qu'elle traverse — pour le bandeau "Congé à
+ * cheval" de `DetailCongePanel` (29/08/2026), qui doit toujours pouvoir
+ * afficher "N j en [mois]" pour chaque tranche, que la demande ait déjà été
+ * transmise ou non (contrairement à `joursDansPeriode`/
+ * `calculerJoursATransmettreMaintenant` ci-dessous, pensés uniquement pour
+ * la tranche "à transmettre maintenant" d'une période donnée). Un aller-
+ * retour Supabase par mois traversé (fériés/CPI/DJI de ce seul mois) — les
+ * demandes à cheval sur plus de deux mois restent exceptionnelles, pas
+ * d'optimisation en un seul appel ici.
+ */
+export async function repartitionParMoisCalendaire(demande: {
+  debut: string;
+  fin: string;
+  demiDebut: DemiJournee;
+  demiFin: DemiJournee;
+}): Promise<{ mois: string; jours: number }[]> {
+  const supabase = createClient();
+  const segments: { mois: string; jours: number }[] = [];
+  let curseur = demande.debut;
+
+  while (curseur <= demande.fin) {
+    const finSegment = Math.min(
+      new Date(`${finDuMoisCalendaire(curseur)}T00:00:00Z`).getTime(),
+      new Date(`${demande.fin}T00:00:00Z`).getTime(),
+    );
+    const finSegmentIso = new Date(finSegment).toISOString().slice(0, 10);
+    const demiDebutSegment = curseur === demande.debut ? demande.demiDebut : "matin";
+    const demiFinSegment = finSegmentIso === demande.fin ? demande.demiFin : "apres_midi";
+    const demiJournees = await calculerNbDemiJournees(
+      supabase,
+      curseur,
+      finSegmentIso,
+      demiDebutSegment,
+      demiFinSegment,
+    );
+    segments.push({ mois: curseur.slice(0, 7), jours: demiJournees / 2 });
+    curseur = lendemain(finSegmentIso);
+  }
+
+  return segments;
 }
 
 /**

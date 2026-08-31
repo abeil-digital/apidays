@@ -14,7 +14,8 @@ import type {
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { fetchHistoriqueDecisions, type DecisionHistorique } from "@/lib/data/demandes.repository";
-import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
+import { repartitionParMoisCalendaire } from "@/lib/data/exportsPaie.repository";
+import { formatDateAction, formatJours, formatPeriodeDemande, todayISO } from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
@@ -122,6 +123,14 @@ interface DetailCongePanelProps {
   lignesTransmission?: LigneExportPaie[];
 }
 
+// "août" — nom de mois seul, minuscule (bandeau "Congé à cheval"), à partir
+// d'une clé "YYYY-MM" (`repartitionParMoisCalendaire`).
+function nomMoisSeul(anneeMoisIso: string): string {
+  return new Intl.DateTimeFormat("fr-FR", { month: "long", timeZone: "UTC" }).format(
+    new Date(`${anneeMoisIso}-01T00:00:00Z`),
+  );
+}
+
 function formatJjMmAa(iso: string): string {
   return new Intl.DateTimeFormat("fr-FR", {
     day: "2-digit",
@@ -213,6 +222,27 @@ export function DetailCongePanel({
   );
   const [historiqueDecisions, setHistoriqueDecisions] = useState<DecisionHistorique[]>([]);
   const [retraitOuvert, setRetraitOuvert] = useState(false);
+  const [repartitionMois, setRepartitionMois] = useState<{ mois: string; jours: number }[] | null>(
+    null,
+  );
+
+  // "Congé à cheval" (29/08/2026) — la demande traverse au moins une
+  // frontière de mois calendaire (= période de paie, voir `lib/periodePaie.ts`).
+  // Un aller-retour Supabase par mois traversé (fériés/CPI/DJI de ce mois),
+  // seulement quand c'est effectivement le cas — pas de calcul systématique
+  // sur des demandes qui tiennent sur un seul mois.
+  const aCheval = selection.debut.slice(0, 7) !== selection.fin.slice(0, 7);
+  useEffect(() => {
+    if (!aCheval) return;
+    let cancelled = false;
+    repartitionParMoisCalendaire(selection).then((data) => {
+      if (!cancelled) setRepartitionMois(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aCheval, selection.debut, selection.fin, selection.demiDebut, selection.demiFin]);
 
   // Journal complet des décisions (`decisions_demande`, 25/08/2026) — sans
   // ça, une régularisation écrasait la trace de la validation d'origine
@@ -436,7 +466,8 @@ export function DetailCongePanel({
       node: (
         <>
           <span className="text-status-warning-fg font-semibold">
-            {retro ? "Transmis (retro)" : "Transmis"} le {formatJjMmAa(ligne.genereLe.slice(0, 10))}
+            {retro ? "Transmis en paie (retro)" : "Transmis en paie"} le{" "}
+            {formatJjMmAa(ligne.genereLe.slice(0, 10))}
           </span>
           {ligne.genereParNom && <span className="text-ink-500"> par {ligne.genereParNom}</span>}
           <span className="text-ink-500">
@@ -530,6 +561,32 @@ export function DetailCongePanel({
         ) : (
           <div className={masquerTypeBadgeBandeau ? "-mt-1.5" : "border-ink-300/60 border-t"}>
             <SuiviDemandeRow demande={selection} isLast masquerType masquerPoseLe />
+          </div>
+        )}
+
+        {aCheval && repartitionMois && (
+          <div className="bg-status-warning-bg flex items-start px-4 py-2.5">
+            <div className="flex min-w-0 flex-col gap-[1px]">
+              <span className="text-status-warning-fg text-[11px] font-bold">
+                Congé sur {repartitionMois.length} mois
+              </span>
+              <span className="text-ink-500 text-[11px]">
+                {repartitionMois.map((segment, index) => (
+                  <span key={segment.mois}>
+                    {index > 0 && " / "}
+                    {segment.mois === todayISO().slice(0, 7) ? (
+                      <span className="text-status-success-fg">
+                        {formatJours(segment.jours)} j en paie {nomMoisSeul(segment.mois)}
+                      </span>
+                    ) : (
+                      <>
+                        {formatJours(segment.jours)} j en {nomMoisSeul(segment.mois)}
+                      </>
+                    )}
+                  </span>
+                ))}
+              </span>
+            </div>
           </div>
         )}
 

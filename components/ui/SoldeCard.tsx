@@ -32,6 +32,10 @@ interface SoldeCardProps {
    * remplace l'ancien lien "Suivre" dédié). Opt-in : défaut inchangé partout
    * ailleurs (Accueil2 notamment). */
   onClick?: () => void;
+  /** Override explicite de la couleur du montant (29/08/2026, essai sur
+   * Accueil collaborateur uniquement) — remplace `text-ink-900` par défaut.
+   * Opt-in, sans effet sur les autres appelants. */
+  classeValeur?: string;
 }
 
 export function SoldeCard({
@@ -41,6 +45,7 @@ export function SoldeCard({
   tone,
   carre = false,
   onClick,
+  classeValeur,
 }: SoldeCardProps) {
   const code = TONE_CODE[tone];
   return (
@@ -68,7 +73,9 @@ export function SoldeCard({
       }
     >
       <TypeBadge code={code} />
-      <span className="text-ink-900 inline-block origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.2]">
+      <span
+        className={`inline-block origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.2] ${classeValeur ?? "text-ink-900"}`}
+      >
         {formatJours(valeur)} j
       </span>
       <span className="text-ink-500 text-xs leading-snug">

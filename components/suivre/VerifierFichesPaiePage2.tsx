@@ -537,6 +537,9 @@ function PanelJoursMouvement({
                 selection={demandeOuverte}
                 onClose={() => setDemandeOuverte(null)}
                 pleineLargeur
+                lignesTransmission={lignes
+                  .filter(({ demande }) => demande.id === demandeOuverte.id)
+                  .map(({ ligne }) => ligne)}
               />
             </div>
           )}
