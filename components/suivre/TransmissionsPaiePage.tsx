@@ -944,8 +944,8 @@ export function TransmissionsPaiePage({
             onClick={() => setOnglet(o.id)}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
               onglet === o.id
-                ? "bg-mint/90 hover:bg-mint-hover text-white"
-                : "border-mint text-mint hover:bg-mint-tint border bg-transparent"
+                ? "bg-slate/90 hover:bg-slate text-white"
+                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
             }`}
           >
             {o.label}
