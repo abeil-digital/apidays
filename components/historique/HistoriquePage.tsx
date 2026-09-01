@@ -141,7 +141,7 @@ export function HistoriquePage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold print:hidden">
         Historique
       </h1>
 
@@ -152,17 +152,17 @@ export function HistoriquePage() {
       </div>
 
       <div
-        className="animate-stagger-in flex flex-col gap-5 xl:flex-row xl:items-start print:block"
+        className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
         style={{ animationDelay: "90ms" }}
       >
-        <div
-          className={`bg-surface-card w-full xl:min-w-0 ${selection ? "xl:flex-1" : "md:max-w-[900px]"}`}
-        >
-          <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
+        <div className="bg-surface-card w-full min-w-0">
+          <div className="bg-mint-tint/50 flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
             <div className="flex flex-wrap items-end gap-2">
               <SelectFiltrePill
                 value={typeFiltre}
                 onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                classeChevron="text-slate"
               >
                 <option value="tous">Tous les types</option>
                 {TYPES_FILTRABLES.map((code) => (
@@ -174,6 +174,8 @@ export function HistoriquePage() {
               <SelectFiltrePill
                 value={filtre}
                 onChange={(e) => setFiltre(e.target.value as Filtre)}
+                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                classeChevron="text-slate"
               >
                 {FILTRES.map((f) => (
                   <option key={f} value={f}>
@@ -184,6 +186,8 @@ export function HistoriquePage() {
               <SelectFiltrePill
                 value={periodeFiltre}
                 onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                classeChevron="text-slate"
               >
                 {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
                   <option key={v} value={v}>
@@ -198,31 +202,35 @@ export function HistoriquePage() {
                     aria-label="Du"
                     value={debutPerso}
                     onChange={(e) => setDebutPerso(e.target.value)}
+                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
                   />
                   <InputFiltrePill
                     type="date"
                     aria-label="Au"
                     value={finPerso}
                     onChange={(e) => setFinPerso(e.target.value)}
+                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
                   />
                 </>
               )}
             </div>
             <button
               onClick={() => window.print()}
-              className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+              className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
             >
               <Printer size={13} />
               Exporter
             </button>
           </div>
 
-          <div className="border-ink-300/60 border-t">
+          <div className="border-slate/30 border-t">
             <HistoriqueTable
               demandes={filtered}
               emptyText="Aucune demande sur cette période."
               onDateClick={setSelectionId}
               selectedId={selectionId}
+              typeCourt
+              lignesTransmissionParDemande={lignesTransmissionParId}
             />
           </div>
         </div>

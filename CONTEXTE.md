@@ -3564,6 +3564,95 @@ qu'affichait `CalendrierCollaborateur` en interne a été supprimé (devenu redo
 titre de page) — son prop `nomComplet`, plus utilisé nulle part dans le composant, a été retiré de son
 interface et de l'appelant.
 
+**"Révision des tableaux de l'app" — pattern établi sur Historique (`/historique`), à répliquer
+ailleurs (29/08/2026, item Backlog priorité Haute)**
+
+Première passe de la révision des tableaux, entièrement sur `HistoriquePage.tsx`/`HistoriqueTable.tsx`
+(partagé avec "Suivre les demandes" via `avecCollaborateur`) — ~25 échanges verbaux successifs.
+Objectif de cette note : que la prochaine table révisée (Suivre les demandes/soldes 2, Transmissions
+paie, Utilisateurs...) reprenne les mêmes décisions plutôt que de repartir de zéro.
+
+*Teinte "vert header" (`text-slate`/`border-slate`, `--color-slate: #245554`, même vert que
+`HeaderBar`)* — appliquée systématiquement à : titre de page (`h1`), bordure/texte/chevron des
+`SelectFiltrePill`/`InputFiltrePill` (nouveaux props opt-in `classeBordure`/`classeChevron`/
+`classeIcone` sur `FiltrePill.tsx`, décrits plus bas), bouton d'action principal ("Exporter" —
+fond plein `bg-slate`, texte/icône blancs), texte des titres de colonnes du tableau, et les 2
+séparateurs horizontaux de la section filtres (bordure au-dessus du tableau + bordure sous la ligne
+d'en-tête, tous deux en `border-slate/30`). Fond de la barre de filtres ET de la ligne d'en-tête de
+colonnes : `bg-mint-tint/50` (mint existant, testé à 100% puis redescendu à 50% — trop appuyé sinon).
+
+*`FiltrePill.tsx` (composant partagé, extension opt-in, pas de breaking change)* — `CLASSE_FILTRE_PILL_BASE`
+ne porte plus la couleur (bordure/texte/anneau focus) ni le poids de police : ces deux aspects vivent
+désormais dans `CLASSE_ACCENT_MINT` (défaut mint inchangé pour tous les appelants existants) et sont
+overridables via de nouveaux props optionnels — `classeBordure`/`classeChevron` sur `SelectFiltrePill`,
+`classeBordure`/`classeIcone` sur `InputFiltrePill`. Extraire la couleur de la constante de base était
+nécessaire : deux classes Tailwind de même groupe (ex. `border-mint` dans la base + `border-slate`
+apposée après via `className`) ont une spécificité CSS identique, le résultat final dépend alors de
+l'ordre d'apparition dans la feuille de style générée (pas de l'ordre dans la chaîne `className`) — un
+comportement non fiable, déjà rencontré et documenté ailleurs dans ce projet.
+
+*Structure/largeur du tableau, alignée sur "Suivre les demandes"* — `HistoriquePage.tsx` reprend
+maintenant EXACTEMENT le même conteneur que `SuivreDemandesPage.tsx` : `grid grid-cols-1 items-start
+gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5`, tableau en 1ère colonne
+(`bg-surface-card w-full min-w-0`), `DetailCongePanel` en 2ᵉ colonne (`xl:w-64`, sticky). Un premier
+essai avait donné au conteneur du tableau une largeur figée en dur (`xl:w-[900px] xl:shrink-0`) pour
+éviter le "saut" de largeur entre l'état sans sélection (alors `max-w-[900px]`) et avec sélection
+(alors `xl:flex-1`, qui remplit l'espace libre à côté du panneau) — fonctionnel, mais Vincent a
+préféré réutiliser telle quelle la grille déjà partagée par les autres écrans "Suivre" plutôt qu'un
+correctif ad hoc propre à cette page. Cette même grille (`minmax(0,900px)_16rem`) est le motif
+partagé documenté ailleurs dans ce fichier (voir l'entrée "Calendrier des employés" du 28/08 pour le
+bug de stretch qu'il peut provoquer dans un AUTRE contexte, une grille de mini-calendriers — sans
+rapport ici, un tableau `w-full` remplit de toute façon sa colonne).
+
+*En-têtes de colonnes* — police normale (majuscule uniquement en première lettre, la transformation
+CSS `uppercase` d'origine a été retirée), fond `bg-mint-tint/50`, texte `text-slate`. Alignement
+: plusieurs allers-retours (centré text+titre, puis centré titre seul, puis tout repassé à gauche) —
+**décision finale : tout aligné à gauche**, y compris les colonnes resserrées (Durée/Statut/Paie).
+
+*Colonnes resserrées "à leur contenu" (`w-px` + `whitespace-nowrap`, sur le `th` ET le `td`)* — Durée,
+Dates, Statut, Paie. Astuce déjà utilisée ailleurs dans le projet : dans un tableau `table-auto`
+(layout par défaut), une colonne `w-px` associée à du contenu `whitespace-nowrap` se réduit à la
+largeur minimale de son contenu le plus large, sans jamais laisser la colonne s'étirer pour combler
+l'espace libre (contrairement à une colonne sans largeur explicite, qui absorbe l'espace restant).
+Combiné à `inline-flex` (au lieu de `flex`, qui crée une boîte bloc pleine largeur) sur les petits
+conteneurs internes (pastille Type, pill Dates) — un point technique à connaître : un `<span
+className="flex ...">` à l'intérieur d'une cellule de tableau devient une boîte de type bloc qui
+s'étire pour remplir toute la largeur de la cellule une fois que le tableau a fixé la largeur finale
+des colonnes (même si elle est `w-fit`) ; `inline-flex` reste, lui, dimensionné à son contenu et
+respecte `text-align`/`justify-content` du parent.
+
+*Détails colonne par colonne* :
+- **Type** : libellé court (CP/RTT/CPA...) via nouveau prop `typeCourt` sur `HistoriqueTable`
+  — délibérément DÉCOUPLÉ du prop `compact` existant (qui change aussi le format des dates et masque
+  "Validé le", non voulu ici pour Historique).
+- **Dates** : pill jamais coupée sur deux lignes (`whitespace-nowrap`), colonne resserrée à la pill
+  la plus large réellement affichée.
+- **Durée** : renommée simplement "Durée" partout (l'ancien "Nbre jours" en mode non-`compact` est
+  retiré, un seul libellé par défaut désormais) ; valeur en semi-gras, couleur reprise du statut de
+  la ligne (nouvelle map locale `TEXTE_STATUT`, même mapping tone que `StatusBadge`/`STATUT_CONFIG`
+  mais exprimé en classe de texte).
+- **Posé le / Validé le** : date compacte jj/mm/aa (année sur 2 chiffres, nouvelle fonction locale
+  `formatDateActionCourte` — `formatDateAction` partagée, année 4 chiffres, reste inchangée partout
+  ailleurs) ; espacement horizontal resserré entre les deux colonnes adjacentes (`pr-2 pl-4` puis
+  `pr-4 pl-2`, au lieu de `px-4` symétrique des deux côtés).
+- **Paie** : colonne resserrée ; `BadgeTransmission` retourne `null` (plus de tiret "—") quand la
+  demande n'a aucune ligne de transmission, au lieu d'un texte de repli.
+
+*Effets over/déclenché des lignes, alpha propres à ce tableau* — après plusieurs itérations (50% →
+70% → 80/60% → 20/40% → **10%/20% final**, la dernière étant explicitement en "% de transparence",
+donc 90%/80% de transparence = 10%/20% d'opacité), les teintes standard `classeFondSurvolTypeBadge`/
+`classeFondActifTypeBadge` de `TypeBadge.tsx` (15%/30%, utilisées partout ailleurs dans l'app) ont
+été jugées insuffisamment visibles ici et remplacées par deux maps locales à `HistoriqueTable.tsx`
+(`CODE_HOVER_10`/`CODE_ACTIF_20`, un jeu de classes Tailwind littérales par `TypeBadgeCode`, même
+principe que les maps existantes de `TypeBadge.tsx` mais à une opacité différente) — **décision
+consciente de ne pas modifier le design system partagé** pour ce réglage, propre à cet écran.
+
+**Reste à faire pour appliquer ce pattern ailleurs** (voir Backlog "Révision des tableaux de l'app") :
+Suivre les demandes/soldes 2 (déjà share `HistoriqueTable`, bénéficie donc déjà du gros des
+changements — vérifier notamment couleur d'en-tête/filtres et alpha over/déclenché, pas automatiques
+puisque portés par la page appelante, pas le composant table lui-même), Transmissions paie, et la
+liste Utilisateurs (`UtilisateursListPage.tsx`).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

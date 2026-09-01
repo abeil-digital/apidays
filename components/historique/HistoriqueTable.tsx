@@ -1,28 +1,64 @@
 import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check } from "lucide-react";
 import type { Demande, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
-import {
-  formatDateAction,
-  formatJours,
-  formatPeriodeDemande,
-  formatPeriodePillNumerique,
-} from "@/lib/format";
+import { formatJours, formatPeriodeDemande, formatPeriodePillNumerique } from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondActifTypeBadge,
-  classeFondSurvolTypeBadge,
   classeFondSurvolTypeBadgeActif,
   classeFondTypeBadge,
   LABEL_COURT,
   LABEL_LONG,
+  type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
+// Couleur de la colonne Durée reprise du statut de la ligne (29/08/2026,
+// demande explicite) — même mapping tone que `StatusBadge` (`STATUT_CONFIG`),
+// exprimé ici en classe de texte plutôt qu'en fond de badge.
+const TEXTE_STATUT: Record<StatutDemande, string> = {
+  "en attente": "text-status-warning-fg",
+  validé: "text-status-success-fg",
+  refusé: "text-status-danger-fg",
+  annulé: "text-status-danger-fg",
+};
+
+// Alpha propres aux effets over (90% de transparence = 10% d'opacité)/
+// déclenché (80% de transparence = 20% d'opacité, plus marqué) des LIGNES de
+// ce tableau (29/08/2026, demande explicite) — propres à cet écran plutôt
+// qu'ajoutés aux teintes 15%/30% standard de `classeFondSurvolTypeBadge`/
+// `classeFondActifTypeBadge` (`TypeBadge.tsx`).
+const CODE_HOVER_10: Record<TypeBadgeCode, string> = {
+  CP: "hover:bg-cp/10",
+  RTT: "hover:bg-rtt/10",
+  CPA: "hover:bg-cpa/10",
+  CSS: "hover:bg-css/10",
+  CE: "hover:bg-ce/10",
+  RECUP: "hover:bg-recup/10",
+  EVT_FAM: "hover:bg-evtfam/10",
+  DJI: "hover:bg-dji/10",
+  CPI: "hover:bg-cpi/10",
+  FERIE: "hover:bg-ferie/10",
+};
+
+const CODE_ACTIF_20: Record<TypeBadgeCode, string> = {
+  CP: "bg-cp/20",
+  RTT: "bg-rtt/20",
+  CPA: "bg-cpa/20",
+  CSS: "bg-css/20",
+  CE: "bg-ce/20",
+  RECUP: "bg-recup/20",
+  EVT_FAM: "bg-evtfam/20",
+  DJI: "bg-dji/20",
+  CPI: "bg-cpi/20",
+  FERIE: "bg-ferie/20",
+};
+
 function BadgeTransmission({ lignes }: { lignes: LigneExportPaie[] }) {
-  if (lignes.length === 0) return <span className="text-ink-500">—</span>;
+  if (lignes.length === 0) return null;
   return (
     <Badge tone="warning">
       <Check size={12} strokeWidth={2.5} />
@@ -57,10 +93,16 @@ interface HistoriqueTablePropsCommunes {
    * initial, l'en-tête reste cliquable ensuite comme d'habitude. Absent =
    * pas de tri par défaut, comportement inchangé ailleurs. */
   triParDefaut?: ColonneTriable;
-  /** Libellé de l'en-tête de la colonne Durée — par défaut "Durée"
-   * (`compact`) / "Nbre jours". "Quels congés transmettre" (25/08/2026) la
-   * renomme "Transmis", plus parlant une fois la colonne au format X/Y. */
+  /** Libellé de l'en-tête de la colonne Durée — par défaut "Durée". "Quels
+   * congés transmettre" (25/08/2026) la renomme "Transmis", plus parlant une
+   * fois la colonne au format X/Y. */
   libelleColonneDuree?: string;
+  /** Libellé court du Type (`LABEL_COURT`, ex. "CP") plutôt que le libellé
+   * complet (`LABEL_LONG`, ex. "Congés Payés") — 29/08/2026, indépendant de
+   * `compact` (qui change aussi le format Dates/masque "Validé le", pas
+   * demandé ici pour Historique). `compact` continue d'impliquer les
+   * initiales également (comportement inchangé). */
+  typeCourt?: boolean;
 }
 
 type HistoriqueTableProps =
@@ -72,6 +114,19 @@ type HistoriqueTableProps =
 // gardée telle quelle pour ses autres usages ("au" voulu ailleurs).
 function periodeCourte(debut: string, fin: string): string {
   return formatPeriodeDemande(debut, fin).replace(" au ", " - ");
+}
+
+// "26" au lieu de "2026" pour les colonnes Posé le/Validé le (29/08/2026,
+// demande explicite) — `formatDateAction` (lib/format.ts, année sur 4
+// chiffres) reste inchangée partout ailleurs, ce format compact est propre
+// à ce tableau.
+function formatDateActionCourte(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).format(d);
 }
 
 /**
@@ -214,6 +269,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
     lignesTransmissionParDemande,
     triParDefaut,
     libelleColonneDuree,
+    typeCourt = false,
   } = props;
   const [tri, setTri] = useState<TriTable | null>(
     triParDefaut ? { colonne: triParDefaut, direction: "recent" } : null,
@@ -248,19 +304,17 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
   // s'efface au départ du curseur.
   function classeLigne(demande: Demande) {
     const code = codeDemande(demande);
-    return demande.id === selectedId
-      ? classeFondActifTypeBadge(code)
-      : classeFondSurvolTypeBadge(code);
+    return demande.id === selectedId ? CODE_ACTIF_20[code] : CODE_HOVER_10[code];
   }
 
   function cellulesCommunes(demande: Demande) {
     const code = codeDemande(demande);
     const jours = demande.nbDemiJournees / 2;
-    const libelleType = compact ? LABEL_COURT[code] : LABEL_LONG[code];
+    const libelleType = compact || typeCourt ? LABEL_COURT[code] : LABEL_LONG[code];
     const selectionnee = demande.id === selectedId;
     const pillDates = (
       <span
-        className={`flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+        className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${
           selectionnee
             ? `${classeFondTypeBadge(code)} border-transparent text-white`
             : `bg-surface-app text-ink-900 ${classeBordureTypeBadge(code)}`
@@ -275,28 +329,30 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
     return (
       <>
         <td className="px-4 py-3">
-          <span className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5">
             <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
             <span className="text-ink-900 font-semibold">{libelleType}</span>
           </span>
         </td>
-        <td className="px-4 py-3">{pillDates}</td>
-        <td className="text-ink-500 px-4 py-3">
+        <td className="w-px px-4 py-3 whitespace-nowrap">{pillDates}</td>
+        <td
+          className={`w-px px-4 py-3 font-semibold whitespace-nowrap ${TEXTE_STATUT[demande.statut]}`}
+        >
           {renderDuree ? renderDuree(demande) : `${formatJours(jours)} j`}
         </td>
-        <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
-          {formatDateAction(demande.datePose)}
+        <td className="text-ink-500 hidden py-3 pr-2 pl-4 md:table-cell">
+          {formatDateActionCourte(demande.datePose)}
         </td>
         {!compact && (
-          <td className="text-ink-500 hidden px-4 py-3 md:table-cell">
-            {demande.dateDecision ? formatDateAction(demande.dateDecision) : "—"}
+          <td className="text-ink-500 hidden py-3 pr-4 pl-2 md:table-cell">
+            {demande.dateDecision ? formatDateActionCourte(demande.dateDecision) : "—"}
           </td>
         )}
-        <td className="px-4 py-3">
+        <td className="w-px px-4 py-3 whitespace-nowrap">
           <StatusBadge statut={demande.statut} />
         </td>
         {lignesTransmissionParDemande && (
-          <td className="px-4 py-3">
+          <td className="w-px px-4 py-3 whitespace-nowrap">
             <BadgeTransmission lignes={lignesTransmissionParDemande[demande.id] ?? []} />
           </td>
         )}
@@ -308,7 +364,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm md:min-w-[760px]">
         <thead>
-          <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+          <tr className="border-slate/30 text-slate bg-mint-tint/50 border-b text-xs font-semibold tracking-wide">
             {props.avecCollaborateur && (
               <th className="px-4 py-3">
                 <button
@@ -322,7 +378,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
               </th>
             )}
             <th className="px-4 py-3">Type</th>
-            <th className="px-4 py-3">
+            <th className="w-px px-4 py-3 whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => handleToggleTri("dates")}
@@ -332,10 +388,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("dates")}
               </button>
             </th>
-            <th className="px-4 py-3">
-              {libelleColonneDuree ?? (compact ? "Durée" : "Nbre jours")}
-            </th>
-            <th className="hidden px-4 py-3 md:table-cell">
+            <th className="w-px px-4 py-3 whitespace-nowrap">{libelleColonneDuree ?? "Durée"}</th>
+            <th className="hidden py-3 pr-2 pl-4 md:table-cell">
               <button
                 type="button"
                 onClick={() => handleToggleTri("posele")}
@@ -345,8 +399,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("posele")}
               </button>
             </th>
-            {!compact && <th className="hidden px-4 py-3 md:table-cell">Validé le</th>}
-            <th className="px-4 py-3">
+            {!compact && <th className="hidden py-3 pr-4 pl-2 md:table-cell">Validé le</th>}
+            <th className="w-px px-4 py-3 whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => handleToggleTri("statut")}
@@ -356,7 +410,9 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("statut")}
               </button>
             </th>
-            {lignesTransmissionParDemande && <th className="px-4 py-3">Paie</th>}
+            {lignesTransmissionParDemande && (
+              <th className="w-px px-4 py-3 whitespace-nowrap">Paie</th>
+            )}
           </tr>
         </thead>
         <tbody>
