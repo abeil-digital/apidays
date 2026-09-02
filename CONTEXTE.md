@@ -3789,6 +3789,78 @@ complète).
 Nav "Suivre" (`components/layout/tabs.ts`) : "Calendrier" repassé en premier onglet de la
 sous-navigation (avant "Suivre les demandes").
 
+**Vraie charte Abeil : logo + couleurs, premier déploiement sur le menu général (02/09/2026)**
+
+Premier pas concret vers la vraie charte graphique Abeil (`Charte-abeil/`, non commitée — voir
+Conventions), jusqu'ici jamais déployée dans le code (logo placeholder, palette de travail
+provisoire, voir `projet.md`). Le dossier local contenait en fait DEUX choses distinctes,
+découvertes en cours de session : `public/abeil-logo.jpeg` (l'ancien logo, jamais utilisé nulle
+part dans le code, un fichier orphelin resté en place) et le vrai pack `Charte-abeil/2026_New_Logo/`
+(avril 2026, "Version 1" — logos SVG en plusieurs déclinaisons + `ABEIL - Charte graphique_V2.pdf`
+avec les vraies teintes) — Vincent a confirmé sur capture que c'est bien ce second pack qui fait foi.
+
+Couleurs officielles ajoutées comme nouveaux tokens `@theme` dans `app/globals.css` —
+`--color-abeil-navy: #001e32` (Bleu nuit) et `--color-abeil-yellow: #ebc850` (Jaune abeille),
+valeurs exactes de la table "Couleurs et correspondances" du PDF — **sans toucher `--color-slate`**
+(décision explicite via question de clarification : déploiement scopé au menu général pour
+l'instant, pas un remplacement app-wide du slate provisoire).
+
+`public/logo-abeil.svg` : wordmark dérivé du pack officiel (`ABEIL_LOGO_blanc_fond_bleu.svg`,
+lettres blanches + point jaune, prévu pour un fond navy), avec deux corrections apportées au
+fichier source du pack :
+- le `<rect>` de fond navy plein intégré au fichier source retiré (le pack fournit chaque variante
+  avec son propre fond en dur, pas transparent — inutilisable tel quel sur un header qui n'est pas
+  exactement cette même teinte) ;
+- `viewBox` recadré sur la vraie boîte englobante des lettres (calculée via `getBBox()` en
+  navigateur, `x=130.97 y=121.98 588.45×266.29` + petite marge) au lieu du viewBox d'origine
+  (0 0 850.39 510.24) qui incluait une zone de protection très large — sans ce recadrage le logo
+  paraissait "aplati/étiré" à l'affichage (l'essentiel de sa boîte était de la marge invisible) ;
+  `width`/`height` explicites ajoutés en plus du `viewBox` (absents du fichier source), sans quoi
+  le navigateur ne calcule qu'une taille intrinsèque par défaut (250×150) au lieu de la vraie
+  résolution vectorielle.
+
+`components/layout/HeaderBar.tsx` — fond passé de `bg-slate` à `bg-abeil-navy` (le seul endroit de
+l'app sur ce nouveau token pour l'instant), logo à la place du texte "Apidays" (`ml-[10px]`
+`h-[25.6px]`, ajusté à la baisse après un premier essai jugé trop gros), nav de niveau 1
+(Poser/Suivre/Paramétrer) : état actif en jaune (texte + soulignement `border-b-2`), état inactif
+repassé en blanc plein (`text-white`, au lieu du `text-white/60` d'origine — demande explicite "état
+off en blanc"), nav étirée en pleine hauteur du header (`h-full`/`items-stretch` sur le conteneur,
+`flex items-center` par lien) pour que le soulignement actif touche exactement le bas du bandeau,
+label recalé avec `pt-[10px]` (ajusté par itérations successives), hover `bg-white/10`
+(inactif)/`bg-abeil-yellow/10` (actif) ajouté sur les 3 items.
+
+`components/layout/SideNav.tsx`/`BottomNav.tsx` (nav secondaire) : par défaut, intitulé ET icône en
+bleu nuit (`text-abeil-navy`, remplace `text-ink-900/60`/`text-ink-500`/l'ancien `text-brand` bleu
+de `BottomNav`) ; état actif en jaune plein (texte + icône) sur fond jaune à 8% d'alpha
+(`bg-abeil-yellow/8`), hover `bg-abeil-navy/5` (inactif)/`bg-abeil-yellow/15` (actif). Un essai de
+fond plein bleu nuit pour l'état actif (repris du même principe que les sélecteurs d'onglet de
+l'Accueil, voir plus bas) a été testé puis explicitement annulé par Vincent ("non, on revient en
+arrière") — l'état actif de la nav secondaire reste donc sur fond alpha jaune, pas fond navy plein.
+
+Tests de couleur sur écrans (comparaison avant validation, pas encore de décision finale sur la
+généralisation) :
+
+- **Accueil** (`DashboardPage.tsx`, `FaqCard.tsx`, `ProchainsJoursOffCard.tsx`) et **Historique**
+  (`HistoriquePage.tsx`) : tous les usages de `slate` remplacés par `abeil-navy` (titres, sous-titres,
+  indicateurs de solde, filtres, bouton Exporter, séparateurs) — test scopé à ces fichiers précis,
+  **pas** au composant partagé `HistoriqueTable.tsx` (dont l'en-tête de colonnes reste en slate,
+  ce composant étant aussi utilisé par Suivre les demandes et Transmissions paie — le changer aurait
+  dépassé le scope du test demandé).
+- **Suivre les demandes** (`SuivreDemandesPage.tsx`) : titre en bleu nuit conservé ; un essai
+  "bouton Exporter en jaune avec texte navy" a été testé puis explicitement annulé ("reviens en
+  arrière pour le bouton") — le bouton reste `bg-slate`.
+- Sélecteurs d'onglet "Mon Calendrier" de l'Accueil (année en cours/période CP/année suivante) et
+  CTA "Poser un congé" : plusieurs allers-retours de test — bleu nuit avec texte jaune d'abord, puis
+  **repassés au mint d'origine** ("call to action verts... pour voir"), puis **repassés au slate**
+  ("vert foncé comme calendrier de suivre", pour matcher `CalendrierCollaborateur.tsx`/
+  `CalendrierGlobal.tsx` sur `/suivre/calendrier`, qui utilisent ce même pattern
+  `bg-slate/90 hover:bg-slate text-white` / `border-slate text-slate hover:bg-slate/10`) — état final
+  de cette session : **slate**, pas encore de décision définitive.
+
+Reste ouvert (pas tranché cette session) : sort de `public/abeil-logo.jpeg` (ancien logo, toujours
+présent mais inutilisé — signalé à Vincent, pas supprimé), et généralisation ou non de
+`--color-abeil-navy`/`--color-abeil-yellow` au-delà du menu général et des écrans testés.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

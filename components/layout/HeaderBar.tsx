@@ -9,7 +9,9 @@ import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { logout } from "@/app/connexion/actions";
 
 /**
- * Header général de l'application — fond slate. Porte le logo, la navigation
+ * Header général de l'application — fond bleu nuit (vraie charte Abeil,
+ * `--color-abeil-navy`, 02/09/2026 — pas encore généralisé au reste de
+ * l'app, qui reste sur le slate provisoire). Porte le logo, la navigation
  * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. "Paramétrer" n'est
  * cliquable que pour manager/admin (voir niveau1.ts). La sous-navigation
  * (SideNav/BottomNav) dépend de la section active — voir tabs.ts.
@@ -26,17 +28,21 @@ export function HeaderBar() {
   const niveau1Items = getNiveau1Items(utilisateur?.role);
 
   return (
-    <header className="bg-slate relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto px-4 shadow-sm md:max-w-[1180px] md:gap-6 md:px-8 print:hidden">
-      <span className="text-base font-semibold whitespace-nowrap text-white">Apidays</span>
+    <header className="bg-abeil-navy relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
+          l'optimisation next/image n'apporte rien ici */}
+      <img src="/logo-abeil.svg" alt="Abeil" className="ml-[10px] h-[25.6px] w-auto shrink-0" />
 
-      <nav className="flex shrink-0 items-center gap-1">
+      <nav className="flex h-full shrink-0 items-stretch gap-1">
         {niveau1Items.map(({ key, label, href }) =>
           href ? (
             <Link
               key={key}
               href={href}
-              className={`border-b-2 px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white ${
-                isNiveau1Actif(key, pathname) ? "border-white" : "border-transparent text-white/60"
+              className={`flex items-center border-b-2 px-3 pt-[10px] text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
+                isNiveau1Actif(key, pathname)
+                  ? "border-abeil-yellow text-abeil-yellow hover:bg-abeil-yellow/10"
+                  : "border-transparent text-white hover:bg-white/10"
               }`}
             >
               {label}
@@ -45,7 +51,7 @@ export function HeaderBar() {
             <span
               key={key}
               title="Bientôt disponible"
-              className="hidden cursor-not-allowed border-b-2 border-transparent px-3 py-1.5 text-sm font-semibold whitespace-nowrap text-white/60 md:inline-block"
+              className="hidden cursor-not-allowed items-center border-b-2 border-transparent px-3 pt-[10px] text-sm font-semibold whitespace-nowrap text-white/60 md:flex"
             >
               {label}
             </span>

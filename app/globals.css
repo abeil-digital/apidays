@@ -20,8 +20,16 @@
   --color-brand: #0a84ff;
   --color-brand-foreground: #ffffff;
 
-  /* Slate — header, texte d'accent, éléments forts */
+  /* Slate — header, texte d'accent, éléments forts (teinte de travail,
+     provisoire — voir projet.md) */
   --color-slate: #245554;
+
+  /* Charte Abeil réelle (avril 2026, Charte-abeil/ABEIL - Charte graphique_V2.pdf)
+     — déployée pour l'instant sur le bandeau de nav générale et les icônes
+     de la nav secondaire (02/09/2026), pas encore généralisée à `--color-slate`
+     ailleurs dans l'app. */
+  --color-abeil-navy: #001e32;
+  --color-abeil-yellow: #ebc850;
 
   /* Fond d'app / cartes */
   --color-surface-app: #fafbfc;

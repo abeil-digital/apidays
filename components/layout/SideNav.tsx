@@ -69,11 +69,16 @@ export function SideNav() {
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold whitespace-nowrap ${
-                      active ? "bg-slate/10 text-slate" : "text-ink-900/60"
+                    className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
+                      active
+                        ? "bg-abeil-yellow/8 text-abeil-yellow hover:bg-abeil-yellow/15"
+                        : "text-abeil-navy hover:bg-abeil-navy/5"
                     }`}
                   >
-                    <Icon size={17} className="shrink-0" />
+                    <Icon
+                      size={17}
+                      className={`shrink-0 ${active ? "text-abeil-yellow" : "text-abeil-navy"}`}
+                    />
                     <span className="opacity-0 transition-opacity duration-150 group-hover/nav:opacity-100">
                       {label}
                     </span>

@@ -21,9 +21,17 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-1 py-2.5 ${active ? "text-brand" : "text-ink-500"}`}
+              className={`flex flex-col items-center gap-1 py-2.5 transition-colors duration-150 ${
+                active
+                  ? "bg-abeil-yellow/8 text-abeil-yellow hover:bg-abeil-yellow/15"
+                  : "text-abeil-navy hover:bg-abeil-navy/5"
+              }`}
             >
-              <Icon size={20} strokeWidth={active ? 2.4 : 2} />
+              <Icon
+                size={20}
+                strokeWidth={active ? 2.4 : 2}
+                className={active ? "text-abeil-yellow" : "text-abeil-navy"}
+              />
               <span className="text-xs font-semibold">{label}</span>
             </Link>
           );

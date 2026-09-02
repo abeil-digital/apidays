@@ -141,7 +141,7 @@ export function HistoriquePage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+      <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold print:hidden">
         Historique
       </h1>
 
@@ -161,8 +161,8 @@ export function HistoriquePage() {
               <SelectFiltrePill
                 value={typeFiltre}
                 onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
+                classeBordure="border border-abeil-navy text-abeil-navy font-semibold hover:bg-abeil-navy/10 focus-visible:ring-abeil-navy"
+                classeChevron="text-abeil-navy"
               >
                 <option value="tous">Tous les types</option>
                 {TYPES_FILTRABLES.map((code) => (
@@ -174,8 +174,8 @@ export function HistoriquePage() {
               <SelectFiltrePill
                 value={filtre}
                 onChange={(e) => setFiltre(e.target.value as Filtre)}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
+                classeBordure="border border-abeil-navy text-abeil-navy font-semibold hover:bg-abeil-navy/10 focus-visible:ring-abeil-navy"
+                classeChevron="text-abeil-navy"
               >
                 {FILTRES.map((f) => (
                   <option key={f} value={f}>
@@ -186,8 +186,8 @@ export function HistoriquePage() {
               <SelectFiltrePill
                 value={periodeFiltre}
                 onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
+                classeBordure="border border-abeil-navy text-abeil-navy font-semibold hover:bg-abeil-navy/10 focus-visible:ring-abeil-navy"
+                classeChevron="text-abeil-navy"
               >
                 {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
                   <option key={v} value={v}>
@@ -202,28 +202,28 @@ export function HistoriquePage() {
                     aria-label="Du"
                     value={debutPerso}
                     onChange={(e) => setDebutPerso(e.target.value)}
-                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                    classeBordure="border border-abeil-navy text-abeil-navy font-semibold hover:bg-abeil-navy/10 focus-visible:ring-abeil-navy"
                   />
                   <InputFiltrePill
                     type="date"
                     aria-label="Au"
                     value={finPerso}
                     onChange={(e) => setFinPerso(e.target.value)}
-                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                    classeBordure="border border-abeil-navy text-abeil-navy font-semibold hover:bg-abeil-navy/10 focus-visible:ring-abeil-navy"
                   />
                 </>
               )}
             </div>
             <button
               onClick={() => window.print()}
-              className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
+              className="bg-abeil-navy hover:bg-abeil-navy/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
             >
               <Printer size={13} />
               Exporter
             </button>
           </div>
 
-          <div className="border-slate/30 border-t">
+          <div className="border-abeil-navy/30 border-t">
             <HistoriqueTable
               demandes={filtered}
               emptyText="Aucune demande sur cette période."

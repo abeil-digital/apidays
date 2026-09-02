@@ -208,7 +208,7 @@ export function SuivreDemandesPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+      <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold print:hidden">
         Suivre les demandes
       </h1>
 

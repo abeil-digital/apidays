@@ -100,7 +100,7 @@ export function FaqCard() {
     >
       <div className="flex flex-col gap-8 md:flex-row md:gap-16">
         <div className="shrink-0 md:w-72">
-          <h2 className="text-slate text-2xl font-semibold">Questions fréquentes</h2>
+          <h2 className="text-abeil-navy text-2xl font-semibold">Questions fréquentes</h2>
           <p className="text-ink-500 mt-2 text-sm">
             Comprendre les quelques principes qui encadrent les congés chez Abeil
           </p>

@@ -86,7 +86,7 @@ function SelectAffichage({
         <option value="mois_en_cours">{labelMoisEnCours}</option>
         <option value="complete">{labelDebut}</option>
       </select>
-      <ChevronDown size={11} className="text-slate pointer-events-none absolute right-0" />
+      <ChevronDown size={11} className="text-abeil-navy pointer-events-none absolute right-0" />
     </div>
   );
 }
@@ -433,7 +433,7 @@ export function DashboardPage() {
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
       <div className="animate-stagger-in px-1 pt-5 md:pt-0">
-        <h1 className="text-slate text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
+        <h1 className="text-abeil-navy text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
       <div
@@ -465,7 +465,7 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setTiroirActiviteOuvert(true)}
-                className="text-slate font-bold underline"
+                className="text-abeil-navy font-bold underline"
               >
                 voir le journal
               </button>
@@ -504,7 +504,7 @@ export function DashboardPage() {
         style={{ animationDelay: "210ms" }}
       >
         <div className="flex flex-col gap-1 px-1">
-          <h2 className="text-slate text-base font-semibold">Suivre mes soldes</h2>
+          <h2 className="text-abeil-navy text-base font-semibold">Suivre mes soldes</h2>
         </div>
 
         <div className="grid max-w-[900px] grid-cols-2 gap-3 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
@@ -514,7 +514,7 @@ export function DashboardPage() {
             conditionAccent={soldes.cp.conditionAccent}
             tone="cp"
             onClick={() => setSoldeDetailOuvert("CP")}
-            classeValeur="text-slate"
+            classeValeur="text-abeil-navy"
           />
           <SoldeCard
             valeur={soldes.rtt.valeurApresAttente}
@@ -522,7 +522,7 @@ export function DashboardPage() {
             conditionAccent={soldes.rtt.conditionAccent}
             tone="rtt"
             onClick={() => setSoldeDetailOuvert("RTT")}
-            classeValeur="text-slate"
+            classeValeur="text-abeil-navy"
           />
           <SoldeCard
             valeur={soldes.cpa.valeurApresAttente}
@@ -530,7 +530,7 @@ export function DashboardPage() {
             conditionAccent={soldes.cpa.conditionAccent}
             tone="cpa"
             onClick={() => setSoldeDetailOuvert("CPA")}
-            classeValeur="text-slate"
+            classeValeur="text-abeil-navy"
           />
           <button
             type="button"
@@ -549,7 +549,7 @@ export function DashboardPage() {
           filtre ne concerne plus seulement le calendrier — le caler à gauche
           au-dessus des deux colonnes le rend visuellement plus clair. */}
       <div className="animate-stagger-in" style={{ animationDelay: "280ms" }}>
-        <h2 className="text-slate mb-[14px] px-1 text-base font-semibold">Mon Calendrier</h2>
+        <h2 className="text-abeil-navy mb-[14px] px-1 text-base font-semibold">Mon Calendrier</h2>
         {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
             même ligne que les onglets de sélection de période, poussé à
             droite (`justify-between`) : un total par typologie de "day off"
@@ -682,7 +682,7 @@ export function DashboardPage() {
                   className="h-[290px] w-full sm:w-[calc(50%-12px)] lg:w-[calc((100%-48px)/3)]"
                   texteJour="text-base"
                   paddingClassName="p-6"
-                  classeTitreMois="text-slate text-base"
+                  classeTitreMois="text-abeil-navy text-base"
                 />
               ))}
             </div>

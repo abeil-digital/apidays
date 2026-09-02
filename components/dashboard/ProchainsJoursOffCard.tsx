@@ -444,7 +444,7 @@ export function ProchainsJoursOffCard({
           {!masquerDemandesPerso && !utilisateurId && (
             <Link
               href="/historique"
-              className="bg-surface-app text-slate hover:text-slate/80 sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
+              className="bg-surface-app text-abeil-navy hover:text-abeil-navy/80 sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
             >
               <Sheet size={16} />
               Gérer mes demandes
