@@ -37,6 +37,13 @@ function categorieSolde(soldes: Soldes, code: CodeSoldeDetail) {
   return soldes.cp;
 }
 
+// État "déclenché" d'une pill Théorique/Réel (29/08/2026, demande explicite)
+// — jusque-là, ouvrir Théorique OU Réel allumait la ligne entière de la même
+// façon, sans distinguer laquelle des deux est réellement ouverte dans le
+// panneau. La pill réellement ouverte bascule sur `TypeBadge variant="outline"`
+// (fond blanc, contour + texte dans la couleur du type — inversion du plein
+// habituel), l'autre pill de la ligne garde juste son survol normal.
+
 /**
  * Card "Soldes" d'un collaborateur — repris à l'identique de
  * `CardSoldeCollaborateur` (`VerifierFichesPaiePage2.tsx`, "Vérifier les
@@ -96,11 +103,11 @@ function CardSoldeCollaborateur({
                     <button
                       type="button"
                       onClick={() => onSelect(utilisateur.id, code, "theorique")}
-                      className="rounded-full transition-opacity duration-150 hover:opacity-70"
+                      className="rounded-full transition-transform duration-150 hover:scale-105"
                     >
                       <TypeBadge
                         code={code}
-                        variant="pill"
+                        variant={active && selection?.mode === "theorique" ? "outline" : "pill"}
                         label={`${formatJours(categorie.valeurApresAttente)} j`}
                       />
                     </button>
@@ -113,11 +120,11 @@ function CardSoldeCollaborateur({
                     <button
                       type="button"
                       onClick={() => onSelect(utilisateur.id, code, "reel")}
-                      className="rounded-full transition-opacity duration-150 hover:opacity-70"
+                      className="rounded-full transition-transform duration-150 hover:scale-105"
                     >
                       <TypeBadge
                         code={code}
-                        variant="pill"
+                        variant={active && selection?.mode === "reel" ? "outline" : "pill"}
                         label={`${formatJours(categorie.valeur)} j`}
                       />
                     </button>

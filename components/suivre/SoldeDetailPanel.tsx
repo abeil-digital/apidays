@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
@@ -18,6 +18,7 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
@@ -126,6 +127,10 @@ function libelleEvenement(m: {
   libelle: string;
 }) {
   if (m.type === "ajustement") return `Régul (${formatJjMm(m.date)})`;
+  // Année sur 2 chiffres (02/09/2026, "éviter les retours à la ligne") — la
+  // pill acquisition ("Acquisition septembre 2026") est plus large que les
+  // autres et wrappait sur 2 lignes dans la colonne Événement.
+  if (m.type === "acquisition") return m.libelle.replace(/\b20(\d{2})\b/, "$1");
   return m.libelle;
 }
 
@@ -197,6 +202,7 @@ export function SoldeDetailPanel({
   const [motifAjustement, setMotifAjustement] = useState("");
   const [envoiAjustement, setEnvoiAjustement] = useState(false);
   const [erreurAjustement, setErreurAjustement] = useState<string | null>(null);
+  const [confirmationAjustement, setConfirmationAjustement] = useState(false);
 
   async function soumettreAjustement() {
     const valeur = Number(montant.replace(",", "."));
@@ -575,103 +581,47 @@ export function SoldeDetailPanel({
         </div>
       )}
 
-      {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
-          "Vérifier les fiches de paie") — réservé à `avecAjustement`
-          (manager, "Suivre les soldes 2"), jamais sur Accueil. */}
-      {avecAjustement &&
-        (!formulaireOuvert ? (
-          <button
-            type="button"
-            onClick={() => setFormulaireOuvert(true)}
-            className="text-ink-500 hover:text-ink-900 border-ink-300/60 block w-full border-t px-4 py-2.5 text-left text-xs font-semibold underline decoration-dotted underline-offset-2"
-          >
-            Ajuster le solde
-          </button>
-        ) : (
-          <div className="border-ink-300/60 flex flex-col gap-2 border-t px-4 py-3">
-            <div className="flex gap-3 text-xs font-semibold">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={sens === "ajouter"}
-                  onChange={() => setSens("ajouter")}
-                />
-                Ajouter
-              </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="radio"
-                  checked={sens === "retirer"}
-                  onChange={() => setSens("retirer")}
-                />
-                Retirer
-              </label>
-            </div>
-            <Input
-              type="number"
-              step="any"
-              min="0"
-              inputMode="decimal"
-              placeholder="Nombre de jours"
-              value={montant}
-              onChange={(e) => setMontant(e.target.value)}
-              className="text-sm"
-            />
-            <Textarea
-              placeholder="Commentaire"
-              value={motifAjustement}
-              onChange={(e) => setMotifAjustement(e.target.value)}
-              rows={2}
-              className="text-sm"
-            />
-            {erreurAjustement && (
-              <p className="text-status-danger-fg text-xs">{erreurAjustement}</p>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                className="px-3 py-1.5 text-xs"
-                onClick={() => {
-                  setFormulaireOuvert(false);
-                  setErreurAjustement(null);
-                }}
-              >
-                Annuler
-              </Button>
-              <Button
-                className="px-3 py-1.5 text-xs"
-                disabled={envoiAjustement}
-                onClick={soumettreAjustement}
-              >
-                Enregistrer
-              </Button>
-            </div>
-          </div>
-        ))}
-
-      {!loading && historique && !avecAjustement && (
+      {!loading && historique && (
         <div className="border-ink-300/60 flex items-center justify-between border-t px-4 py-3">
           <span className="text-ink-900 flex items-center gap-1 text-sm font-semibold">
             Solde actuel
-            <span className="relative inline-flex items-center">
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as ModeSolde)}
-                className="text-ink-500 cursor-pointer appearance-none bg-transparent pr-4 text-sm font-semibold underline decoration-dotted underline-offset-2 outline-none"
-              >
-                <option value="reel">Réel</option>
-                <option value="theorique">Théorique</option>
-              </select>
-              <ChevronDown
-                size={12}
-                className="text-ink-500 pointer-events-none absolute right-0"
-              />
-            </span>
+            {/* Pas de bascule Réel/Théorique dans ce contexte (29/08/2026,
+                demande explicite, "Suivre les soldes") — le mode reste celui
+                sur lequel la pill cliquée dans le tableau a ouvert ce
+                panneau (`modeParDefaut`), simple libellé plutôt qu'un select
+                interactif. Le sélecteur d'origine reste disponible ailleurs
+                (Accueil, `avecAjustement` absent). */}
+            {avecAjustement ? (
+              <span className="text-ink-500">{mode === "reel" ? "Réel" : "Théorique"}</span>
+            ) : (
+              <span className="relative inline-flex items-center">
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as ModeSolde)}
+                  className="text-ink-500 cursor-pointer appearance-none bg-transparent pr-4 text-sm font-semibold underline decoration-dotted underline-offset-2 outline-none"
+                >
+                  <option value="reel">Réel</option>
+                  <option value="theorique">Théorique</option>
+                </select>
+                <ChevronDown
+                  size={12}
+                  className="text-ink-500 pointer-events-none absolute right-0"
+                />
+              </span>
+            )}
           </span>
-          <TypeBadgePillEnhanced
-            code={code}
-            label={`${formatJours(mode === "reel" ? historique.soldeActuel : historique.soldeTheorique)} j`}
-          />
+          {avecAjustement ? (
+            <TypeBadge
+              code={code}
+              variant="pill"
+              label={`${formatJours(mode === "reel" ? historique.soldeActuel : historique.soldeTheorique)} j`}
+            />
+          ) : (
+            <TypeBadgePillEnhanced
+              code={code}
+              label={`${formatJours(mode === "reel" ? historique.soldeActuel : historique.soldeTheorique)} j`}
+            />
+          )}
         </div>
       )}
     </div>
@@ -699,11 +649,125 @@ export function SoldeDetailPanel({
   // colonne détail animée, à plat.
   if (avecAjustement) {
     return (
-      <div
-        className="flex items-stretch transition-[gap] duration-300 ease-in-out"
-        style={{ ...style, gap: detailOuvert ? "5px" : "0px" }}
-      >
-        <div className="bg-surface-card w-72 shrink-0 overflow-hidden shadow-sm">{bodyJsx}</div>
+      <>
+        <div
+          className="flex items-stretch transition-[gap] duration-300 ease-in-out"
+          style={{ ...style, gap: detailOuvert ? "5px" : "0px" }}
+        >
+        <div className="flex w-72 shrink-0 flex-col gap-2">
+          <div className="bg-surface-card overflow-hidden shadow-sm">{bodyJsx}</div>
+          {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
+              "Vérifier les fiches de paie") — sorti de la card tableau
+              (29/08/2026, demande explicite) : sa propre card en dessous.
+              Affichage repris du principe "Annuler cette demande"
+              (`DetailCongePanel`, 29/08/2026, demande explicite) : lien +
+              chevron replié par défaut (pas de fond/ombre tant que fermé),
+              panneau déplié teinté à 5% de la couleur du type plutôt qu'un
+              simple fond blanc. */}
+          <button
+            type="button"
+            onClick={() => {
+              setFormulaireOuvert((v) => !v);
+              setErreurAjustement(null);
+            }}
+            className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
+          >
+            Ajuster le solde
+            {formulaireOuvert ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          {formulaireOuvert && (
+            <div
+              className="w-full shadow-sm"
+              style={{
+                backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 5%, white)`,
+              }}
+            >
+              <div
+                className={`px-4 pt-3 pb-1 text-sm leading-[1.5] font-bold ${classeTexteTypeBadge(code)}`}
+              >
+                Ajuster le solde
+              </div>
+              <div className="flex flex-col gap-4 px-4 pt-1.5 pb-2">
+                <div className="flex gap-3 text-xs font-semibold">
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={sens === "ajouter"}
+                      onChange={() => setSens("ajouter")}
+                    />
+                    Ajouter
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      checked={sens === "retirer"}
+                      onChange={() => setSens("retirer")}
+                    />
+                    Retirer
+                  </label>
+                </div>
+                <div>
+                  <label
+                    htmlFor="ajustement-jours"
+                    className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+                  >
+                    Nombre de jours
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="ajustement-jours"
+                      type="number"
+                      step="any"
+                      min="0"
+                      inputMode="decimal"
+                      value={montant}
+                      onChange={(e) => {
+                        const valeur = e.target.value;
+                        if (/^\d{0,2}([.,]\d{0,2})?$/.test(valeur)) setMontant(valeur);
+                      }}
+                      className="w-20 shrink-0 rounded-md text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                    <span className="text-ink-900 shrink-0 text-xs font-semibold">jours</span>
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor="ajustement-commentaire"
+                    className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+                  >
+                    Commentaire (obligatoire)
+                  </label>
+                  <Textarea
+                    id="ajustement-commentaire"
+                    value={motifAjustement}
+                    onChange={(e) => setMotifAjustement(e.target.value)}
+                    rows={2}
+                    placeholder="Ex. régularisation suite à..."
+                    className="w-full rounded-md text-xs placeholder:text-xs"
+                  />
+                </div>
+              </div>
+
+              {erreurAjustement && (
+                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
+                  {erreurAjustement}
+                </div>
+              )}
+
+              <div className="px-4 pb-4">
+                <Button
+                  variant={montant.trim() && motifAjustement.trim() ? "primary" : "secondary"}
+                  disabled={envoiAjustement || !montant.trim() || !motifAjustement.trim()}
+                  onClick={() => setConfirmationAjustement(true)}
+                  className="w-full justify-center rounded-full px-4 py-2 text-xs"
+                >
+                  Confirmer
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
         <div
           className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
         >
@@ -741,7 +805,41 @@ export function SoldeDetailPanel({
             ) : null}
           </div>
         </div>
-      </div>
+        </div>
+        {confirmationAjustement && (
+          <Modal onClose={() => setConfirmationAjustement(false)} className="max-w-sm">
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-ink-900 text-sm font-semibold">
+                  Êtes-vous certain d&apos;ajuster ce solde :
+                </p>
+                <p className="text-ink-500 mt-1 text-xs">
+                  {sens === "ajouter" ? "+" : "-"}
+                  {montant} jours de {code} — {nomComplet}
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setConfirmationAjustement(false)}
+                  className="rounded-full px-4 py-2 text-xs"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await soumettreAjustement();
+                    setConfirmationAjustement(false);
+                  }}
+                  className="rounded-full px-4 py-2 text-xs"
+                >
+                  Confirmer
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </>
     );
   }
 

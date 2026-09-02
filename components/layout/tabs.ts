@@ -28,6 +28,7 @@ const PARAMETRER_TABS: NavTab[] = [
 ];
 
 const SUIVRE_TABS: NavTab[] = [
+  { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   // Ex-duplication expérimentale (27/08/2026) devenue l'unique écran
   // (28/08/2026, "Suivre les soldes" V1 supprimé). Libellé renommé le
@@ -35,7 +36,6 @@ const SUIVRE_TABS: NavTab[] = [
   // disparu) — l'URL `/suivre/soldes2` reste inchangée (pas de renommage de
   // route pour un simple intitulé).
   { href: "/suivre/soldes2", label: "Suivre les soldes", Icon: Wallet },
-  { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/transmissions-paie", label: "Transmissions paie", Icon: ClipboardCheck },
 ];
 

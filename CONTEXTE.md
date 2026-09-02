@@ -3750,6 +3750,45 @@ l'URL `/suivre/soldes2` reste inchangée) :
   fixent la largeur du conteneur ; la barre de filtre en `w-full` s'y cale) plutôt qu'une largeur
   figée en dur, qui se serait désynchronisée si le contenu des cards changeait.
 
+**Suivre les soldes : états déclenchés, restructuration du panneau détail, "Ajuster le solde"
+alignée sur "Annuler cette demande" (29/08/2026 → 02/09/2026)**
+
+État "déclenché" par pill (`SuivreSoldesPage2.tsx`, `CardSoldeCollaborateur`) : chaque pill
+Théorique/Réel a désormais son propre état actif plutôt qu'un état partagé par ligne — première
+tentative en anneau (`ring-2`) rejetée ("pas le bon effet déclenché"), corrigée en inversion de
+`TypeBadge` (`variant="outline"`, fond blanc + contour/texte couleur du type, au lieu du `"pill"`
+plein habituel) sur la pill réellement ouverte ; survol des deux pills passé de `hover:opacity-70`
+à `hover:scale-105`.
+
+Panneau détail (`SoldeDetailPanel.tsx`, branche `avecAjustement`) restructuré sur demande explicite :
+le rappel "Solde actuel" (déjà affiché en bas de la liste d'événements dans les autres contextes)
+l'est désormais aussi ici, sans sélecteur Théorique/Réel (label statique — l'utilisateur ne doit pas
+pouvoir changer de solde depuis cette vue) et avec la pill à la taille du tableau (`TypeBadge
+variant="pill"`, pas `TypeBadgePillEnhanced`). "Ajuster le solde" sort de la card tableau pour
+devenir sa propre card en dessous, avec le même principe d'affichage que "Annuler cette demande"
+(`DetailCongePanel`) : lien + chevron replié par défaut (pas de fond tant que fermé), panneau
+déplié teinté à 5% de la couleur du type (`color-mix(in srgb, var(--color-X) 5%, white)`), styles de
+champs/sous-titres/bouton repris à l'identique (labels `text-ink-500 text-[11px] font-bold`,
+`gap-4` entre les blocs — plus d'interlignage avant un sous-titre qu'après, demande explicite de
+design d'information). Champ "Nombre de jours" étroit (`w-20`, contraint par regex à 2 chiffres
+avant la virgule + 2 après, plus de flèches de spin natives), unité "jours" en noir à côté plutôt
+qu'en placeholder dans le champ (le placeholder `000,00` n'était qu'un repère de taille, pas censé
+s'afficher — retiré sur clarification).
+
+Validation forte ajoutée sur "Ajuster le solde" ("il faut une confirmation forte : popin de
+confirmation", après une première proposition de bandeau annulable refusée) : même pattern
+`Modal`/question + résumé + Annuler/Confirmer que `DetailCongePanel.demanderConfirmation`, la
+mutation réelle (`ajouterAjustementSolde`) ne partant qu'au clic sur le "Confirmer" de la popin.
+
+Cards événements : libellé des acquisitions mensuelles ("Acquisition septembre 2026") passé à
+l'année sur 2 chiffres ("Acquisition septembre 26") pour éviter le retour à la ligne dans la
+colonne Événement — traité localement dans `libelleEvenement` (SoldeDetailPanel), pas dans le
+formateur partagé `formatMoisAnnee` de `soldes.repository.ts` (utilisé ailleurs avec l'année
+complète).
+
+Nav "Suivre" (`components/layout/tabs.ts`) : "Calendrier" repassé en premier onglet de la
+sous-navigation (avant "Suivre les demandes").
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
