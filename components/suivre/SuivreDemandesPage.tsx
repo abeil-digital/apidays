@@ -223,7 +223,7 @@ export function SuivreDemandesPage() {
         style={{ animationDelay: "90ms" }}
       >
         <div className="bg-surface-card w-full min-w-0">
-          <div className="flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
+          <div className="bg-mint-tint/50 flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
             <div className="flex flex-wrap items-end gap-2">
               <SelectFiltrePill
                 value={typeFiltre}
@@ -300,7 +300,7 @@ export function SuivreDemandesPage() {
             </button>
           </div>
 
-          <div className="border-ink-300/60 border-t">
+          <div className="border-slate/30 border-t">
             {regulSelectionne ? (
               <TableauAjustements
                 ajustements={ajustementsFiltres}

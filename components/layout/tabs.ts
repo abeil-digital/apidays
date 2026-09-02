@@ -30,10 +30,11 @@ const PARAMETRER_TABS: NavTab[] = [
 const SUIVRE_TABS: NavTab[] = [
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   // Ex-duplication expérimentale (27/08/2026) devenue l'unique écran
-  // (28/08/2026, "Suivre les soldes" V1 supprimé) — garde son nom/URL "2"
-  // historique, jamais renommé en pratique (même situation que
-  // `DashboardPage`, voir Backlog.md).
-  { href: "/suivre/soldes2", label: "Suivre les soldes 2", Icon: Wallet },
+  // (28/08/2026, "Suivre les soldes" V1 supprimé). Libellé renommé le
+  // 29/08/2026 ("Suivre les soldes 2" n'avait plus de sens une fois le V1
+  // disparu) — l'URL `/suivre/soldes2` reste inchangée (pas de renommage de
+  // route pour un simple intitulé).
+  { href: "/suivre/soldes2", label: "Suivre les soldes", Icon: Wallet },
   { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
   { href: "/suivre/transmissions-paie", label: "Transmissions paie", Icon: ClipboardCheck },
 ];

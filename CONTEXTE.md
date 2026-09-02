@@ -3710,6 +3710,46 @@ préexistante de Delphine sur les mêmes dates reste intacte (aucune interféren
 Migration SQL appliquée manuellement par Vincent dans le SQL editor Supabase (colonne
 `conge_impose_id` + policy RLS mise à jour) — voir `supabase/schema.sql`.
 
+**Vert header (`slate`) généralisé à toute l'app + suite sur les tableaux (29/08/2026)**
+
+Après le pattern établi sur Historique (voir l'entrée du même jour plus haut) puis étendu à
+Transmissions paie, Vincent a demandé le même traitement partout ("tous les titres et tous les
+boutons du dispositif" → confirmé "toute l'app" via question de clarification). Plutôt que de
+patcher chaque écran, la teinte a été poussée à la source dans les deux composants partagés :
+`components/ui/Button.tsx` (`variant="primary"`, mint → slate) et `components/ui/FiltrePill.tsx`
+(`SelectFiltrePill`/`InputFiltrePill`, accent par défaut `CLASSE_ACCENT_DEFAUT` mint → slate) — ça
+propage automatiquement le changement à tous les CTA/filtres qui utilisent ces briques (Suivre les
+demandes/soldes, Utilisateurs, Congés & RTT, Transmissions paie...) sans toucher chaque fichier.
+Restaient les titres de page (`h1`) et quelques liens/boutons mint ponctuels non couverts par ces
+deux composants — traités un par un : `SuivreDemandesPage`, `SuivreSoldesPage2`, `UtilisateursListPage`,
+`CongesRttPage`, `TransmissionsPaiePage` (titre dynamique + lien "Exporter (CSV)"),
+`ListeTransmissionsPaiePage`, `BackHeader` (fiche utilisateur), `FaqCard` (Accueil, "même typo que
+le h1" par design), "Poser un congé"/"voir le journal"/"Gérer mes demandes" sur Accueil, titre +
+sélecteurs d'année sur Paramétrer > Calendrier.
+
+`FiltrePill.tsx` a aussi gagné un prop `classeFond` (opt-in, défaut `bg-surface-card` inchangé) —
+même raison que `classeBordure`/`classeChevron` déjà extraits le 29/08 (deux classes Tailwind du
+même groupe CSS, `bg-*`, ont une spécificité identique : le résultat dépend de l'ordre dans la
+feuille de style générée, pas de l'ordre dans `className`, un comportement déjà rencontré et
+documenté — extraire en prop plutôt que concaténer est la façon fiable de l'overrider).
+
+Suite sur "Suivre les demandes"/"Suivre les soldes" (ex-"Suivre les soldes 2", renommé — le "2"
+n'avait plus de sens depuis la suppression de la V1 le 28/08, seul le libellé de nav change,
+l'URL `/suivre/soldes2` reste inchangée) :
+
+- Barre de filtres de "Suivre les demandes" passée en fond `bg-mint-tint/50` (même traitement que
+  Historique), fond des sélecteurs eux-mêmes laissé par défaut (`bg-surface-card`) — la première
+  tentative appliquait le mint-tint aux pills individuelles, corrigée sur retour explicite de
+  Vincent ("la ligne derrière en mint-tint/50, pas les sélecteurs").
+- Bouton "Exporter (CSV)" de "Suivre les soldes" recalé sur la taille du bouton "Exporter" de
+  "Suivre les demandes" (`text-xs`/`px-3 py-1.5`/icône 13px, remplace le `<Button>` partagé —
+  trop imposant ici, `text-sm`/icône 16px — par un `<button>` custom aux mêmes classes).
+- Filtre "Tous les collaborateurs" + bouton Exporter de "Suivre les soldes" regroupés dans une
+  card `bg-mint-tint/50 rounded-xl`, à la largeur exacte des cards de solde juste en dessous —
+  obtenu en plaçant filtre+cards dans un même conteneur `w-fit` (les cards, elles-mêmes `w-fit`,
+  fixent la largeur du conteneur ; la barre de filtre en `w-full` s'y cale) plutôt qu'une largeur
+  figée en dur, qui se serait désynchronisée si le contenu des cards changeait.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

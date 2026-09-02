@@ -15,7 +15,6 @@ import {
   TypeBadge,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
-import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { SelectFiltrePill } from "@/components/ui/FiltrePill";
 import { SoldeDetailPanel, type ModeSolde } from "@/components/suivre/SoldeDetailPanel";
@@ -278,7 +277,7 @@ export function SuivreSoldesPage2() {
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold">
-        Suivre les soldes 2
+        Suivre les soldes
       </h1>
 
       {error && (
@@ -286,31 +285,6 @@ export function SuivreSoldesPage2() {
           {error}
         </div>
       )}
-
-      <div
-        className="animate-stagger-in flex flex-wrap items-end justify-between gap-3 px-1"
-        style={{ animationDelay: "90ms" }}
-      >
-        <SelectFiltrePill
-          value={collaborateurFiltre}
-          onChange={(e) => setCollaborateurFiltre(e.target.value)}
-        >
-          <option value="tous">Tous les collaborateurs</option>
-          {collaborateurs.map(([id, nom]) => (
-            <option key={id} value={id}>
-              {nom}
-            </option>
-          ))}
-        </SelectFiltrePill>
-        <Button
-          onClick={exporter}
-          disabled={filtres.length === 0}
-          className="rounded-full px-4 py-2"
-        >
-          <Download size={16} />
-          Exporter (CSV)
-        </Button>
-      </div>
 
       {loading ? (
         <div className="bg-surface-card w-full shadow-sm">
@@ -326,24 +300,54 @@ export function SuivreSoldesPage2() {
             className={`animate-stagger-in grid grid-cols-1 items-start gap-[5px] ${selection ? "xl:grid-cols-[max-content_max-content]" : ""}`}
             style={{ animationDelay: "180ms" }}
           >
-            <div ref={cardsRef} className="flex min-w-0 flex-col gap-3">
-              {filtres.map((u) => (
-                <CardSoldeCollaborateur
-                  key={u.id}
-                  utilisateur={u}
-                  soldes={soldesParId[u.id]}
-                  selection={selection}
-                  onSelect={(utilisateurId, code, mode) =>
-                    setSelection((prev) =>
-                      prev?.utilisateurId === utilisateurId &&
-                      prev.code === code &&
-                      prev.mode === mode
-                        ? null
-                        : { utilisateurId, code, mode },
-                    )
-                  }
-                />
-              ))}
+            {/* Filtre + Exporter regroupés avec les cards dans un même
+                conteneur `w-fit` (29/08/2026, demande explicite) — la barre
+                de filtre en `w-full` prend alors exactement la largeur des
+                cards en dessous (elles-mêmes `w-fit`, les plus larges des
+                deux), sans largeur figée en dur qui se désynchroniserait si
+                le contenu des cards change. */}
+            <div className="flex w-fit min-w-0 flex-col gap-3">
+              <div className="bg-mint-tint/50 flex w-full items-center justify-between gap-3 rounded-xl px-4 py-3">
+                <SelectFiltrePill
+                  value={collaborateurFiltre}
+                  onChange={(e) => setCollaborateurFiltre(e.target.value)}
+                >
+                  <option value="tous">Tous les collaborateurs</option>
+                  {collaborateurs.map(([id, nom]) => (
+                    <option key={id} value={id}>
+                      {nom}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                <button
+                  type="button"
+                  onClick={exporter}
+                  disabled={filtres.length === 0}
+                  className="bg-slate hover:enabled:bg-slate/90 disabled:bg-ink-300 disabled:text-ink-500 flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150 disabled:cursor-not-allowed"
+                >
+                  <Download size={13} />
+                  Exporter (CSV)
+                </button>
+              </div>
+              <div ref={cardsRef} className="flex flex-col gap-3">
+                {filtres.map((u) => (
+                  <CardSoldeCollaborateur
+                    key={u.id}
+                    utilisateur={u}
+                    soldes={soldesParId[u.id]}
+                    selection={selection}
+                    onSelect={(utilisateurId, code, mode) =>
+                      setSelection((prev) =>
+                        prev?.utilisateurId === utilisateurId &&
+                        prev.code === code &&
+                        prev.mode === mode
+                          ? null
+                          : { utilisateurId, code, mode },
+                      )
+                    }
+                  />
+                ))}
+              </div>
             </div>
             {selection && utilisateurSelectionne && (
               <SoldeDetailPanel

@@ -13,30 +13,35 @@ import type { InputHTMLAttributes, SelectHTMLAttributes } from "react";
  * popin DJI/CPI), pas par la taille — les deux sont maintenant proches.
  */
 const CLASSE_FILTRE_PILL_BASE =
-  "rounded-full bg-surface-card px-2.5 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
+  "rounded-full px-2.5 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-1";
 
 const CLASSE_ACCENT_DEFAUT =
   "border border-slate text-slate font-medium hover:bg-slate/10 focus-visible:ring-slate";
 
-export const CLASSE_FILTRE_PILL = `${CLASSE_ACCENT_DEFAUT} ${CLASSE_FILTRE_PILL_BASE}`;
+const CLASSE_FOND_DEFAUT = "bg-surface-card";
+
+export const CLASSE_FILTRE_PILL = `${CLASSE_ACCENT_DEFAUT} ${CLASSE_FOND_DEFAUT} ${CLASSE_FILTRE_PILL_BASE}`;
 
 /** Variante `<select>` — chevron superposé par défaut (le natif ne permet pas
  * de le coloriser directement). `classeBordure`/`classeChevron` (29/08/2026) :
  * override opt-in de l'accent par défaut — bordure/anneau focus et couleur du
  * chevron respectivement, sans effet sur les autres appelants qui ne les
- * passent pas. */
+ * passent pas. `classeFond` (29/08/2026) : override opt-in du fond (défaut
+ * `bg-surface-card`) — ex. aligner le fond des sélecteurs sur celui de
+ * l'en-tête de colonnes du tableau juste en dessous. */
 export function SelectFiltrePill(
   props: SelectHTMLAttributes<HTMLSelectElement> & {
     classeBordure?: string;
     classeChevron?: string;
+    classeFond?: string;
   },
 ) {
-  const { className, classeBordure, classeChevron, ...rest } = props;
+  const { className, classeBordure, classeChevron, classeFond, ...rest } = props;
   return (
     <div className="relative inline-block">
       <select
         {...rest}
-        className={`${CLASSE_FILTRE_PILL_BASE} ${classeBordure ?? CLASSE_ACCENT_DEFAUT} cursor-pointer appearance-none pr-6 ${className ?? ""}`}
+        className={`${CLASSE_FILTRE_PILL_BASE} ${classeFond ?? CLASSE_FOND_DEFAUT} ${classeBordure ?? CLASSE_ACCENT_DEFAUT} cursor-pointer appearance-none pr-6 ${className ?? ""}`}
       />
       <ChevronDown
         size={11}
@@ -58,15 +63,17 @@ export function InputFiltrePill(
     avecIcone?: boolean;
     classeBordure?: string;
     classeIcone?: string;
+    classeFond?: string;
   },
 ) {
-  const { className, avecIcone, classeBordure, classeIcone, ...rest } = props;
+  const { className, avecIcone, classeBordure, classeIcone, classeFond, ...rest } = props;
   const classeAccent = classeBordure ?? CLASSE_ACCENT_DEFAUT;
+  const fond = classeFond ?? CLASSE_FOND_DEFAUT;
   if (!avecIcone) {
     return (
       <input
         {...rest}
-        className={`${CLASSE_FILTRE_PILL_BASE} ${classeAccent} ${className ?? ""}`}
+        className={`${CLASSE_FILTRE_PILL_BASE} ${fond} ${classeAccent} ${className ?? ""}`}
       />
     );
   }
@@ -78,7 +85,7 @@ export function InputFiltrePill(
       />
       <input
         {...rest}
-        className={`${CLASSE_FILTRE_PILL_BASE} ${classeAccent} pl-7 ${className ?? ""}`}
+        className={`${CLASSE_FILTRE_PILL_BASE} ${fond} ${classeAccent} pl-7 ${className ?? ""}`}
       />
     </div>
   );
