@@ -79,7 +79,7 @@ export function ListeTransmissionsPaiePage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 px-1 text-2xl font-semibold">Transmissions paie</h1>
+      <h1 className="text-slate px-1 text-2xl font-semibold">Transmissions paie</h1>
 
       <div className="flex flex-col gap-2">
         <h2 className="text-ink-500 px-1 text-sm font-bold">Mois en cours</h2>

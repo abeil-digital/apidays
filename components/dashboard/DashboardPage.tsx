@@ -86,7 +86,7 @@ function SelectAffichage({
         <option value="mois_en_cours">{labelMoisEnCours}</option>
         <option value="complete">{labelDebut}</option>
       </select>
-      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
+      <ChevronDown size={11} className="text-slate pointer-events-none absolute right-0" />
     </div>
   );
 }
@@ -465,7 +465,7 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={() => setTiroirActiviteOuvert(true)}
-                className="text-mint font-bold underline"
+                className="text-slate font-bold underline"
               >
                 voir le journal
               </button>
@@ -535,7 +535,7 @@ export function DashboardPage() {
           <button
             type="button"
             onClick={() => setNouvelleDemandeOuverte(true)}
-            className="text-mint hover:text-mint-hover flex h-full w-full flex-col items-center justify-center gap-2 p-4 transition-[transform,color] hover:scale-110"
+            className="text-slate hover:text-slate/80 flex h-full w-full flex-col items-center justify-center gap-2 p-4 transition-[transform,color] hover:scale-110"
           >
             <PlusCircle size={56} />
             <span className="text-sm font-semibold">Poser un congé</span>

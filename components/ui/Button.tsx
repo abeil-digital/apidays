@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 export type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
-  primary: "bg-mint text-brand-foreground enabled:hover:bg-mint-hover",
+  primary: "bg-slate text-brand-foreground enabled:hover:bg-slate/90",
   secondary: "bg-surface-card text-ink-900 border-ink-300 border enabled:hover:bg-surface-app",
   ghost: "text-ink-900 enabled:hover:opacity-70",
 };

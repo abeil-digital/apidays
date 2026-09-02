@@ -824,7 +824,7 @@ function QuelsCongesTransmettre({
           <button
             type="button"
             onClick={exporter}
-            className="text-mint hover:text-mint-hover text-sm font-semibold underline"
+            className="text-slate hover:text-slate/80 text-sm font-semibold underline"
           >
             Exporter (CSV)
           </button>
@@ -927,7 +927,7 @@ export function TransmissionsPaiePage({
       </Link>
 
       <h1
-        className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold"
+        className="text-slate animate-stagger-in px-1 text-2xl font-semibold"
         style={{ animationDelay: "60ms" }}
       >
         {titre}

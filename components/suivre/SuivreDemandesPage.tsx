@@ -208,7 +208,7 @@ export function SuivreDemandesPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
+      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold print:hidden">
         Suivre les demandes
       </h1>
 
@@ -293,7 +293,7 @@ export function SuivreDemandesPage() {
             </div>
             <button
               onClick={() => window.print()}
-              className="bg-surface-app text-ink-900 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
+              className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
             >
               <Printer size={13} />
               Exporter

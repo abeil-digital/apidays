@@ -69,7 +69,7 @@ function SelectAffichage({
         <option value="mois_en_cours">{labelMoisEnCours}</option>
         <option value="complete">{labelDebut}</option>
       </select>
-      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
+      <ChevronDown size={11} className="text-slate pointer-events-none absolute right-0" />
     </div>
   );
 }

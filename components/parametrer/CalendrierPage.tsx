@@ -1024,16 +1024,16 @@ export function Calendrier2Page() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
+      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
 
       <div className="animate-stagger-in flex gap-2 px-1" style={{ animationDelay: "60ms" }}>
         <button
           type="button"
           onClick={() => setAnnee(anneeEnCours)}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
             annee === anneeEnCours
-              ? "bg-brand text-brand-foreground"
-              : "bg-surface-card text-ink-900 shadow-sm"
+              ? "bg-slate/90 hover:bg-slate text-white"
+              : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
           }`}
         >
           {anneeEnCours}
@@ -1041,10 +1041,10 @@ export function Calendrier2Page() {
         <button
           type="button"
           onClick={() => setAnnee(anneeAVenir)}
-          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+          className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
             annee === anneeAVenir
-              ? "bg-brand text-brand-foreground"
-              : "bg-surface-card text-ink-900 shadow-sm"
+              ? "bg-slate/90 hover:bg-slate text-white"
+              : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
           }`}
         >
           {anneeAVenir} - Brouillon
