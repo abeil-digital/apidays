@@ -504,7 +504,7 @@ export function DashboardPage() {
         style={{ animationDelay: "210ms" }}
       >
         <div className="flex flex-col gap-1 px-1">
-          <h2 className="text-slate text-sm font-bold">Suivre mes soldes</h2>
+          <h2 className="text-slate text-base font-semibold">Suivre mes soldes</h2>
         </div>
 
         <div className="grid max-w-[900px] grid-cols-2 gap-3 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
@@ -535,7 +535,7 @@ export function DashboardPage() {
           <button
             type="button"
             onClick={() => setNouvelleDemandeOuverte(true)}
-            className="text-mint hover:text-mint-hover bg-surface-card/30 flex h-full w-full flex-col items-center justify-center gap-2 rounded-xl p-4 shadow-sm transition-[transform,color,box-shadow] hover:scale-110 hover:shadow-md"
+            className="text-mint hover:text-mint-hover flex h-full w-full flex-col items-center justify-center gap-2 p-4 transition-[transform,color] hover:scale-110"
           >
             <PlusCircle size={56} />
             <span className="text-sm font-semibold">Poser un congé</span>
@@ -549,7 +549,7 @@ export function DashboardPage() {
           filtre ne concerne plus seulement le calendrier — le caler à gauche
           au-dessus des deux colonnes le rend visuellement plus clair. */}
       <div className="animate-stagger-in" style={{ animationDelay: "280ms" }}>
-        <h2 className="text-slate mb-[14px] px-1 text-sm font-bold">Mon Calendrier</h2>
+        <h2 className="text-slate mb-[14px] px-1 text-base font-semibold">Mon Calendrier</h2>
         {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
             même ligne que les onglets de sélection de période, poussé à
             droite (`justify-between`) : un total par typologie de "day off"

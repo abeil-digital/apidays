@@ -303,10 +303,15 @@ export function DetailCongePanel({
   // simple mention plutôt qu'un lien d'action absent. Seul l'admin peut
   // passer outre (`peutAnnulerDejaTransmis`).
   const dejaTransmis = selection.statut === "validé" && (lignesTransmission ?? []).length > 0;
+  // Congé imposé (CPI, 29/08/2026) — un collaborateur ne peut pas annuler
+  // lui-même une demande générée par un CPI (RLS alignée, voir schema.sql),
+  // seul l'admin peut la retirer en supprimant la période sur Paramétrer >
+  // Calendrier (`supprimerCongeImpose`, qui annule alors ces demandes).
   const peutAnnulerCetteDemande =
-    selection.statut === "en attente" ||
-    peutAnnulerValide ||
-    (dejaTransmis && peutAnnulerDejaTransmis);
+    !selection.congeImposeId &&
+    (selection.statut === "en attente" ||
+      peutAnnulerValide ||
+      (dejaTransmis && peutAnnulerDejaTransmis));
   // Solde avant/après (17/08/2026 → 24/08/2026, ajout demandé) — uniquement
   // pour les 3 types suivis par `useSoldes` (mêmes que "Suivre les soldes"),
   // pas de notion de solde pour CSS/CE/RECUP/EVT_FAM. `valeurApresAttente`
@@ -840,6 +845,12 @@ export function DetailCongePanel({
       {onRetirer && dejaTransmis && !peutAnnulerDejaTransmis && (
         <p className="text-ink-500 px-4 py-1 text-[11px]">
           Passé en paie : contactez l&apos;administrateur pour modifier ce congé
+        </p>
+      )}
+
+      {onRetirer && selection.congeImposeId && (
+        <p className="text-ink-500 px-4 py-1 text-[11px]">
+          Congé imposé : à retirer depuis Paramétrer &gt; Calendrier
         </p>
       )}
 

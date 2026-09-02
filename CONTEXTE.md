@@ -2362,8 +2362,8 @@ demandés une fois l'écran en main, avant de reprendre la partie "Vérifier les
   - **"Congés passés en paye mais annulés"** — `d.statut === "annulé"`, à part des deux tableaux
     ci-dessus plutôt que mélangés dedans (avant : une correction en attente de régularisation
     pouvait se retrouver listée dans "sur la période" ou "repêchage" selon sa date, peu lisible).
-  Chaque tableau a son propre `<HistoriqueTable>`, `selectionId`/`DetailCongePanel` restent
-  partagés entre les 3 (un seul panneau ouvert à la fois, quel que soit le tableau cliqué).
+    Chaque tableau a son propre `<HistoriqueTable>`, `selectionId`/`DetailCongePanel` restent
+    partagés entre les 3 (un seul panneau ouvert à la fois, quel que soit le tableau cliqué).
 - **`HistoriqueTable.tsx` — colonnes "Statut" et "Collaborateur" rendues triables**, en plus des
   colonnes déjà triables "Dates"/"Posé le" (mécanisme `ColonneTriable` étendu). "Statut" trie sur un
   ordre métier (`STATUT_ORDRE`, pas alphabétique) : en attente → validé → refusé → annulé, l'idée
@@ -2384,9 +2384,9 @@ demandés une fois l'écran en main, avant de reprendre la partie "Vérifier les
     superposaient. Fix : la classe JS ne s'applique que si c'est une AUTRE ligne du groupe qui est
     survolée/sélectionnée (`hoveredId !== demande.id` / `selectedId !== demande.id`) — la ligne qui
     porte nativement la cellule n'a jamais besoin du double calque, sa propre classe suffit déjà.
-  Nouvelle classe utilitaire ajoutée pour ce besoin :
-  `classeFondSurvolTypeBadgeActif` (`TypeBadge.tsx`) — même teinte que `classeFondSurvolTypeBadge`
-  (15%) mais sans le préfixe `hover:`, pour un survol piloté en JS plutôt qu'en CSS pur.
+    Nouvelle classe utilitaire ajoutée pour ce besoin :
+    `classeFondSurvolTypeBadgeActif` (`TypeBadge.tsx`) — même teinte que `classeFondSurvolTypeBadge`
+    (15%) mais sans le préfixe `hover:`, pour un survol piloté en JS plutôt qu'en CSS pur.
 - **Tri par défaut sur "Collaborateur"** pour les 2 premiers tableaux de "Quels congés transmettre"
   (nouvelle prop `triParDefaut` de `HistoriqueTable`) — direct à l'ouverture, sans clic requis.
 - **Onglet "Générer l'export" aligné sur "Quels congés transmettre"** — jusque-là, cet onglet
@@ -2536,7 +2536,7 @@ réécrire l'historique).
   `historiqueDecisions` est vide, le composant retombe sur l'ancien affichage à partir de
   `selection.dateDecision`/`selection.validateur` (comportement inchangé pour ces demandes-là).
 - **Migration + backfill exécutés par Vincent** (`insert into decisions_demande select … from
-  demandes_conges where date_decision is not null and not exists (…)`, idempotent) — préserve la
+demandes_conges where date_decision is not null and not exists (…)`, idempotent) — préserve la
   décision courante de chaque demande déjà décidée comme première ligne de son journal, avant
   qu'une future régularisation ne l'écrase. Ne peut PAS recréer un historique déjà perdu : une
   demande déjà régularisée avant ce jour (ex. l'ancien test Olivier 03/08→28/08) n'a que sa dernière
@@ -2793,7 +2793,7 @@ jours deux fois à l'écran.
 - **Export CSV** : bouton retiré du bandeau du haut de `CongesPaiePage` (masqué quand
   `sourceTransmission`) — devient un simple lien texte souligné "Exporter (CSV)" dans le bandeau
   sticky de `GenererExport`, juste avant le bouton "Transmettre" (toujours `congesPaieRef.current
-  ?.exporter()` via `ref`). Le lien "Télécharger le CSV" à l'intérieur de la modale de confirmation
+?.exporter()` via `ref`). Le lien "Télécharger le CSV" à l'intérieur de la modale de confirmation
   est retiré (redondant, déjà accessible avant l'ouverture de la modale).
 - **Wording statut** : "Pas encore transmise." → "Brouillon - non transmis".
 - Vérifié en navigateur : période figée en pill texte, 3 tableaux affichés (récap + repêchage +
@@ -2899,7 +2899,7 @@ récap (`lignes`), perdant le repêchage et les corrections au passage.
 - Nouvelle fonction `fusionnerLignes(...groupes: LigneCollab[][])` (`CongesPaiePage.tsx`) — combine
   plusieurs `LigneCollab[]` par collaborateur × type (somme des jours, concaténation des dates).
   `exporter()` appelle désormais `genererCsv(fusionnerLignes(lignes, lignesRepechage,
-  lignesCorrections))` — le CSV redevient le reflet complet des 3 tableaux, cohérent avec ce que
+lignesCorrections))` — le CSV redevient le reflet complet des 3 tableaux, cohérent avec ce que
   `Transmettre` envoie réellement.
 - `genererCsv` : `c.jours > 0` → `c.jours !== 0` (une correction pure, cellule 100% "annulé", a un
   total négatif — l'ancien seuil `> 0` l'aurait affichée à "0") ; le filtre des dates listées entre
@@ -2923,7 +2923,7 @@ l'export a fait remonter deux autres points, corrigés dans la foulée.
   `[debut, fin, sourceTransmission, version]`, tous invariants ici. Résultat : les 3 tableaux et le
   feed du panneau de détail restaient figés sur l'état "avant transmission" tant que la page n'était
   pas rechargée. Corrigé en donnant à `<CongesPaiePage>` une `key={exportPaie ? exportPaie.id :
-  "brouillon"}` — le composant remonte (donc refetch tout) dès que `exportPaie` passe de `null` à un
+"brouillon"}` — le composant remonte (donc refetch tout) dès que `exportPaie` passe de `null` à un
   id réel. Vérifié par lecture du flux de données (`tsc`/`eslint`/`npm run build` clean) — non testé
   en cliquant réellement sur "Confirmer" pour ne pas créer un export réel sur la période d'août en
   cours de test.
@@ -3111,6 +3111,7 @@ pour le détail au fur et à mesure des changements.
 **Itérations UI supplémentaires sur `VerifierFichesPaiePage2.tsx` (27/08/2026, "on va bosser sur l'UI
 du truc et la logique globale")** — chaîne de petits ajustements demandés au fil de l'eau, tous vérifiés
 en navigateur :
+
 - Colonnes "Solde N-1"/"Solde N"/"Mouvement" plafonnées à `150px` chacune (`minmax(0,150px)`), colonne
   "Type" resserrée à `4.5rem` (fixe, pas `auto` — chaque ligne est sa propre grille CSS, `auto` aurait
   donné une largeur différente par ligne selon CP/RTT/CPA).
@@ -3119,7 +3120,7 @@ en navigateur :
 - Typo "Solde N-1" alignée sur celle de la pill "Solde N" (`text-xs font-bold` de `TypeBadge`), puis
   agrandie (`text-sm`) sur demande.
 - **Correction de fond** (pas juste du style) : "Mouvement" recalculé en delta (`moisEnCours −
-  moisPrecedent`) plutôt que via `fetchMouvementsExport` — ce dernier ne somme que les
+moisPrecedent`) plutôt que via `fetchMouvementsExport` — ce dernier ne somme que les
   `export_paie_lignes` transmises, sans les acquisitions RTT/CPA du mois ("les mouvements totalisent
   les acquisitions et les consommés", Vincent). Résultat concret : RTT de Delphine passe de "0 j" à
   "+0,25 j".
@@ -3159,7 +3160,7 @@ renommage — le "réel" doit désormais se dériver de `export_paie_lignes` (cu
 transmis) au lieu du statut `validee` des `demandes_conges`. Touche `soldes.repository.ts` (moteur de
 calcul), et potentiellement `exportsPaie.repository.ts`/`VerifierFichesPaiePage.tsx` (le
 `fetchComparaisonSoldes`/`fetchMouvementsExport` construits le 25/08 reposaient sur l'hypothèse — dont
-on sait maintenant qu'elle était fausse — que le "mouvement" de l'export doit *reconcilier* un solde
+on sait maintenant qu'elle était fausse — que le "mouvement" de l'export doit _reconcilier_ un solde
 théorique recalculé en direct ; avec le nouveau modèle, le réel EST directement le cumul transmis, plus
 besoin de reconcilier deux calculs indépendants). Périmètre exact et plan de bascule à définir en
 implémentation — voir `questions.md` pour le point resté ouvert et `Backlog.md` pour le chantier en
@@ -3223,6 +3224,7 @@ pour la colonne Durée "X/Y j". `tsc`/`eslint`/`prettier`/`npm run build` clean.
 
 **Refonte de "Quels congés transmettre" (28/08/2026)** — plusieurs chantiers enchaînés dans la même
 session :
+
 - **Décision/Régularisation retirées de cet écran** ("on va supprimer les blocs régulation de cette
   vue et décision pour le remplacer par le bloc qui permet de supprimer un congé") : composant
   `CarteDecisionRapide` (Valider/Refuser/Pending, construit le 25/08) supprimé, ainsi que le bloc
@@ -3367,6 +3369,7 @@ modification de l'intitulé des compteurs RTT) — le cadrage CPI/DJI/RTT impos�
 **Revue complète du Backlog + nettoyage technique (28/08/2026)** : après la documentation ci-dessus,
 passage exhaustif ligne par ligne sur `Backlog.md` avec Vincent, générant plusieurs correctifs et
 suppressions concrets, en plus des mises à jour de statut :
+
 - **`HistoriqueTable.tsx`** : la ligne entière (`<tr>`) devient cliquable dans les deux variantes de
   rendu (groupée par collaborateur avec `rowSpan`, et plate), pas seulement la pastille de dates —
   celle-ci perd son wrapper `<button>` dédié. Audit fait sur toute l'app pour repérer un éventuel
@@ -3439,7 +3442,7 @@ l'écran (le sélecteur de collaborateur existant bascule toujours vers `Calendr
 cas de sélection explicite — rien retiré, uniquement ajouté). Reprend le même système d'onglets de
 période (Année en cours / Période de référence CP / Année suivante) que les autres calendriers.
 
-*Modèle d'intensité* : ratio = MAX de deux sources (jamais la somme, pour ne pas dépasser 100% ni
+_Modèle d'intensité_ : ratio = MAX de deux sources (jamais la somme, pour ne pas dépasser 100% ni
 compter deux fois une même fermeture) — (1) congés personnels validés/en attente, pondérés en
 demi-journées (0,5/1 par collaborateur selon `demiDebut`/`demiFin`, même granularité que
 `DashboardPage`/`CalendrierCollaborateur`) divisé par l'effectif actif ; (2) fériés/CPI/DJI, communs
@@ -3447,7 +3450,7 @@ demi-journées (0,5/1 par collaborateur selon `demiDebut`/`demiFin`, même granu
 vaut 100% (entreprise fermée), une DJI vaut 50%. Plancher à 15% dès qu'au moins une personne est
 concernée, pour rester visible sur un gros effectif.
 
-*Rendu de la heatmap* : extension du DS partagé `MiniCalendrier.tsx` avec une nouvelle variante
+_Rendu de la heatmap_ : extension du DS partagé `MiniCalendrier.tsx` avec une nouvelle variante
 `PastilleJour.plein` (couleur CSS calculée dynamiquement — `color-mix`/interpolation par jour,
 qu'aucune classe Tailwind littérale ne peut représenter à l'avance) plutôt qu'un composant dédié
 bypassant `MiniCalendrier` (premier essai, revenu en arrière sur demande explicite : "on doit avoir
@@ -3461,7 +3464,7 @@ clair → rouge foncé (échelle "OrRd" de ColorBrewer, 5 paliers interpolés ma
 restent en couleur dédiée `--color-ferie` plutôt que fondus dans le dégradé (identifiables au premier
 coup d'œil, même sur un jour qui coïncide avec des congés personnels).
 
-*États d'interaction, plusieurs itérations* : survol → chiffre en gras + léger grossissement (pas
+_États d'interaction, plusieurs itérations_ : survol → chiffre en gras + léger grossissement (pas
 d'éclaircissement `brightness-110`, jugé "jaunâtre" sur un fond orange/rouge saturé) + bulle
 "n Collab. off · n demi-jour."/"Jour férié" en fond `--color-slate` ; sélection (clic) → état
 "déclenché" séparé et stable (fond blanc, bordure + texte dans la couleur du jour), corrige un bug
@@ -3469,7 +3472,7 @@ réel où la bulle de survol disparaissait juste après le clic (l'ouverture du 
 reflow qui déclenche un `mouseleave` involontaire sur la case). Jours vides totalement
 non-interactifs (`PastilleJour.plein.interactif`, défaut `true`) — ni clic, ni curseur, ni survol.
 
-*Panneau de détail (clic sur une date)* : redessiné en s'inspirant explicitement de
+_Panneau de détail (clic sur une date)_ : redessiné en s'inspirant explicitement de
 `DetailCongePanel` (même largeur `xl:w-64`) — bandeau coloré (couleur heatmap du jour, pas une
 couleur de type fixe) avec `JourBadge` (abréviation 2 lettres, ex. "Ma") devant 2 lignes empilées
 (date sans le nom du jour, déjà porté par le badge + stats "n Collab. off · n demi-jour."), corps à
@@ -3480,7 +3483,7 @@ comme ligne "fluo" (`bg-dji/15 text-dji`) dans la section Matin/Après-midi corr
 qu'un bandeau séparé (bandeau restant réservé au CPI) ; jour férié → message dédié centré "Personne
 ne travaille aujourd'hui !".
 
-*Mise en page, plusieurs itérations de resserrement* : grille des mois recentrée dans le corps de
+_Mise en page, plusieurs itérations de resserrement_ : grille des mois recentrée dans le corps de
 page puis repassée en colonnes calées à gauche (le centrage par ligne recentrait à tort la dernière
 ligne incomplète, ex. 5 mois affichés → 2 sur la 2e ligne visuellement décalés) ; espacement resserré
 à 10px entre cards et entre la grille et le panneau ; largeur des cards plafonnée à 256-259px (valeur
@@ -3540,6 +3543,7 @@ en août) n'apparaît nulle part dans "Transmissions paie" avant que la date ré
 En parallèle, plusieurs petits ajustements demandés sur "Calendrier consolidé"
 (`CalendrierGlobal`/`SuivreCalendrierPage`) et repris à l'identique sur l'Accueil collaborateur
 (`DashboardPage`) :
+
 - Le panneau de détail du jour s'ouvre désormais par défaut sur AUJOURD'HUI au chargement de la page
   (`dateSelectionnee` initialisé à `todayISO()` plutôt qu'à `null`).
 - Le titre de page, les sous-titres de section, les montants de solde (`SoldeCard`, nouveau prop
@@ -3572,8 +3576,8 @@ Première passe de la révision des tableaux, entièrement sur `HistoriquePage.t
 Objectif de cette note : que la prochaine table révisée (Suivre les demandes/soldes 2, Transmissions
 paie, Utilisateurs...) reprenne les mêmes décisions plutôt que de repartir de zéro.
 
-*Teinte "vert header" (`text-slate`/`border-slate`, `--color-slate: #245554`, même vert que
-`HeaderBar`)* — appliquée systématiquement à : titre de page (`h1`), bordure/texte/chevron des
+_Teinte "vert header" (`text-slate`/`border-slate`, `--color-slate: #245554`, même vert que
+`HeaderBar`)_ — appliquée systématiquement à : titre de page (`h1`), bordure/texte/chevron des
 `SelectFiltrePill`/`InputFiltrePill` (nouveaux props opt-in `classeBordure`/`classeChevron`/
 `classeIcone` sur `FiltrePill.tsx`, décrits plus bas), bouton d'action principal ("Exporter" —
 fond plein `bg-slate`, texte/icône blancs), texte des titres de colonnes du tableau, et les 2
@@ -3581,7 +3585,7 @@ séparateurs horizontaux de la section filtres (bordure au-dessus du tableau + b
 d'en-tête, tous deux en `border-slate/30`). Fond de la barre de filtres ET de la ligne d'en-tête de
 colonnes : `bg-mint-tint/50` (mint existant, testé à 100% puis redescendu à 50% — trop appuyé sinon).
 
-*`FiltrePill.tsx` (composant partagé, extension opt-in, pas de breaking change)* — `CLASSE_FILTRE_PILL_BASE`
+_`FiltrePill.tsx` (composant partagé, extension opt-in, pas de breaking change)_ — `CLASSE_FILTRE_PILL_BASE`
 ne porte plus la couleur (bordure/texte/anneau focus) ni le poids de police : ces deux aspects vivent
 désormais dans `CLASSE_ACCENT_MINT` (défaut mint inchangé pour tous les appelants existants) et sont
 overridables via de nouveaux props optionnels — `classeBordure`/`classeChevron` sur `SelectFiltrePill`,
@@ -3591,7 +3595,7 @@ apposée après via `className`) ont une spécificité CSS identique, le résult
 l'ordre d'apparition dans la feuille de style générée (pas de l'ordre dans la chaîne `className`) — un
 comportement non fiable, déjà rencontré et documenté ailleurs dans ce projet.
 
-*Structure/largeur du tableau, alignée sur "Suivre les demandes"* — `HistoriquePage.tsx` reprend
+_Structure/largeur du tableau, alignée sur "Suivre les demandes"_ — `HistoriquePage.tsx` reprend
 maintenant EXACTEMENT le même conteneur que `SuivreDemandesPage.tsx` : `grid grid-cols-1 items-start
 gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5`, tableau en 1ère colonne
 (`bg-surface-card w-full min-w-0`), `DetailCongePanel` en 2ᵉ colonne (`xl:w-64`, sticky). Un premier
@@ -3604,12 +3608,12 @@ partagé documenté ailleurs dans ce fichier (voir l'entrée "Calendrier des emp
 bug de stretch qu'il peut provoquer dans un AUTRE contexte, une grille de mini-calendriers — sans
 rapport ici, un tableau `w-full` remplit de toute façon sa colonne).
 
-*En-têtes de colonnes* — police normale (majuscule uniquement en première lettre, la transformation
+_En-têtes de colonnes_ — police normale (majuscule uniquement en première lettre, la transformation
 CSS `uppercase` d'origine a été retirée), fond `bg-mint-tint/50`, texte `text-slate`. Alignement
 : plusieurs allers-retours (centré text+titre, puis centré titre seul, puis tout repassé à gauche) —
 **décision finale : tout aligné à gauche**, y compris les colonnes resserrées (Durée/Statut/Paie).
 
-*Colonnes resserrées "à leur contenu" (`w-px` + `whitespace-nowrap`, sur le `th` ET le `td`)* — Durée,
+_Colonnes resserrées "à leur contenu" (`w-px` + `whitespace-nowrap`, sur le `th` ET le `td`)_ — Durée,
 Dates, Statut, Paie. Astuce déjà utilisée ailleurs dans le projet : dans un tableau `table-auto`
 (layout par défaut), une colonne `w-px` associée à du contenu `whitespace-nowrap` se réduit à la
 largeur minimale de son contenu le plus large, sans jamais laisser la colonne s'étirer pour combler
@@ -3621,7 +3625,8 @@ s'étire pour remplir toute la largeur de la cellule une fois que le tableau a f
 des colonnes (même si elle est `w-fit`) ; `inline-flex` reste, lui, dimensionné à son contenu et
 respecte `text-align`/`justify-content` du parent.
 
-*Détails colonne par colonne* :
+_Détails colonne par colonne_ :
+
 - **Type** : libellé court (CP/RTT/CPA...) via nouveau prop `typeCourt` sur `HistoriqueTable`
   — délibérément DÉCOUPLÉ du prop `compact` existant (qui change aussi le format des dates et masque
   "Validé le", non voulu ici pour Historique).
@@ -3638,7 +3643,7 @@ respecte `text-align`/`justify-content` du parent.
 - **Paie** : colonne resserrée ; `BadgeTransmission` retourne `null` (plus de tiret "—") quand la
   demande n'a aucune ligne de transmission, au lieu d'un texte de repli.
 
-*Effets over/déclenché des lignes, alpha propres à ce tableau* — après plusieurs itérations (50% →
+_Effets over/déclenché des lignes, alpha propres à ce tableau_ — après plusieurs itérations (50% →
 70% → 80/60% → 20/40% → **10%/20% final**, la dernière étant explicitement en "% de transparence",
 donc 90%/80% de transparence = 10%/20% d'opacité), les teintes standard `classeFondSurvolTypeBadge`/
 `classeFondActifTypeBadge` de `TypeBadge.tsx` (15%/30%, utilisées partout ailleurs dans l'app) ont
@@ -3652,6 +3657,58 @@ Suivre les demandes/soldes 2 (déjà share `HistoriqueTable`, bénéficie donc d
 changements — vérifier notamment couleur d'en-tête/filtres et alpha over/déclenché, pas automatiques
 puisque portés par la page appelante, pas le composant table lui-même), Transmissions paie, et la
 liste Utilisateurs (`UtilisateursListPage.tsx`).
+
+**CPI (congés imposés) — mêmes règles de gestion que des CP normaux (29/08/2026, migration SQL
+appliquée)**
+
+Revirement complet sur le traitement des CPI, en deux temps. D'abord un audit d'impact ("les CPI ne
+sont plus paramétrés dans le calendrier, on va les supprimer" — Vincent) a établi que CPI n'était en
+réalité PAS chargé de calcul de solde comme initialement rapporté : `calculerNbDemiJournees`
+(`demandes.repository.ts`) exclut bien les demi-journées couvertes par un CPI du décompte d'une
+demande personnelle qui chevauche, mais c'est un filet anti-double-comptage (le jour est déjà "pris"
+par l'imposition), pas une déduction propre au CPI — `soldes.repository.ts` ne référence d'ailleurs
+jamais `conges_imposes`. Correction actée avec Vincent en cours d'échange.
+
+Puis décision finale, plus ambitieuse : garder le réglage "nombre de CP imposés" dans Congés & RTT
+(masquer seulement la section de configuration sur Calendrier quand il vaut 0), et surtout faire en
+sorte que les CPI suivent **exactement les mêmes règles de gestion qu'un CP normal** — déduction du
+solde Théorique dès la création, déduction du solde Réel une fois transmis en paie. Tous les CPI
+existants en base (2026 + 2027) ont d'abord été supprimés via l'écran d'admin (pas de données
+historiques à faire migrer).
+
+Architecture retenue (détaillée dans BASE-DE-DONNEES.md, section "Points de modélisation notables") :
+plutôt que de dupliquer le calcul de solde/export paie pour un second type d'enregistrement, la
+création d'un CPI génère une vraie ligne `demandes_conges` (type CP, statut `validee`) **par
+collaborateur actif**, liée à sa période d'origine via la nouvelle colonne
+`demandes_conges.conge_impose_id`. Ces lignes traversent alors tout le pipeline solde/export paie
+déjà existant sans aucun changement de code — confirmé par exploration que `fetchSoldes`,
+`fetchDemandesAvecSoldeTransmission`/`genererExportPaie` ne filtrent ni sur l'origine ni sur
+l'utilisateur. `conges_imposes` reste la source de vérité pour la PÉRIODE (ce que Delphine crée/
+consulte/supprime sur Paramétrer > Calendrier) ; les demandes générées sont l'effet de bord qui
+alimente les soldes. `calculerNbDemiJournees` est appelée AVANT l'insertion de la période elle-même
+(sinon elle se déduirait de son propre chevauchement et renverrait 0).
+
+Décision produit actée (AskUserQuestion) : un collaborateur ne peut pas annuler lui-même une demande
+générée par un CPI — seul l'admin peut la retirer en supprimant la période sur Paramétrer >
+Calendrier. Implémenté à deux niveaux : policy RLS ("demandes: salarié annule un congé validé non
+transmis" exclut désormais `conge_impose_id is not null`) et un seul point d'application côté UI
+(`DetailCongePanel.peutAnnulerCetteDemande`), qui couvre automatiquement tous les appelants
+(Historique, Suivre les demandes, Suivre les soldes 2, Transmissions paie) sans les toucher un par
+un — même principe que la simplification du rôle admin faite plus tôt dans cette session (portée
+limitée à l'UI pour l'admin, RLS admin inchangée `for all`). `supprimerCongeImpose` annule
+(`retirerDemande`, jamais un hard delete) chaque demande liée encore validée avant de supprimer la
+période — la correction paie se génère automatiquement au prochain export si l'une était déjà
+transmise, même mécanisme que l'annulation d'un CP normal déjà transmis.
+
+Vérifié end-to-end en navigateur après migration : création d'un CPI de 5j (21→25 sept. 2026) →
+4 lignes CP "validée" générées (une par collaborateur actif, 4,5j chacune après déduction des jours
+déjà occupés), commentaire "Congé imposé du...", aucun bouton "Annuler cette demande" côté
+collaborateur, message "Congé imposé : à retirer depuis Paramétrer > Calendrier" affiché ;
+suppression de la période → les 4 lignes générées passent en `annulé`, la demande personnelle
+préexistante de Delphine sur les mêmes dates reste intacte (aucune interférence).
+
+Migration SQL appliquée manuellement par Vincent dans le SQL editor Supabase (colonne
+`conge_impose_id` + policy RLS mise à jour) — voir `supabase/schema.sql`.
 
 ## Décisions prises
 
@@ -3812,6 +3869,7 @@ pouvoir, chaque mois, vérifier en un coup d'œil que le solde de l'outil colle 
 et détecter tôt un écart qui se serait créé entre les deux.
 
 **Ce qui a été construit aujourd'hui** :
+
 1. Section "Soldes" dans `VerifierFichesPaiePage.tsx` — par collaborateur actif, CP/RTT/CPA : solde
    fin de mois précédent, solde fin de mois en cours, mouvement du mois (jamais masqué à 0).
 2. Moteur de solde généralisé pour accepter une date de référence passée (`fetchSoldes`,
@@ -3826,6 +3884,7 @@ et détecter tôt un écart qui se serait créé entre les deux.
 
 **2 bugs réels trouvés et corrigés en cours de route** (pas des malentendus — vérifiés par Vincent
 sur des cas concrets) :
+
 - `sommeJours` (cœur du calcul de consommation CP/RTT, `soldes.repository.ts`) filtrait sur le
   statut ACTUEL de la demande plutôt que sur son statut à la date demandée — tout mouvement
   ressortait à 0 quelle que soit la période. Corrigé via replay du journal `decisions_demande`.
@@ -3835,6 +3894,7 @@ sur des cas concrets) :
   depuis. `inclureAnnuleDansTotal` forcé à `true` en mode figé.
 
 **Ce qui N'A PAS été fait/vérifié — à reprendre** :
+
 - **CP n / CP n-1+n-2** : toujours un seul total CP combiné, pas de split par ancienneté du solde
   comme sur la vraie fiche de paie (décision actée de ne pas s'y attaquer maintenant, voir
   `questions.md` — le report CP est à un seul niveau dans le moteur actuel, un vrai split demanderait
@@ -3887,6 +3947,7 @@ mouvement -1. C'est pas logique." Investigation (`Suivre les demandes`, pas un b
 instantanés — 21/09→25/09 (5 j), 16/09 (0,5 j), 31/08→11/09 (9,5 j, celle avec 1 j transmis en août)
 = 15 j pile. Le "mouvement" (1 j) ne recolle pas avec le delta de solde (15 j) parce que ce sont deux
 notions différentes de "solde" mélangées dans le même tableau :
+
 - **Solde interne à l'outil** (`fetchSoldes`, moteur déjà utilisé partout ailleurs — Accueil, Suivre
   les soldes) : décompte le CP dès la validation, y compris des congés dont la date est dans le
   futur et jamais encore transmis au comptable (ici, les 2 congés de septembre).

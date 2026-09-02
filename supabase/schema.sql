@@ -253,6 +253,16 @@ create table conges_imposes (
   created_at timestamptz not null default now()
 );
 
+-- Lien vers la/les demandes générées automatiquement pour chaque
+-- collaborateur actif au moment de la création d'un CPI (29/08/2026, "mêmes
+-- règles de gestion que des CP normaux" — déduit le solde Théorique/Réel via
+-- le pipeline demandes_conges existant, plutôt que dupliquer ce calcul).
+-- `set null` (pas cascade) : la suppression d'un CPI passe par l'annulation
+-- applicative des demandes liées (retirerDemande), jamais par un hard delete
+-- — cohérent avec le reste de l'app qui ne supprime jamais une demande.
+alter table demandes_conges
+  add column conge_impose_id uuid references conges_imposes(id) on delete set null;
+
 -- ------------------------------------------------------------
 -- MOTEUR DE CALCUL DES SOLDES (porté par le Manager)
 -- Paramétrage générique, indépendant des règles spécifiques Abeil
@@ -642,11 +652,16 @@ create policy "demandes: salarié modifie une demande en attente"
 -- transmis en paie (aucune ligne export_paie_lignes) : même principe que la
 -- policy ci-dessus pour "en attente", combinée en OR avec elle sur la même
 -- commande UPDATE.
+-- 29/08/2026 — exclut les demandes générées par un CPI (conge_impose_id non
+-- nul) : un collaborateur ne peut pas annuler lui-même un congé imposé,
+-- seul l'admin peut le retirer en supprimant la période sur Paramétrer >
+-- Calendrier (voir supprimerCongeImpose, lib/data/calendrier.repository.ts).
 create policy "demandes: salarié annule un congé validé non transmis"
   on demandes_conges for update
   using (
     utilisateur_id = my_utilisateur_id()
     and statut = 'validee'
+    and conge_impose_id is null
     and not exists (
       select 1 from export_paie_lignes el where el.demande_id = demandes_conges.id
     )

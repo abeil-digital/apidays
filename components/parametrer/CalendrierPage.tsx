@@ -410,7 +410,11 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
   // qu'une année a été touchée une seule fois, ce qui masquerait en
   // permanence toute mise à jour du réglage global (bug constaté : changer
   // la cible DJI dans Congés & RTT n'avait aucun effet sur le Calendrier).
-  const cibleJoursCpi = objectifs?.cibleJoursCpi ?? 5;
+  // 0 (pas de valeur saisie en Congés & RTT, ou explicitement à 0) masque la
+  // section CPI ci-dessous (29/08/2026, demande explicite) — plus de défaut
+  // silencieux à 5, qui aurait gardé la section visible tant que Delphine
+  // n'a jamais touché ce champ.
+  const cibleJoursCpi = objectifs?.cibleJoursCpi ?? 0;
   const cibleDemiJourneesDji = objectifs?.cibleDemiJourneesDji ?? 16;
   const classesPastilleCpi = classesPastilleVolume(totalJoursCpi, cibleJoursCpi);
   const classesPastilleDji = classesPastilleVolume(totalDemiJourneesDji, cibleDemiJourneesDji);
@@ -719,88 +723,90 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
             </div>
           )}
         </div>
-        <div ref={carteCpiRef} className="relative">
-          <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
-            <TypeBadge code="CPI" />
-            <div className="flex flex-1 flex-col">
-              <span className="text-ink-900 text-sm">Congés imposés</span>
+        {cibleJoursCpi > 0 && (
+          <div ref={carteCpiRef} className="relative">
+            <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
+              <TypeBadge code="CPI" />
+              <div className="flex flex-1 flex-col">
+                <span className="text-ink-900 text-sm">Congés imposés</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTiroirCpiOuvert((v) => !v);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setTiroirCpiOuvert((v) => !v);
+                    }
+                  }}
+                  className={`mt-1 w-fit cursor-pointer rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap transition-[filter] duration-150 hover:brightness-90 ${classesPastilleCpi}`}
+                >
+                  {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
+                </span>
+              </div>
               <span
                 role="button"
                 tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setTiroirCpiOuvert((v) => !v);
+                  setDateInitialeCreation(undefined);
+                  setModaleCreation("CPI");
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.stopPropagation();
                     e.preventDefault();
-                    setTiroirCpiOuvert((v) => !v);
+                    setDateInitialeCreation(undefined);
+                    setModaleCreation("CPI");
                   }
                 }}
-                className={`mt-1 w-fit cursor-pointer rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap transition-[filter] duration-150 hover:brightness-90 ${classesPastilleCpi}`}
+                className="shrink-0 cursor-pointer self-center"
               >
-                {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
+                <PlusCircle
+                  size={18}
+                  className="text-mint transition-transform duration-150 hover:scale-125"
+                />
               </span>
             </div>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                setDateInitialeCreation(undefined);
-                setModaleCreation("CPI");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setDateInitialeCreation(undefined);
-                  setModaleCreation("CPI");
-                }
-              }}
-              className="shrink-0 cursor-pointer self-center"
-            >
-              <PlusCircle
-                size={18}
-                className="text-mint transition-transform duration-150 hover:scale-125"
-              />
-            </span>
-          </div>
 
-          {tiroirCpiOuvert && (
-            <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
-              <button
-                type="button"
-                onClick={() => setTiroirCpiOuvert(false)}
-                aria-label="Fermer"
-                className="text-ink-500 hover:text-ink-900 mb-1 self-end"
-              >
-                <X size={16} />
-              </button>
-              <div className="min-h-0 flex-1">
-                <ProchainsJoursOffCard
-                  debutPeriode={`${annee}-01-01`}
-                  finPeriode={`${annee}-12-31`}
-                  masquerDemandesPerso
-                  separerCpiDji
-                  filtreCode="CPI"
-                  avecSuppression
-                  toutAfficher
-                  donneesInjectees={{
-                    congesImposes: calendrier.congesImposes,
-                    djImposees: calendrier.djImposees,
-                    joursFeries: calendrier.joursFeries,
-                    supprimerConge: calendrier.supprimerConge,
-                    supprimerDj: calendrier.supprimerDj,
-                    ajouterConge: calendrier.ajouterConge,
-                    ajouterDj: calendrier.ajouterDj,
-                  }}
-                />
+            {tiroirCpiOuvert && (
+              <div className="bg-surface-card rounded-card absolute top-full right-0 left-0 z-20 mt-2 flex h-80 flex-col p-2 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setTiroirCpiOuvert(false)}
+                  aria-label="Fermer"
+                  className="text-ink-500 hover:text-ink-900 mb-1 self-end"
+                >
+                  <X size={16} />
+                </button>
+                <div className="min-h-0 flex-1">
+                  <ProchainsJoursOffCard
+                    debutPeriode={`${annee}-01-01`}
+                    finPeriode={`${annee}-12-31`}
+                    masquerDemandesPerso
+                    separerCpiDji
+                    filtreCode="CPI"
+                    avecSuppression
+                    toutAfficher
+                    donneesInjectees={{
+                      congesImposes: calendrier.congesImposes,
+                      djImposees: calendrier.djImposees,
+                      joursFeries: calendrier.joursFeries,
+                      supprimerConge: calendrier.supprimerConge,
+                      supprimerDj: calendrier.supprimerDj,
+                      ajouterConge: calendrier.ajouterConge,
+                      ajouterDj: calendrier.ajouterDj,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
         <div ref={carteFerieRef} className="relative">
           <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
             <TypeBadge code="FERIE" />

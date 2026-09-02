@@ -33,6 +33,7 @@ interface DemandeRow {
   commentaire_decision: string | null;
   date_decision: string | null;
   vu: boolean;
+  conge_impose_id: string | null;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
   validateur:
     | { id: string; prenom: string; nom: string }
@@ -45,7 +46,7 @@ interface DemandeRow {
 // de base pour que le feed "Activité récente" du collaborateur (ses propres
 // demandes) puisse nommer qui a validé/refusé, pas seulement l'Espace Suivre.
 const SELECT_DEMANDE =
-  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, vu, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
+  "id, date_debut, date_fin, demi_debut, demi_fin, nb_demi_journees, created_at, statut, is_anticipation, commentaire_salarie, commentaire_decision, date_decision, vu, conge_impose_id, types_absences(code), validateur:utilisateurs!validateur_id(id, prenom, nom)";
 
 // Exporté pour `exportsPaie.repository.ts` (étend ce type localement avec
 // `export_paie_lignes`).
@@ -94,6 +95,7 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     commentaireManager: row.commentaire_decision ?? "",
     validateur: validateur ?? null,
     vu: row.vu,
+    congeImposeId: row.conge_impose_id,
   };
 }
 

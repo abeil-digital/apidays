@@ -11,6 +11,12 @@ import type {
 } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
+import {
+  calculerNbDemiJournees,
+  getUtilisateurId,
+  retirerDemande,
+} from "@/lib/data/demandes.repository";
+import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 
 /**
  * Repository de l'écran Paramétrer > Calendrier (`parametrage_periode`,
@@ -223,12 +229,33 @@ export async function fetchCongesImposes(parametragePeriodeId: string): Promise<
   return (data ?? []).map(mapCongeImposeDepuisDb);
 }
 
+/**
+ * Ajoute une période de congés imposés — et, depuis le 29/08/2026 ("mêmes
+ * règles de gestion que des CP normaux"), une vraie ligne `demandes_conges`
+ * (type CP, statut validée) par collaborateur actif, liée à la période via
+ * `conge_impose_id`. Ces lignes traversent ensuite tout le pipeline
+ * solde/export paie existant sans aucun changement de code ailleurs
+ * (`fetchSoldes`, `fetchDemandesAvecSoldeTransmission`/`genererExportPaie`
+ * ne filtrent ni sur l'origine ni sur l'utilisateur).
+ *
+ * `nbDemiJournees` est calculé AVANT l'insertion de la période elle-même :
+ * `calculerNbDemiJournees` déduit déjà les CPI existants sur la plage — s'il
+ * incluait la période en cours de création, il se soustrairait à lui-même et
+ * renverrait 0. Fériés/DJI déjà en base restent correctement déduits, la
+ * même valeur s'applique à tous (donnée d'entreprise, pas personnelle).
+ */
 export async function ajouterCongeImpose(
   parametragePeriodeId: string,
   input: CongeImposeInput,
 ): Promise<CongeImpose> {
   const supabase = createClient();
-  const typeAbsenceId = await getTypeAbsenceId(supabase, "CP_IMPOSE");
+  const [typeAbsenceId, typeCpId, nbDemiJournees, auteurId, utilisateurs] = await Promise.all([
+    getTypeAbsenceId(supabase, "CP_IMPOSE"),
+    getTypeAbsenceId(supabase, "CP"),
+    calculerNbDemiJournees(supabase, input.debut, input.fin, input.demiDebut, input.demiFin),
+    getUtilisateurId(supabase),
+    fetchUtilisateursAdmin(),
+  ]);
 
   const { data, error } = await supabase
     .from("conges_imposes")
@@ -247,11 +274,63 @@ export async function ajouterCongeImpose(
     throw new Error("Impossible d'ajouter cette période de congés imposés.");
   }
 
-  return mapCongeImposeDepuisDb(data);
+  const congeImpose = mapCongeImposeDepuisDb(data);
+  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+  const commentaire = `Congé imposé du ${input.debut} au ${input.fin}`;
+
+  if (actifs.length > 0) {
+    const { error: errorDemandes } = await supabase.from("demandes_conges").insert(
+      actifs.map((u) => ({
+        utilisateur_id: u.id,
+        type_absence_id: typeCpId,
+        date_debut: input.debut,
+        date_fin: input.fin,
+        demi_debut: input.demiDebut,
+        demi_fin: input.demiFin,
+        nb_demi_journees: nbDemiJournees,
+        is_anticipation: false,
+        statut: "validee",
+        validateur_id: auteurId,
+        commentaire_decision: commentaire,
+        date_decision: new Date().toISOString(),
+        conge_impose_id: congeImpose.id,
+      })),
+    );
+
+    if (errorDemandes) {
+      throw new Error(
+        "Congé imposé créé mais impossible de générer les demandes associées aux collaborateurs.",
+      );
+    }
+  }
+
+  return congeImpose;
 }
 
+/**
+ * Supprime une période de congés imposés — annule d'abord (statut →
+ * `annulé`, via `retirerDemande`, jamais un hard delete) toutes les
+ * demandes générées pour cette période qui sont encore validées ; la
+ * correction est générée automatiquement au prochain export si l'une
+ * d'elles était déjà transmise (même mécanisme que l'annulation d'un CP
+ * normal déjà transmis, voir `DetailCongePanel`/`peutAnnulerDejaTransmis`).
+ */
 export async function supprimerCongeImpose(id: string): Promise<void> {
   const supabase = createClient();
+
+  const { data: demandesLiees, error: errorSelect } = await supabase
+    .from("demandes_conges")
+    .select("id")
+    .eq("conge_impose_id", id)
+    .eq("statut", "validee");
+
+  if (errorSelect) {
+    throw new Error("Impossible de supprimer cette période de congés imposés.");
+  }
+
+  for (const demande of demandesLiees ?? []) {
+    await retirerDemande(demande.id, "Congé imposé supprimé");
+  }
 
   // Pas de `.select().single()` après le delete : ça exigerait exactement
   // une ligne renvoyée et lèverait une erreur si la période a déjà été

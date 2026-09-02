@@ -34,6 +34,11 @@ export interface Demande {
   // marquer_demande_vue() dans supabase/schema.sql. Toujours `false` tant que
   // `statut === "en attente"`.
   vu: boolean;
+  // Non-null si cette demande a été générée automatiquement par un congé
+  // imposé (CPI, 29/08/2026) — un collaborateur ne peut alors pas l'annuler
+  // lui-même (RLS), seul l'admin en supprimant la période sur Paramétrer >
+  // Calendrier (voir DetailCongePanel.tsx).
+  congeImposeId: string | null;
 }
 
 // Demande vue côté manager (Espace Suivre) — mêmes champs qu'une `Demande`,
