@@ -138,7 +138,7 @@ function TableauPeriodes({ titre, lignes }: { titre: string; lignes: LignePeriod
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-ink-500 text-xs font-semibold tracking-wide uppercase">{titre}</h3>
-      <div className="bg-surface-card rounded-card overflow-hidden">
+      <div className="bg-surface-card overflow-hidden">
         {lignes.map((l, i) => (
           <div
             key={l.key}
@@ -198,7 +198,7 @@ function construireSuivi(
 function SuiviModifications({ entrees }: { entrees: EntreeSuivi[] }) {
   return (
     <div className="xl:sticky xl:top-4 xl:w-72 xl:shrink-0">
-      <div className="bg-surface-card rounded-card shadow-sm">
+      <div className="bg-surface-card shadow-sm">
         <h2 className="text-ink-900 px-4 pt-3 pb-2 text-sm font-semibold">
           Suivi des modifications
         </h2>
@@ -280,7 +280,7 @@ function ModalModifierChamp({
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <FieldLabel htmlFor="modif-valeur">
+          <FieldLabel variant="carte" htmlFor="modif-valeur">
             {estTaux ? "Durée de travail" : "Nature du contrat"}
           </FieldLabel>
           {estTaux ? (
@@ -293,7 +293,7 @@ function ModalModifierChamp({
                   setDureeSelection(v);
                   if (v === "autre") setTauxAutre(valeurActuelle);
                 }}
-                className="mt-2 w-full"
+                className="w-full rounded-md text-xs"
               >
                 {PRESETS_DUREE.map((preset) => (
                   <option key={preset.value} value={preset.value}>
@@ -310,7 +310,7 @@ function ModalModifierChamp({
                   step="0.01"
                   value={tauxAutre}
                   onChange={(e) => setTauxAutre(e.target.value)}
-                  className="mt-2 w-full"
+                  className="w-full rounded-md text-xs"
                 />
               )}
             </>
@@ -319,7 +319,7 @@ function ModalModifierChamp({
               id="modif-valeur"
               value={natureSelection}
               onChange={(e) => setNatureSelection(e.target.value as NatureContrat)}
-              className="mt-2 w-full"
+              className="w-full rounded-md text-xs"
             >
               <option value="cdi">CDI</option>
               <option value="cdd">CDD</option>
@@ -330,13 +330,15 @@ function ModalModifierChamp({
         </div>
 
         <div>
-          <FieldLabel htmlFor="modif-date-effet">Date d&rsquo;effet</FieldLabel>
+          <FieldLabel variant="carte" htmlFor="modif-date-effet">
+            Date d&rsquo;effet
+          </FieldLabel>
           <Input
             id="modif-date-effet"
             type="date"
             value={dateEffet}
             onChange={(e) => setDateEffet(e.target.value)}
-            className="mt-2 w-full"
+            className="w-full rounded-md text-xs"
           />
         </div>
 
@@ -403,13 +405,15 @@ function ModalModifierSoldeInitial({
     <Modal title="Modifier les soldes actuels" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <FieldLabel htmlFor="solde-init-date">Mois de référence</FieldLabel>
+          <FieldLabel variant="carte" htmlFor="solde-init-date">
+            Mois de référence
+          </FieldLabel>
           <Input
             id="solde-init-date"
             type="month"
             value={dateReference.slice(0, 7)}
             onChange={(e) => setDateReference(e.target.value ? `${e.target.value}-01` : "")}
-            className="mt-2 w-full"
+            className="w-full rounded-md text-xs"
           />
           {/* Sélecteur de mois, pas de jour (27/08/2026, demande explicite) —
               le moteur de solde ne raisonne qu'en mois entiers (report CP,
@@ -426,36 +430,42 @@ function ModalModifierSoldeInitial({
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <FieldLabel htmlFor="solde-init-cp">CP</FieldLabel>
+            <FieldLabel variant="carte" htmlFor="solde-init-cp">
+              CP
+            </FieldLabel>
             <Input
               id="solde-init-cp"
               type="number"
               step="0.5"
               value={cp}
               onChange={(e) => setCp(e.target.value)}
-              className="mt-2 w-full"
+              className="w-full rounded-md text-xs"
             />
           </div>
           <div>
-            <FieldLabel htmlFor="solde-init-rtt">RTT</FieldLabel>
+            <FieldLabel variant="carte" htmlFor="solde-init-rtt">
+              RTT
+            </FieldLabel>
             <Input
               id="solde-init-rtt"
               type="number"
               step="0.5"
               value={rtt}
               onChange={(e) => setRtt(e.target.value)}
-              className="mt-2 w-full"
+              className="w-full rounded-md text-xs"
             />
           </div>
           <div>
-            <FieldLabel htmlFor="solde-init-cpa">CPA</FieldLabel>
+            <FieldLabel variant="carte" htmlFor="solde-init-cpa">
+              CPA
+            </FieldLabel>
             <Input
               id="solde-init-cpa"
               type="number"
               step="0.5"
               value={cpa}
               onChange={(e) => setCpa(e.target.value)}
-              className="mt-2 w-full"
+              className="w-full rounded-md text-xs"
             />
           </div>
         </div>
@@ -591,68 +601,81 @@ function Formulaire({
 
   return (
     <>
-      {/* Card englobante (21/08/2026, mise en cohérence DS) — même convention
-          que les formulaires de `CongesRttPage.tsx`
-          (`bg-surface-card rounded-card p-5 shadow-sm`) : le formulaire
-          flottait directement sur le fond de page jusqu'ici, seule page de
-          ce type sans card. */}
-      <div className="bg-surface-card rounded-card flex flex-col gap-5 p-5 shadow-sm">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      {/* Séquencé en cards distinctes (02/09/2026, refonte UI de la fiche,
+          demande explicite) — identité / contrat / rôle, plutôt qu'une seule
+          card englobante (jusque-là "mise en cohérence DS" du 21/08/2026).
+          Un seul `<form>` porte toujours l'ensemble (validation + soumission
+          globales), les cards ne sont que des groupes visuels à l'intérieur.
+          Coins carrés (02/09/2026, même refonte). */}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+        <div className="bg-surface-card flex flex-col gap-5 p-5 shadow-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FieldLabel htmlFor="prenom">Prénom</FieldLabel>
+              <FieldLabel variant="carte" htmlFor="prenom">
+                Prénom
+              </FieldLabel>
               <Input
                 id="prenom"
                 value={champs.prenom}
                 onChange={(e) => setChamps({ ...champs, prenom: e.target.value })}
-                className="mt-2 w-full"
+                className="w-full rounded-md text-xs"
               />
             </div>
             <div>
-              <FieldLabel htmlFor="nom">Nom</FieldLabel>
+              <FieldLabel variant="carte" htmlFor="nom">
+                Nom
+              </FieldLabel>
               <Input
                 id="nom"
                 value={champs.nom}
                 onChange={(e) => setChamps({ ...champs, nom: e.target.value })}
-                className="mt-2 w-full"
+                className="w-full rounded-md text-xs"
               />
             </div>
           </div>
 
           <div>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <FieldLabel variant="carte" htmlFor="email">
+              Email
+            </FieldLabel>
             <Input
               id="email"
               type="email"
               value={champs.email}
               onChange={(e) => setChamps({ ...champs, email: e.target.value })}
-              className="mt-2 w-full"
+              className="w-full rounded-md text-xs"
             />
           </div>
+        </div>
 
+        <div className="bg-surface-card flex flex-col gap-5 p-5 shadow-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FieldLabel htmlFor="dateEntree">Date d&rsquo;entrée</FieldLabel>
+              <FieldLabel variant="carte" htmlFor="dateEntree">
+                Date d&rsquo;entrée
+              </FieldLabel>
               <Input
                 id="dateEntree"
                 type="date"
                 value={champs.dateEntree}
                 onChange={(e) => setChamps({ ...champs, dateEntree: e.target.value })}
-                className="mt-2 w-full"
+                className="w-full rounded-md text-xs"
               />
             </div>
             <div>
-              <FieldLabel htmlFor="role">Rôle</FieldLabel>
-              <Select
-                id="role"
-                value={champs.role}
-                onChange={(e) => setChamps({ ...champs, role: e.target.value as RoleUtilisateur })}
-                className="mt-2 w-full"
-              >
-                <option value="salarie">Salarié·e</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </Select>
+              <FieldLabel variant="carte" htmlFor="anciennete">
+                Date de référence ancienneté{" "}
+                <span className="text-ink-500 font-normal">(si différente)</span>
+              </FieldLabel>
+              <Input
+                id="anciennete"
+                type="date"
+                value={champs.ancienneteDateReference ?? ""}
+                onChange={(e) =>
+                  setChamps({ ...champs, ancienneteDateReference: e.target.value || null })
+                }
+                className="w-full rounded-md text-xs"
+              />
             </div>
           </div>
 
@@ -664,8 +687,8 @@ function Formulaire({
                rétroactivement le calcul du solde en cours. */
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <FieldLabel>Nature du contrat</FieldLabel>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <FieldLabel variant="carte">Nature du contrat</FieldLabel>
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-ink-900 text-sm">
                     {labelNatureContrat(champs.natureContrat)}
                   </span>
@@ -680,8 +703,8 @@ function Formulaire({
                 </div>
               </div>
               <div>
-                <FieldLabel>Durée de travail</FieldLabel>
-                <div className="mt-2 flex items-center justify-between gap-2">
+                <FieldLabel variant="carte">Durée de travail</FieldLabel>
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-ink-900 text-sm">
                     {formatTauxLabel(String(champs.tauxActivite))}
                   </span>
@@ -699,14 +722,16 @@ function Formulaire({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <FieldLabel htmlFor="natureContrat">Nature du contrat</FieldLabel>
+                <FieldLabel variant="carte" htmlFor="natureContrat">
+                  Nature du contrat
+                </FieldLabel>
                 <Select
                   id="natureContrat"
                   value={champs.natureContrat}
                   onChange={(e) =>
                     setChamps({ ...champs, natureContrat: e.target.value as NatureContrat })
                   }
-                  className="mt-2 w-full"
+                  className="w-full rounded-md text-xs"
                 >
                   <option value="cdi">CDI</option>
                   <option value="cdd">CDD</option>
@@ -715,7 +740,9 @@ function Formulaire({
                 </Select>
               </div>
               <div>
-                <FieldLabel htmlFor="dureeTravail">Durée de travail</FieldLabel>
+                <FieldLabel variant="carte" htmlFor="dureeTravail">
+                  Durée de travail
+                </FieldLabel>
                 <Select
                   id="dureeTravail"
                   value={dureeSelection}
@@ -728,7 +755,7 @@ function Formulaire({
                       setChamps({ ...champs, tauxActivite: Number(valeur) });
                     }
                   }}
-                  className="mt-2 w-full"
+                  className="w-full rounded-md text-xs"
                 >
                   {PRESETS_DUREE.map((preset) => (
                     <option key={preset.value} value={preset.value}>
@@ -743,7 +770,9 @@ function Formulaire({
 
           {!modeEdition && dureeSelection === "autre" && (
             <div>
-              <FieldLabel htmlFor="tauxAutre">Pourcentage</FieldLabel>
+              <FieldLabel variant="carte" htmlFor="tauxAutre">
+                Pourcentage
+              </FieldLabel>
               <Input
                 id="tauxAutre"
                 type="number"
@@ -759,114 +788,122 @@ function Formulaire({
                     setChamps({ ...champs, tauxActivite: n });
                   }
                 }}
-                className="mt-2 w-full"
+                className="w-full rounded-md text-xs"
               />
             </div>
           )}
+        </div>
 
+        <div className="bg-surface-card flex flex-col gap-5 p-5 shadow-sm">
           <div>
-            <FieldLabel htmlFor="anciennete">
-              Date de référence ancienneté{" "}
+            <FieldLabel variant="carte" htmlFor="role">
+              Rôle
+            </FieldLabel>
+            <Select
+              id="role"
+              value={champs.role}
+              onChange={(e) => setChamps({ ...champs, role: e.target.value as RoleUtilisateur })}
+              className="w-full rounded-md text-xs"
+            >
+              <option value="salarie">Salarié·e</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </Select>
+          </div>
+        </div>
+
+        {!modeEdition && (
+          /* Soldes actuels (21/08/2026, lancement en prod) — report de la
+             dernière fiche de paie pour un salarié déjà en poste avant
+             l'app : remplace le report/accrual automatique tant que la
+             période en cours est celle de cette date de référence, voir
+             `resolverReportCp`/`resolverPointDepartAccrual` dans
+             `soldes.repository.ts`. Facultatif — si la date est laissée
+             vide, aucun solde initial n'est créé (comportement inchangé). */
+          <div className="bg-surface-card flex flex-col gap-3 p-5 shadow-sm">
+            <FieldLabel variant="carte">
+              Soldes actuels{" "}
               <span className="text-ink-500 font-normal">
-                (si différente de la date d&rsquo;entrée)
+                (report de la dernière fiche de paie, facultatif)
               </span>
             </FieldLabel>
-            <Input
-              id="anciennete"
-              type="date"
-              value={champs.ancienneteDateReference ?? ""}
-              onChange={(e) =>
-                setChamps({ ...champs, ancienneteDateReference: e.target.value || null })
-              }
-              className="mt-2 w-full"
-            />
-          </div>
-
-          {!modeEdition && (
-            /* Soldes actuels (21/08/2026, lancement en prod) — report de la
-               dernière fiche de paie pour un salarié déjà en poste avant
-               l'app : remplace le report/accrual automatique tant que la
-               période en cours est celle de cette date de référence, voir
-               `resolverReportCp`/`resolverPointDepartAccrual` dans
-               `soldes.repository.ts`. Facultatif — si la date est laissée
-               vide, aucun solde initial n'est créé (comportement inchangé). */
-            <div className="border-ink-300/60 flex flex-col gap-3 border-t pt-5">
-              <FieldLabel>
-                Soldes actuels{" "}
-                <span className="text-ink-500 font-normal">
-                  (report de la dernière fiche de paie, facultatif)
-                </span>
+            <div>
+              <FieldLabel variant="carte" htmlFor="soldeInitDate">
+                Mois de référence
               </FieldLabel>
+              <Input
+                id="soldeInitDate"
+                type="month"
+                value={soldeInitDate.slice(0, 7)}
+                onChange={(e) => setSoldeInitDate(e.target.value ? `${e.target.value}-01` : "")}
+                className="w-full rounded-md text-xs"
+              />
+              {/* Sélecteur de mois (27/08/2026) — voir `ModalModifierSoldeInitial`,
+                  même raisonnement : le moteur ne gère que des mois entiers. */}
+              <p className="text-ink-500 mt-1.5 text-xs">
+                Le solde saisi correspond au solde constaté à la fin du mois précédent. Par exemple,
+                choisir juillet 2026 revient à saisir le solde au 30 juin 2026.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
               <div>
-                <FieldLabel htmlFor="soldeInitDate">Mois de référence</FieldLabel>
+                <FieldLabel variant="carte" htmlFor="soldeInitCp">
+                  CP
+                </FieldLabel>
                 <Input
-                  id="soldeInitDate"
-                  type="month"
-                  value={soldeInitDate.slice(0, 7)}
-                  onChange={(e) => setSoldeInitDate(e.target.value ? `${e.target.value}-01` : "")}
-                  className="mt-2 w-full"
+                  id="soldeInitCp"
+                  type="number"
+                  step="0.5"
+                  value={soldeInitCp}
+                  onChange={(e) => setSoldeInitCp(e.target.value)}
+                  className="w-full rounded-md text-xs"
                 />
-                {/* Sélecteur de mois (27/08/2026) — voir `ModalModifierSoldeInitial`,
-                    même raisonnement : le moteur ne gère que des mois entiers. */}
-                <p className="text-ink-500 mt-1.5 text-xs">
-                  Le solde saisi correspond au solde constaté à la fin du mois précédent. Par
-                  exemple, choisir juillet 2026 revient à saisir le solde au 30 juin 2026.
-                </p>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <FieldLabel htmlFor="soldeInitCp">CP</FieldLabel>
-                  <Input
-                    id="soldeInitCp"
-                    type="number"
-                    step="0.5"
-                    value={soldeInitCp}
-                    onChange={(e) => setSoldeInitCp(e.target.value)}
-                    className="mt-2 w-full"
-                  />
-                </div>
-                <div>
-                  <FieldLabel htmlFor="soldeInitRtt">RTT</FieldLabel>
-                  <Input
-                    id="soldeInitRtt"
-                    type="number"
-                    step="0.5"
-                    value={soldeInitRtt}
-                    onChange={(e) => setSoldeInitRtt(e.target.value)}
-                    className="mt-2 w-full"
-                  />
-                </div>
-                <div>
-                  <FieldLabel htmlFor="soldeInitCpa">CPA</FieldLabel>
-                  <Input
-                    id="soldeInitCpa"
-                    type="number"
-                    step="0.5"
-                    value={soldeInitCpa}
-                    onChange={(e) => setSoldeInitCpa(e.target.value)}
-                    className="mt-2 w-full"
-                  />
-                </div>
+              <div>
+                <FieldLabel variant="carte" htmlFor="soldeInitRtt">
+                  RTT
+                </FieldLabel>
+                <Input
+                  id="soldeInitRtt"
+                  type="number"
+                  step="0.5"
+                  value={soldeInitRtt}
+                  onChange={(e) => setSoldeInitRtt(e.target.value)}
+                  className="w-full rounded-md text-xs"
+                />
+              </div>
+              <div>
+                <FieldLabel variant="carte" htmlFor="soldeInitCpa">
+                  CPA
+                </FieldLabel>
+                <Input
+                  id="soldeInitCpa"
+                  type="number"
+                  step="0.5"
+                  value={soldeInitCpa}
+                  onChange={(e) => setSoldeInitCpa(e.target.value)}
+                  className="w-full rounded-md text-xs"
+                />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {erreur && (
-            <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-              {erreur}
-            </div>
-          )}
+        {erreur && (
+          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+            {erreur}
+          </div>
+        )}
 
-          <Button
-            type="submit"
-            disabled={envoi}
-            className="rounded-card w-fit self-start px-6 py-3.5"
-          >
-            <Check size={16} />
-            {id ? "Enregistrer" : "Créer le profil"}
-          </Button>
-        </form>
-      </div>
+        <Button
+          type="submit"
+          disabled={envoi}
+          className="rounded-card w-fit self-start px-6 py-3.5"
+        >
+          <Check size={16} />
+          {id ? "Enregistrer" : "Créer le profil"}
+        </Button>
+      </form>
 
       {modeEdition && (
         <div className="mt-5 flex flex-col gap-4">
@@ -893,7 +930,7 @@ function Formulaire({
             <h3 className="text-ink-500 text-xs font-semibold tracking-wide uppercase">
               Soldes actuels
             </h3>
-            <div className="bg-surface-card rounded-card flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
+            <div className="bg-surface-card flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
               {soldeInitial ? (
                 <span className="text-ink-900">
                   Au {formatDateAction(soldeInitial.dateReference)} : CP{" "}

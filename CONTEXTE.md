@@ -3882,6 +3882,78 @@ Bug corrigé au passage : `niveau1.ts`, le lien "Suivre" du header pointait enco
 premier onglet, même session) — un clic sur "Suivre" n'atterrissait donc pas sur le premier
 sous-onglet réel. Corrigé vers `/suivre/calendrier`.
 
+**Fiche utilisateur : coins carrés + style de champs sur l'écran réel, refonte plus large sur un
+brouillon dédié (02/09/2026)**
+
+Deux volets bien distincts, suite au backlog "Checker l'UI de la fiche utilisateur".
+
+Sur `UtilisateurFichePage.tsx` (écran réel, inchangé au-delà de ça) : coins carrés sur les cards
+(`rounded-card` retiré des `<div className="bg-surface-card ...">`, gardé sur les `<Button>` —
+distinction volontaire card/bouton) et style de champs repris de "Annuler cette demande"/"Ajuster
+le solde" (`DetailCongePanel`/`SoldeDetailPanel`, plus tôt dans la session) — `FieldLabel` gagne un
+prop `variant` (`"champ"` par défaut inchangé, `"carte"` = `text-ink-500 mb-1.5 block text-[11px]
+font-bold`, additif donc sans risque pour les autres appelants du composant partagé), inputs/select
+resserrés (`rounded-md text-xs`, className passé aux composants partagés `Input`/`Select` — override
+confirmé fiable dans ce projet, déjà vu sur "Ajuster le solde").
+
+Pour la suite, plus profonde ("à revoir à froid... pas juste le champ de saisie mais l'écran dans
+son ensemble"), duplication en brouillon plutôt qu'itération en direct — même pattern que
+`calendrier2` en son temps : `components/parametrer/UtilisateurFichePage2.tsx` + routes
+`/parametrer/utilisateurs2/[id]` et `/nouveau` (pas de liste dédiée, `BackHeader` renvoie vers la
+vraie liste `/parametrer/utilisateurs`). Partage la couche données (`useUtilisateurAdmin`), seule
+l'UI diverge. Sur ce brouillon, mode édition uniquement (le mode création n'a volontairement pas
+encore reçu le même traitement — voir Backlog) :
+
+- **Card "Identité"** (Nom/Prénom/email fusionnés) : lecture seule + un seul stylo "Modifier" (popin
+  unique `ModalModifierIdentite`, sans date d'effet ni historisation — contrairement à
+  `ModalModifierChamp`, une correction remplace juste la valeur précédente). Nom en 24px, Prénom en
+  20px sur sa propre ligne (`<br/>` dans le même `<span>`, ordre Nom puis Prénom partout sur cette
+  card — demande explicite), email en 16px semi-bold gris. Encart "Entrée" (fond mint, 14px label +
+  16px date) en haut-droite de la card ; lien "Modifier" (intitulé avant le picto, gris `ink-500`)
+  déplacé au-dessus de la card avec un espacement de 1px, dans son propre conteneur `gap-[1px]`
+  distinct du `gap-5` global du formulaire. Date d'entrée intégrée à cette même popin (retirée de la
+  card contrat en édition) — cohérent avec le principe déjà appliqué ailleurs.
+- **Nature du contrat / Durée de travail** : deux cards à 50% chacune (`grid grid-cols-2 gap-5`),
+  remplacent l'ancien duo "lecture seule + tableau récap séparé plus bas dans la page" — valeur
+  actuelle ET historique complet fusionnés dans la MÊME card
+  (`construireLignesHistorique`, remplace `construirePeriodes`/`TableauPeriodes` supprimés),
+  formatés "{valeur} depuis le {date}" (période en cours) / "{valeur} entre le {début} et le {fin}"
+  (précédentes), la plus récente en tête. "+ Ajouter un événement" (icône `Plus`) ouvre la même
+  popin qu'avant (`ModalModifierChamp`, inchangée). Titres de card repris du style "Annuler cette
+  demande" (`text-sm font-bold`, mais en bleu nuit plutôt que la couleur du type). C'est le cœur du
+  sujet d'origine du backlog : le caractère historique de ces deux champs est maintenant visible
+  d'emblée, sans avoir à scroller jusqu'au tableau récap qui n'existe plus séparément.
+- **Card "Rôle"** : déplacée en colonne de droite, au-dessus de "Suivi des modifications" — pour
+  cela, `Formulaire` gère désormais lui-même la mise en page deux-colonnes (auparavant portée par le
+  composant parent `UtilisateurFichePage2`), avec un nouveau prop `suiviEntrees` (calculé par le
+  parent, transmis pour que `Formulaire` puisse rendre `SuiviModifications` dans SA colonne de
+  droite aux côtés de la card Rôle). En création (pas de colonne de droite, pas de suivi), Rôle
+  reste dans le flux principal — seul cas encore géré en `<Select>` de saisie libre à cet endroit.
+- **Bandeau de statut** ("Salarié·e de l'effectif", mint/vert foncé slate, ou "Salarié·e archivée",
+  tokens `status-warning` orange) — remplace l'ancien bandeau qui ne couvrait que le cas archivé
+  (rien en actif). Positionné entre la card identité et les deux cards Nature/Durée, largeur de la
+  colonne principale (après un premier essai en pleine largeur du corps de page, ajusté sur retour
+  explicite).
+- **"Soldes actuels" sorti du flux principal en édition** (demande explicite : "élément éphémère...
+  n'a pas grand-chose à faire ici", confirmé — "une fois que tu as créé la fiche, tu gères les
+  soldes ailleurs : suivre les soldes, suivre les demandes, export paie") — plus de "Modifier" ici,
+  les corrections de solde vivent désormais uniquement sur Suivre les soldes ("Ajuster le solde",
+  avec sa propre popin de confirmation forte, travaillée plus tôt dans la session). Affiché à la
+  place en lecture seule dans "Suivi des modifications", associé à l'entrée de création, avec les
+  pastilles `TypeBadge` (mêmes codes couleur CP/RTT/CPA que partout ailleurs) plutôt qu'une ligne de
+  texte. `ModalModifierSoldeInitial` et tout son code mort (state, handler, prop non utilisée sur
+  toute la chaîne `Formulaire`/`UtilisateurFichePage2`/hook) supprimés — reste utilisé tel quel en
+  création (saisie initiale, hors de ce mécanisme de modale).
+- **"Date de référence ancienneté" retirée de l'UI pour l'instant** ("pas un besoin Abeil
+  actuellement... je ne me vois pas m'encombrer avec cela") — le champ reste fonctionnel côté
+  données (`ancienneteDateReference`, calcul du bonus d'ancienneté dans `soldes.repository.ts`,
+  retombe sur la date d'entrée par défaut si non renseigné), seule la saisie UI a disparu.
+
+Reste ouvert (voir Backlog, priorité baissée de Haute à Moyenne — chantier bien avancé) : le
+formulaire de création n'a pas reçu le même traitement (toujours l'ancien enchaînement de champs
+libres), et la bascule finale de `/parametrer/utilisateurs` vers ce brouillon (ou abandon) n'est pas
+tranchée.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
