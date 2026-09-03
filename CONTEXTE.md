@@ -3861,6 +3861,27 @@ Reste ouvert (pas tranché cette session) : sort de `public/abeil-logo.jpeg` (an
 présent mais inutilisé — signalé à Vincent, pas supprimé), et généralisation ou non de
 `--color-abeil-navy`/`--color-abeil-yellow` au-delà du menu général et des écrans testés.
 
+**Suite (même session) : tous les H1 en bleu nuit, Historique repassé cohérent, lien "Suivre" corrigé**
+
+Historique (`HistoriquePage.tsx`) réaligné sur le même principe que Suivre les demandes/Accueil :
+titre `<h1>` seul en bleu nuit, tout le reste (filtres, bouton Exporter, séparateur) repassé en
+slate — le test "tout en navy" du tour précédent n'a donc été conservé nulle part pour les éléments
+cliquables, uniquement pour les titres.
+
+**Tous les `<h1>` de l'app passés en `text-abeil-navy`** (décision cette fois généralisée, pas un
+test scopé) : `BackHeader.tsx` (fiche utilisateur), `ListeTransmissionsPaiePage.tsx`,
+`SuivreSoldesPage2.tsx`, `TransmissionsPaiePage.tsx`, `SuivreCalendrierPage.tsx`,
+`DesignSystemPage.tsx`, `UtilisateursListPage.tsx`, `CongesRttPage.tsx`, `CalendrierPage.tsx` — en
+plus des 4 déjà faits au tour précédent (Accueil, Historique, Suivre les demandes, header général).
+Seule exception assumée : les `<h1>` `print:block`/`hidden` (variantes dédiées à l'impression sur
+Historique et Suivre les demandes) restent en `text-ink-900`, hors du champ de cette décision — ce
+sont des styles d'impression, pas d'affichage écran.
+
+Bug corrigé au passage : `niveau1.ts`, le lien "Suivre" du header pointait encore en dur sur
+`/suivre/demandes`, jamais mis à jour après le changement d'ordre de `tabs.ts` (Calendrier repassé
+premier onglet, même session) — un clic sur "Suivre" n'atterrissait donc pas sur le premier
+sous-onglet réel. Corrigé vers `/suivre/calendrier`.
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)

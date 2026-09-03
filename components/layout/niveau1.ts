@@ -18,7 +18,7 @@ export function getNiveau1Items(role: RoleUtilisateur | undefined): Niveau1Item[
 
   return [
     { key: "poser", label: "Poser", href: "/" },
-    { key: "suivre", label: "Suivre", href: peutParametrer ? "/suivre/demandes" : null },
+    { key: "suivre", label: "Suivre", href: peutParametrer ? "/suivre/calendrier" : null },
     {
       key: "parametrer",
       label: "Paramétrer",

@@ -1024,7 +1024,7 @@ export function Calendrier2Page() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-slate animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
+      <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
 
       <div className="animate-stagger-in flex gap-2 px-1" style={{ animationDelay: "60ms" }}>
         <button

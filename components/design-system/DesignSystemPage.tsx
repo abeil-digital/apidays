@@ -202,7 +202,7 @@ export function DesignSystemPage() {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-8">
       <div>
-        <h1 className="text-ink-900 text-2xl font-semibold">Design system</h1>
+        <h1 className="text-abeil-navy text-2xl font-semibold">Design system</h1>
         <p className="text-ink-500 mt-1 text-sm">
           Référence vivante — cette page importe les vrais composants de <code>components/ui/</code>{" "}
           (et alentours) avec de vraies props. Si un composant change, cette page change avec lui.

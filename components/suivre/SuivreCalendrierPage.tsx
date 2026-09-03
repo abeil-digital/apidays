@@ -37,7 +37,7 @@ export function SuivreCalendrierPage() {
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <div className="animate-stagger-in flex items-center gap-1 px-1">
-        <h1 className="text-slate text-2xl font-semibold">
+        <h1 className="text-abeil-navy text-2xl font-semibold">
           {collaborateurSelectionne
             ? `Calendrier de ${collaborateurSelectionne.prenom} ${collaborateurSelectionne.nom.charAt(0)}.`
             : "Calendrier consolidé"}
