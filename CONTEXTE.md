@@ -3954,6 +3954,11 @@ formulaire de création n'a pas reçu le même traitement (toujours l'ancien enc
 libres), et la bascule finale de `/parametrer/utilisateurs` vers ce brouillon (ou abandon) n'est pas
 tranchée.
 
+**Retouche logo du header (02/09/2026)** : `HeaderBar.tsx` — logo étiré horizontalement de +21%
+(`scale-x-[1.21]`, deux `+10%` successifs composés, `origin-left` pour que l'étirement pousse vers
+la droite plutôt que de recentrer) et son décalage au bord gauche du header passé de 10px à 25px
+(`ml-[25px]`).
+
 ## Décisions prises
 
 - Un seul compte de travail utilisé côté Abeil : `abeil-it@proton.me` (GitHub : `Abeil35`)
