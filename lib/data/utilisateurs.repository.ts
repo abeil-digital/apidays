@@ -37,6 +37,7 @@ interface UtilisateurRow {
   role: UtilisateurAdmin["role"];
   statut: UtilisateurAdmin["statut"];
   date_archivage: string | null;
+  date_fin_contrat: string | null;
   cree_par_id: string | null;
   created_at: string;
 }
@@ -55,7 +56,7 @@ interface UtilisateurRow {
  * (`fetchNomUtilisateur`), uniquement là où affiché (fiche détail).
  */
 const SELECT_UTILISATEUR =
-  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage, cree_par_id, created_at";
+  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage, date_fin_contrat, cree_par_id, created_at";
 
 function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
   return {
@@ -70,6 +71,7 @@ function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
     role: row.role,
     statut: row.statut,
     dateArchivage: row.date_archivage,
+    dateFinContrat: row.date_fin_contrat,
     creeParId: row.cree_par_id,
     creeParNom: undefined,
     createdAt: row.created_at,
@@ -159,13 +161,24 @@ export async function fetchUtilisateurAdmin(id: string): Promise<UtilisateurAdmi
 export async function creerUtilisateurAdmin(
   input: UtilisateurAdminInput,
   soldeInitial?: SoldeInitial,
+  /** Date de sortie connue à la création — CDD uniquement (04/09/2026,
+   * demande explicite : "prévoir pour les CDD une date d'entrée et une date
+   * de sortie"). Écrite directement dans `date_fin_contrat` : un CDD a par
+   * nature un terme déjà connu, c'est exactement ce que "Fin de contrat"
+   * représente (archivage/gel de l'acquisition/blocage de connexion à cette
+   * date, voir `definirFinContrat`) — pas besoin d'un champ séparé. */
+  dateFinContrat?: string,
 ): Promise<UtilisateurAdmin> {
   const supabase = createClient();
   const auteurId = await getUtilisateurIdCourant(supabase);
 
   const { data, error } = await supabase
     .from("utilisateurs")
-    .insert({ ...paramsDepuisInput(input), cree_par_id: auteurId })
+    .insert({
+      ...paramsDepuisInput(input),
+      cree_par_id: auteurId,
+      date_fin_contrat: dateFinContrat || null,
+    })
     .select(SELECT_UTILISATEUR)
     .single();
 
@@ -366,17 +379,115 @@ export async function changerNatureContrat(
   return changerChamp(utilisateurId, "nature_contrat", "nature_contrat", input);
 }
 
-export async function archiverUtilisateurAdmin(id: string): Promise<void> {
+/**
+ * Corrige la période EN COURS de durée de travail/nature de contrat — à la
+ * différence de `changerChamp` (qui insère toujours une nouvelle ligne
+ * d'historique, pour un véritable nouvel événement via "+ Ajouter un
+ * événement"), une correction ("Modifier" sur le pill de la période en
+ * cours, 04/09/2026, demande explicite : "c'est juste de la gestion de
+ * l'erreur... tu t'es planté, tu mets à jour", et "tu ne créés pas
+ * d'historique") ne doit PAS ajouter de ligne : elle met à jour en place la
+ * dernière ligne d'historique existante (`dernierHistoriqueId`), ou — s'il
+ * n'y en a aucune (la valeur courante remonte à la date d'entrée, jamais
+ * modifiée depuis) — se contente de corriger la valeur sur `utilisateurs`
+ * sans toucher à l'historique. */
+async function corrigerChamp(
+  utilisateurId: string,
+  colonne: "taux_activite" | "nature_contrat",
+  dernierHistoriqueId: string | null,
+  input: ChangerChampInput,
+): Promise<void> {
+  const supabase = createClient();
+
+  if (dernierHistoriqueId) {
+    const { error: erreurHistorique } = await supabase
+      .from("historique_utilisateur")
+      .update({ nouvelle_valeur: input.valeur, date_effet: input.dateEffet })
+      .eq("id", dernierHistoriqueId);
+
+    if (erreurHistorique) {
+      throw new Error("Impossible de corriger cette période.");
+    }
+  }
+
+  const valeurColonne = colonne === "taux_activite" ? Number(input.valeur) : input.valeur;
+  const { error: erreurMaj } = await supabase
+    .from("utilisateurs")
+    .update({ [colonne]: valeurColonne })
+    .eq("id", utilisateurId);
+
+  if (erreurMaj) {
+    throw new Error("Impossible de corriger cette période.");
+  }
+}
+
+export async function corrigerTauxActivite(
+  utilisateurId: string,
+  dernierHistoriqueId: string | null,
+  input: ChangerChampInput,
+): Promise<void> {
+  return corrigerChamp(utilisateurId, "taux_activite", dernierHistoriqueId, input);
+}
+
+export async function corrigerNatureContrat(
+  utilisateurId: string,
+  dernierHistoriqueId: string | null,
+  input: ChangerChampInput,
+): Promise<void> {
+  return corrigerChamp(utilisateurId, "nature_contrat", dernierHistoriqueId, input);
+}
+
+/**
+ * "Fin de contrat" (04/09/2026, demande explicite — remplace l'ancien
+ * archivage direct via "bouton Archiver", retiré) — définit une date de
+ * sortie, potentiellement future (préavis) : archivage, gel de l'acquisition
+ * de congés (`resolverTauxActiviteEffectif`) et blocage de connexion
+ * (`proxy.ts`) ne surviennent réellement qu'à cette date, comparée
+ * directement à la date du jour à chaque calcul/connexion — pas de tâche
+ * planifiée dans cette app. Si la date choisie est déjà passée (ou
+ * aujourd'hui), `statut`/`date_archivage` basculent immédiatement pour que
+ * la fiche reflète tout de suite l'état réel plutôt que d'attendre une
+ * prochaine connexion/calcul de solde qui ne viendra pas forcément.
+ */
+export async function definirFinContrat(id: string, dateFinContrat: string): Promise<void> {
+  const supabase = createClient();
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+
+  const miseAJour: {
+    date_fin_contrat: string;
+    statut?: "archive";
+    date_archivage?: string;
+  } = { date_fin_contrat: dateFinContrat };
+
+  if (dateFinContrat <= aujourdhui) {
+    miseAJour.statut = "archive";
+    miseAJour.date_archivage = dateFinContrat;
+  }
+
+  const { error } = await supabase.from("utilisateurs").update(miseAJour).eq("id", id);
+
+  if (error) {
+    throw new Error("Impossible d'enregistrer la fin de contrat.");
+  }
+}
+
+/**
+ * Annule une fin de contrat définie par erreur, ou parce que le
+ * collaborateur reste finalement (04/09/2026, demande explicite — "prévoir
+ * un annuler associé à la pill fin de contrat"). Réinitialise aussi
+ * `statut`/`date_archivage` : si la date était déjà passée, `definirFinContrat`
+ * les avait fait basculer, annuler doit défaire cet effet-là aussi, pas
+ * seulement la date elle-même.
+ */
+export async function annulerFinContrat(id: string): Promise<void> {
   const supabase = createClient();
 
   const { error } = await supabase
     .from("utilisateurs")
-    .update({ statut: "archive", date_archivage: new Date().toISOString().slice(0, 10) })
-    .eq("id", id)
-    .select()
-    .single();
+    .update({ date_fin_contrat: null, statut: "actif", date_archivage: null })
+    .eq("id", id);
 
   if (error) {
-    throw new Error("Impossible d'archiver ce profil.");
+    throw new Error("Impossible d'annuler cette fin de contrat.");
   }
 }

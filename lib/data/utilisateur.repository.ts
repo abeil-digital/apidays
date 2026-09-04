@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 // Le schéma n'a pas (encore) de champ "poste" (intitulé de fonction) — en
 // attendant qu'il soit modélisé, on affiche un libellé dérivé du rôle.
 const POSTE_PAR_ROLE: Record<string, string> = {
-  salarie: "Salarié·e",
+  salarie: "Collaborateur·rice",
   manager: "Manager",
   admin: "Administratrice",
 };

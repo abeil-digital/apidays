@@ -5,10 +5,12 @@ import { createServerClient } from "@supabase/ssr";
 /**
  * Next.js 16 : ce fichier remplace l'ancien middleware.ts (renommé "Proxy").
  * Rôle : rafraîchir la session Supabase à chaque requête (cookies), protéger
- * les routes de l'Espace Salarié tant qu'aucune session n'existe, et bloquer
+ * les routes de l'Espace Salarié tant qu'aucune session n'existe, bloquer
  * /parametrer/* et /suivre/* pour les salariés (manager/admin uniquement,
- * voir niveau1.ts). La RLS reste la protection de fond côté données ; ceci
- * n'est qu'une redirection optimiste côté route.
+ * voir niveau1.ts), et déconnecter un profil dont le contrat est terminé
+ * (04/09/2026, "Fin de contrat" — voir `definirFinContrat` dans
+ * `utilisateurs.repository.ts`). La RLS reste la protection de fond côté
+ * données ; ceci n'est qu'une redirection optimiste côté route.
  */
 const ROUTE_CONNEXION = "/connexion";
 const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
@@ -51,23 +53,41 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isRouteConnexion) {
-    const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/";
-    return NextResponse.redirect(redirectUrl);
-  }
-
-  if (
-    user &&
-    PREFIXES_MANAGER_ADMIN.some((prefixe) => request.nextUrl.pathname.startsWith(prefixe))
-  ) {
+  if (user) {
+    // Une seule requête `utilisateurs`, réutilisée pour le blocage "fin de
+    // contrat" ci-dessous ET la protection manager/admin existante — pas
+    // deux allers-retours par requête.
     const { data } = await supabase
       .from("utilisateurs")
-      .select("role")
+      .select("role, statut, date_fin_contrat")
       .eq("auth_id", user.id)
       .single();
 
-    if (data?.role === "salarie") {
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    const contratTermine =
+      data?.statut === "archive" ||
+      (!!data?.date_fin_contrat && data.date_fin_contrat <= aujourdhui);
+
+    if (contratTermine) {
+      await supabase.auth.signOut();
+      if (!isRouteConnexion) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = ROUTE_CONNEXION;
+        return NextResponse.redirect(redirectUrl);
+      }
+      return response;
+    }
+
+    if (isRouteConnexion) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/";
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    if (
+      PREFIXES_MANAGER_ADMIN.some((prefixe) => request.nextUrl.pathname.startsWith(prefixe)) &&
+      data?.role === "salarie"
+    ) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
       return NextResponse.redirect(redirectUrl);

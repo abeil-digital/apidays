@@ -15,10 +15,9 @@ import { formatJours } from "@/lib/format";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { Button } from "@/components/ui/Button";
-import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
 import { ListCard } from "@/components/ui/ListCard";
-import { Select } from "@/components/ui/Select";
+import { SelectPille } from "@/components/ui/SelectPille";
 
 type PresetPeriode =
   "juin_mai" | "annee_civile" | "annee_scolaire" | "avril_mars" | "personnalisee";
@@ -83,8 +82,8 @@ function RadioOuiNon({
 }) {
   return (
     <div>
-      <FieldLabel>{titre}</FieldLabel>
-      <div className="mt-2 flex gap-5">
+      <div className="text-abeil-navy mb-1.5 text-sm font-bold">{titre}</div>
+      <div className="flex gap-5">
         <label className="text-ink-900 flex items-center gap-1.5 text-sm">
           <input type="radio" name={name} checked={valeur} onChange={() => onChange(true)} />
           Oui
@@ -181,33 +180,46 @@ function BlocAcquisition({
   }
 
   return (
-    <div className="bg-surface-card rounded-card flex flex-col gap-5 p-5 shadow-sm">
-      <h2 className="text-ink-900 text-lg font-semibold">{titre}</h2>
+    <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+      <h2 className="text-abeil-navy text-sm font-bold">{titre}</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor={`${type}-periode`}>Période de référence</FieldLabel>
-            <Select
+            <label
+              htmlFor={`${type}-periode`}
+              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+            >
+              Période de référence
+            </label>
+            <SelectPille
               id={`${type}-periode`}
               value={preset}
               onChange={(e) => {
                 setPreset(e.target.value as PresetPeriode);
                 marquerModifie();
               }}
-              className="mt-2 block w-40"
+              borderClassName="border-slate"
+              chevronClassName="text-abeil-navy"
+              hoverClassName="enabled:hover:bg-surface-app"
+              className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
             >
               {ordrePresets.map((p) => (
                 <option key={p} value={p}>
                   {PRESET_PERIODE_LABEL[p]}
                 </option>
               ))}
-            </Select>
+            </SelectPille>
           </div>
 
           <div>
-            <FieldLabel htmlFor={`${type}-acquisition`}>Acquisition</FieldLabel>
-            <div className="mt-2 flex items-center gap-2">
+            <label
+              htmlFor={`${type}-acquisition`}
+              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+            >
+              Acquisition
+            </label>
+            <div className="flex items-center gap-2">
               <Input
                 id={`${type}-acquisition`}
                 type="number"
@@ -219,7 +231,7 @@ function BlocAcquisition({
                   setAcquisition(e.target.value);
                   marquerModifie();
                 }}
-                className="w-20"
+                className="!border-slate w-20"
               />
               <span className="text-ink-500 text-sm">jours / mois</span>
             </div>
@@ -229,7 +241,12 @@ function BlocAcquisition({
         {preset === "personnalisee" && (
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FieldLabel htmlFor={`${type}-mois`}>Mois de début</FieldLabel>
+              <label
+                htmlFor={`${type}-mois`}
+                className="text-abeil-navy mb-1.5 block text-sm font-bold"
+              >
+                Mois de début
+              </label>
               <Input
                 id={`${type}-mois`}
                 type="number"
@@ -240,11 +257,16 @@ function BlocAcquisition({
                   setMois(Number(e.target.value));
                   marquerModifie();
                 }}
-                className="mt-2 w-full"
+                className="!border-slate w-20"
               />
             </div>
             <div>
-              <FieldLabel htmlFor={`${type}-jour`}>Jour de début</FieldLabel>
+              <label
+                htmlFor={`${type}-jour`}
+                className="text-abeil-navy mb-1.5 block text-sm font-bold"
+              >
+                Jour de début
+              </label>
               <Input
                 id={`${type}-jour`}
                 type="number"
@@ -255,7 +277,7 @@ function BlocAcquisition({
                   setJour(Number(e.target.value));
                   marquerModifie();
                 }}
-                className="mt-2 w-full"
+                className="!border-slate w-20"
               />
             </div>
           </div>
@@ -363,7 +385,7 @@ function LigneFormulaireAnciennete({
           placeholder="Ex. 1"
           value={jours}
           onChange={(e) => setJours(e.target.value)}
-          className="w-16"
+          className="!border-slate w-16"
           aria-label="Jours de CP supplémentaires"
         />
         <span className="text-ink-900 text-sm">jour(s) de CP supplémentaire tous les</span>
@@ -373,7 +395,7 @@ function LigneFormulaireAnciennete({
           placeholder="Ex. 5"
           value={seuil}
           onChange={(e) => setSeuil(e.target.value)}
-          className="w-16"
+          className="!border-slate w-16"
           aria-label="Ancienneté en années"
         />
         <span className="text-ink-900 text-sm">ans</span>
@@ -542,14 +564,19 @@ function BlocObjectifsCalendrier({
   }
 
   return (
-    <div className="bg-surface-card rounded-card flex flex-col gap-5 p-5 shadow-sm">
-      <h2 className="text-ink-900 text-lg font-semibold">Congés &amp; demi-journées imposés</h2>
+    <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+      <h2 className="text-abeil-navy text-sm font-bold">Congés &amp; demi-journées imposés</h2>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor="objectifs-cpi">CP Imposés</FieldLabel>
-            <div className="mt-2 flex items-center gap-2">
+            <label
+              htmlFor="objectifs-cpi"
+              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+            >
+              CP Imposés
+            </label>
+            <div className="flex items-center gap-2">
               <Input
                 id="objectifs-cpi"
                 type="number"
@@ -560,15 +587,20 @@ function BlocObjectifsCalendrier({
                   setCibleJoursCpi(e.target.value);
                   marquerModifie();
                 }}
-                className="w-20"
+                className="!border-slate w-20"
               />
               <span className="text-ink-500 text-sm">jours / an</span>
             </div>
           </div>
 
           <div>
-            <FieldLabel htmlFor="objectifs-dji">Demi-journées imposées</FieldLabel>
-            <div className="mt-2 flex items-center gap-2">
+            <label
+              htmlFor="objectifs-dji"
+              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+            >
+              Demi-journées imposées
+            </label>
+            <div className="flex items-center gap-2">
               <Input
                 id="objectifs-dji"
                 type="number"
@@ -578,7 +610,7 @@ function BlocObjectifsCalendrier({
                   setCibleDemiJourneesDji(e.target.value);
                   marquerModifie();
                 }}
-                className="w-20"
+                className="!border-slate w-20"
               />
               <span className="text-ink-500 text-sm">demi-journées / an</span>
             </div>

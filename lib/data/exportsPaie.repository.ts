@@ -314,6 +314,38 @@ export async function fetchExportsPaie(
 }
 
 /**
+ * Mois d'effet le plus ancien qu'un changement de nature de contrat/durée de
+ * travail peut encore viser — le mois qui SUIT le dernier mois déjà transmis
+ * en paie (`exports_paie`), ou `null` si aucune transmission n'a encore eu
+ * lieu (04/09/2026, règle explicite : "Delphine ne peut pas définir de
+ * changement au-delà des mois passés en paie" — un mois déjà transmis a déjà
+ * généré des fiches de paie, y toucher rétroactivement fausserait un calcul
+ * déjà figé). Les exports sont des mois calendaires complets, communs à
+ * toute l'entreprise (pas par collaborateur) — un seul mois maximum à
+ * chercher, pas une période par personne. */
+export async function fetchMoisMinimumChangementRH(): Promise<string | null> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("exports_paie")
+    .select("periode_fin")
+    .order("periode_fin", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error("Impossible de vérifier les mois déjà transmis en paie.");
+  }
+  if (!data) return null;
+
+  const finDernierMoisTransmis = new Date(`${data.periode_fin}T00:00:00Z`);
+  const premierMoisAutorise = new Date(
+    Date.UTC(finDernierMoisTransmis.getUTCFullYear(), finDernierMoisTransmis.getUTCMonth() + 1, 1),
+  );
+  return premierMoisAutorise.toISOString().slice(0, 7);
+}
+
+/**
  * Action "Transmettre" — crée l'export puis ses lignes :
  * - Congés validés avec un reliquat : seule la portion tombant dans la
  *   période est transmise maintenant (`joursDansPeriode`), plafonnée au

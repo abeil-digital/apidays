@@ -39,7 +39,7 @@ export function SelectPille({
     ? ""
     : "focus-visible:ring-mint focus-visible:ring-2 focus-visible:ring-offset-1";
   return (
-    <div className="relative inline-block">
+    <div className="relative inline-block w-fit">
       <select
         disabled={disabled}
         {...rest}

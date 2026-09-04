@@ -162,8 +162,8 @@ app/
   (app)/page.tsx            route "/" — Dashboard
   (app)/nouvelle-demande/page.tsx route "/nouvelle-demande" — formulaire
   (app)/historique/page.tsx       route "/historique" — historique + filtre + impression
-  (app)/parametrer/utilisateurs/page.tsx           route "/parametrer/utilisateurs" — tableau
-  (app)/parametrer/utilisateurs/nouveau/page.tsx    route "/parametrer/utilisateurs/nouveau"
+  (app)/parametrer/utilisateurs/page.tsx           route "/parametrer/utilisateurs" — tableau,
+                                                    création via popin (NouveauUtilisateurModal)
   (app)/parametrer/utilisateurs/[id]/page.tsx        route "/parametrer/utilisateurs/:id" — fiche
 
 proxy.ts                 rafraîchit la session Supabase, protège les routes hors /connexion,

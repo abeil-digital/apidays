@@ -15,9 +15,10 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
+import { NouveauUtilisateurModal } from "@/components/parametrer/UtilisateurFichePage";
 
 const ROLE_LABEL: Record<RoleUtilisateur, string> = {
-  salarie: "Salarié·e",
+  salarie: "Collaborateur·rice",
   manager: "Manager",
   admin: "Admin",
 };
@@ -65,7 +66,12 @@ function ThTriable({ label, champ, triActif, direction, onClick }: ThTriableProp
 
 export function UtilisateursListPage() {
   const router = useRouter();
-  const { utilisateurs, loading, error } = useUtilisateursAdmin();
+  const { utilisateurs, loading, error, recharger } = useUtilisateursAdmin();
+  // Popin "Créer un profil" (04/09/2026, demande explicite : "on peut le
+  // jouer en popin sur la page utilisateurs") — remplace la navigation vers
+  // /parametrer/utilisateurs/nouveau par une création sur place ; la route
+  // reste par ailleurs disponible pour un accès direct par URL.
+  const [creationOuverte, setCreationOuverte] = useState(false);
 
   const [recherche, setRecherche] = useState("");
   const [role, setRole] = useState<RoleUtilisateur | "tous">("tous");
@@ -110,7 +116,7 @@ export function UtilisateursListPage() {
       <div className="animate-stagger-in flex items-center justify-between px-1">
         <h1 className="text-abeil-navy text-2xl font-semibold">Utilisateurs</h1>
         <Button
-          href="/parametrer/utilisateurs/nouveau"
+          onClick={() => setCreationOuverte(true)}
           className="shrink-0 rounded-full px-4 py-2.5"
         >
           <UserPlus size={16} />
@@ -145,7 +151,7 @@ export function UtilisateursListPage() {
             onChange={(e) => setRole(e.target.value as RoleUtilisateur | "tous")}
           >
             <option value="tous">Tous les rôles</option>
-            <option value="salarie">Salarié·e</option>
+            <option value="salarie">Collaborateur·rice</option>
             <option value="manager">Manager</option>
             <option value="admin">Admin</option>
           </SelectFiltrePill>
@@ -228,6 +234,16 @@ export function UtilisateursListPage() {
           )}
         </div>
       </div>
+
+      {creationOuverte && (
+        <NouveauUtilisateurModal
+          onClose={() => setCreationOuverte(false)}
+          onCreated={() => {
+            setCreationOuverte(false);
+            recharger();
+          }}
+        />
+      )}
     </div>
   );
 }

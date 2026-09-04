@@ -43,6 +43,12 @@ create table utilisateurs (
   anciennete_date_reference date, -- si différente de date_entree, à préciser avec Abeil
   statut statut_utilisateur not null default 'actif',
   date_archivage date,
+  -- Date de fin de contrat (04/09/2026, "Fin de contrat" sur la fiche
+  -- utilisateur) — peut être future (préavis) : archivage/gel de
+  -- l'acquisition/blocage de connexion ne surviennent qu'à cette date, sans
+  -- tâche planifiée (comparée directement à la date du jour à chaque calcul
+  -- de solde et à chaque connexion, voir soldes.repository.ts/proxy.ts).
+  date_fin_contrat date,
   -- Auteur de la création du profil (21/08/2026, migration additive) — nullable :
   -- absent sur tous les profils créés avant cette colonne, pas de backfill
   -- rétroactif possible (l'info n'existait pas). Alimenté à la création pour

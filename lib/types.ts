@@ -172,6 +172,14 @@ export interface UtilisateurAdmin {
   role: RoleUtilisateur;
   statut: StatutUtilisateur;
   dateArchivage: string | null; // date ISO, renseignée si statut = "archive"
+  /** Date de fin de contrat définie via "Fin de contrat" sur la fiche
+   * (04/09/2026) — à cette date : archivage, gel de l'acquisition de congés,
+   * accès bloqué (voir `resolverTauxActiviteEffectif`/`proxy.ts`). Peut être
+   * dans le futur (préavis) : `statut` ne bascule à "archive" que si la date
+   * est déjà passée au moment de la saisie, sinon les points d'application
+   * (moteur de solde, connexion) comparent directement à cette date à
+   * chaque calcul/requête — pas de tâche planifiée dans cette app. */
+  dateFinContrat: string | null;
   creeParId: string | null; // null sur les profils créés avant ce champ (21/08/2026)
   creeParNom?: string;
   createdAt: string; // timestamptz ISO

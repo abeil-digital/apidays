@@ -9,10 +9,13 @@ import type {
   UtilisateurAdminInput,
 } from "@/lib/types";
 import {
-  archiverUtilisateurAdmin,
+  annulerFinContrat,
   changerNatureContrat,
   changerTauxActivite,
+  corrigerNatureContrat,
+  corrigerTauxActivite,
   creerUtilisateurAdmin,
+  definirFinContrat,
   enregistrerSoldeInitial,
   fetchHistoriqueUtilisateur,
   fetchSoldeInitial,
@@ -26,11 +29,24 @@ interface UseUtilisateurAdminResult {
   soldeInitial: SoldeInitial | null;
   loading: boolean;
   error: string | null;
-  creer: (input: UtilisateurAdminInput, soldeInitial?: SoldeInitial) => Promise<UtilisateurAdmin>;
+  creer: (
+    input: UtilisateurAdminInput,
+    soldeInitial?: SoldeInitial,
+    dateFinContrat?: string,
+  ) => Promise<UtilisateurAdmin>;
   modifier: (input: UtilisateurAdminInput) => Promise<UtilisateurAdmin>;
-  archiver: () => Promise<void>;
+  definirFinContrat: (date: string) => Promise<void>;
+  annulerFinContrat: () => Promise<void>;
   changerTauxActivite: (input: ChangerChampInput) => Promise<void>;
   changerNatureContrat: (input: ChangerChampInput) => Promise<void>;
+  corrigerTauxActivite: (
+    dernierHistoriqueId: string | null,
+    input: ChangerChampInput,
+  ) => Promise<void>;
+  corrigerNatureContrat: (
+    dernierHistoriqueId: string | null,
+    input: ChangerChampInput,
+  ) => Promise<void>;
   enregistrerSoldeInitial: (input: SoldeInitial) => Promise<void>;
 }
 
@@ -83,8 +99,8 @@ export function useUtilisateurAdmin(id?: string): UseUtilisateurAdminResult {
   }, [id]);
 
   const creer = useCallback(
-    (input: UtilisateurAdminInput, soldeInitialInput?: SoldeInitial) =>
-      creerUtilisateurAdmin(input, soldeInitialInput),
+    (input: UtilisateurAdminInput, soldeInitialInput?: SoldeInitial, dateFinContrat?: string) =>
+      creerUtilisateurAdmin(input, soldeInitialInput, dateFinContrat),
     [],
   );
 
@@ -98,15 +114,20 @@ export function useUtilisateurAdmin(id?: string): UseUtilisateurAdminResult {
     [id],
   );
 
-  const archiver = useCallback(async () => {
+  const definirFin = useCallback(
+    async (date: string) => {
+      if (!id) throw new Error("Identifiant manquant.");
+      await definirFinContrat(id, date);
+      await recharger();
+    },
+    [id, recharger],
+  );
+
+  const annulerFin = useCallback(async () => {
     if (!id) throw new Error("Identifiant manquant.");
-    await archiverUtilisateurAdmin(id);
-    setUtilisateur((prev) =>
-      prev
-        ? { ...prev, statut: "archive", dateArchivage: new Date().toISOString().slice(0, 10) }
-        : prev,
-    );
-  }, [id]);
+    await annulerFinContrat(id);
+    await recharger();
+  }, [id, recharger]);
 
   const changerTaux = useCallback(
     async (input: ChangerChampInput) => {
@@ -121,6 +142,24 @@ export function useUtilisateurAdmin(id?: string): UseUtilisateurAdminResult {
     async (input: ChangerChampInput) => {
       if (!id) throw new Error("Identifiant manquant.");
       await changerNatureContrat(id, input);
+      await recharger();
+    },
+    [id, recharger],
+  );
+
+  const corrigerTaux = useCallback(
+    async (dernierHistoriqueId: string | null, input: ChangerChampInput) => {
+      if (!id) throw new Error("Identifiant manquant.");
+      await corrigerTauxActivite(id, dernierHistoriqueId, input);
+      await recharger();
+    },
+    [id, recharger],
+  );
+
+  const corrigerNature = useCallback(
+    async (dernierHistoriqueId: string | null, input: ChangerChampInput) => {
+      if (!id) throw new Error("Identifiant manquant.");
+      await corrigerNatureContrat(id, dernierHistoriqueId, input);
       await recharger();
     },
     [id, recharger],
@@ -143,9 +182,12 @@ export function useUtilisateurAdmin(id?: string): UseUtilisateurAdminResult {
     error,
     creer,
     modifier,
-    archiver,
+    definirFinContrat: definirFin,
+    annulerFinContrat: annulerFin,
     changerTauxActivite: changerTaux,
     changerNatureContrat: changerNature,
+    corrigerTauxActivite: corrigerTaux,
+    corrigerNatureContrat: corrigerNature,
     enregistrerSoldeInitial: enregistrerSolde,
   };
 }

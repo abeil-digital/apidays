@@ -3808,6 +3808,7 @@ l'instant, pas un remplacement app-wide du slate provisoire).
 `public/logo-abeil.svg` : wordmark dérivé du pack officiel (`ABEIL_LOGO_blanc_fond_bleu.svg`,
 lettres blanches + point jaune, prévu pour un fond navy), avec deux corrections apportées au
 fichier source du pack :
+
 - le `<rect>` de fond navy plein intégré au fichier source retiré (le pack fournit chaque variante
   avec son propre fond en dur, pas transparent — inutilisable tel quel sur un header qui n'est pas
   exactement cette même teinte) ;
@@ -4209,6 +4210,84 @@ depuis la clarification précédente), pas sur l'engagement live du moteur de so
 un écart comme celui-ci est structurellement garanti dès qu'un congé futur est validé avant d'être
 transmis. Corrélé à la question déjà ouverte dans `questions.md` ("Format Droit/Pris/Solde... à
 revalider") — non corrigé, chantier resté en pause à la demande de Vincent.
+
+## Fiche utilisateur — refonte + conventions de formulaire "popin" (05/09/2026)
+
+Refonte complète de la fiche utilisateur (`UtilisateurFichePage.tsx`, devenue la seule version —
+l'ancienne implémentation et la route brouillon `/utilisateurs2` ont été supprimées), plus la
+création d'un utilisateur passée en popin (`NouveauUtilisateurModal`, exportée par le même fichier,
+utilisée sur la page Utilisateurs). La route `/parametrer/utilisateurs/nouveau` a été supprimée : la
+création ne se fait plus que par la popin (testé de bout en bout — champs obligatoires, format
+email, CDD + date de sortie, solde initial avec mois/année + CP/RTT/CPA, vérifié en base).
+
+Au passage, un **vocabulaire de style de formulaire** s'est stabilisé, désormais considéré comme la
+référence à reprendre pour tout formulaire de l'app (déjà réappliqué à `CongesRttPage.tsx` le même
+jour — voir plus bas) :
+
+- **Cards "coins carrés"** : `bg-surface-card border-ink-300/60 flex flex-col gap-{3|5} border p-5`
+  — pas de `rounded-card`/`shadow-sm` (ancien style, encore présent ailleurs dans l'app à l'heure où
+  ceci est écrit).
+- **Titre de card** : `text-abeil-navy text-sm font-bold` (pas de `text-lg font-semibold text-ink-900`).
+- **Label de champ** : `text-abeil-navy text-sm font-bold` (un `<label>` direct, plus le composant
+  `FieldLabel` — celui-ci reste utilisé ailleurs dans l'app pour l'instant, mais n'est plus le
+  standard des nouveaux formulaires).
+- **Sélecteurs** : `SelectPille` (`components/ui/SelectPille.tsx`) partout, plus `Select` — pilule,
+  largeur au contenu (`className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"` pour caler la hauteur sur
+  celle d'un `Input`), `borderClassName="border-slate"` (vert bouton, pas de couleur par valeur :
+  ce codage couleur est réservé aux types de congés via `TypeBadge`, sans équivalent pour
+  rôle/nature de contrat/période de référence), `chevronClassName="text-abeil-navy"`,
+  `hoverClassName="enabled:hover:bg-surface-app"`.
+  - **Bug trouvé sur `SelectPille`** : son wrapper `<div className="relative inline-block">`
+    n'imposait pas sa propre largeur — dans un parent CSS Grid (`justify-items: stretch` par
+    défaut), il s'étirait à la largeur de la colonne, décalant le chevron loin du bord du `<select>`
+    réel (resté à sa largeur de contenu). Corrigé en ajoutant `w-fit` au wrapper.
+  - **Bug trouvé sur `Select`** (`components/ui/Select.tsx`) : son `className` s'applique au `<div>`
+    conteneur, pas au `<select>` lui-même — impossible d'y personnaliser la bordure/le fond via ce
+    prop (seule la taille du conteneur passe). C'est ce qui a motivé la bascule complète vers
+    `SelectPille` plutôt que de patcher `Select` au cas par cas.
+- **Champs texte/nombre/date** : contour vert bouton via `!border-slate` (important nécessaire —
+  sinon `border-ink-300` du composant `Input` gagne selon l'ordre de génération Tailwind, pas
+  l'ordre d'apparition dans la chaîne de classes). Largeur réduite au type (`w-16`/`w-20`/`w-40`/
+  `max-w-72`), jamais `w-full` par défaut. Flèches de spinner natives retirées sur les champs
+  numériques courts via `[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none
+[&::-webkit-outer-spin-button]:appearance-none`.
+- **En-tête de popin bleu marine** : nouveau composant partagé `EnTeteModalNavy` (local à
+  `UtilisateurFichePage.tsx`) — `bg-abeil-navy`, titre blanc gras, croix `text-white/70`. Remplace
+  le `title` par défaut de `Modal` (barre blanche, texte noir, croix grise) via son prop `header`.
+  Utilisé par les 5 popins de la fiche (création + Modifier nature/durée + Modifier l'identité +
+  Modifier le rôle + Fin de contrat) — appliqué après un audit explicite de cohérence demandé par
+  Vincent ("checke que toutes popin de modifications sont iso... avec la popin création").
+- **Fond gris derrière les cards, dans une popin** : `bg-surface-app` en négatif de marge pour
+  reprendre tout le corps scrollable de `Modal` malgré son padding — **attention à l'asymétrie** :
+  le corps de `Modal` avec `header` fait `px-6 py-4` (24px horizontal, **16px** vertical, pas 24) ;
+  un `-m-6` uniforme (24px partout) déborde de 8px en haut/bas et peut être rogné par le
+  `overflow-y-auto` du parent. Utiliser `-mx-6 -my-4` (asymétrique, aligné sur le vrai padding).
+- **Bouton de validation sticky : essayé, abandonné** (même session) — `position: sticky` s'ancre
+  au bord de PADDING du plus proche ancêtre scrollable, pas à son bord réel ; une marge négative sur
+  l'élément sticky lui-même ne change rien à ce repère (seul un `bottom` négatif le ferait), ce qui
+  rendait le calage pénible pour un gain visuel marginal. Revenu à un bouton simple en fin de
+  formulaire, identique en popin et en page.
+
+**Autres décisions notables de cette refonte** (`UtilisateurFichePage.tsx`) :
+
+- Rôle rebaptisé "Collaborateur·rice" partout où il désigne le rôle applicatif (pas "Espace
+  Salarié", conservé comme nom de section/produit, ni le libellé de connexion).
+- "Fin de contrat" : nouvelle colonne `date_fin_contrat`, gèle l'acquisition de solde au-delà du
+  mois choisi (`moisLimite` dans `soldes.repository.ts`), bloque l'accès (`proxy.ts`), archive si la
+  date est passée/aujourd'hui. Remplace l'ancien bouton "Archiver" (supprimé, y compris
+  `archiverUtilisateurAdmin` côté repository).
+- Historique Nature du contrat/Durée de travail : sélecteurs mois + année (`MOIS_LABELS`/
+  `anneesSelectionnables`) plutôt qu'un `<input type="date">` — une date d'effet est de toute façon
+  arrondie au 1er du mois (`moisEffet`), un jour précis n'a pas de sens ici.
+- Garde-fou "toujours un administrateur actif" étendu à la définition d'une fin de contrat (en plus
+  de la rétrogradation de rôle) — **client-only** (calculé dans `Formulaire` via
+  `useUtilisateursAdmin()`), pas encore renforcé côté base/RLS.
+
+**Réappliqué le même jour à `CongesRttPage.tsx`** (demande explicite : "on applique les styles de
+la popin dans le contexte d'une page") — cards `BlocAcquisition`/`BlocObjectifsCalendrier` passées
+en coins carrés, titres en navy gras, `FieldLabel`/`Select` remplacés par des labels navy gras et
+des `SelectPille`, contour vert bouton sur tous les `Input` (y compris les petits champs inline de
+`LigneFormulaireAnciennete`). Import `FieldLabel` retiré (devenu inutile dans ce fichier).
 
 ## À faire
 
