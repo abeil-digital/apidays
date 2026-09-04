@@ -4219,6 +4219,31 @@ déjà le cas côté "Suivre les soldes" (vue manager) ? **Tranché par Vincent 
 suffit**, pas de switch à ajouter sur cette popin — aucun changement de code, comportement actuel
 conservé tel quel.
 
+## Calendrier — clarification du modèle CPI/DJI, il n'y a plus de CPI (05/09/2026)
+
+Question ouverte depuis le 25/08/2026 sur le modèle des jours imposés (voir ancien
+`questions.md`) : **tranchée par Vincent**, avec un recadrage plus simple que tout ce qui avait été
+esquissé jusqu'ici.
+
+- **DJI (demi-journées imposées) ne déduisent aucun solde CP/RTT** — c'est le comportement voulu,
+  pas un bug (contrairement à ce que notait la précédente analyse, qui supposait que 3 des 10
+  demi-journées imposées devaient être décomptées comme du RTT).
+- **Il n'y a plus de CPI (congés payés imposés) au sens strict du terme.** La semaine de congé
+  obligatoire n'est plus un mécanisme imposé par l'admin (table `conges_imposes`, calendrier) :
+  chaque collaborateur la pose lui-même comme un CP normal, information communiquée hors de l'app —
+  le moteur de solde existant la déduit donc déjà correctement, sans rien à coder.
+- **Conséquence déjà appliquée** : la cible "nombre de CP imposés" a été mise à 0 dans Paramétrer >
+  Congés & RTT. `CalendrierPage.tsx` masque déjà la section de configuration CPI quand cette cible
+  est à 0 (`cibleJoursCpi ?? 0` + `{cibleJoursCpi > 0 && (...)}`, ligne ~417/726) — vérifié en
+  navigateur le 05/09/2026 : la légende du calendrier admin n'affiche plus que DJI et Jours fériés,
+  plus de carte "Congés imposés". Rien à corriger sur ce point.
+- **Le code CPI est conservé en dormance** (table `conges_imposes`, repository, UI masquée mais pas
+  supprimée) — décision explicite de Vincent : "on garde le concept de CPI même si il ne sert plus
+  à rien, mais cela peut revenir". Pas de nettoyage de code mort à faire pour l'instant.
+- **L'ancien plan de correctif imaginé pour ce sujet est caduc** (CPI recompté comme du CP, "RTT
+  imposées" séparées des DJI, flag `deduit_du_solde`) — reposait sur une lecture erronée du besoin,
+  à ne pas reprendre.
+
 ## Fiche utilisateur — refonte + conventions de formulaire "popin" (05/09/2026)
 
 Refonte complète de la fiche utilisateur (`UtilisateurFichePage.tsx`, devenue la seule version —
