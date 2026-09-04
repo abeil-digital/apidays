@@ -427,7 +427,7 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-ink-900 text-base font-semibold">Ancienneté</h2>
+      <h2 className="text-abeil-navy text-sm font-bold">Ancienneté</h2>
 
       <p className="text-ink-500 text-xs">
         Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté. Les règles ne se

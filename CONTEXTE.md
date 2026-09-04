@@ -4211,6 +4211,14 @@ un écart comme celui-ci est structurellement garanti dès qu'un congé futur es
 transmis. Corrélé à la question déjà ouverte dans `questions.md` ("Format Droit/Pris/Solde... à
 revalider") — non corrigé, chantier resté en pause à la demande de Vincent.
 
+## Accueil — solde théorique confirmé pour la popin "Suivre mon solde" (05/09/2026)
+
+Question ouverte depuis le 20/08/2026 (voir ancien `questions.md`) : fallait-il proposer au
+collaborateur un switch Réel/Théorique sur la popin "Suivre mon solde" de l'Accueil, comme c'est
+déjà le cas côté "Suivre les soldes" (vue manager) ? **Tranché par Vincent : le solde théorique
+suffit**, pas de switch à ajouter sur cette popin — aucun changement de code, comportement actuel
+conservé tel quel.
+
 ## Fiche utilisateur — refonte + conventions de formulaire "popin" (05/09/2026)
 
 Refonte complète de la fiche utilisateur (`UtilisateurFichePage.tsx`, devenue la seule version —

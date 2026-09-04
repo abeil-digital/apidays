@@ -5,15 +5,6 @@ dispersées dans le chat, pour ne rien perdre. Pas un todo : une question retir�
 répondue (la réponse et la décision vont dans [CONTEXTE.md](CONTEXTE.md)/[Backlog.md](Backlog.md)
 selon le cas).
 
-## Poser/Accueil
-
-- **Affichage des soldes : théorique vs réel** (20/08/2026) — aujourd'hui les cards Soldes
-  d'Accueil affichent le solde théorique (compte les demandes en attente), et la popin "Suivre mon
-  solde" démarre elle aussi sur "Théorique" par défaut. Est-ce nécessaire de proposer au
-  collaborateur le switch vers le solde réel sur cette popin, ou le solde théorique
-  suffit-il pour cet usage (vue salarié sur son propre solde) ? Le sélecteur Réel/Théorique reste
-  utile côté "Suivre les soldes" (vue manager), la question ne porte que sur la popin Accueil.
-
 ## Suivre/Transmissions paie
 
 - **Valider un congé non décidé au moment de générer l'export** (25/08/2026) — si un congé
@@ -53,6 +44,14 @@ selon le cas).
   automatiquement. Le plafond de pose (`PoserDemandeModal`, `PoserCongePourCollaborateurModal`) a été
   basculé sur `.valeurApresAttente` pour ne pas devenir trop permissif. Vérifié en navigateur sur le
   cas Delphine (voir CONTEXTE.md) — comportement conforme.
+- **Congés à cheval sur deux mois : cas à la marge non couverts** (05/09/2026, repris du Backlog
+  "Annulation d'une demande à cheval") — le principe général de découpage/transmission d'un congé
+  qui déborde sur le mois suivant est tranché et codé (notation "2/6", reliquat transmis au mois
+  suivant, voir CONTEXTE.md). Reste non vérifié/non listé : les cas limites, notamment
+  l'**annulation d'une demande à cheval partiellement déjà transmise** (une partie transmise sur un
+  mois, l'autre pas encore) — le comportement exact de `retirerDemande`/de la correction générée au
+  prochain export n'a jamais été vérifié sur ce cas précis. Vincent confirme qu'il y a bien des cas
+  à la marge à traiter — à lister précisément avec lui avant de considérer le sujet clos.
 
 ## Paramétrer/Calendrier
 
@@ -91,3 +90,57 @@ selon le cas).
   doit-il rester modifiable (ajout/suppression) par Delphine, ou faut-il verrouiller l'année en
   cours après publication (comme c'est déjà le cas pour l'année à venir tant qu'elle n'est pas
   publiée, mais en sens inverse) ? Aujourd'hui rien ne bloque la modification une fois publié.
+
+## Paramétrer/Congés & RTT
+
+- **Moment exact où le bonus d'ancienneté est attribué au collaborateur** (05/09/2026) — lecture du
+  code (`bonusAnciennete`/`ansAnciennete` dans `soldes.repository.ts`) : le bonus est recalculé à
+  chaque consultation du solde, au jour anniversaire exact de l'ancienneté (comparaison mois+jour
+  vs date d'entrée/date de référence), et s'ajoute immédiatement au capital CP de la période en
+  cours dès que le seuil est franchi — pas d'attente du renouvellement de la période CP (juin par
+  ex.), pas de proratisation. Présenté à Vincent comme tel, réaction : "je ne pense pas que ça
+  fonctionne comme ça" — donc soit la lecture de code est incomplète/erronée sur un point non vu,
+  soit le comportement attendu par Vincent diffère de ce que fait le code aujourd'hui (ex. bonus
+  attribué seulement au renouvellement de période, pas en cours d'année ?). À clarifier avec
+  Vincent avant de considérer ce point comme acquis — voir aussi
+  [CONTEXTE.md](CONTEXTE.md) pour le reste de l'audit "règles d'ancienneté" du même jour.
+
+  **Sous-point tranché (05/09/2026)** : le non-cumul entre seuils n'est PAS la source du désaccord
+  — Vincent a confirmé que le comportement actuel (seul le seuil le plus favorable s'applique, pas
+  de somme entre règles — ex. à 12 ans avec les règles 5 ans→+1j et 10 ans→+2j, le collaborateur a
+  +2j au total, pas +3j) est bien le comportement voulu. Le désaccord reste donc entier sur le
+  **moment exact** où le bonus s'applique (jour anniversaire précis vs autre logique attendue),
+  point encore à clarifier.
+
+## Moteur de solde / fin de période
+
+- **Principe de bascule de période : comment le CPA se transfère vers le solde CP ?** (05/09/2026,
+  repris du Backlog "Prévoir la gestion des fins de période") — lu dans le code
+  (`soldes.repository.ts`, `fetchSoldes`) : aucune étape explicite de "transfert" n'existe. Le CPA
+  (congé pris par anticipation sur la période suivante) est une simple projection calculée à la
+  volée — `accrualCpa` sur `periodeSuivante`, avec le même taux mensuel que le CP — et sa
+  consommation (`is_anticipation = true`) est explicitement exclue du calcul de report du CP
+  normal (`consommePeriodePrecedente` filtre sur `is_anticipation = false`). Autrement dit : quand
+  la période bascule réellement (l'ancienne "periodeSuivante" devient "periodeEnCours"), rien ne
+  vérifie explicitement que les jours déjà pris en CPA sont bien recomptés comme de la
+  consommation CP normale sur la nouvelle période — le mécanisme repose entièrement sur le fait que
+  les demandes CPA passées tombent naturellement dans la nouvelle fenêtre de dates au moment du
+  calcul, jamais vérifié de bout en bout sur un vrai cas de bascule. Rejoint la remarque de Vincent
+  du 29/08/2026 (voir Backlog.md) : le vrai sujet n'est pas qu'une formule, c'est aussi comment
+  RENDRE TANGIBLE ce moment pour le collaborateur et Delphine (jours restants perdus ou reportés,
+  CPA de l'année qui devient le CP de la suivante) — rien de tout ça n'est affiché aujourd'hui.
+
+## Paramétrer/Utilisateurs
+
+- **Proratisation du mois d'entrée partiel (acquisition CP/RTT/CPA)** (05/09/2026) — signalé par
+  Vincent : un collaborateur créé avec une date d'entrée en cours de mois (ex. 14/06/26) acquiert
+  quand même un mois complet de CP/RTT pour ce mois — le moteur (`accrualMensuelSomme` dans
+  `soldes.repository.ts`) ne raisonne qu'en mois entiers, aucune proratisation journalière nulle
+  part dans ce moteur (choix assumé jusqu'ici, documenté dans le code). Trois options
+  proposées : (1) prorata au jour près (`tauxAcquisitionMensuel × jours travaillés / jours du
+mois`) — précis, mais introduit une granularité absente ailleurs dans le moteur ; (2) règle
+  "entré avant/après le 15" (mois compté entier si entrée ≤ 15, pas compté sinon) — cohérente avec
+  la logique "tout ou rien par mois" déjà en place (`moisEffet`) ; (3) ne rien changer. **Vincent :
+  "on pose la question à Delphine"** — en attente de sa réponse avant d'implémenter quoi que ce
+  soit (le changement toucherait 6 points d'appel de `accrualMensuelSomme`, et changerait
+  rétroactivement le solde affiché de tout collaborateur déjà entré en cours de mois).
