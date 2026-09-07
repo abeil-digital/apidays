@@ -4435,6 +4435,12 @@ publier/dépublier, modification, glisser-déposer avec persistance vérifiée a
 suppression, disparition de la card Accueil quand aucune FAQ n'est publiée. `tsc`/`eslint`/
 `npm run build` clean.
 
+## FaqCard — fond atténué à 50% (07/09/2026)
+
+Demande explicite : fond `bg-[#FCEFB3]` (jaune plein) passé à `bg-[#FCEFB3]/50` sur Accueil — même
+principe d'opacité Tailwind qu'ailleurs dans l'app (ex. `bg-cp/15` sur `HistoriqueTable`), rien
+d'autre changé sur la card.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
