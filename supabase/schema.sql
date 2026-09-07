@@ -839,6 +839,22 @@ create policy "exports_paie: manager et admin créent"
   on exports_paie for insert
   with check (my_role() in ('manager', 'admin'));
 
+-- Même correctif que "export_paie_lignes: salarié lit ses propres lignes"
+-- (07/09/2026) — la requête de l'historique embarque `export_paie_lignes` en
+-- jointure vers `exports_paie` (`genere_le`, dates de période) ; sans cette
+-- policy, la ligne existe mais la jointure remonte vide, et le mapping côté
+-- client (`if (!exportPaie) continue`) l'ignore silencieusement.
+create policy "exports_paie: salarié lit les exports où il apparaît"
+  on exports_paie for select
+  using (
+    exists (
+      select 1 from export_paie_lignes epl
+      join demandes_conges dc on dc.id = epl.demande_id
+      where epl.export_paie_id = exports_paie.id
+      and dc.utilisateur_id = my_utilisateur_id()
+    )
+  );
+
 create policy "exports_paie: admin gère tout"
   on exports_paie for all
   using (my_role() = 'admin')
@@ -856,6 +872,20 @@ create policy "export_paie_lignes: admin gère tout"
   on export_paie_lignes for all
   using (my_role() = 'admin')
   with check (my_role() = 'admin');
+
+-- Un collaborateur doit voir le badge "Transmis" sur SON PROPRE historique
+-- (07/09/2026, bug remonté par Vincent : "aucun congé n'est signifié comme
+-- passé en paie" dans l'historique utilisateur) — jusqu'ici seuls
+-- manager/admin pouvaient lire cette table, même pour ses propres lignes.
+create policy "export_paie_lignes: salarié lit ses propres lignes"
+  on export_paie_lignes for select
+  using (
+    exists (
+      select 1 from demandes_conges dc
+      where dc.id = export_paie_lignes.demande_id
+      and dc.utilisateur_id = my_utilisateur_id()
+    )
+  );
 
 -- ------------------------------------------------------------
 -- GRANTS — nécessaires en complément de RLS : RLS filtre les

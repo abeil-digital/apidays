@@ -4342,6 +4342,38 @@ lui-même n'est pas retiré (le concept CPI reste en dormance dans le code, voir
 05/09/2026) — seule la teinte utilisée à l'écran pour DJI change. Vérifié en navigateur sur
 `/parametrer/calendrier2` : pastilles DJI en bleu slate.
 
+## Bug RLS : un collaborateur ne voyait jamais ses propres transmissions paie (07/09/2026)
+
+Signalé par Vincent : "dans l'historique utilisateur des demandes, aucun congé n'est signifié
+comme passé en paie". Root cause identifiée par comparaison — "Suivre les demandes" (vue
+admin/manager) affichait bien le badge "Transmis", mais le même collaborateur consultant son
+propre `/historique` n'en voyait jamais aucun.
+
+**Cause** : aucune policy RLS n'autorisait un rôle `salarie` à lire `export_paie_lignes` ni
+`exports_paie`, même pour ses propres lignes — seules 3 policies "manager et admin lisent
+tout"/"admin gère tout" existaient sur chacune des deux tables. `fetchLignesTransmissionParDemande`
+(utilisée par `HistoriquePage.tsx`), appelée par un salarié pour lui-même, recevait donc
+silencieusement 0 ligne (pas d'erreur — RLS filtre, ne bloque pas la requête).
+
+**Plus grave que le badge manquant** : `sommeTransmis`/`fetchLignesTransmises`
+(`soldes.repository.ts`) — qui calculent le **solde réel** (`.valeur`) affiché à un collaborateur
+sur son propre Accueil — lisent les deux mêmes tables avec le même filtre RLS. Un collaborateur
+consultant son propre solde réel ne pouvait donc jamais voir ses propres transmissions comptées
+dedans, potentiellement faussant ce solde (pas juste un défaut d'affichage dans l'historique).
+
+**Correctif** (`supabase/schema.sql`) : deux nouvelles policies SELECT, scopées à "ses propres
+lignes" via `demandes_conges.utilisateur_id = my_utilisateur_id()` :
+
+- `export_paie_lignes: salarié lit ses propres lignes`
+- `exports_paie: salarié lit les exports où il apparaît` (nécessaire séparément — la requête
+  embarque `exports_paie` en jointure imbriquée ; sans cette policy, la jointure remonte vide et la
+  ligne est ignorée côté client même une fois la première policy en place)
+
+Migration appliquée par Vincent en direct dans Supabase (pas de fichier de migration séparé dans le
+repo, `schema.sql` mis à jour en conséquence comme à chaque changement de schéma). **Vérification
+visuelle en attente** — nécessite une reconnexion avec `test-salarie@abeil.local` pour confirmer le
+badge "Transmis" sur l'historique personnel et la valeur du solde réel.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
