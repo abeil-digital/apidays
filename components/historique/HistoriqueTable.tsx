@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check } from "lucide-react";
 import type { Demande, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
-import { formatJours, formatPeriodeDemande, formatPeriodePillNumerique } from "@/lib/format";
+import {
+  formatDateActionCourte,
+  formatJours,
+  formatPeriodeDemande,
+  formatPeriodePillNumerique,
+} from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondActifTypeBadge,
@@ -114,19 +119,6 @@ type HistoriqueTableProps =
 // gardée telle quelle pour ses autres usages ("au" voulu ailleurs).
 function periodeCourte(debut: string, fin: string): string {
   return formatPeriodeDemande(debut, fin).replace(" au ", " - ");
-}
-
-// "26" au lieu de "2026" pour les colonnes Posé le/Validé le (29/08/2026,
-// demande explicite) — `formatDateAction` (lib/format.ts, année sur 4
-// chiffres) reste inchangée partout ailleurs, ce format compact est propre
-// à ce tableau.
-function formatDateActionCourte(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "2-digit",
-  }).format(d);
 }
 
 /**

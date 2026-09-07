@@ -24,6 +24,19 @@ export function formatDateAction(iso: string): string {
   }).format(d);
 }
 
+/**
+ * Format jj/mm/aa — année sur 2 chiffres plutôt que 4 (`formatDateAction`),
+ * pour les colonnes compactes (ex. Historique, Régularisations).
+ */
+export function formatDateActionCourte(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).format(d);
+}
+
 export function formatJourMois(iso: string, avecAnnee: boolean): string {
   const d = new Date(`${iso}T00:00:00`);
   const jour = d.getDate();

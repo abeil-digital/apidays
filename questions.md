@@ -51,7 +51,13 @@ selon le cas).
   l'**annulation d'une demande à cheval partiellement déjà transmise** (une partie transmise sur un
   mois, l'autre pas encore) — le comportement exact de `retirerDemande`/de la correction générée au
   prochain export n'a jamais été vérifié sur ce cas précis. Vincent confirme qu'il y a bien des cas
-  à la marge à traiter — à lister précisément avec lui avant de considérer le sujet clos.
+  à la marge à traiter — à lister précisément avec lui avant de considérer le sujet clos. Piste
+  ajoutée le 07/09/2026 : un statut de badge **"Partiellement transmis"** (colonne Paie) pour ce cas
+  précis — aujourd'hui `BadgeTransmission` (`HistoriqueTable.tsx`) n'affiche que "Transmis" (tout ou
+  rien, basé sur la présence d'au moins une ligne `export_paie_lignes`), sans distinguer une demande
+  à cheval dont un seul des deux mois a été transmis. À rapprocher du statut "à régulariser" évoqué
+  le même jour sur le Backlog ("Trancher l'action concrète de Delphine en cas d'écart") — les deux
+  pistes touchent le même badge et pourraient se recouper.
 
 ## Paramétrer/Calendrier
 

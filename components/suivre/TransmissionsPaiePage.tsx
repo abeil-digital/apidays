@@ -622,7 +622,7 @@ function QuelsCongesTransmettre({
             )}
 
             <div className="border-ink-300/60 border-t px-4 pt-3 pb-1">
-              <h2 className="text-ink-900 text-sm font-bold">Congés consommés sur la période</h2>
+              <h2 className="text-slate text-base font-bold">Congés consommés sur la période</h2>
             </div>
             {chargementAffiche ? (
               <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>
@@ -643,7 +643,7 @@ function QuelsCongesTransmettre({
                 }
                 emptyText="Rien à transmettre sur cette période."
                 triParDefaut="collaborateur"
-                libelleColonneDuree="Transmis"
+                libelleColonneDuree="À transmettre"
                 lignesTransmissionParDemande={lignesTransmissionParId}
               />
             )}
@@ -654,7 +654,7 @@ function QuelsCongesTransmettre({
             style={{ animationDelay: "90ms" }}
           >
             <div className="px-4 pt-3 pb-1">
-              <h2 className="text-ink-900 text-sm font-bold">
+              <h2 className="text-slate text-base font-bold">
                 Congés consommés non passés sur des périodes précédentes
               </h2>
             </div>
@@ -681,7 +681,7 @@ function QuelsCongesTransmettre({
                   }
                   emptyText="Aucun congé en repêchage."
                   triParDefaut="collaborateur"
-                  libelleColonneDuree="Transmis"
+                  libelleColonneDuree="À transmettre"
                   lignesTransmissionParDemande={lignesTransmissionParId}
                 />
               )}
@@ -693,7 +693,7 @@ function QuelsCongesTransmettre({
             style={{ animationDelay: "180ms" }}
           >
             <div className="px-4 pt-3 pb-1">
-              <h2 className="text-ink-900 text-sm font-bold">Congés passés en paye mais annulés</h2>
+              <h2 className="text-slate text-base font-bold">Congés passés en paye mais annulés</h2>
             </div>
             <div className="border-ink-300/60 border-t">
               {chargementAffiche ? (
@@ -718,7 +718,7 @@ function QuelsCongesTransmettre({
                   }
                   emptyText="Aucune correction à transmettre."
                   triParDefaut="collaborateur"
-                  libelleColonneDuree="Transmis"
+                  libelleColonneDuree="À transmettre"
                   lignesTransmissionParDemande={lignesTransmissionParId}
                 />
               )}
@@ -730,7 +730,7 @@ function QuelsCongesTransmettre({
             style={{ animationDelay: "270ms" }}
           >
             <div className="px-4 pt-3 pb-1">
-              <h2 className="text-ink-900 text-sm font-bold">Régularisations</h2>
+              <h2 className="text-slate text-base font-bold">Régularisations</h2>
             </div>
             <div className="border-ink-300/60 border-t">
               <TableauAjustements

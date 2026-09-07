@@ -4462,6 +4462,50 @@ stretch`, plus de `h-[604px]` fixe), puis une mesure JS pour n'afficher que le n
   tenant sans scroll (`useLayoutEffect`, comptage cumulatif des hauteurs de ligne) — les deux
   annulés sur demande explicite, retour à la hauteur plafonnée à 604px d'origine (20/08/2026).
 
+## Suivre les soldes — croix de fermeture manquante (07/09/2026)
+
+Bug réel trouvé (pas juste cosmétique) : sur "Suivre les soldes", le panneau de détail (branche
+`avecAjustement` de `SoldeDetailPanel.tsx`) n'affichait aucun moyen de le refermer. Le bouton croix
+existait bel et bien dans le fichier (`headerJsx`, `onClick={onClose}`, `onClose` déjà câblé par
+l'appelant) mais cette branche de rendu ne l'incluait jamais — contrairement à une autre branche du
+même fichier. Ajout d'un bouton croix dédié (pas le `headerJsx` complet avec avatar/nom, volontai-
+rement absent ici par décision antérieure — "pas de bandeau, le nom est déjà visible sur la card
+cliquée juste à côté"). Piège rencontré en le plaçant : le `<th>` sticky de la colonne "Jours" du
+tableau partageait le même `z-10` et le peignait par-dessus (invisible + non cliquable bien que
+présent dans le DOM) — corrigé en passant le bouton à `z-20` avec un fond propre. Au passage,
+l'intitulé de colonne "Jours" retiré (redondant avec "Événement"/le montant déjà visible).
+
+Au cours de cette investigation, un état corrompu du serveur de dev (cache Fast Refresh, erreurs de
+parsing sur des fichiers pourtant sains sur disque) a été identifié et nettoyé (`rm -rf .next` +
+redémarrage) — sans lien avec le code applicatif, juste l'accumulation d'une très longue session.
+
+## Transmissions paie — tableau "Régularisations" aligné sur les autres tableaux (07/09/2026)
+
+`TableauAjustements.tsx` (table dédiée aux régularisations manuelles) était en retard sur les
+conventions déjà en place ailleurs sur "Quels congés transmettre" :
+- En-tête de colonnes passé au motif "vert header" partagé (`border-slate/30 text-slate
+  bg-mint-tint/50`, repris de `HistoriqueTable.tsx`) au lieu du gris neutre d'origine.
+- Colonne **Type** ajoutée (point de couleur + code, ex. "● CP" — même pattern que la colonne Type
+  de `HistoriqueTable.tsx`, factorisable si un 3e appelant apparaît un jour).
+- Colonne durée renommée **"À transmettre"** (ainsi que le même intitulé sur les 3 tableaux
+  `HistoriqueTable` de la page, `libelleColonneDuree`) — "Durée"/"Transmis" prêtaient à confusion
+  avant transmission effective. Valeur colorée selon le type (`classeTexteTypeBadge`), comme un
+  solde.
+- Colonne **Date** au format court jj/mm/aa (`formatDateActionCourte`, jusque-là une fonction
+  locale à `HistoriqueTable.tsx` — extraite vers `lib/format.ts` pour être réutilisable), style
+  aligné sur la colonne "Posé le" (`text-ink-500`, pas de gras). Colonnes À transmettre/Date
+  interverties sur demande explicite (À transmettre avant Date).
+- Colonne **Paie** ajoutée en dernière position, à `—` comme Statut : les régularisations
+  (`ajustements_solde`) sont appliquées immédiatement au solde Réel, jamais via un export paie —
+  pas de statut de transmission réel à afficher, mais colonne conservée pour l'alignement visuel
+  avec les 3 autres tableaux de la page (Collaborateur/Type/À transmettre/Date/Statut/Paie).
+
+**Pistes de conception notées sans être implémentées** (voir Backlog.md/questions.md) : un statut de
+badge "à régulariser" pour une demande déjà transmise puis annulée (`BadgeTransmission`, aujourd'hui
+tout-ou-rien, ne regarde pas `statut`), et un statut "partiellement transmis" pour une demande à
+cheval sur deux mois dont un seul a été transmis — les deux pistes touchent le même badge et
+pourraient se recouper.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

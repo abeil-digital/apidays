@@ -407,7 +407,7 @@ export function SoldeDetailPanel({
             <thead>
               <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
                 <th className="bg-surface-card sticky top-0 z-10 px-4 py-3">Événement</th>
-                <th className="bg-surface-card sticky top-0 z-10 px-4 py-3 text-center">Jours</th>
+                <th className="bg-surface-card sticky top-0 z-10 px-4 py-3 text-center"></th>
               </tr>
             </thead>
             <tbody>
@@ -655,7 +655,17 @@ export function SoldeDetailPanel({
           style={{ ...style, gap: detailOuvert ? "5px" : "0px" }}
         >
         <div className="flex w-72 shrink-0 flex-col gap-2">
-          <div className="bg-surface-card overflow-hidden shadow-sm">{bodyJsx}</div>
+          <div className="bg-surface-card relative overflow-hidden shadow-sm">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fermer"
+              className="text-ink-500 hover:text-ink-900 bg-surface-card absolute top-2 right-2 z-20 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+            >
+              <X size={16} />
+            </button>
+            {bodyJsx}
+          </div>
           {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
               "Vérifier les fiches de paie") — sorti de la card tableau
               (29/08/2026, demande explicite) : sa propre card en dessous.

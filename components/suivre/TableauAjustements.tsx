@@ -1,6 +1,11 @@
-import { formatJours } from "@/lib/format";
+import { formatDateActionCourte, formatJours } from "@/lib/format";
 import type { AjustementEquipe } from "@/lib/data/soldes.repository";
 import { EmptyRow } from "@/components/ui/EmptyRow";
+import {
+  LABEL_COURT,
+  classeFondTypeBadge,
+  classeTexteTypeBadge,
+} from "@/components/demandes/TypeBadge";
 
 /**
  * Table dédiée aux régularisations manuelles (27/08/2026, filtre "Régul
@@ -26,11 +31,13 @@ export function TableauAjustements({
   return (
     <table className="w-full text-left text-sm">
       <thead>
-        <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+        <tr className="border-slate/30 text-slate bg-mint-tint/50 border-b text-xs font-semibold tracking-wide">
           <th className="px-4 py-3">Collaborateur</th>
-          <th className="px-4 py-3">Dates</th>
-          <th className="px-4 py-3">Durée</th>
+          <th className="px-4 py-3">Type</th>
+          <th className="px-4 py-3">À transmettre</th>
+          <th className="px-4 py-3">Date</th>
           <th className="px-4 py-3">Statut</th>
+          <th className="px-4 py-3">Paie</th>
         </tr>
       </thead>
       <tbody>
@@ -43,11 +50,18 @@ export function TableauAjustements({
             }`}
           >
             <td className="text-ink-900 px-4 py-3 font-semibold">{a.nomComplet}</td>
-            <td className="text-ink-900 px-4 py-3">{a.date}</td>
-            <td className="text-ink-900 px-4 py-3" title={a.motif}>
+            <td className="px-4 py-3">
+              <span className="inline-flex items-center gap-1.5">
+                <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(a.code)}`} />
+                <span className="text-ink-900 font-semibold">{LABEL_COURT[a.code]}</span>
+              </span>
+            </td>
+            <td className={`px-4 py-3 font-semibold ${classeTexteTypeBadge(a.code)}`} title={a.motif}>
               {a.deltaJours > 0 ? "+" : ""}
               {formatJours(a.deltaJours)} j
             </td>
+            <td className="text-ink-500 px-4 py-3">{formatDateActionCourte(a.date)}</td>
+            <td className="text-ink-500 px-4 py-3">—</td>
             <td className="text-ink-500 px-4 py-3">—</td>
           </tr>
         ))}
