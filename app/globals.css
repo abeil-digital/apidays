@@ -63,7 +63,7 @@
   --color-cpi: #496580; /* bleu slate — congé imposé (paramétrage Manager) — anciennement couleur de RECUP, échange du 15/08/2026 */
   --color-recup: #d98ca6; /* rose — récupération — anciennement couleur d'EVT_FAM, échange du 15/08/2026 */
   --color-evtfam: #d98ca6; /* rose — événement familial — partage temporairement la couleur de RECUP, à distinguer plus tard */
-  --color-dji: #9b8bc4; /* violet — demi-journée imposée (paramétrage Manager, pas un compteur salarié) */
+  --color-dji: #496580; /* bleu slate — demi-journée imposée (paramétrage Manager, pas un compteur salarié) — reprend la couleur de CPI (07/09/2026, demande explicite), même principe que RECUP/EVT_FAM ci-dessus */
   --color-ferie: #d4b106; /* or — jour férié (vue calendrier) */
   --color-mint: #4fa893; /* accent secondaire — carte "Poser un congé" */
   --color-mint-tint: #e7f3ef; /* accent-100 — fond du bloc "Soldes" */

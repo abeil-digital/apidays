@@ -12,8 +12,10 @@ import { logout } from "@/app/connexion/actions";
  * Header général de l'application — fond bleu nuit (vraie charte Abeil,
  * `--color-abeil-navy`, 02/09/2026 — pas encore généralisé au reste de
  * l'app, qui reste sur le slate provisoire). Porte le logo, la navigation
- * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. "Paramétrer" n'est
- * cliquable que pour manager/admin (voir niveau1.ts). La sous-navigation
+ * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. "Suivre"/"Paramétrer"
+ * n'existent dans cette nav QUE pour manager/admin (07/09/2026, demande
+ * explicite — pas de lien grisé pour un rôle sans droit, absence pure et
+ * simple, voir niveau1.ts). La sous-navigation
  * (SideNav/BottomNav) dépend de la section active — voir tabs.ts.
  *
  * Pas sticky (28/08/2026, refusé explicitement par Vincent) — `relative z-50`
@@ -34,15 +36,16 @@ export function HeaderBar() {
       <img
         src="/logo-abeil.svg"
         alt="Abeil"
-        className="ml-[25px] h-[25.6px] w-auto origin-left scale-x-[1.21] shrink-0"
+        className="ml-[25px] h-[25.6px] w-auto shrink-0 origin-left scale-x-[1.21]"
       />
 
       <nav className="flex h-full shrink-0 items-stretch gap-1">
-        {niveau1Items.map(({ key, label, href }) =>
-          href ? (
+        {niveau1Items
+          .filter(({ href }) => href !== null)
+          .map(({ key, label, href }) => (
             <Link
               key={key}
-              href={href}
+              href={href!}
               className={`flex items-center border-b-2 px-3 pt-[10px] text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
                 isNiveau1Actif(key, pathname)
                   ? "border-abeil-yellow text-abeil-yellow hover:bg-abeil-yellow/10"
@@ -51,16 +54,7 @@ export function HeaderBar() {
             >
               {label}
             </Link>
-          ) : (
-            <span
-              key={key}
-              title="Bientôt disponible"
-              className="hidden cursor-not-allowed items-center border-b-2 border-transparent px-3 pt-[10px] text-sm font-semibold whitespace-nowrap text-white/60 md:flex"
-            >
-              {label}
-            </span>
-          ),
-        )}
+          ))}
       </nav>
 
       <div className="ml-auto flex shrink-0 items-center gap-3">

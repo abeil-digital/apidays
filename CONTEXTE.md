@@ -4322,6 +4322,26 @@ en coins carrés, titres en navy gras, `FieldLabel`/`Select` remplacés par des 
 des `SelectPille`, contour vert bouton sur tous les `Input` (y compris les petits champs inline de
 `LigneFormulaireAnciennete`). Import `FieldLabel` retiré (devenu inutile dans ce fichier).
 
+## Navigation niveau 1 — masquée (pas grisée) pour un rôle sans droit (07/09/2026)
+
+`HeaderBar.tsx` affichait "Suivre"/"Paramétrer" en grisé (`<span>` désactivé, tooltip "Bientôt
+disponible") pour un collaborateur sans droit sur ces sections, plutôt que de ne pas les afficher
+du tout. Changé sur demande explicite ("on n'affiche pas les éléments de navigation principale
+auxquels [le collaborateur] n'a pas de droit") : `niveau1Items` est maintenant filtré sur `href !==
+null` avant le rendu — un collaborateur ne voit plus que "Poser" dans le header, les deux autres
+liens n'existent plus dans le DOM (pas juste désactivés visuellement). `getNiveau1Items`
+(`niveau1.ts`) inchangé, seule la consommation dans `HeaderBar.tsx` a changé.
+
+## Calendrier — DJI reprend la couleur de CPI (07/09/2026)
+
+Demande explicite, dans la continuité de la clarification CPI/DJI du 05/09/2026 (plus de CPI actif,
+DJI reste le seul mécanisme d'imposition visible sur le calendrier) : `--color-dji` passé de violet
+(`#9b8bc4`) au bleu slate de `--color-cpi` (`#496580`), en valeur littérale dupliquée plutôt qu'une
+référence `var()` — même principe déjà en place pour RECUP/EVT_FAM (`app/globals.css`). `--color-cpi`
+lui-même n'est pas retiré (le concept CPI reste en dormance dans le code, voir décision du
+05/09/2026) — seule la teinte utilisée à l'écran pour DJI change. Vérifié en navigateur sur
+`/parametrer/calendrier2` : pastilles DJI en bleu slate.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
