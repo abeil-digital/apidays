@@ -4374,6 +4374,33 @@ repo, `schema.sql` mis à jour en conséquence comme à chaque changement de sch
 visuelle en attente** — nécessite une reconnexion avec `test-salarie@abeil.local` pour confirmer le
 badge "Transmis" sur l'historique personnel et la valeur du solde réel.
 
+## Congés & RTT — enregistrement global sur bandeau sticky (07/09/2026)
+
+Demande explicite : "remplacer tous les enregistrer associé à chaque pavé par un enregistrer
+global sur un bandeau sticky en bas". Les 3 blocs de réglage (`BlocAcquisition` ×2 pour CP/RTT,
+`BlocObjectifsCalendrier` pour CPI/DJI) avaient chacun leur propre `<form>`, bouton "Enregistrer"
+et état "modifié"/erreur/succès indépendants.
+
+**Approche retenue** : garder l'état local et la validation de chaque bloc (rien à dupliquer côté
+parent), mais remplacer leur `<form onSubmit>` par un `<div>` et exposer une méthode `enregistrer()`
+via `forwardRef`/`useImperativeHandle` (type partagé `BlocReglageHandle`) — le bloc reste seul
+responsable de valider ses propres champs et d'afficher son erreur locale le cas échéant, il
+retourne juste `true`/`false` à l'appelant. Chaque bloc reçoit aussi un prop `onModifieChange`
+(branché directement sur un `setState` du parent, pas besoin de `useCallback`) pour remonter son
+état "modifié" — `CongesRttPage` agrège les 3 flags en un seul `modifieGlobal` (OU logique) qui
+pilote le bouton du bandeau global.
+
+Le bandeau lui-même : `sticky bottom-0`, bleed en marge négative (`-mx-3 px-3`) pour reprendre la
+largeur malgré le `px-3` d'`AppShell` — contexte page pleine, pas de padding de `Modal` à
+compenser (contrairement au bandeau abandonné sur la popin fiche utilisateur le 05/09/2026, où le
+problème venait justement de cette compensation). Au clic, `Promise.all` sur les 3 `ref.current
+.enregistrer()`, un message de succès/erreur global agrégé, bouton redésactivé après un
+enregistrement réussi. Testé en direct (navigateur) : activation/désactivation du bouton au
+changement, sauvegarde effective des 3 blocs, message de succès.
+
+Au passage : la phrase "Les règles ne se cumulent pas entre elles : seule la plus favorable au
+collaborateur s'applique" retirée du texte d'aide du bloc Ancienneté (demande explicite).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

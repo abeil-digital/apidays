@@ -1,7 +1,15 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
-import { Trash2 } from "lucide-react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { Check, Trash2 } from "lucide-react";
 import type {
   ObjectifsCalendrier,
   ObjectifsCalendrierInput,
@@ -18,6 +26,16 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { ListCard } from "@/components/ui/ListCard";
 import { SelectPille } from "@/components/ui/SelectPille";
+
+/** Handle exposé par chaque bloc de réglage (07/09/2026, demande explicite :
+ * "un enregistrer global sur un bandeau sticky en bas" à la place d'un
+ * bouton par pavé) — le bandeau global de `CongesRttPage` déclenche
+ * `enregistrer()` sur chaque bloc, qui valide et sauvegarde ses propres
+ * champs puis retourne `true`/`false` ; le bloc affiche lui-même son erreur
+ * de validation le cas échéant, le bandeau global n'agrège que le résultat. */
+interface BlocReglageHandle {
+  enregistrer: () => Promise<boolean>;
+}
 
 type PresetPeriode =
   "juin_mai" | "annee_civile" | "annee_scolaire" | "avril_mars" | "personnalisee";
@@ -108,230 +126,230 @@ interface BlocAcquisitionProps {
   titreAnticipation: string;
   guidanceAnticipation: string;
   onEnregistrer: (type: TypeDemande, input: RegleAcquisitionInput) => Promise<RegleAcquisition>;
+  /** Reflète l'état "modifié" de ce bloc vers le bandeau global (07/09/2026)
+   * — le bouton "Enregistrer" n'est plus ici, il vit sur `CongesRttPage`, qui
+   * doit savoir si CE bloc a des changements en attente. */
+  onModifieChange: (modifie: boolean) => void;
   children?: ReactNode;
 }
 
-function BlocAcquisition({
-  titre,
-  type,
-  ordrePresets,
-  regle,
-  titreReport,
-  guidanceReport,
-  titreAnticipation,
-  guidanceAnticipation,
-  onEnregistrer,
-  children,
-}: BlocAcquisitionProps) {
-  const presetParDefaut = ordrePresets[0];
-  const baseParDefaut =
-    presetParDefaut === "personnalisee"
-      ? { mois: 1, jour: 1 }
-      : PRESET_PERIODE_VALEUR[presetParDefaut];
+const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
+  function BlocAcquisition(
+    {
+      titre,
+      type,
+      ordrePresets,
+      regle,
+      titreReport,
+      guidanceReport,
+      titreAnticipation,
+      guidanceAnticipation,
+      onEnregistrer,
+      onModifieChange,
+      children,
+    },
+    ref,
+  ) {
+    const presetParDefaut = ordrePresets[0];
+    const baseParDefaut =
+      presetParDefaut === "personnalisee"
+        ? { mois: 1, jour: 1 }
+        : PRESET_PERIODE_VALEUR[presetParDefaut];
 
-  const [preset, setPreset] = useState<PresetPeriode>(
-    regle ? presetPourPeriode(regle.periodeDebutMois, regle.periodeDebutJour) : presetParDefaut,
-  );
-  const [mois, setMois] = useState(regle?.periodeDebutMois ?? baseParDefaut.mois);
-  const [jour, setJour] = useState(regle?.periodeDebutJour ?? baseParDefaut.jour);
-  const [acquisition, setAcquisition] = useState(regle ? String(regle.tauxAcquisitionMensuel) : "");
-  const [report, setReport] = useState(regle?.reportAutorise ?? false);
-  const [anticipation, setAnticipation] = useState(regle?.anticipationAutorisee ?? false);
-  const [erreur, setErreur] = useState("");
-  const [envoi, setEnvoi] = useState(false);
-  const [enregistre, setEnregistre] = useState(false);
-  const [modifie, setModifie] = useState(false);
+    const [preset, setPreset] = useState<PresetPeriode>(
+      regle ? presetPourPeriode(regle.periodeDebutMois, regle.periodeDebutJour) : presetParDefaut,
+    );
+    const [mois, setMois] = useState(regle?.periodeDebutMois ?? baseParDefaut.mois);
+    const [jour, setJour] = useState(regle?.periodeDebutJour ?? baseParDefaut.jour);
+    const [acquisition, setAcquisition] = useState(
+      regle ? String(regle.tauxAcquisitionMensuel) : "",
+    );
+    const [report, setReport] = useState(regle?.reportAutorise ?? false);
+    const [anticipation, setAnticipation] = useState(regle?.anticipationAutorisee ?? false);
+    const [erreur, setErreur] = useState("");
+    const [modifie, setModifie] = useState(false);
 
-  function marquerModifie() {
-    setModifie(true);
-    setEnregistre(false);
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-
-    const taux = Number(acquisition);
-    if (!acquisition || Number.isNaN(taux) || taux < 0) {
-      setErreur("Merci d'indiquer un taux d'acquisition valide.");
-      return;
+    function marquerModifie() {
+      setModifie(true);
     }
 
-    const { mois: moisEnvoye, jour: jourEnvoye } =
-      preset === "personnalisee" ? { mois, jour } : PRESET_PERIODE_VALEUR[preset];
+    useEffect(() => {
+      onModifieChange(modifie);
+    }, [modifie, onModifieChange]);
 
-    setErreur("");
-    setEnvoi(true);
-    setEnregistre(false);
-    try {
-      await onEnregistrer(type, {
-        periodeDebutMois: moisEnvoye,
-        periodeDebutJour: jourEnvoye,
-        tauxAcquisitionMensuel: taux,
-        reportAutorise: report,
-        anticipationAutorisee: anticipation,
-      });
-      setEnregistre(true);
-      setModifie(false);
-    } catch {
-      setErreur("Impossible d'enregistrer ces réglages.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
+    useImperativeHandle(
+      ref,
+      () => ({
+        async enregistrer() {
+          const taux = Number(acquisition);
+          if (!acquisition || Number.isNaN(taux) || taux < 0) {
+            setErreur("Merci d'indiquer un taux d'acquisition valide.");
+            return false;
+          }
 
-  return (
-    <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
-      <h2 className="text-abeil-navy text-sm font-bold">{titre}</h2>
+          const { mois: moisEnvoye, jour: jourEnvoye } =
+            preset === "personnalisee" ? { mois, jour } : PRESET_PERIODE_VALEUR[preset];
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label
-              htmlFor={`${type}-periode`}
-              className="text-abeil-navy mb-1.5 block text-sm font-bold"
-            >
-              Période de référence
-            </label>
-            <SelectPille
-              id={`${type}-periode`}
-              value={preset}
-              onChange={(e) => {
-                setPreset(e.target.value as PresetPeriode);
-                marquerModifie();
-              }}
-              borderClassName="border-slate"
-              chevronClassName="text-abeil-navy"
-              hoverClassName="enabled:hover:bg-surface-app"
-              className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
-            >
-              {ordrePresets.map((p) => (
-                <option key={p} value={p}>
-                  {PRESET_PERIODE_LABEL[p]}
-                </option>
-              ))}
-            </SelectPille>
-          </div>
+          setErreur("");
+          try {
+            await onEnregistrer(type, {
+              periodeDebutMois: moisEnvoye,
+              periodeDebutJour: jourEnvoye,
+              tauxAcquisitionMensuel: taux,
+              reportAutorise: report,
+              anticipationAutorisee: anticipation,
+            });
+            setModifie(false);
+            return true;
+          } catch {
+            setErreur("Impossible d'enregistrer ces réglages.");
+            return false;
+          }
+        },
+      }),
+      [acquisition, preset, mois, jour, report, anticipation, type, onEnregistrer],
+    );
 
-          <div>
-            <label
-              htmlFor={`${type}-acquisition`}
-              className="text-abeil-navy mb-1.5 block text-sm font-bold"
-            >
-              Acquisition
-            </label>
-            <div className="flex items-center gap-2">
-              <Input
-                id={`${type}-acquisition`}
-                type="number"
-                min={0}
-                step="0.01"
-                placeholder="Ex. 2.08"
-                value={acquisition}
-                onChange={(e) => {
-                  setAcquisition(e.target.value);
-                  marquerModifie();
-                }}
-                className="!border-slate w-20"
-              />
-              <span className="text-ink-500 text-sm">jours / mois</span>
-            </div>
-          </div>
-        </div>
+    return (
+      <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+        <h2 className="text-abeil-navy text-sm font-bold">{titre}</h2>
 
-        {preset === "personnalisee" && (
+        <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label
-                htmlFor={`${type}-mois`}
+                htmlFor={`${type}-periode`}
                 className="text-abeil-navy mb-1.5 block text-sm font-bold"
               >
-                Mois de début
+                Période de référence
               </label>
-              <Input
-                id={`${type}-mois`}
-                type="number"
-                min={1}
-                max={12}
-                value={mois}
+              <SelectPille
+                id={`${type}-periode`}
+                value={preset}
                 onChange={(e) => {
-                  setMois(Number(e.target.value));
+                  setPreset(e.target.value as PresetPeriode);
                   marquerModifie();
                 }}
-                className="!border-slate w-20"
-              />
+                borderClassName="border-slate"
+                chevronClassName="text-abeil-navy"
+                hoverClassName="enabled:hover:bg-surface-app"
+                className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
+              >
+                {ordrePresets.map((p) => (
+                  <option key={p} value={p}>
+                    {PRESET_PERIODE_LABEL[p]}
+                  </option>
+                ))}
+              </SelectPille>
             </div>
+
             <div>
               <label
-                htmlFor={`${type}-jour`}
+                htmlFor={`${type}-acquisition`}
                 className="text-abeil-navy mb-1.5 block text-sm font-bold"
               >
-                Jour de début
+                Acquisition
               </label>
-              <Input
-                id={`${type}-jour`}
-                type="number"
-                min={1}
-                max={31}
-                value={jour}
-                onChange={(e) => {
-                  setJour(Number(e.target.value));
-                  marquerModifie();
-                }}
-                className="!border-slate w-20"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id={`${type}-acquisition`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="Ex. 2.08"
+                  value={acquisition}
+                  onChange={(e) => {
+                    setAcquisition(e.target.value);
+                    marquerModifie();
+                  }}
+                  className="!border-slate w-20"
+                />
+                <span className="text-ink-500 text-sm">jours / mois</span>
+              </div>
             </div>
           </div>
+
+          {preset === "personnalisee" && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label
+                  htmlFor={`${type}-mois`}
+                  className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                >
+                  Mois de début
+                </label>
+                <Input
+                  id={`${type}-mois`}
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={mois}
+                  onChange={(e) => {
+                    setMois(Number(e.target.value));
+                    marquerModifie();
+                  }}
+                  className="!border-slate w-20"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor={`${type}-jour`}
+                  className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                >
+                  Jour de début
+                </label>
+                <Input
+                  id={`${type}-jour`}
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={jour}
+                  onChange={(e) => {
+                    setJour(Number(e.target.value));
+                    marquerModifie();
+                  }}
+                  className="!border-slate w-20"
+                />
+              </div>
+            </div>
+          )}
+
+          <RadioOuiNon
+            name={`${type}-report`}
+            titre={titreReport}
+            valeur={report}
+            onChange={(valeur) => {
+              setReport(valeur);
+              marquerModifie();
+            }}
+            guidance={guidanceReport}
+          />
+
+          <RadioOuiNon
+            name={`${type}-anticipation`}
+            titre={titreAnticipation}
+            valeur={anticipation}
+            onChange={(valeur) => {
+              setAnticipation(valeur);
+              marquerModifie();
+            }}
+            guidance={guidanceAnticipation}
+          />
+
+          {erreur && (
+            <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+              {erreur}
+            </div>
+          )}
+        </div>
+
+        {children && (
+          <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">{children}</div>
         )}
-
-        <RadioOuiNon
-          name={`${type}-report`}
-          titre={titreReport}
-          valeur={report}
-          onChange={(valeur) => {
-            setReport(valeur);
-            marquerModifie();
-          }}
-          guidance={guidanceReport}
-        />
-
-        <RadioOuiNon
-          name={`${type}-anticipation`}
-          titre={titreAnticipation}
-          valeur={anticipation}
-          onChange={(valeur) => {
-            setAnticipation(valeur);
-            marquerModifie();
-          }}
-          guidance={guidanceAnticipation}
-        />
-
-        {erreur && (
-          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-            {erreur}
-          </div>
-        )}
-
-        {enregistre && !erreur && (
-          <div className="rounded-control bg-status-success-bg text-status-success-fg px-3 py-2.5 text-sm">
-            Réglages enregistrés.
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          disabled={envoi || !modifie}
-          className="rounded-card w-fit self-start px-6 py-3"
-        >
-          {envoi ? "Enregistrement…" : "Enregistrer"}
-        </Button>
-      </form>
-
-      {children && (
-        <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">{children}</div>
-      )}
-    </div>
-  );
-}
+      </div>
+    );
+  },
+);
 
 interface LigneFormulaireAncienneteProps {
   valeurInitiale?: RegleAnciennete;
@@ -430,8 +448,7 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
       <h2 className="text-abeil-navy text-sm font-bold">Ancienneté</h2>
 
       <p className="text-ink-500 text-xs">
-        Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté. Les règles ne se
-        cumulent pas entre elles : seule la plus favorable au collaborateur s&rsquo;applique.
+        Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté.
       </p>
 
       {regles.length > 0 && (
@@ -512,13 +529,14 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
  * bouton "Publier"). Même gabarit que `BlocAcquisition` (titre, formulaire,
  * bouton "Enregistrer" désactivé tant que rien n'a changé).
  */
-function BlocObjectifsCalendrier({
-  objectifs,
-  onEnregistrer,
-}: {
-  objectifs: ObjectifsCalendrier | null;
-  onEnregistrer: (input: ObjectifsCalendrierInput) => Promise<ObjectifsCalendrier>;
-}) {
+const BlocObjectifsCalendrier = forwardRef<
+  BlocReglageHandle,
+  {
+    objectifs: ObjectifsCalendrier | null;
+    onEnregistrer: (input: ObjectifsCalendrierInput) => Promise<ObjectifsCalendrier>;
+    onModifieChange: (modifie: boolean) => void;
+  }
+>(function BlocObjectifsCalendrier({ objectifs, onEnregistrer, onModifieChange }, ref) {
   const [cibleJoursCpi, setCibleJoursCpi] = useState(
     objectifs ? String(objectifs.cibleJoursCpi) : "",
   );
@@ -526,48 +544,50 @@ function BlocObjectifsCalendrier({
     objectifs ? String(objectifs.cibleDemiJourneesDji) : "",
   );
   const [erreur, setErreur] = useState("");
-  const [envoi, setEnvoi] = useState(false);
-  const [enregistre, setEnregistre] = useState(false);
   const [modifie, setModifie] = useState(false);
 
   function marquerModifie() {
     setModifie(true);
-    setEnregistre(false);
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    onModifieChange(modifie);
+  }, [modifie, onModifieChange]);
 
-    const cpi = Number(cibleJoursCpi);
-    const dji = Number(cibleDemiJourneesDji);
-    if (!cibleJoursCpi || Number.isNaN(cpi) || cpi < 0) {
-      setErreur("Merci d'indiquer un nombre de jours CPI valide.");
-      return;
-    }
-    if (!cibleDemiJourneesDji || Number.isNaN(dji) || dji < 0) {
-      setErreur("Merci d'indiquer un nombre de demi-journées DJI valide.");
-      return;
-    }
+  useImperativeHandle(
+    ref,
+    () => ({
+      async enregistrer() {
+        const cpi = Number(cibleJoursCpi);
+        const dji = Number(cibleDemiJourneesDji);
+        if (!cibleJoursCpi || Number.isNaN(cpi) || cpi < 0) {
+          setErreur("Merci d'indiquer un nombre de jours CPI valide.");
+          return false;
+        }
+        if (!cibleDemiJourneesDji || Number.isNaN(dji) || dji < 0) {
+          setErreur("Merci d'indiquer un nombre de demi-journées DJI valide.");
+          return false;
+        }
 
-    setErreur("");
-    setEnvoi(true);
-    setEnregistre(false);
-    try {
-      await onEnregistrer({ cibleJoursCpi: cpi, cibleDemiJourneesDji: dji });
-      setEnregistre(true);
-      setModifie(false);
-    } catch {
-      setErreur("Impossible d'enregistrer ces objectifs.");
-    } finally {
-      setEnvoi(false);
-    }
-  }
+        setErreur("");
+        try {
+          await onEnregistrer({ cibleJoursCpi: cpi, cibleDemiJourneesDji: dji });
+          setModifie(false);
+          return true;
+        } catch {
+          setErreur("Impossible d'enregistrer ces objectifs.");
+          return false;
+        }
+      },
+    }),
+    [cibleJoursCpi, cibleDemiJourneesDji, onEnregistrer],
+  );
 
   return (
     <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
       <h2 className="text-abeil-navy text-sm font-bold">Congés &amp; demi-journées imposés</h2>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label
@@ -622,24 +642,10 @@ function BlocObjectifsCalendrier({
             {erreur}
           </div>
         )}
-
-        {enregistre && !erreur && (
-          <div className="rounded-control bg-status-success-bg text-status-success-fg px-3 py-2.5 text-sm">
-            Objectifs enregistrés.
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          disabled={envoi || !modifie}
-          className="rounded-card w-fit self-start px-6 py-3"
-        >
-          {envoi ? "Enregistrement…" : "Enregistrer"}
-        </Button>
-      </form>
+      </div>
     </div>
   );
-}
+});
 
 export function CongesRttPage() {
   const {
@@ -662,6 +668,46 @@ export function CongesRttPage() {
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const regleRtt = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
 
+  // Enregistrer global sur un bandeau sticky (07/09/2026, demande explicite
+  // : "remplacer tous les enregistrer associé à chaque pavé par un
+  // enregistrer global") — chaque bloc garde son propre état/sa propre
+  // validation (via `BlocReglageHandle`), ce bandeau se contente d'agréger
+  // "y a-t-il quelque chose à enregistrer" et de déclencher les 3
+  // sauvegardes en parallèle au clic.
+  const refCp = useRef<BlocReglageHandle>(null);
+  const refObjectifs = useRef<BlocReglageHandle>(null);
+  const refRtt = useRef<BlocReglageHandle>(null);
+  const [modifieCp, setModifieCp] = useState(false);
+  const [modifieObjectifs, setModifieObjectifs] = useState(false);
+  const [modifieRtt, setModifieRtt] = useState(false);
+  const [envoiGlobal, setEnvoiGlobal] = useState(false);
+  const [erreurGlobale, setErreurGlobale] = useState("");
+  const [succesGlobal, setSuccesGlobal] = useState(false);
+
+  const modifieGlobal = modifieCp || modifieObjectifs || modifieRtt;
+
+  async function handleEnregistrerTout() {
+    setEnvoiGlobal(true);
+    setErreurGlobale("");
+    setSuccesGlobal(false);
+    try {
+      const resultats = await Promise.all([
+        refCp.current?.enregistrer() ?? true,
+        refObjectifs.current?.enregistrer() ?? true,
+        refRtt.current?.enregistrer() ?? true,
+      ]);
+      if (resultats.every(Boolean)) {
+        setSuccesGlobal(true);
+      } else {
+        setErreurGlobale(
+          "Certains réglages n'ont pas pu être enregistrés — voir le détail ci-dessus.",
+        );
+      }
+    } finally {
+      setEnvoiGlobal(false);
+    }
+  }
+
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
       <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold">
@@ -680,6 +726,7 @@ export function CongesRttPage() {
         <>
           <div className="animate-stagger-in">
             <BlocAcquisition
+              ref={refCp}
               key={regleCp?.id ?? "cp-nouveau"}
               titre="Congés Payés"
               type="CP"
@@ -690,6 +737,7 @@ export function CongesRttPage() {
               titreAnticipation="Congés anticipés"
               guidanceAnticipation="Les collaborateurs peuvent poser des congés anticipés"
               onEnregistrer={enregistrerAcquisition}
+              onModifieChange={setModifieCp}
             >
               <BlocAnciennete
                 regles={reglesAnciennete}
@@ -702,14 +750,17 @@ export function CongesRttPage() {
 
           <div className="animate-stagger-in" style={{ animationDelay: "90ms" }}>
             <BlocObjectifsCalendrier
+              ref={refObjectifs}
               key={objectifs ? "objectifs-charges" : "objectifs-chargement"}
               objectifs={objectifs}
               onEnregistrer={enregistrerObjectifs}
+              onModifieChange={setModifieObjectifs}
             />
           </div>
 
           <div className="animate-stagger-in" style={{ animationDelay: "180ms" }}>
             <BlocAcquisition
+              ref={refRtt}
               key={regleRtt?.id ?? "rtt-nouveau"}
               titre="RTT"
               type="RTT"
@@ -720,7 +771,35 @@ export function CongesRttPage() {
               titreAnticipation="RTT anticipées"
               guidanceAnticipation="Les collaborateurs peuvent poser des RTT anticipées"
               onEnregistrer={enregistrerAcquisition}
+              onModifieChange={setModifieRtt}
             />
+          </div>
+
+          {/* Bandeau global sticky (07/09/2026) — bleed en marge négative
+          pour reprendre toute la largeur malgré le `px-3` d'`AppShell` (voir
+          `app/layout` — même principe que le bandeau de la popin création
+          utilisateur, mais ici en contexte page pleine, pas de padding de
+          `Modal` à compenser). */}
+          <div className="bg-surface-app border-ink-300/60 sticky bottom-0 -mx-3 border-t px-3 py-3">
+            {erreurGlobale && (
+              <div className="rounded-control bg-status-danger-bg text-status-danger-fg mb-3 px-3 py-2.5 text-sm">
+                {erreurGlobale}
+              </div>
+            )}
+            {succesGlobal && !erreurGlobale && (
+              <div className="rounded-control bg-status-success-bg text-status-success-fg mb-3 px-3 py-2.5 text-sm">
+                Réglages enregistrés.
+              </div>
+            )}
+            <Button
+              type="button"
+              onClick={handleEnregistrerTout}
+              disabled={envoiGlobal || !modifieGlobal}
+              className="rounded-card w-fit px-6 py-3"
+            >
+              <Check size={16} />
+              {envoiGlobal ? "Enregistrement…" : "Enregistrer"}
+            </Button>
           </div>
         </>
       )}
