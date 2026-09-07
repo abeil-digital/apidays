@@ -2,41 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-
-interface Question {
-  id: string;
-  question: string;
-  reponse: string;
-}
-
-// Contenu provisoire (20/08/2026, "on affinera") — texte de départ pour poser
-// le principe d'affichage, pas encore les vraies réponses métier validées.
-const QUESTIONS: Question[] = [
-  {
-    id: "solde-theorique-reel",
-    question: "Solde théorique et Solde réel, c'est quoi ?",
-    reponse:
-      "Le solde théorique est celui qui vous dit combien il vous reste à poser : il retire déjà vos demandes validées et celles en attente de validation. Le solde réel, lui, reflète ce qui a été effectivement transmis en paie — il évolue au rythme des transmissions, pas au moment de la validation.",
-  },
-  {
-    id: "jours-imposes",
-    question: "Quels jours imposés cette année ?",
-    reponse:
-      "Les jours et demi-journées imposés (CPI/DJI) sont définis par votre manager dans le calendrier de l'année. Vous les retrouvez directement sur votre calendrier, avec les jours fériés.",
-  },
-  {
-    id: "conges-ete",
-    question: "À quel moment je pose mes congés d'été ?",
-    reponse:
-      "Il n'y a pas de fenêtre imposée : vous pouvez poser vos congés d'été dès que vous connaissez vos dates, dans la limite de votre solde disponible sur la période.",
-  },
-  {
-    id: "jours-anciennete",
-    question: "Les jours d'ancienneté, c'est pour qui ?",
-    reponse:
-      "Les jours d'ancienneté s'ajoutent automatiquement à votre solde de congés payés une fois un seuil d'ancienneté atteint. Le nombre de jours dépend du barème en vigueur.",
-  },
-];
+import { useFaqs } from "@/hooks/useFaqs";
 
 /**
  * Card FAQ (20/08/2026, premier jet ; refonte 21/08/2026 sur maquette de
@@ -52,9 +18,12 @@ const QUESTIONS: Question[] = [
  * / "Juin 26 → Mai 27" / "2027", `text-sm font-semibold`) — déjà le cas ici,
  * conservé tel quel. Accordéon de questions à droite (une seule dépliée à la
  * fois, réponse affichée en dessous de la question elle-même plutôt que dans
- * un panneau séparé). Empilé en une seule colonne sous `md:`. Contenu des
- * réponses volontairement provisoire, pas encore les vraies règles métier
- * validées.
+ * un panneau séparé). Empilé en une seule colonne sous `md:`. Contenu géré
+ * depuis Paramétrer > FAQ (07/09/2026, remplace le contenu provisoire en
+ * dur) — `useFaqs()` ne renvoie ici que les FAQ publiées (RLS, un
+ * collaborateur ne voit jamais les brouillons), déjà triées par `ordre`.
+ * Rien affiché tant que le chargement est en cours ou si aucune FAQ n'est
+ * publiée, plutôt qu'une card vide.
  *
  * Débordement à droite jusqu'au bord de l'écran, bord gauche collé au rail
  * `SideNav` replié sans la gouttière `px-3` habituelle (21/08/2026, demande
@@ -71,9 +40,22 @@ const QUESTIONS: Question[] = [
  * rejouable au resize sans boucle de rétroaction.
  */
 export function FaqCard() {
-  const [selectionId, setSelectionId] = useState<string>(QUESTIONS[0].id);
+  const { faqs, loading } = useFaqs();
+  const [selectionId, setSelectionId] = useState<string>("");
   const conteneurRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ margeGauche: 0, largeur: 0 });
+
+  // Sélection par défaut sur la première FAQ une fois chargée (07/09/2026,
+  // ne peut plus être calculée en synchrone comme avec l'ancien tableau en
+  // dur). Ajustement pendant le rendu plutôt que dans un effect (pattern
+  // documenté React — "adjusting state as you render") : `initialise` garde
+  // ce réglage à usage unique, sans quoi rouvrir la 1ère FAQ écraserait un
+  // repli volontaire du collaborateur (`selectionId` remis à "" au clic).
+  const [initialise, setInitialise] = useState(false);
+  if (!initialise && faqs.length > 0) {
+    setInitialise(true);
+    setSelectionId(faqs[0].id);
+  }
 
   useEffect(() => {
     function recalculer() {
@@ -92,6 +74,8 @@ export function FaqCard() {
     return () => window.removeEventListener("resize", recalculer);
   }, []);
 
+  if (loading || faqs.length === 0) return null;
+
   return (
     <div
       ref={conteneurRef}
@@ -106,23 +90,25 @@ export function FaqCard() {
           </p>
         </div>
         <div className="divide-ink-300/60 flex min-w-0 flex-col divide-y md:w-[400px]">
-          {QUESTIONS.map((q) => {
-            const active = q.id === selectionId;
+          {faqs.map((faq) => {
+            const active = faq.id === selectionId;
             return (
-              <div key={q.id} className="py-4 first:pt-0 last:pb-0">
+              <div key={faq.id} className="py-4 first:pt-0 last:pb-0">
                 <button
                   type="button"
-                  onClick={() => setSelectionId(active ? "" : q.id)}
+                  onClick={() => setSelectionId(active ? "" : faq.id)}
                   className="text-ink-900 flex w-full items-center justify-between gap-3 text-left text-sm font-semibold"
                 >
-                  {q.question}
+                  {faq.question}
                   {active ? (
                     <ChevronUp size={16} className="text-ink-500 shrink-0" />
                   ) : (
                     <ChevronDown size={16} className="text-ink-500 shrink-0" />
                   )}
                 </button>
-                {active && <p className="text-ink-500 mt-2 text-sm leading-relaxed">{q.reponse}</p>}
+                {active && (
+                  <p className="text-ink-500 mt-2 text-sm leading-relaxed">{faq.reponse}</p>
+                )}
               </div>
             );
           })}

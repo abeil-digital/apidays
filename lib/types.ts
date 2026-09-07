@@ -274,6 +274,23 @@ export interface ObjectifsCalendrierInput {
   cibleDemiJourneesDji: number;
 }
 
+/** FAQ (Accueil, `FaqCard.tsx`) — administrée depuis Paramétrer > FAQ
+ * (07/09/2026). `ordre` pilote l'affichage (drag and drop en admin) ;
+ * `publie` distingue une FAQ visible des collaborateurs d'un brouillon —
+ * une FAQ créée est non publiée par défaut. */
+export interface Faq {
+  id: string;
+  question: string;
+  reponse: string;
+  publie: boolean;
+  ordre: number;
+}
+
+export interface FaqInput {
+  question: string;
+  reponse: string;
+}
+
 // --- Espace Paramétrer > Calendrier (DJ imposées, semaine du 15 août, jours fériés) ---
 
 export type DemiJournee = "matin" | "apres_midi";

@@ -4401,6 +4401,40 @@ changement, sauvegarde effective des 3 blocs, message de succès.
 Au passage : la phrase "Les règles ne se cumulent pas entre elles : seule la plus favorable au
 collaborateur s'applique" retirée du texte d'aide du bloc Ancienneté (demande explicite).
 
+## Administration des FAQ (07/09/2026)
+
+Nouvelle page Paramétrer > FAQ (`FaqAdminPage.tsx`, route `/parametrer/faq`), reprend l'item
+Backlog "Administration des FAQ" (21/08/2026) — `FaqCard.tsx` (Accueil) affichait jusqu'ici un
+contenu 100% en dur, non gérable.
+
+- **Table `faqs`** (question, réponse, `publie` défaut `false`, `ordre`) — RLS : lecture des FAQ
+  publiées pour tout authentifié, lecture/écriture totale pour manager/admin (même policy shape que
+  `regles_anciennete`/`objectifs_calendrier`). Une seule fonction de lecture (`fetchFaqs`) sert les
+  deux usages (Accueil collaborateur vs Paramétrer admin) — le filtre "publiées seulement" se fait
+  entièrement côté RLS (deux policies SELECT combinées en OR), pas de branche applicative séparée.
+- **Drag and drop natif** (07/09/2026, première fois dans ce codebase — aucune librairie DnD
+  n'était installée, aucun prior art) : HTML5 `draggable`/`onDragStart`/`onDragOver`/`onDrop`, pas
+  de nouvelle dépendance. L'aperçu pendant le glisser est un état dérivé (`dragOrder`), pas
+  synchronisé via un `useEffect` — le lint `react-hooks/set-state-in-effect` (nouveau sur ce
+  projet, rencontré deux fois pendant ce chantier) interdit d'appeler `setState` de façon
+  synchrone dans un effect ; corrigé soit en dérivant l'état directement au rendu (`items =
+dragOrder ?? faqs`), soit via le pattern React documenté "ajuster l'état pendant le rendu" (guard
+  à usage unique, `FaqCard.tsx` pour la sélection par défaut de la 1ère question).
+- **Formulaire d'ajout/édition** : même gabarit que `LigneFormulaireAnciennete`
+  (`CongesRttPage.tsx`) — ligne dépliée dans une `ListCard`, "Valider"/"Annuler", pas de popin.
+  Publication gérée séparément, par un clic direct sur la pastille `Badge` de la ligne (pas dans le
+  formulaire) — cohérent avec la demande explicite "en création une FAQ est non publiée" : aucun
+  contrôle de publication n'existe à la création, seulement une fois la ligne créée.
+- Onglet "FAQ" ajouté à `PARAMETRER_TABS` (`components/layout/tabs.ts`), protection de route déjà
+  couverte par le préfixe `/parametrer` dans `proxy.ts` (aucun changement nécessaire là).
+- `FaqCard.tsx` reconnectée à `useFaqs()` — ne rend rien tant que le chargement est en cours ou si
+  aucune FAQ n'est publiée (plutôt qu'une card vide affichée aux collaborateurs).
+
+Testé en direct (navigateur, compte admin) : création (brouillon par défaut), bascule
+publier/dépublier, modification, glisser-déposer avec persistance vérifiée après rechargement,
+suppression, disparition de la card Accueil quand aucune FAQ n'est publiée. `tsc`/`eslint`/
+`npm run build` clean.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

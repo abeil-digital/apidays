@@ -309,6 +309,20 @@ create table regles_anciennete (
   created_at timestamptz not null default now()
 );
 
+-- FAQ (Accueil, `FaqCard.tsx`) — administrée depuis Paramétrer > FAQ
+-- (07/09/2026). `ordre` pilote l'affichage (drag and drop en admin, valeurs
+-- non nécessairement contiguës — comparées entre elles, pas indexées) ;
+-- `publie` distingue une FAQ visible des collaborateurs d'un brouillon —
+-- non publiée par défaut à la création.
+create table faqs (
+  id uuid primary key default gen_random_uuid(),
+  question text not null,
+  reponse text not null,
+  publie boolean not null default false,
+  ordre int not null,
+  created_at timestamptz not null default now()
+);
+
 -- Régulation manuelle du solde par Delphine (Espace Suivre, feed d'historique
 -- CP) — table indépendante de `soldes`/`historique_soldes` (non exploitées :
 -- le solde est calculé à la volée par `soldes.repository.ts`, pas
@@ -447,6 +461,7 @@ alter table historique_utilisateur enable row level security;
 alter table soldes_initiaux enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table regles_anciennete enable row level security;
+alter table faqs enable row level security;
 alter table exports_paie enable row level security;
 alter table export_paie_lignes enable row level security;
 
@@ -787,6 +802,24 @@ create policy "regles_anciennete: manager et admin modifient"
   with check (my_role() in ('manager', 'admin'));
 
 -- ------------------------------------------------------------
+-- POLICIES — faqs (Paramétrer > FAQ, Accueil > FaqCard) — un collaborateur
+-- ne lit que les FAQ publiées ; manager/admin gèrent tout, publiées ou non
+-- (mêmes droits que regles_anciennete/objectifs_calendrier ci-dessus).
+-- ------------------------------------------------------------
+create policy "faqs: lecture des FAQ publiées par tout utilisateur authentifié"
+  on faqs for select
+  using (auth.role() = 'authenticated' and publie = true);
+
+create policy "faqs: manager et admin lisent tout"
+  on faqs for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "faqs: manager et admin modifient"
+  on faqs for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
+-- ------------------------------------------------------------
 -- POLICIES — ajustements_solde (régulation manuelle, Delphine uniquement)
 -- ------------------------------------------------------------
 -- Lecture élargie au salarié concerné (21/08/2026) — sans ce OR,
@@ -916,5 +949,6 @@ grant select, insert, update, delete on
   historique_utilisateur,
   soldes_initiaux,
   exports_paie,
-  export_paie_lignes
+  export_paie_lignes,
+  faqs
 to authenticated;

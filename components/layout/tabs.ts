@@ -2,6 +2,7 @@ import {
   CalendarClock,
   CalendarDays,
   ClipboardCheck,
+  HelpCircle,
   History,
   Home,
   ListChecks,
@@ -25,6 +26,7 @@ const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/utilisateurs", label: "Utilisateurs", Icon: Users },
   { href: "/parametrer/conges-rtt", label: "Congés & RTT", Icon: CalendarClock },
   { href: "/parametrer/calendrier2", label: "Calendrier", Icon: CalendarDays },
+  { href: "/parametrer/faq", label: "FAQ", Icon: HelpCircle },
 ];
 
 const SUIVRE_TABS: NavTab[] = [
