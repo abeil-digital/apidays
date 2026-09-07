@@ -655,7 +655,7 @@ function QuelsCongesTransmettre({
           >
             <div className="px-4 pt-3 pb-1">
               <h2 className="text-slate text-base font-bold">
-                Congés consommés non passés sur des périodes précédentes
+                Congés non passés en paie - mois précédents
               </h2>
             </div>
             <div className="border-ink-300/60 border-t">

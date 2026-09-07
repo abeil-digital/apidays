@@ -4506,6 +4506,38 @@ tout-ou-rien, ne regarde pas `statut`), et un statut "partiellement transmis" po
 cheval sur deux mois dont un seul a été transmis — les deux pistes touchent le même badge et
 pourraient se recouper.
 
+## Transmissions paie — renommage "Congés non passés en paie - mois précédents" (07/09/2026)
+
+Titre "Congés consommés non passés sur des périodes précédentes" jugé confus par Vincent (mélangeait
+"consommés" et "non passés", pas clair sur ce que la section couvre). Renommé en "Congés non passés
+en paie - mois précédents" — reste le nom de section, le nom interne côté code (`repêchage`,
+`emptyText="Aucun congé en repêchage."`) est inchangé.
+
+## Authentification — infra SMTP mise en place (07/09/2026)
+
+Chantier Backlog "Authentification : définition de mot de passe / mot de passe oublié" débloqué,
+côté infra (le parcours applicatif — email d'invitation, écran de définition de mot de passe, lien
+"mot de passe oublié" — reste à développer, non commencé).
+
+**Domaine changé par rapport à la décision du 02/09/2026** : `abeil-bretagne.fr` écarté (impliquait
+de coordonner avec Rémy — création de boîte mail + fusion prudente de l'enregistrement SPF avec la
+messagerie Abeil existante sans le dupliquer, un domaine ne pouvant avoir qu'un seul enregistrement
+TXT SPF) au profit de `citizen-d.fr`, un domaine déjà possédé par Vincent et inutilisé — zéro coût,
+zéro risque pour la messagerie d'Abeil, zéro dépendance à Rémy. Sous-domaine dédié
+`abeil-conges.citizen-d.fr` plutôt que le domaine racine — isole la réputation d'envoi, et prépare le
+passage en multi-tenant évoqué plus tôt dans la session (un sous-domaine par client à terme, ex.
+`clientb-conges.citizen-d.fr`).
+
+**Réalisé** : compte Resend créé, domaine `abeil-conges.citizen-d.fr` ajouté et vérifié (DKIM/SPF en
+CNAME/TXT, DMARC optionnel posé aussi) — enregistrements DNS ajoutés côté Gandi (zone de
+`citizen-d.fr`), piège rencontré et corrigé sur une ligne CNAME : le nom d'hôte cible
+(`send.forge.rmta.net`, serveur externe Resend) doit se terminer par un point pour être traité comme
+une valeur absolue par Gandi — sans le point, Gandi le traite comme relatif et lui accole
+`.citizen-d.fr`, ce qui aurait cassé l'enregistrement. Custom SMTP activé dans Supabase
+(Authentication > Emails > SMTP Settings — pas un menu séparé du menu latéral, une sous-section de
+la page Emails ; host `smtp.resend.com`, port 465, username `resend`, password = clé API Resend).
+Testé de bout en bout : email reçu.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
