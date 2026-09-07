@@ -183,6 +183,10 @@ export interface UtilisateurAdmin {
   creeParId: string | null; // null sur les profils créés avant ce champ (21/08/2026)
   creeParNom?: string;
   createdAt: string; // timestamptz ISO
+  /** Lien vers auth.users (07/09/2026) — null tant que l'invitation n'a pas
+   * abouti (voir `inviterUtilisateur`), permet d'afficher "Renvoyer
+   * l'invitation" sur la fiche. */
+  authId: string | null;
 }
 
 export interface UtilisateurAdminInput {

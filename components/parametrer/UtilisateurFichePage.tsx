@@ -36,6 +36,10 @@ import { useUtilisateurAdmin } from "@/hooks/useUtilisateurAdmin";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { fetchMoisMinimumChangementRH } from "@/lib/data/exportsPaie.repository";
+import {
+  envoyerLienReinitialisation,
+  inviterUtilisateur,
+} from "@/app/(app)/parametrer/utilisateurs/actions";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
@@ -985,6 +989,10 @@ interface FormulaireProps {
   statut?: UtilisateurAdmin["statut"];
   dateArchivage?: string | null;
   dateFinContrat?: string | null;
+  /** `null` tant que l'invitation par email n'a pas abouti (07/09/2026) —
+   * affiche "Renvoyer l'invitation" en édition. `undefined` en création
+   * (pas encore de fiche). */
+  authId?: string | null;
   historique: HistoriqueUtilisateurEntry[];
   soldeInitial: SoldeInitial | null;
   dateEntree: string;
@@ -1032,6 +1040,7 @@ function Formulaire({
   statut,
   dateArchivage,
   dateFinContrat,
+  authId,
   historique,
   soldeInitial,
   dateEntree,
@@ -1054,6 +1063,11 @@ function Formulaire({
   );
   const [erreur, setErreur] = useState("");
   const [envoi, setEnvoi] = useState(false);
+  const [invitationEnvoi, setInvitationEnvoi] = useState(false);
+  const [invitationErreur, setInvitationErreur] = useState(false);
+  const [invitationRenvoyee, setInvitationRenvoyee] = useState(false);
+  const [reinitEnvoi, setReinitEnvoi] = useState(false);
+  const [reinitEnvoyee, setReinitEnvoyee] = useState(false);
   const [modaleFinContratOuverte, setModaleFinContratOuverte] = useState(false);
   const [modaleOuverte, setModaleOuverte] = useState<{
     champ: ChampHistoriqueUtilisateur;
@@ -1139,6 +1153,14 @@ function Formulaire({
           soldeInitialInput,
           champs.natureContrat === "cdd" && dateSortieCdd ? dateSortieCdd : undefined,
         );
+        const invite = await inviterUtilisateur(resultat.id, resultat.email);
+        if (!invite.ok) {
+          setErreur(
+            "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
+              "Vous pourrez la renvoyer depuis la fiche du collaborateur.",
+          );
+          return;
+        }
         if (onCreated) {
           onCreated(resultat);
         } else {
@@ -1375,6 +1397,61 @@ function Formulaire({
                 <div className="bg-status-warning-bg text-status-warning-fg px-3.5 py-2.5 text-sm font-semibold">
                   Collaborateur·rice archivée
                   {dateArchivage ? ` le ${formatDateAction(dateArchivage)}` : ""}
+                </div>
+              )}
+              {modeEdition && !authId && (
+                <div className="bg-status-danger-bg text-status-danger-fg flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm font-semibold">
+                  <span>
+                    {invitationRenvoyee
+                      ? "Invitation renvoyée."
+                      : "Invitation non envoyée : ce profil ne peut pas encore se connecter."}
+                  </span>
+                  {!invitationRenvoyee && (
+                    <button
+                      type="button"
+                      disabled={invitationEnvoi}
+                      onClick={async () => {
+                        if (!id) return;
+                        setInvitationEnvoi(true);
+                        setInvitationErreur(false);
+                        const resultat = await inviterUtilisateur(id, champs.email);
+                        setInvitationEnvoi(false);
+                        if (resultat.ok) {
+                          setInvitationRenvoyee(true);
+                        } else {
+                          setInvitationErreur(true);
+                        }
+                      }}
+                      className="shrink-0 underline disabled:opacity-50"
+                    >
+                      {invitationEnvoi ? "Envoi…" : "Renvoyer l'invitation"}
+                    </button>
+                  )}
+                  {invitationErreur && <span>Échec de l&rsquo;envoi, réessayez.</span>}
+                </div>
+              )}
+              {modeEdition && authId && (
+                <div className="bg-surface-app text-ink-500 flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
+                  <span>
+                    {reinitEnvoyee
+                      ? "Lien de réinitialisation envoyé."
+                      : "Le collaborateur a oublié son mot de passe ?"}
+                  </span>
+                  {!reinitEnvoyee && (
+                    <button
+                      type="button"
+                      disabled={reinitEnvoi}
+                      onClick={async () => {
+                        setReinitEnvoi(true);
+                        const resultat = await envoyerLienReinitialisation(champs.email);
+                        setReinitEnvoi(false);
+                        if (resultat.ok) setReinitEnvoyee(true);
+                      }}
+                      className="text-abeil-navy shrink-0 underline disabled:opacity-50"
+                    >
+                      {reinitEnvoi ? "Envoi…" : "Envoyer un lien de réinitialisation"}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1986,6 +2063,7 @@ export function UtilisateurFichePage({ id }: UtilisateurFichePageProps) {
         statut={utilisateur?.statut}
         dateArchivage={utilisateur?.dateArchivage}
         dateFinContrat={utilisateur?.dateFinContrat}
+        authId={utilisateur?.authId}
         historique={historique}
         soldeInitial={soldeInitial}
         dateEntree={initial.dateEntree}

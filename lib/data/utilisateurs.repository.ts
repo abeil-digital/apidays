@@ -40,6 +40,7 @@ interface UtilisateurRow {
   date_fin_contrat: string | null;
   cree_par_id: string | null;
   created_at: string;
+  auth_id: string | null;
 }
 
 /**
@@ -56,7 +57,7 @@ interface UtilisateurRow {
  * (`fetchNomUtilisateur`), uniquement là où affiché (fiche détail).
  */
 const SELECT_UTILISATEUR =
-  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage, date_fin_contrat, cree_par_id, created_at";
+  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage, date_fin_contrat, cree_par_id, created_at, auth_id";
 
 function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
   return {
@@ -75,6 +76,7 @@ function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
     creeParId: row.cree_par_id,
     creeParNom: undefined,
     createdAt: row.created_at,
+    authId: row.auth_id,
   };
 }
 

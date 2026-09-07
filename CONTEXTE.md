@@ -4538,6 +4538,109 @@ une valeur absolue par Gandi — sans le point, Gandi le traite comme relatif et
 la page Emails ; host `smtp.resend.com`, port 465, username `resend`, password = clé API Resend).
 Testé de bout en bout : email reçu.
 
+## Authentification — parcours création de compte + mot de passe (07/09/2026)
+
+Suite de la section précédente (infra SMTP) : le parcours applicatif est maintenant construit et
+son plomberie (dashboard Supabase + code) fonctionne de bout en bout jusqu'à l'écran de définition
+de mot de passe. **Reste à faire à la prochaine session** : test complet (définir le mot de passe →
+se reconnecter avec) et passe UI/finitions sur les nouveaux écrans (actuellement au même gabarit
+minimal que `/connexion`, jamais retravaillés visuellement).
+
+### Ce qui a été construit
+
+Demande initiale de Vincent : admin crée un compte depuis Paramétrer → email envoyé au
+collaborateur avec un lien vers une page de définition de mot de passe (double saisie) ; côté
+collaborateur, "mot de passe oublié" avec le même principe (email → lien → double saisie + check).
+Passé en mode plan avant implémentation (exploration du code existant via agents, `auth_id` jamais
+posé par `creerUtilisateurAdmin`, aucune clé service_role dans le projet jusque-là).
+
+**Architecture retenue** : `supabase.auth.admin.inviteUserByEmail` (API Admin) pour la création par
+l'admin — le seul mécanisme qui correspond exactement au besoin (admin déclenche, collaborateur
+définit lui-même son mot de passe). Nouveau client Supabase dédié au service_role
+(`lib/supabase/admin.ts`, `import "server-only"`, jamais importé côté client, usage cantonné au
+seul appel `inviteUserByEmail` — tout le reste, y compris l'écriture de `auth_id`, passe par le
+client de session normal de l'admin, RLS déjà en place).
+
+**Nouveaux fichiers** :
+- `lib/supabase/admin.ts` — client service_role.
+- `app/(app)/parametrer/utilisateurs/actions.ts` — `inviterUtilisateur` (invite + liaison
+  `auth_id`) et `envoyerLienReinitialisation` (bouton admin "Envoyer un lien de réinitialisation",
+  ajouté en cours de session — cf. ci-dessous).
+- `app/auth/confirm/route.ts` — Route Handler partagé qui appelle `verifyOtp` et redirige.
+- `app/connexion/confirmer/[type]/page.tsx` — page intermédiaire "Cliquez pour continuer" (voir
+  bug ci-dessous pour le pourquoi du segment `[type]`).
+- `app/connexion/definir-mot-de-passe/page.tsx` + `actions.ts` — écran partagé invitation/reset,
+  double saisie avec validation de correspondance côté client avant tout aller-retour serveur.
+- `app/connexion/mot-de-passe-oublie/page.tsx` + `actions.ts` — self-service, anti-énumération
+  stricte (retourne toujours `{ envoye: true }`, même message affiché que l'email existe ou non).
+- Lien "Mot de passe oublié ?" ajouté sur `app/connexion/page.tsx`.
+
+**Modifiés** :
+- `proxy.ts` — nouveau `estRoutePublique()` (préfixe `/connexion/*` + `/auth/confirm`) remplace
+  l'ancien exact-match sur `/connexion` ; le "bounce" d'un utilisateur déjà connecté reste restreint
+  à `/connexion` exactement (pas toute la famille), sinon une session temporaire posée par
+  `/auth/confirm` serait rejetée avant d'atteindre `/connexion/definir-mot-de-passe`.
+- `lib/data/utilisateurs.repository.ts` / `lib/types.ts` — `auth_id` exposé (`authId`) pour
+  permettre l'affichage conditionnel des boutons d'invitation/réinitialisation sur la fiche.
+- `components/parametrer/UtilisateurFichePage.tsx` — invite déclenchée juste après `creer(...)` en
+  création ; bandeau "Invitation non envoyée" + bouton "Renvoyer l'invitation" quand `authId` est
+  vide (gap comblé dans la même passe : sans ça, un échec d'invite après création réussie laissait
+  le collaborateur bloqué sans recours) ; bandeau "Envoyer un lien de réinitialisation" une fois le
+  compte activé (`authId` renseigné) — ajouté en cours de session suite à une demande explicite.
+
+### Bug Supabase découvert en testant — troncature des paramètres de requête email
+
+En testant le vrai parcours (premier lien reçu par email), la page de confirmation affichait
+systématiquement "Ce lien est invalide" malgré un template email vérifié correct dans l'éditeur du
+dashboard. Diagnostic par la source brute de l'email reçu (Gmail → "Afficher l'original") plutôt
+que par l'aperçu du dashboard : **tout paramètre de requête au-delà du premier
+(`token_hash={{ .TokenHash }}`) dans le `href` du template email est corrompu par le rendu
+Supabase** — `&type=...` systématiquement vidé, `&next=...` tronqué avec des points de suspension
+insérés en plein milieu du texte (`/connexion/...definir-mot-de-passe`) — reproduit à l'identique
+que `type` soit une variable de template (`{{ .Type }}`) ou du texte 100% statique (`type=invite`
+écrit en dur), et confirmé sur le HTML brut transmis (donc pas un artefact de l'éditeur du
+dashboard ni du rendu de la boîte mail).
+
+**Contournement** : ne plus transmettre `type`/`next` comme paramètres de requête additionnels par
+email du tout. `type` est passé en **segment de route** (`/connexion/confirmer/invite` vs
+`/connexion/confirmer/recovery`, d'où le dossier `[type]`) plutôt qu'en query string, et `next` est
+codé en dur côté serveur (`NEXT_PAR_DEFAUT` dans `app/connexion/confirmer/[type]/page.tsx`) plutôt
+que transmis — un seul paramètre de requête reste dans le lien email (`token_hash`), ce qui suffit
+à contourner le problème. Les deux templates email et la liste "Redirect URLs" du dashboard ont dû
+être repris en conséquence (par Vincent, aucun accès dashboard direct côté Claude) :
+
+```
+Invite user  : {{ .SiteURL }}/connexion/confirmer/invite?token_hash={{ .TokenHash }}
+Reset Password : {{ .SiteURL }}/connexion/confirmer/recovery?token_hash={{ .TokenHash }}
+```
+Redirect URLs : `http://localhost:3000/connexion/confirmer/invite` et
+`http://localhost:3000/connexion/confirmer/recovery` ajoutées (les entrées précédentes
+`/auth/confirm` et `/connexion/confirmer` restent, sans usage direct mais sans gêner).
+
+Après ce correctif : lien cliqué avec succès, page "Cliquez pour continuer" → `/auth/confirm` →
+atterrissage confirmé sur l'écran de définition de mot de passe. **Non encore vérifié à ce
+stade** : la soumission du nouveau mot de passe elle-même et la reconnexion avec — prévu en tout
+début de la prochaine session, avant la passe UI.
+
+### Autres points rencontrés en cours de route
+
+- **Confusion initiale sur la cause du premier échec** : le tout premier test avait aussi échoué,
+  mais pour une raison différente et sans lien avec le bug ci-dessus — une session `Olivier Test`
+  restée ouverte dans le même navigateur + un double-clic involontaire sur le lien (à usage unique
+  par design) ont fait croire un temps à un souci de scanner anti-phishing consommant le lien tout
+  seul (hypothèse initialement avancée, cf. page `/connexion/confirmer`, toujours utile en
+  soi comme protection standard, mais pas la cause réelle observée ici).
+- **Cache Turbopack corrompu** (deux fois cette session) : lancer un `npm run build` (prod) pendant
+  qu'un serveur de dev tournait déjà a corrompu le cache partagé sous `.next/` (fichiers `.sst`
+  introuvables, erreurs "Persisting failed") — résolu par `rm -rf .next` + redémarrage du serveur de
+  dev. Éviter de lancer `npm run build` en parallèle d'un serveur de dev déjà actif sur ce projet.
+- **Suppression du compte de test `vincent.mayol@gmail.com`** (avant de commencer les tests) : SQL
+  fourni à Vincent (transaction complète) réattribuant d'abord les colonnes `auteur_id`/`decide_par`/
+  `genere_par` (NOT NULL, sans cascade) à un autre admin de test avant de supprimer la ligne
+  `utilisateurs` — la suppression cascade automatiquement sur les données propres de ce compte
+  (demandes, soldes, historique...). Aucun compte `auth.users` associé n'existait (profil créé avant
+  ce chantier), donc rien à nettoyer côté Authentication.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

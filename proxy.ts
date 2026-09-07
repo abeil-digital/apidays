@@ -15,6 +15,19 @@ import { createServerClient } from "@supabase/ssr";
 const ROUTE_CONNEXION = "/connexion";
 const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
 
+// Routes accessibles sans session "réelle" (07/09/2026, parcours mot de
+// passe) : toute la famille /connexion/* (login, mot de passe oublié,
+// définition de mot de passe — cette dernière posée via une session
+// temporaire par /auth/confirm, pas une vraie connexion) + /auth/confirm
+// lui-même (pose justement cette session avant de rediriger).
+function estRoutePublique(pathname: string): boolean {
+  return (
+    pathname === "/auth/confirm" ||
+    pathname === ROUTE_CONNEXION ||
+    pathname.startsWith(`${ROUTE_CONNEXION}/`)
+  );
+}
+
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -46,8 +59,9 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isRouteConnexion = request.nextUrl.pathname === ROUTE_CONNEXION;
+  const routePublique = estRoutePublique(request.nextUrl.pathname);
 
-  if (!user && !isRouteConnexion) {
+  if (!user && !routePublique) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTE_CONNEXION;
     return NextResponse.redirect(redirectUrl);

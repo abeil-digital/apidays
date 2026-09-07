@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { login, type LoginState } from "@/app/connexion/actions";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
@@ -44,6 +45,14 @@ export default function ConnexionPage() {
             autoComplete="current-password"
             className="mt-2 w-full"
           />
+          <div className="mt-1.5 text-right">
+            <Link
+              href="/connexion/mot-de-passe-oublie"
+              className="text-ink-500 text-xs hover:underline"
+            >
+              Mot de passe oublié ?
+            </Link>
+          </div>
         </div>
 
         {state.error && (
