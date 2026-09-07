@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { Sheet, Trash2, type LucideIcon } from "lucide-react";
+import { Trash2, type LucideIcon } from "lucide-react";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { formatJourMois, formatJours, todayISO } from "@/lib/format";
@@ -101,8 +100,11 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
  * racine de page). Plusieurs pistes testées le 24/08/2026 — bordure
  * `border-ink-300/40`, gap élargi à 8px, `rounded-xl`/`shadow-sm` calqué sur
  * les cards `MiniCalendrier` — **aucune n'a changé quoi que ce soit au
- * rendu perçu par Vincent**, toutes annulées, retour à l'habillage
- * d'origine (`rounded-sm`, `gap-[3px]`, pas de bordure/ombre). Un test de
+ * rendu perçu par Vincent**, toutes annulées à l'époque. Bordure reprise le
+ * 07/09/2026 (demande explicite, sans rapport avec ce sujet non résolu —
+ * juste une bordure voulue sur les composants liste), `border-ink-300/60`
+ * cette fois (même teinte que le reste de l'app, ex. `CongesRttPage.tsx`),
+ * `rounded-sm`/`gap-[3px]` inchangés. Un test de
  * diagnostic (fond temporairement rouge vif) faisait suspecter la variante
  * `lab()` grand-gamut de `--color-red-500` (Tailwind v4, écrans P3) — mais
  * ce mécanisme ne s'applique pas à `--color-surface-card` (`#fff` unique,
@@ -129,11 +131,11 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
 interface ProchainsJoursOffCardProps {
   debutPeriode?: string;
   finPeriode?: string;
-  /** Masque les demandes personnelles de l'utilisateur courant et le lien
-   * "Gérer mes demandes" (21/08/2026) — pour un usage côté paramétrage
-   * Calendrier (`/parametrer/calendrier3`) où seules les données de
-   * paramétrage (CPI/DJI/Fériés) ont du sens, pas les congés perso de
-   * l'admin connecté. Défaut : comportement inchangé (demandes incluses). */
+  /** Masque les demandes personnelles de l'utilisateur courant (21/08/2026)
+   * — pour un usage côté paramétrage Calendrier (`/parametrer/calendrier3`)
+   * où seules les données de paramétrage (CPI/DJI/Fériés) ont du sens, pas
+   * les congés perso de l'admin connecté. Défaut : comportement inchangé
+   * (demandes incluses). */
   masquerDemandesPerso?: boolean;
   /** Distingue CPI et DJI (21/08/2026) au lieu de les fusionner sous "CI" —
    * pour le contexte paramétrage Calendrier, où la distinction reste
@@ -184,11 +186,8 @@ interface ProchainsJoursOffCardProps {
   };
   /** Consulter les jours off d'un AUTRE collaborateur plutôt que ceux de
    * l'utilisateur connecté (24/08/2026, `/suivre/calendrier` — manager/admin)
-   * — passé à `useDemandes`. Masque aussi le lien "Gérer mes demandes" (mène
-   * à `/historique`, propre à l'utilisateur connecté, non pertinent en
-   * consultant quelqu'un d'autre) indépendamment de `masquerDemandesPerso`
-   * (qui masque les demandes elles-mêmes, pas seulement ce lien). Défaut :
-   * comportement d'origine, l'utilisateur connecté. */
+   * — passé à `useDemandes`. Défaut : comportement d'origine, l'utilisateur
+   * connecté. */
   utilisateurId?: string;
 }
 
@@ -387,7 +386,7 @@ export function ProchainsJoursOffCard({
                     {`${MOIS_FR[mois - 1]} ${annee}`}
                   </div>
                 )}
-                <div className="bg-surface-card group flex items-center gap-3 rounded-sm px-[14.4px] py-3">
+                <div className="bg-surface-card border-ink-300/60 group flex items-center gap-3 rounded-sm border px-[14.4px] py-3">
                   <BadgeTypeLeger
                     code={j.code}
                     label={j.code === "CPI" && !separerCpiDji ? "CI" : undefined}
@@ -435,21 +434,6 @@ export function ProchainsJoursOffCard({
               </div>
             );
           })}
-          {/* Lien "Gérer mes demandes" (21/08/2026, demande explicite) — sticky
-              en bas de la zone scrollable (pas de la card entière), toujours
-              visible pendant le défilement de la liste. Fond opaque
-              (`bg-surface-app`, celui de la page) nécessaire : sans lui, le
-              contenu qui défile serait visible par transparence sous le
-              lien. */}
-          {!masquerDemandesPerso && !utilisateurId && (
-            <Link
-              href="/historique"
-              className="bg-surface-app text-abeil-navy hover:text-abeil-navy/80 sticky bottom-0 flex items-center gap-2 px-1 py-3 text-sm font-semibold transition-colors"
-            >
-              <Sheet size={16} />
-              Gérer mes demandes
-            </Link>
-          )}
         </div>
       )}
 

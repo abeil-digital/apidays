@@ -4441,6 +4441,27 @@ Demande explicite : fond `bg-[#FCEFB3]` (jaune plein) passé à `bg-[#FCEFB3]/50
 principe d'opacité Tailwind qu'ailleurs dans l'app (ex. `bg-cp/15` sur `HistoriqueTable`), rien
 d'autre changé sur la card.
 
+## FaqCard/ProchainsJoursOffCard — retouches diverses (07/09/2026)
+
+- **FaqCard** : typo des questions passée à `text-base` (16px, était `text-sm`), texte des
+  réponses passé à `text-ink-900` (était `text-ink-500`), séparateurs `divide-y` entre questions
+  retirés. Fond débordant revu deux fois : passe désormais SOUS le rail `SideNav` (`z-40`) jusqu'à
+  son bord gauche (`data-app-content`/`data-sidenav-spacer` comme repères, padding gauche
+  recalculé en JS pour garder le texte à sa place), et s'arrête au bord droit du conteneur
+  applicatif (`[data-app-content]`, plafonné à 1180px) plutôt qu'à l'écran physique — un premier
+  essai allait jusqu'à `window.innerWidth`, débordant trop loin sur grand écran, corrigé le même
+  jour. Au passage, un bug introduit par la connexion à `useFaqs()` a été trouvé et corrigé : le
+  recalcul de position ne se redéclenchait jamais une fois les FAQ chargées de façon asynchrone
+  (`useEffect` à dépendances `[]`, DOM absent tant que `loading` — corrigé en dépendant de `faqs`).
+- **ProchainsJoursOffCard** ("Mon Calendrier", Accueil) : bordure `border-ink-300/60` ajoutée sur
+  chaque ligne (reprise d'un essai abandonné en 2024/08 pour une autre raison — non concluant sur
+  le sujet d'alors, "juste une bordure voulue" cette fois). Lien "Gérer mes demandes" retiré
+  (imports `Link`/`Sheet` nettoyés). **Essai d'adaptation de la hauteur à la zone calendrier,
+  explicitement abandonné le même jour** : d'abord un simple étirement flex (`align-items:
+stretch`, plus de `h-[604px]` fixe), puis une mesure JS pour n'afficher que le nombre d'items
+  tenant sans scroll (`useLayoutEffect`, comptage cumulatif des hauteurs de ligne) — les deux
+  annulés sur demande explicite, retour à la hauteur plafonnée à 604px d'origine (20/08/2026).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

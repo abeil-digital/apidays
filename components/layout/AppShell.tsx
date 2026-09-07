@@ -16,7 +16,10 @@ export function AppShell({ children }: AppShellProps) {
           n'occupe que la largeur de travail (1180px), le corps de la page
           reste blanc au-delà sur grand écran (18/08/2026, demande
           explicite). */}
-      <div className="bg-surface-app relative mx-auto flex w-full flex-1 md:max-w-[1180px]">
+      <div
+        data-app-content
+        className="bg-surface-app relative mx-auto flex w-full flex-1 md:max-w-[1180px]"
+      >
         <SideNav />
 
         <div className="min-w-0 flex-1">

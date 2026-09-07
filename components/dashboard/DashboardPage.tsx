@@ -636,7 +636,10 @@ export function DashboardPage() {
             (`align-items: stretch` par défaut du `flex md:flex-row`
             parent) — au-delà de 2 lignes équivalentes de contenu, la liste
             scrolle en interne (`overflow-y-auto` dans `ProchainsJoursOffCard`)
-            au lieu de continuer à grandir. */}
+            au lieu de continuer à grandir. Essai du 07/09/2026 (`align-items:
+            stretch` sans hauteur fixe, puis nombre d'items adapté sans
+            scroll) revenu en arrière sur demande explicite — retour à cette
+            version. */}
         <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
           <ProchainsJoursOffCard debutPeriode={rangeActive.debut} finPeriode={rangeActive.fin} />
         </div>
