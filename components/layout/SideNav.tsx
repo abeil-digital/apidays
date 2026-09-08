@@ -38,13 +38,15 @@ import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
  * haut du rail ; une fois défilé hors du viewport, plus rien ne le recouvre,
  * le rail apparaît alors jusqu'en haut de l'écran.
  *
- * `pt-20` (28/08/2026, bug signalé juste après le point ci-dessus : "sans
- * scroll, les premiers items de la nav latérale sont masqués par le
- * header") — sans ce padding, le premier item démarrait dès `py-6` (24px),
- * en plein dans la zone recouverte par le `HeaderBar` (56px) au repos,
- * invisible tant qu'on n'a pas scrollé. `pt-20` (80px = 56px de header +
- * 24px de marge d'origine) pousse tout le contenu sous le header, que la
- * page soit scrollée ou non — le padding bas (`pb-6`) reste inchangé.
+ * Bandeau `pt-20` d'origine (28/08/2026, bug : "sans scroll, les premiers
+ * items de la nav latérale sont masqués par le header") remplacé le
+ * 08/09/2026 par un vrai slot `h-14` (même hauteur que `HeaderBar`) —
+ * plutôt que du padding vide, il contient désormais le signe Abeil
+ * (`public/abeil-signe.png`, charte 2026). Le principe reste le même :
+ * cette zone est visuellement recouverte par le `HeaderBar` (`z-50`, non
+ * sticky) tant que la page n'a pas défilé, et n'apparaît qu'une fois le
+ * header sorti du viewport — demande explicite de Vincent ("qui
+ * apparaîtrait au scroll à la place de la navigation principale").
  */
 export function SideNav() {
   const pathname = usePathname();
@@ -61,8 +63,18 @@ export function SideNav() {
 
       <div className="pointer-events-none fixed inset-0 z-40 hidden md:block print:hidden">
         <div className="pointer-events-none mx-auto flex h-full w-full md:max-w-[1180px]">
-          <nav className="bg-surface-card group/nav pointer-events-auto flex h-full w-16 flex-col overflow-hidden pt-20 pb-6 shadow-sm transition-[width] duration-200 ease-out hover:w-56 hover:shadow-lg">
-            <div className="flex flex-col gap-1 px-2">
+          <nav className="bg-surface-card group/nav pointer-events-auto flex h-full w-16 flex-col overflow-hidden pb-6 shadow-sm transition-[width] duration-200 ease-out hover:w-56 hover:shadow-lg">
+            <div className="flex h-14 shrink-0 items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
+              <img
+                src="/abeil-signe.png"
+                alt="Abeil"
+                width={17}
+                height={28}
+                className="h-7 w-auto"
+              />
+            </div>
+            <div className="flex flex-col gap-1 px-2 pt-6">
               {navTabs.map(({ href, label, Icon }) => {
                 const active = href === activeHref;
                 return (
