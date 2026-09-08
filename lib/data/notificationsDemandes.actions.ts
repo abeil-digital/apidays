@@ -58,7 +58,7 @@ export async function notifierNouvelleDemande(demandeId: string): Promise<void> 
       html: `
         <p>${nomRequerant} a posé une nouvelle demande de congé.</p>
         <p><strong>${libelleType}</strong><br>${periode}</p>
-        <p><a href="${siteUrl}/suivre/demandes">Voir la demande</a></p>
+        <p><a href="${siteUrl}/suivre/demandes?statut=en_attente">Voir la demande</a></p>
       `,
     });
   } catch {

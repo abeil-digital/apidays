@@ -88,10 +88,11 @@ export async function GET(request: NextRequest) {
       })
       .join("");
 
+    const lienSuivi = `${request.nextUrl.origin}/suivre/demandes?statut=en_attente`;
     await envoyerEmail({
       destinataires,
       sujet: `Récap hebdomadaire — ${demandes.length} demande(s) de congé en attente`,
-      html: `<p>Demandes de congé posées cette semaine :</p><ul>${lignes}</ul>`,
+      html: `<p>Demandes de congé posées cette semaine :</p><ul>${lignes}</ul><p><a href="${lienSuivi}">Voir les demandes</a></p>`,
     });
   }
 
