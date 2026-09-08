@@ -4788,6 +4788,39 @@ sur ces liens — l'éditeur de template et l'email réellement envoyé peuvent 
 selon quelle variable Supabase (`{{ .SiteURL }}` vs `{{ .RedirectTo }}` vs texte statique) est
 utilisée.
 
+## Authentification — parcours création de compte ET mot de passe oublié validés en prod (08/09/2026)
+
+**Jalon final** : les deux parcours (invitation à la création d'un compte, et "mot de passe oublié"
+en self-service) fonctionnent désormais de bout en bout en prod
+(`https://apidays-seven.vercel.app`) — création/demande → email reçu avec le bon lien → définition
+du mot de passe → connexion. Trois bugs supplémentaires trouvés et corrigés au fil des tests avant
+d'y arriver :
+
+- **Préchargement `<Link>` grillant le token à usage unique** : le bouton "Continuer" de la page
+  intermédiaire `/connexion/confirmer/[type]` (celle ajoutée le 07/09 pour contrer les scanners
+  anti-phishing) utilisait le composant `Link` de Next.js, qui précharge automatiquement sa cible
+  dès qu'il entre dans le viewport **en production** (comportement absent en dev, donc invisible en
+  local) — `/auth/confirm` consommait ainsi le `token_hash` une première fois via le préchargement,
+  avant même le vrai clic de l'utilisateur, provoquant "lien invalide" juste après un aperçu correct
+  de la page suivante. Corrigé en remplaçant ce lien précis par une balise `<a>` classique (jamais
+  préchargée) — leçon à retenir pour tout futur lien à effet de bord/usage unique dans l'app.
+- **`proxy.ts`, redirection avec paramètres de requête qui traînent** : la redirection d'un
+  utilisateur déjà connecté depuis `/connexion` vers `/` ne réinitialisait pas `redirectUrl.search`
+  (`.clone()` copie aussi les query params) — un `?erreur=lien_invalide` pouvait donc atterrir sur
+  la page d'accueil sans rapport. Corrigé (`redirectUrl.search = ""` avant les deux redirections
+  vers `/`).
+- **Message d'erreur trompeur "lien invalide" pour un mot de passe identique à l'ancien** : Supabase
+  renvoie un code d'erreur dédié (`same_password`) quand on tente de redéfinir le même mot de passe
+  via `updateUser` — jusque-là regroupé sous le message générique "lien expiré", trompeur (cas réel
+  rencontré en testant "mot de passe oublié" avec l'ancien mot de passe par réflexe). Un message
+  dédié distingue maintenant ce cas.
+
+Ajout mineur au passage : icône œil/œil-barré ajoutée au champ mot de passe de `/connexion`
+(déjà présente sur l'écran de définition de mot de passe depuis le 08/09).
+
+**Ce chantier peut être considéré fonctionnellement complet** pour la première itération — reste au
+Backlog uniquement : évaluer une version HTML/stylée des emails (actuellement texte brut).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
