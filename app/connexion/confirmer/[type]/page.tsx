@@ -70,12 +70,17 @@ export default async function ConfirmerPage({
             Retour à la connexion
           </Link>
         ) : (
-          <Link
+          // <a> classique, pas <Link> (08/09/2026, correctif) — Link
+          // précharge automatiquement sa cible dès qu'il entre dans le
+          // viewport en prod (invisible en dev, d'où le bug non détecté en
+          // local) : ça consommait le token à usage unique AVANT le vrai
+          // clic, provoquant "lien invalide" au clic réel juste après.
+          <a
             href={lienConfirmation}
             className="rounded-card bg-slate hover:bg-slate/90 w-full px-4 py-3 text-center text-sm font-semibold text-white"
           >
             Continuer
-          </Link>
+          </a>
         )}
       </div>
     </div>

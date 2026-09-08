@@ -95,6 +95,7 @@ export async function proxy(request: NextRequest) {
     if (isRouteConnexion) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
+      redirectUrl.search = "";
       return NextResponse.redirect(redirectUrl);
     }
 
@@ -104,6 +105,7 @@ export async function proxy(request: NextRequest) {
     ) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
+      redirectUrl.search = "";
       return NextResponse.redirect(redirectUrl);
     }
   }

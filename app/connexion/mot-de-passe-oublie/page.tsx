@@ -31,8 +31,9 @@ export default function MotDePasseOubliePage() {
 
         {state.envoye ? (
           <p className="text-ink-900 text-sm">
-            Si un compte existe pour cet email, vous recevrez un lien pour définir un nouveau mot de
-            passe.
+            Consultez votre boîte mail.
+            <br />
+            Un lien vous permettra de saisir un nouveau mot de passe.
           </p>
         ) : (
           <form action={formAction} className="flex flex-col gap-5">
