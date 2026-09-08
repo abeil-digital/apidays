@@ -31,13 +31,15 @@ export function HeaderBar() {
 
   return (
     <header className="bg-abeil-navy relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
-      {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
-          l'optimisation next/image n'apporte rien ici */}
-      <img
-        src="/logo-abeil.svg"
-        alt="Abeil"
-        className="ml-[25px] h-[25.6px] w-auto shrink-0 origin-left scale-x-[1.21]"
-      />
+      <Link href="/" className="ml-[25px] shrink-0">
+        {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
+            l'optimisation next/image n'apporte rien ici */}
+        <img
+          src="/logo-abeil.svg"
+          alt="Abeil"
+          className="h-[25.6px] w-auto origin-left scale-x-[1.21]"
+        />
+      </Link>
 
       <nav className="flex h-full shrink-0 items-stretch gap-1">
         {niveau1Items
