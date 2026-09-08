@@ -69,9 +69,9 @@ export function SideNav() {
               <img
                 src="/abeil-signe.png"
                 alt="Abeil"
-                width={17}
-                height={28}
-                className="h-7 w-auto"
+                width={12}
+                height={18}
+                className="h-[18px] w-auto"
               />
             </div>
             <div className="flex flex-col gap-1 px-2 pt-6">
