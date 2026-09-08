@@ -39,6 +39,7 @@ import { fetchMoisMinimumChangementRH } from "@/lib/data/exportsPaie.repository"
 import {
   envoyerLienReinitialisation,
   inviterUtilisateur,
+  synchroniserEmailAuth,
 } from "@/app/(app)/parametrer/utilisateurs/actions";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
 import { Button } from "@/components/ui/Button";
@@ -1205,6 +1206,17 @@ function Formulaire({
     email: string;
     dateEntree: string;
   }) {
+    // Le compte Auth (connexion) doit rester aligné sur la fiche — voir
+    // `synchroniserEmailAuth` (08/09/2026, corrige un cas réel de manager
+    // bloqué à la connexion après un changement d'email non répercuté).
+    // Uniquement si `authId` existe (compte déjà activé) et que l'email a
+    // vraiment changé.
+    if (authId && valeurs.email !== champs.email) {
+      const sync = await synchroniserEmailAuth(authId, valeurs.email);
+      if (!sync.ok) {
+        throw new Error("Impossible de mettre à jour l'email de connexion.");
+      }
+    }
     await modifier({ ...champs, ...valeurs });
     setChamps((c) => ({ ...c, ...valeurs }));
   }

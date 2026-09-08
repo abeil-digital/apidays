@@ -99,3 +99,35 @@ export async function envoyerLienReinitialisation(email: string): Promise<{ ok: 
     return { ok: false };
   }
 }
+
+/**
+ * Appelée par `Formulaire.handleSubmit` (fiche utilisateur) juste avant
+ * `modifier()`, uniquement quand l'email saisi diffère de l'email chargé —
+ * corrige un bug réel (08/09/2026, manager bloqué à la connexion en prod
+ * après un changement d'email depuis la fiche) : modifier `utilisateurs`
+ * seul ne touchait jamais le compte `auth.users` réellement utilisé pour se
+ * connecter, les deux divergeaient silencieusement. `email_confirm: true`
+ * applique le changement immédiatement (l'admin modifiant la fiche d'un
+ * collaborateur sait déjà que ce compte est légitime — pas de double
+ * opt-in à faire attendre le collaborateur, contrairement à un changement
+ * d'email en self-service qui n'existe pas dans cette app).
+ *
+ * Ne throw jamais (service_role/API Auth peuvent échouer) — l'appelant doit
+ * bloquer l'enregistrement de la fiche si `ok` est faux, pour ne jamais
+ * laisser `utilisateurs.email` diverger de `auth.users.email`.
+ */
+export async function synchroniserEmailAuth(
+  authId: string,
+  nouvelEmail: string,
+): Promise<{ ok: boolean }> {
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.updateUserById(authId, {
+      email: nouvelEmail,
+      email_confirm: true,
+    });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
+}
