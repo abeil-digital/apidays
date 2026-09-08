@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 import { login, type LoginState } from "@/app/connexion/actions";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -10,6 +11,7 @@ const INITIAL_STATE: LoginState = {};
 
 export default function ConnexionPage() {
   const [state, formAction, pending] = useActionState(login, INITIAL_STATE);
+  const [afficherMotDePasse, setAfficherMotDePasse] = useState(false);
 
   return (
     <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
@@ -55,14 +57,26 @@ export default function ConnexionPage() {
           <label htmlFor="password" className="text-abeil-navy mb-1.5 block text-sm font-bold">
             Mot de passe
           </label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            autoComplete="current-password"
-            className="!border-slate w-full rounded-md text-xs"
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={afficherMotDePasse ? "text" : "password"}
+              required
+              autoComplete="current-password"
+              className="!border-slate w-full rounded-md pr-10 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setAfficherMotDePasse((v) => !v)}
+              aria-label={
+                afficherMotDePasse ? "Masquer le mot de passe" : "Afficher le mot de passe"
+              }
+              className="text-ink-500 hover:text-ink-900 absolute top-1/2 right-3 -translate-y-1/2"
+            >
+              {afficherMotDePasse ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           <div className="mt-1.5 text-right">
             <Link
               href="/connexion/mot-de-passe-oublie"
