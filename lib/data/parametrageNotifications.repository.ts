@@ -1,4 +1,8 @@
-import type { ParametrageNotifications, ParametrageNotificationsInput } from "@/lib/types";
+import type {
+  NotifDecisionCollaborateur,
+  ParametrageNotifications,
+  ParametrageNotificationsInput,
+} from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -14,9 +18,11 @@ interface ParametrageNotificationsRow {
   jour_recap: number;
   heure_recap: number;
   copie_administrateur: boolean;
+  notif_decision_collaborateur: NotifDecisionCollaborateur;
 }
 
-const SELECT_PARAMETRAGE_NOTIFICATIONS = "frequence, jour_recap, heure_recap, copie_administrateur";
+const SELECT_PARAMETRAGE_NOTIFICATIONS =
+  "frequence, jour_recap, heure_recap, copie_administrateur, notif_decision_collaborateur";
 
 function mapParametrageNotificationsDepuisDb(
   row: ParametrageNotificationsRow,
@@ -26,6 +32,7 @@ function mapParametrageNotificationsDepuisDb(
     jourRecap: row.jour_recap,
     heureRecap: row.heure_recap,
     copieAdministrateur: row.copie_administrateur,
+    notifDecisionCollaborateur: row.notif_decision_collaborateur,
   };
 }
 
@@ -57,6 +64,7 @@ export async function mettreAJourParametrageNotifications(
       jour_recap: input.jourRecap,
       heure_recap: input.heureRecap,
       copie_administrateur: input.copieAdministrateur,
+      notif_decision_collaborateur: input.notifDecisionCollaborateur,
     })
     .eq("id", ID_SINGLETON)
     .select(SELECT_PARAMETRAGE_NOTIFICATIONS)

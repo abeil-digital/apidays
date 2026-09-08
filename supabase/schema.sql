@@ -308,12 +308,17 @@ insert into objectifs_calendrier (id) values ('00000000-0000-0000-0000-000000000
 -- (app/api/cron/notifications-digest).
 create type frequence_notification as enum ('immediate', 'hebdomadaire');
 
+create type notif_decision_collaborateur as enum ('tous', 'refus_uniquement', 'aucune');
+
 create table parametrage_notifications (
   id uuid primary key default '00000000-0000-0000-0000-000000000001',
   frequence frequence_notification not null default 'immediate',
   jour_recap int not null default 1,
   heure_recap int not null default 9,
   copie_administrateur boolean not null default false,
+  -- Notification email au collaborateur quand sa demande est
+  -- validée/refusée (08/09/2026, deuxième volet Paramétrer > Notifications).
+  notif_decision_collaborateur notif_decision_collaborateur not null default 'aucune',
   dernier_envoi_digest timestamptz,
   updated_at timestamptz not null default now(),
   constraint jour_recap_valide check (jour_recap between 1 and 7),

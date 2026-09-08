@@ -69,3 +69,65 @@ export async function notifierNouvelleDemande(demandeId: string): Promise<void> 
     // best-effort — jamais remonté à l'appelant
   }
 }
+
+/**
+ * Déclenchée en fire-and-forget juste après une validation/un refus
+ * (`hooks/useDemandesEquipe.ts`, `valider`/`refuser`) — deuxième volet de
+ * Paramétrer > Notifications (08/09/2026, demande explicite de Vincent).
+ * Même principe fire-and-forget que `notifierNouvelleDemande` : n'échoue
+ * jamais visiblement pour le manager qui vient de décider.
+ */
+export async function notifierDecisionDemande(
+  demandeId: string,
+  statut: "validee" | "refusee",
+): Promise<void> {
+  try {
+    const admin = createAdminClient();
+    const { data: parametrage } = await admin
+      .from("parametrage_notifications")
+      .select("notif_decision_collaborateur")
+      .single();
+    if (!parametrage) return;
+    if (parametrage.notif_decision_collaborateur === "aucune") return;
+    if (parametrage.notif_decision_collaborateur === "refus_uniquement" && statut !== "refusee") {
+      return;
+    }
+
+    const { data: demande } = await admin
+      .from("demandes_conges")
+      .select(
+        "date_debut, date_fin, commentaire_decision, types_absences(code), utilisateurs!utilisateur_id(email, prenom)",
+      )
+      .eq("id", demandeId)
+      .single();
+    if (!demande) return;
+
+    const typeAbsence = Array.isArray(demande.types_absences)
+      ? demande.types_absences[0]
+      : demande.types_absences;
+    const requerant = Array.isArray(demande.utilisateurs)
+      ? demande.utilisateurs[0]
+      : demande.utilisateurs;
+    if (!typeAbsence || !requerant?.email) return;
+
+    const libelleType = LABEL_LONG[typeAbsence.code as TypeBadgeCode] ?? typeAbsence.code;
+    const periode = formatPeriodeDemande(demande.date_debut, demande.date_fin);
+    const siteUrl = await getSiteUrl();
+    const commentaire = demande.commentaire_decision?.trim();
+    const estValidee = statut === "validee";
+
+    await envoyerEmail({
+      destinataires: [requerant.email],
+      sujet: estValidee ? "Votre demande de congé a été validée" : "Votre demande de congé a été refusée",
+      html: `
+        <p>Bonjour ${requerant.prenom},</p>
+        <p>Votre demande <strong>${libelleType}</strong> (${periode}) a été
+        ${estValidee ? "<strong>validée</strong>" : "<strong>refusée</strong>"}.</p>
+        ${commentaire ? `<p>&laquo;&nbsp;${echapperHtml(commentaire)}&nbsp;&raquo;</p>` : ""}
+        <p><a href="${siteUrl}/">Voir sur Apidays</a></p>
+      `,
+    });
+  } catch {
+    // best-effort — jamais remonté à l'appelant
+  }
+}

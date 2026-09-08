@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { ParametrageNotifications, ParametrageNotificationsInput } from "@/lib/types";
+import type {
+  NotifDecisionCollaborateur,
+  ParametrageNotifications,
+  ParametrageNotificationsInput,
+} from "@/lib/types";
 import { useParametrageNotifications } from "@/hooks/useParametrageNotifications";
 import { Button } from "@/components/ui/Button";
 import { ListCard } from "@/components/ui/ListCard";
@@ -18,6 +22,12 @@ const JOURS_SEMAINE: { valeur: number; label: string }[] = [
 ];
 
 const HEURES_BUREAU = Array.from({ length: 12 }, (_, i) => i + 8); // 8h → 19h
+
+const OPTIONS_DECISION: { valeur: NotifDecisionCollaborateur; label: string }[] = [
+  { valeur: "tous", label: "Tous" },
+  { valeur: "refus_uniquement", label: "Refus uniquement" },
+  { valeur: "aucune", label: "Aucune" },
+];
 
 /** Convertit une heure Paris (0-23, affichée à l'admin) en heure UTC stockée
  * en base — le cron (`app/api/cron/notifications-digest`) compare en UTC,
@@ -71,6 +81,9 @@ function FormulaireNotifications({
   const [jourRecap, setJourRecap] = useState(parametrage.jourRecap);
   const [heureRecapParis, setHeureRecapParis] = useState(heureUtcVersParis(parametrage.heureRecap));
   const [copieAdministrateur, setCopieAdministrateur] = useState(parametrage.copieAdministrateur);
+  const [notifDecisionCollaborateur, setNotifDecisionCollaborateur] = useState(
+    parametrage.notifDecisionCollaborateur,
+  );
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -85,6 +98,7 @@ function FormulaireNotifications({
         jourRecap,
         heureRecap: heureParisVersUtc(heureRecapParis),
         copieAdministrateur,
+        notifDecisionCollaborateur,
       });
       setConfirmation(true);
     } catch {
@@ -102,7 +116,7 @@ function FormulaireNotifications({
 
       <ListCard className="flex flex-col gap-4 p-4">
         <div>
-          <p className="text-abeil-navy mb-2 text-sm font-bold">E-mail de notification de congé</p>
+          <p className="text-abeil-navy mb-2 text-sm font-bold">Notifications de demande de congés</p>
           <p className="text-ink-500 mb-3 text-xs">
             Les managers sont notifiés par e-mail des demandes d&apos;absence.
           </p>
@@ -175,19 +189,44 @@ function FormulaireNotifications({
             />
           </button>
         </div>
-
-        {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-        {confirmation && <p className="text-mint text-xs font-semibold">Réglages enregistrés.</p>}
-
-        <Button
-          type="button"
-          disabled={enregistrement}
-          onClick={handleEnregistrer}
-          className="w-fit rounded-full px-4 py-1.5 text-xs"
-        >
-          Enregistrer
-        </Button>
       </ListCard>
+
+      <ListCard className="flex flex-col gap-3 p-4">
+        <div>
+          <p className="text-abeil-navy mb-2 text-sm font-bold">
+            Notifications de décisions de demandes (collaborateurs)
+          </p>
+          <p className="text-ink-500 mb-3 text-xs">
+            Les collaborateurs sont notifiés des réponses à leurs demandes.
+          </p>
+
+          <div className="flex flex-col gap-2">
+            {OPTIONS_DECISION.map((option) => (
+              <label key={option.valeur} className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="notifDecisionCollaborateur"
+                  checked={notifDecisionCollaborateur === option.valeur}
+                  onChange={() => setNotifDecisionCollaborateur(option.valeur)}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      </ListCard>
+
+      {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
+      {confirmation && <p className="text-mint text-xs font-semibold">Réglages enregistrés.</p>}
+
+      <Button
+        type="button"
+        disabled={enregistrement}
+        onClick={handleEnregistrer}
+        className="w-fit rounded-full px-4 py-1.5 text-xs"
+      >
+        Enregistrer
+      </Button>
     </div>
   );
 }

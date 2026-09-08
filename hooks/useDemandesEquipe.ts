@@ -10,6 +10,7 @@ import {
   retirerDemande,
   validerDemande,
 } from "@/lib/data/demandes.repository";
+import { notifierDecisionDemande } from "@/lib/data/notificationsDemandes.actions";
 
 interface UseDemandesEquipeResult {
   demandes: DemandeEquipe[];
@@ -70,6 +71,7 @@ export function useDemandesEquipe(): UseDemandesEquipeResult {
   const valider = useCallback(
     async (id: string, commentaire = "") => {
       await validerDemande(id, commentaire);
+      notifierDecisionDemande(id, "validee").catch(() => {});
       refetch();
     },
     [refetch],
@@ -78,6 +80,7 @@ export function useDemandesEquipe(): UseDemandesEquipeResult {
   const refuser = useCallback(
     async (id: string, commentaire = "") => {
       await refuserDemande(id, commentaire);
+      notifierDecisionDemande(id, "refusee").catch(() => {});
       refetch();
     },
     [refetch],

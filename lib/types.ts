@@ -283,11 +283,18 @@ export interface ObjectifsCalendrierInput {
  * `ObjectifsCalendrier`. `jourRecap` en ISO (1=lundi…7=dimanche),
  * `heureRecap` en UTC (0-23) — voir `app/api/cron/notifications-digest`
  * pour la conversion depuis l'heure de Paris au moment de la saisie. */
+export type NotifDecisionCollaborateur = "tous" | "refus_uniquement" | "aucune";
+
 export interface ParametrageNotifications {
   frequence: "immediate" | "hebdomadaire";
   jourRecap: number;
   heureRecap: number;
   copieAdministrateur: boolean;
+  /** Notification email au collaborateur quand sa demande est
+   * validée/refusée (08/09/2026, deuxième volet de la page Notifications)
+   * — "tous" (validé + refusé), "refus_uniquement" (juste les refus, jugés
+   * plus utiles à notifier qu'une validation qu'on attend déjà), "aucune". */
+  notifDecisionCollaborateur: NotifDecisionCollaborateur;
 }
 
 export type ParametrageNotificationsInput = ParametrageNotifications;
