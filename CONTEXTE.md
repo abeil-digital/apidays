@@ -4965,6 +4965,32 @@ Valider/Refuser/Confirmer) — cause non identifiée avec certitude, contournée
 via `element.click()` en JavaScript direct depuis la console, qui fonctionne correctement. Sans
 rapport avec un bug de l'application (le clic humain normal fonctionne).
 
+## Bug corrigé — solde CPA jamais décompté pour une demande datée dans la période en cours (08/09/2026)
+
+**Signalé par Vincent** : le solde CPA affiché sur l'Accueil ne bougeait pas après avoir posé une
+demande "Congés anticipés" datée du 18/24 septembre 2026. Cause identifiée dans
+`lib/data/soldes.repository.ts` : la consommation CPA (`consommeCpa`/`enAttenteCpa`/`transmisCpa`/
+`ajustementsCpa` dans `fetchSoldes`, la même logique dans `fetchSoldeAnticipe` et
+`fetchHistoriqueCpa`) était bornée à la **période suivante** (`periodeSuivante`), alors que
+l'acquisition (`accrualCpa`) se calcule, elle, sur la période **en cours**. Toute demande CPA datée
+dans la période en cours — le cas normal, "Congés anticipés" servant justement à anticiper une
+utilisation avant que le CP ne soit formellement consolidé à la période suivante — était donc
+invisible pour le calcul, quel que soit son statut.
+
+**Règle confirmée avec Vincent** : un CPA s'utilise dès maintenant (période en cours), plafonné par
+ce qui est déjà acquis (ou sera acquis à la date de la demande) — pas seulement à partir de la
+période suivante. Corrigé en alignant les trois fonctions sur `periodeEnCours` plutôt que
+`periodeSuivante` pour la fenêtre de consommation ; `conditionPrefixe`/`conditionAccent` du solde
+CPA passés de "À poser à partir de [période suivante]" à "À poser avant le [fin période en cours]"
+(même formulation que CP, qui partage maintenant la même fenêtre). Vérifié sur un cas réel (Vincent
+Mayol, 2 demandes CPA validées 1j chacune sur le 18 et 24/09/2026) : solde CPA théorique passé de
+7,5 j à 5,5 j après le correctif, réel inchangé à 7,5 j (rien transmis en paie) — comportement
+attendu.
+
+**Reste à trancher** (Backlog) : les cas limites plus fins (refus/annulation après acquisition
+partielle, bascule de période, articulation avec le report) — la logique de base fonctionne, mais le
+sujet n'a pas été creusé au-delà du cas nominal.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

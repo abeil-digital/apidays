@@ -668,7 +668,6 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       regleCP.periodeDebutJour,
     );
     const periodePrecedente = decalerPeriode(periodeEnCours, -1);
-    const periodeSuivante = decalerPeriode(periodeEnCours, 1);
 
     const capitalBase =
       accrualMensuelSomme(
@@ -752,13 +751,19 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         moisEcoulesCpa,
         moisLimite,
       );
+    // Consommation CPA comptée sur la période **en cours** (08/09/2026,
+    // corrige un bug réel remonté par Vincent : une demande CPA datée dans la
+    // période en cours n'était jamais décomptée) — un CPA s'utilise dès
+    // maintenant, dans la limite de ce qui est déjà/sera acquis à sa date,
+    // pas seulement à partir de la période suivante. Voir aussi
+    // `fetchSoldeAnticipe`/`fetchHistoriqueCpa`, même correctif.
     const consommeCpa = await sommeJours(
       supabase,
       id,
       "CP",
       ["validee"],
       true,
-      periodeSuivante,
+      periodeEnCours,
       aujourdhui,
     );
     const enAttenteCpa = await sommeJours(
@@ -767,19 +772,19 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       "CP",
       ["en_attente"],
       true,
-      periodeSuivante,
+      periodeEnCours,
       aujourdhui,
     );
-    const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeSuivante, aujourdhui);
-    const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeSuivante, true);
+    const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeEnCours, aujourdhui);
+    const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
     const soldeCpaValidee = Math.max(0, accrualCpa - consommeCpa + ajustementsCpa);
     const soldeCpaTransmis = Math.max(0, accrualCpa - transmisCpa + ajustementsCpa);
 
     cpa = {
       valeur: soldeCpaTransmis,
       valeurApresAttente: soldeCpaValidee - enAttenteCpa,
-      conditionPrefixe: "À poser à partir de",
-      conditionAccent: formatMoisAnnee(periodeSuivante.debut),
+      conditionPrefixe: "À poser avant le",
+      conditionAccent: formatDateCourte(periodeEnCours.fin),
     };
   }
 
@@ -922,15 +927,15 @@ export async function fetchSoldeAnticipe(
 
   const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   if (!regleCP) return 0;
-  // CPA acquiert sur la période CP en cours (au sens de `dateReference`), pour
-  // financer des congés anticipés dont les dates tombent dans la période
-  // suivante — même logique que `fetchSoldes`.
+  // CPA acquiert et se consomme sur la même période CP en cours (au sens de
+  // `dateReference`, 08/09/2026 — corrige un bug réel, voir `fetchSoldes`) :
+  // un CPA s'utilise dès maintenant, dans la limite de ce qui est déjà/sera
+  // acquis à sa date.
   const periodeEnCours = periodeContenant(
     reference,
     regleCP.periodeDebutMois,
     regleCP.periodeDebutJour,
   );
-  const periodeSuivante = decalerPeriode(periodeEnCours, 1);
   const { debut: debutCpa, base: baseCpa } = resolverPointDepartAccrual(
     periodeEnCours,
     soldeInitial,
@@ -953,7 +958,7 @@ export async function fetchSoldeAnticipe(
     "CP",
     ["validee"],
     true,
-    periodeSuivante,
+    periodeEnCours,
     reference,
   );
   return Math.max(0, accrualCpa - consommeCpa);
@@ -1538,15 +1543,13 @@ export async function fetchHistoriqueRtt(
  * Feed d'historique du solde CPA d'un salarié (Espace Suivre, popin ouverte
  * au clic sur le solde CPA) — même principe d'accrual mensuel que RTT (pas de
  * capital connu d'avance, `type: "acquisition"` un événement par mois entier
- * écoulé), mais sur une fenêtre temporelle **décalée** : l'acquisition se
- * déroule sur la période CP **en cours** (`periodeEnCours`, même horloge que
- * `regleCP`), pendant qu'elle finance des congés anticipés dont les dates
- * tombent, elles, dans la période **suivante** (`periodeSuivante`,
- * `is_anticipation = true` — même logique que `fetchSoldes`). Les clés de
- * mois du feed sont donc dérivées des dates réelles des mouvements plutôt
- * que d'un simple parcours calendaire borné à aujourd'hui : un événement de
- * consommation tombant dans la période suivante (donc hors de la fenêtre
- * d'acquisition) ne doit pas être silencieusement perdu.
+ * écoulé). Acquisition et consommation partagent la même période CP **en
+ * cours** (`periodeEnCours`, même horloge que `regleCP`, `is_anticipation =
+ * true` — même logique que `fetchSoldes` ; corrigé le 08/09/2026, la
+ * consommation était auparavant comptée sur la période suivante, ce qui
+ * ignorait silencieusement toute demande CPA datée dans la période en
+ * cours). Les clés de mois du feed sont dérivées des dates réelles des
+ * mouvements plutôt que d'un simple parcours calendaire borné à aujourd'hui.
  */
 export async function fetchHistoriqueCpa(utilisateurId: string): Promise<HistoriqueSolde> {
   const supabase = createClient();
@@ -1586,7 +1589,6 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     regleCP.periodeDebutMois,
     regleCP.periodeDebutJour,
   );
-  const periodeSuivante = decalerPeriode(periodeEnCours, 1);
   const {
     debut: debutCpa,
     base: baseCpa,
@@ -1606,8 +1608,8 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", true)
-      .gte("date_debut", dateIso(periodeSuivante.debut))
-      .lte("date_debut", dateIso(periodeSuivante.fin)),
+      .gte("date_debut", dateIso(periodeEnCours.debut))
+      .lte("date_debut", dateIso(periodeEnCours.fin)),
     supabase
       .from("ajustements_solde")
       .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
