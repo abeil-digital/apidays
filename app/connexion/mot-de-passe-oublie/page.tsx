@@ -7,7 +7,6 @@ import {
   type MotDePasseOublieState,
 } from "@/app/connexion/mot-de-passe-oublie/actions";
 import { Button } from "@/components/ui/Button";
-import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: MotDePasseOublieState = {};
@@ -16,11 +15,18 @@ export default function MotDePasseOubliePage() {
   const [state, formAction, pending] = useActionState(demanderReinitialisation, INITIAL_STATE);
 
   return (
-    <div className="bg-surface-app flex min-h-full items-center justify-center px-4">
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
       <div className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm">
-        <div>
-          <div className="text-ink-900 text-2xl font-semibold">Apidays</div>
-          <p className="text-ink-500 text-sm">Mot de passe oublié</p>
+        <div className="flex flex-col items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
+          <img
+            src="/logo-abeil-fond-clair.png"
+            alt="Abeil"
+            width={1676}
+            height={710}
+            className="h-12 w-auto"
+          />
+          <p className="text-abeil-navy text-xl font-semibold">Mot de passe oublié</p>
         </div>
 
         {state.envoye ? (
@@ -31,14 +37,17 @@ export default function MotDePasseOubliePage() {
         ) : (
           <form action={formAction} className="flex flex-col gap-5">
             <div>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <label htmlFor="email" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+                Email
+              </label>
               <Input
                 id="email"
                 name="email"
-                type="email"
+                type="text"
                 required
                 autoComplete="email"
-                className="mt-2 w-full"
+                placeholder="votre email"
+                className="!border-slate w-full rounded-md text-xs"
               />
             </div>
 

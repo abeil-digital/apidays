@@ -4,7 +4,6 @@ import { useActionState } from "react";
 import Link from "next/link";
 import { login, type LoginState } from "@/app/connexion/actions";
 import { Button } from "@/components/ui/Button";
-import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: LoginState = {};
@@ -13,37 +12,56 @@ export default function ConnexionPage() {
   const [state, formAction, pending] = useActionState(login, INITIAL_STATE);
 
   return (
-    <div className="bg-surface-app flex min-h-full items-center justify-center px-4">
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
       <form
         action={formAction}
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
       >
-        <div>
-          <div className="text-ink-900 text-2xl font-semibold">Apidays</div>
-          <p className="text-ink-500 text-sm">Connexion à l&rsquo;espace salarié</p>
+        <div className="flex flex-col items-start gap-3">
+          {/* Version couleur fond clair (07/09/2026, Charte-abeil/2026_New_Logo)
+              — le logo blanc (`logo-abeil.svg`, utilisé sur `HeaderBar`) n'a
+              de sens que sur fond navy ; celui-ci est pensé pour un fond
+              clair, pas besoin de bandeau sombre autour. Largeur/hauteur
+              explicites (ratio réel du fichier, 2552x1532) pour ne pas
+              dépendre d'un `w-auto` recalculé par le navigateur avant le
+              chargement de l'image, qui étirait le logo le temps du calcul. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
+          <img
+            src="/logo-abeil-fond-clair.png"
+            alt="Abeil"
+            width={1676}
+            height={710}
+            className="h-12 w-auto"
+          />
+          <p className="text-abeil-navy text-xl font-semibold">Bienvenue sur Apidays</p>
         </div>
 
         <div>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
+          <label htmlFor="email" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+            Email
+          </label>
           <Input
             id="email"
             name="email"
-            type="email"
+            type="text"
             required
             autoComplete="email"
-            className="mt-2 w-full"
+            placeholder="votre email"
+            className="!border-slate w-full rounded-md text-xs"
           />
         </div>
 
         <div>
-          <FieldLabel htmlFor="password">Mot de passe</FieldLabel>
+          <label htmlFor="password" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+            Mot de passe
+          </label>
           <Input
             id="password"
             name="password"
             type="password"
             required
             autoComplete="current-password"
-            className="mt-2 w-full"
+            className="!border-slate w-full rounded-md text-xs"
           />
           <div className="mt-1.5 text-right">
             <Link

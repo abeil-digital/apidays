@@ -112,5 +112,11 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  // Exclusion générique des fichiers statiques de `public/` par extension
+  // (07/09/2026, corrige un bug latent — le logo sur la page de connexion
+  // était redirigé vers /connexion comme n'importe quelle route protégée,
+  // faute d'être authentifié) plutôt que de lister chaque fichier un par un.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpe?g|gif|webp|ico)$).*)",
+  ],
 };

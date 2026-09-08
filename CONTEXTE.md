@@ -4641,6 +4641,47 @@ début de la prochaine session, avant la passe UI.
   (demandes, soldes, historique...). Aucun compte `auth.users` associé n'existait (profil créé avant
   ce chantier), donc rien à nettoyer côté Authentication.
 
+## Authentification — passe UI sur les 3 écrans publics (08/09/2026)
+
+Uniformisation visuelle de `/connexion`, `/connexion/mot-de-passe-oublie` et
+`/connexion/definir-mot-de-passe` (jusque-là au gabarit minimal type "Apidays" en texte + sous-titre
+gris) :
+
+- **Bug corrigé en même temps** : la carte n'était pas centrée verticalement. `min-h-full` sur le
+  conteneur ne fonctionnait pas — `body` (`app/layout.tsx`) n'a que `min-height: 100%`, pas
+  `height: 100%`, donc la chaîne de pourcentages ne se résout pas et le conteneur se réduisait à la
+  hauteur de son contenu. Remplacé par `min-h-screen` (`100vh`, indépendant des ancêtres) sur les
+  trois pages.
+- **Logo** : `logo-abeil.svg` (utilisé sur `HeaderBar`) est blanc, pensé pour un fond navy — invisible
+  sur les cards blanches de ces écrans. Nouvelle version utilisée à la place :
+  `Charte-abeil/2026_New_Logo/.../PNG transparents/ABEIL_LOGO_couleur_fond_clair_RVB.png`, recadrée
+  (`PIL.Image.getbbox()` pour retirer la marge transparente autour du glyphe, `2552x1532` →
+  `1676x710`) et copiée dans `public/logo-abeil-fond-clair.png` — sans ce recadrage, le "A" du logo
+  ne s'alignait pas avec le texte en dessous (marge transparente asymétrique dans le fichier source).
+  `width`/`height` HTML explicites sur la balise `img` (pas seulement `w-auto` en CSS) pour éviter un
+  étirement le temps que le navigateur récupère les dimensions réelles.
+- **Titre** : "Bienvenue sur Apidays" / "Mot de passe oublié" / "Définir un mot de passe" en
+  `text-abeil-navy text-xl font-semibold` (était `text-ink-500 text-sm`), juste sous le logo,
+  calé à gauche (`items-start`, pas centré).
+- **Champs** : repris du style déjà en place sur les popins Paramétrer (`UtilisateurFichePage.tsx`)
+  — labels `text-abeil-navy text-sm font-bold` (au lieu du `FieldLabel` gris par défaut), `Input`
+  avec `!border-slate` (contour vert). Le champ email a perdu son `type="email"` (validation de
+  format du navigateur retirée, demande explicite) et gagné un placeholder "votre email".
+- **Piège rencontré** : sur `definir-mot-de-passe`, le champ "Confirmer le mot de passe" combine
+  `!border-slate` (style de base) ET `error={mismatch}` (bordure rouge `border-status-danger-fg` si
+  les deux mots de passe diffèrent) — `!border-slate` avec `!important` écraserait la bordure rouge
+  quoi qu'il arrive. Corrigé en rendant `!border-slate` conditionnel (`mismatch ? "" :
+  "!border-slate"`), l'indicateur d'erreur reste donc fonctionnel.
+
+**Bug latent découvert et corrigé au passage (`proxy.ts`)** : le logo ne s'affichait pas du tout au
+premier essai (icône d'image cassée) — `fetch('/logo-abeil.svg')` renvoyait le HTML de la page de
+connexion elle-même plutôt que le SVG. Cause : le matcher du middleware n'excluait que
+`favicon.ico`/`icon.svg` par leur nom exact, pas les fichiers statiques de `public/` en général —
+une requête d'image sur une page non authentifiée tombait donc dans la même redirection que
+n'importe quelle route protégée. Corrigé en excluant par extension
+(`.*\.(?:svg|png|jpe?g|gif|webp|ico)$`) plutôt que de lister chaque fichier, pour ne pas retomber
+dans le même piège au prochain asset ajouté.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
