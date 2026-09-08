@@ -32,6 +32,13 @@ export async function definirMotDePasse(
   const { error } = await supabase.auth.updateUser({ password: motDePasse });
 
   if (error) {
+    // Supabase distingue "nouveau mot de passe = ancien" (code
+    // `same_password`) d'un vrai souci de session/lien — les deux
+    // remontaient jusqu'ici sous le même message trompeur "lien invalide"
+    // (08/09/2026, cas réel rencontré en test).
+    if (error.code === "same_password") {
+      return { error: "Le nouveau mot de passe doit être différent de l'ancien." };
+    }
     return { error: "Le lien a expiré ou est invalide. Refaites une demande." };
   }
 
