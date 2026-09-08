@@ -4757,6 +4757,37 @@ proposé de "mettre à jour" un identifiant enregistré sous un mauvais libellé
 email visible sur cette page pour bien identifier le compte), sans impact sur le compte Supabase
 réel.
 
+## Authentification — bug "lien email toujours en localhost" en prod, résolu (08/09/2026)
+
+Suite du jalon précédent : le premier test en prod échouait sur la création elle-même
+("Impossible de créer ce profil.") — cause confirmée : `SUPABASE_SERVICE_ROLE_KEY` n'était pas
+définie dans les variables d'environnement Vercel (seulement en local), donc `createAdminClient()`
+levait une exception. Corrigé côté code en même temps (`inviterUtilisateur`/
+`envoyerLienReinitialisation` ne laissent plus jamais remonter d'exception — retournent toujours
+`{ ok: false }`, pour que l'appelant affiche "profil créé, invitation à renvoyer" plutôt que le
+message générique qui masquait qu'un profil avait déjà été inséré). Clé ajoutée par Vincent sur
+Vercel (Project Settings > Environments > Production > Environment Variables), redéploiement fait.
+
+Une fois la création débloquée, **second bug** : le lien reçu par email pointait toujours vers
+`localhost:3000`, même en déclenchant l'invite depuis la prod. Cause réelle, confirmée via la
+source brute de l'email (Gmail > "Afficher l'original", pas l'aperçu du dashboard) : les templates
+utilisaient `{{ .SiteURL }}`, un réglage **global** du dashboard Supabase (Authentication > URL
+Configuration > "Site URL") resté sur `http://localhost:3000` depuis la configuration initiale — le
+correctif `lib/siteUrl.ts` de la veille ne changeait que la valeur `redirectTo` passée par le code,
+que les templates n'utilisaient pas encore. **Corrigé en remplaçant `{{ .SiteURL }}` par
+`{{ .RedirectTo }}`** dans les deux templates ("Invite user" et "Reset Password", ce dernier traduit
+en français au passage) — cette variable reflète bien la valeur dynamique envoyée par le code
+(`getSiteUrl()`), donc localhost en local et le bon domaine en prod, sans readapter le dashboard à
+chaque changement d'environnement. Un log de diagnostic temporaire posé dans `getSiteUrl()` pour
+confirmer la cause a été retiré une fois le comportement vérifié correct sur un email réel
+(`https://apidays-seven.vercel.app/connexion/confirmer/invite?token_hash=...`).
+
+**Leçon pour la suite** : toujours vérifier le HTML brut réellement transmis (source de l'email,
+pas l'aperçu du dashboard Supabase ni le rendu de la boîte mail) en cas de comportement inattendu
+sur ces liens — l'éditeur de template et l'email réellement envoyé peuvent diverger silencieusement
+selon quelle variable Supabase (`{{ .SiteURL }}` vs `{{ .RedirectTo }}` vs texte statique) est
+utilisée.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
