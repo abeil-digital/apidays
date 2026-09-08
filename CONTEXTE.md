@@ -4930,10 +4930,12 @@ client. `useSearchParams()` (pour lire `next` sur la page) a nécessité une fro
 hook. Testé en local bout en bout (déconnecté → lien direct → connexion → atterrissage confirmé sur
 la page visée) et build complet vérifié.
 
-**Repéré en testant ce correctif, pas encore creusé** : le compte `test-admin@abeil.local`
-(fiche) a un email Auth différent (`michelle.mayol1944@gmail.com`) — pourrait être un compte de test
-volontairement configuré avec une vraie adresse pour recevoir des emails de test, à confirmer avec
-Vincent avant de le considérer comme un cas du bug déjà corrigé plus haut.
+**Repéré en testant ce correctif, clarifié par Vincent** : le compte admin de test avait
+volontairement un email Auth différent de la fiche (`michelle.mayol1944@gmail.com`, une vraie
+adresse pour recevoir des emails de test) — pas un cas du bug. Vincent l'a ensuite aligné lui-même
+depuis la fiche (Paramétrer > Utilisateurs), qui a bien déclenché `synchroniserEmailAuth` : fiche et
+Auth confirmés identiques (`michelle.mayol1944@gmail.com`) des deux côtés — validation en conditions
+réelles du correctif ci-dessus, au-delà du test avec un compte dédié.
 
 ## À faire
 
