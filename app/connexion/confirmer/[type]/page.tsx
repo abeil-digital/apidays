@@ -44,11 +44,21 @@ export default async function ConfirmerPage({
   )}&type=${type}&next=${encodeURIComponent(NEXT_PAR_DEFAUT)}`;
 
   return (
-    <div className="bg-surface-app flex min-h-full items-center justify-center px-4">
-      <div className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 text-center shadow-sm">
-        <div>
-          <div className="text-ink-900 text-2xl font-semibold">Apidays</div>
-          <p className="text-ink-500 mt-2 text-sm">
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
+      <div className="bg-surface-card rounded-card flex w-full max-w-sm flex-col items-start gap-5 p-6 shadow-sm">
+        <div className="flex flex-col items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
+          <img
+            src="/logo-abeil-fond-clair.png"
+            alt="Abeil"
+            width={1676}
+            height={710}
+            className="h-12 w-auto"
+          />
+          <p className="text-abeil-navy text-xl font-semibold">
+            {lienInvalide ? "Lien invalide" : "Bienvenue sur Apidays"}
+          </p>
+          <p className="text-ink-500 text-sm">
             {lienInvalide
               ? "Ce lien est invalide."
               : "Cliquez pour continuer et accéder à votre compte."}
@@ -62,7 +72,7 @@ export default async function ConfirmerPage({
         ) : (
           <Link
             href={lienConfirmation}
-            className="bg-slate hover:bg-slate/90 rounded-card w-full px-4 py-3 text-center text-sm font-semibold text-white"
+            className="rounded-card bg-slate hover:bg-slate/90 w-full px-4 py-3 text-center text-sm font-semibold text-white"
           >
             Continuer
           </Link>
