@@ -4869,6 +4869,36 @@ d'environnement Vercel (Production), déployer avec `vercel.json` pour activer l
 vérifier le support des cron jobs horaires sur le plan Vercel actuel (Hobby) — Project Settings >
 Cron Jobs après le premier déploiement.
 
+## Notifications email — déploiement en prod, validé (08/09/2026)
+
+**Le déploiement automatique Vercel était cassé** : les push sur `origin/main` n'avaient plus
+déclenché de nouveau build depuis un moment (la liste "Deployments" ne montrait que des redeploys
+manuels d'anciens builds). Cause non identifiée avec certitude (webhook interne Vercel resté
+bloqué, rien d'anormal trouvé côté GitHub App ni côté réglages projet) — résolu en déconnectant puis
+reconnectant le repo Git dans Settings > Git du projet Vercel. Les push suivants se sont bien
+redéclenchés automatiquement.
+
+**Cron horaire refusé par le plan Hobby** : `vercel.json` avec `"0 * * * *"` bloquait le déploiement
+("Hobby accounts are limited to daily cron jobs"). Dégradé en cron **quotidien à 18h UTC**
+plutôt que de bloquer sur un upgrade payant (comportement anticipé et acté dans le plan initial) —
+`heure_recap` choisie par l'admin devient une heure "au plus tôt" (`heure < heure_recap` plutôt que
+`heure !== heure_recap` dans `app/api/cron/notifications-digest/route.ts`) : le digest part au
+premier passage quotidien du cron qui tombe après cette heure, plutôt qu'à l'heure exacte. Note
+ajoutée sur la page de réglages pour clarifier ce comportement.
+
+**Validé de bout en bout en prod** (`https://apidays-seven.vercel.app`) : `CRON_SECRET` testé
+(401 sans le bon secret, 200 avec), demande de test posée → email de notification immédiate bien
+reçu par le manager (`RESEND_API_KEY` confirmée fonctionnelle). Lien de l'email pointant vers
+`/suivre/demandes` complété avec `?statut=en_attente` (mécanisme de filtre déjà existant sur cette
+page) pour arriver directement sur les demandes à valider, plutôt que sur la liste complète —
+appliqué aux deux emails (immédiat et digest, qui n'avait pas de lien du tout jusque-là).
+
+**Bug annexe découvert pendant ce test** (sans lien avec les notifications, documenté au Backlog) :
+changer l'email d'un utilisateur depuis sa fiche (Paramétrer > Utilisateurs) ne met à jour que la
+table applicative `utilisateurs`, jamais `auth.users` côté Supabase Auth — la connexion continue
+d'exiger l'ancien email. A bloqué un manager en prod, débloqué manuellement via le dashboard
+Supabase (Authentication > Users).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
