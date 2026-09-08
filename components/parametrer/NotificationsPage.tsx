@@ -149,6 +149,11 @@ function FormulaireNotifications({
               </SelectPille>
             </div>
           )}
+          {frequence === "hebdomadaire" && (
+            <p className="text-ink-500 mt-2 pl-6 text-xs">
+              Heure indicative — l&apos;envoi a lieu une fois par jour, à partir de cette heure.
+            </p>
+          )}
         </div>
 
         <div className="bg-mint-tint flex items-center justify-between rounded-xl px-3 py-2">

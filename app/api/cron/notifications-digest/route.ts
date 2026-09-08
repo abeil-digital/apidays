@@ -10,10 +10,14 @@ import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge"
 const TOLERANCE_MS = 6 * 24 * 60 * 60 * 1000;
 
 /**
- * Cron Vercel horaire (`vercel.json`) — le déclenchement du digest
- * hebdomadaire dépend d'un jour/heure choisis par l'admin, comparés ici en
- * UTC à chaque exécution. Le cron immédiat (`notifierNouvelleDemande`) ne
- * passe pas par cette route.
+ * Cron Vercel quotidien (`vercel.json`, 18h UTC — plan Hobby limité à une
+ * exécution/jour, un cron horaire est refusé au déploiement). Le
+ * jour/heure choisis par l'admin ne peuvent donc plus être comparés à
+ * l'égalité : `heureRecap` devient une heure "au plus tôt" (envoi dès que
+ * l'unique passage quotidien du cron, tard dans la journée, tombe après
+ * cette heure) plutôt qu'une heure exacte — dégradation actée avec Vincent
+ * le 08/09/2026 plutôt que bloquer sur un upgrade de plan. Le cron
+ * immédiat (`notifierNouvelleDemande`) ne passe pas par cette route.
  */
 export async function GET(request: NextRequest) {
   const auth = request.headers.get("authorization");
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
   const dejaEnvoyeRecemment =
     dernierEnvoi !== null && maintenant.getTime() - dernierEnvoi.getTime() < TOLERANCE_MS;
 
-  if (jourISO !== parametrage.jour_recap || heure !== parametrage.heure_recap) {
+  if (jourISO !== parametrage.jour_recap || heure < parametrage.heure_recap) {
     return NextResponse.json({ ok: true, envoye: false, raison: "hors créneau" });
   }
   if (dejaEnvoyeRecemment) {
