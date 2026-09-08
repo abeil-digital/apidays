@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
+import { Toast } from "@/components/ui/Toast";
 import { NouveauUtilisateurModal } from "@/components/parametrer/UtilisateurFichePage";
 
 const ROLE_LABEL: Record<RoleUtilisateur, string> = {
@@ -72,6 +73,7 @@ export function UtilisateursListPage() {
   // /parametrer/utilisateurs/nouveau par une création sur place ; la route
   // reste par ailleurs disponible pour un accès direct par URL.
   const [creationOuverte, setCreationOuverte] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const [recherche, setRecherche] = useState("");
   const [role, setRole] = useState<RoleUtilisateur | "tous">("tous");
@@ -238,12 +240,18 @@ export function UtilisateursListPage() {
       {creationOuverte && (
         <NouveauUtilisateurModal
           onClose={() => setCreationOuverte(false)}
-          onCreated={() => {
+          onCreated={(utilisateur) => {
             setCreationOuverte(false);
             recharger();
+            setToast(
+              `Compte de ${utilisateur.nom} ${utilisateur.prenom} créé. ` +
+                `${utilisateur.prenom} a reçu un e-mail pour initialiser son compte.`,
+            );
           }}
         />
       )}
+
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

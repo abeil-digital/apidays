@@ -1,14 +1,31 @@
 "use client";
 
 import { useActionState, useState, type FormEvent } from "react";
+import { Check, Eye, EyeOff } from "lucide-react";
 import {
   definirMotDePasse,
   type DefinirMotDePasseState,
 } from "@/app/connexion/definir-mot-de-passe/actions";
+import {
+  criteresMotDePasse,
+  MESSAGE_POLITIQUE_MOT_DE_PASSE,
+  respectePolitiqueMotDePasse,
+} from "@/lib/passwordPolicy";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: DefinirMotDePasseState = {};
+
+function CritereMotDePasse({ rempli, texte }: { rempli: boolean; texte: string }) {
+  return (
+    <li
+      className={`flex items-center gap-1.5 text-xs ${rempli ? "text-status-success-fg" : "text-ink-500"}`}
+    >
+      <Check size={12} className={rempli ? "opacity-100" : "opacity-30"} />
+      {texte}
+    </li>
+  );
+}
 
 /**
  * Écran partagé invitation/mot de passe oublié — atteint via
@@ -21,10 +38,19 @@ export default function DefinirMotDePassePage() {
   const [motDePasse, setMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [erreurLocale, setErreurLocale] = useState("");
+  const [afficherMotDePasse, setAfficherMotDePasse] = useState(false);
+  const [afficherConfirmation, setAfficherConfirmation] = useState(false);
 
   const mismatch = confirmation.length > 0 && motDePasse !== confirmation;
+  const match = confirmation.length > 0 && motDePasse === confirmation;
+  const criteres = criteresMotDePasse(motDePasse);
 
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    if (!respectePolitiqueMotDePasse(motDePasse)) {
+      e.preventDefault();
+      setErreurLocale(MESSAGE_POLITIQUE_MOT_DE_PASSE);
+      return;
+    }
     if (motDePasse !== confirmation) {
       e.preventDefault();
       setErreurLocale("Les deux mots de passe ne correspondent pas.");
@@ -58,33 +84,73 @@ export default function DefinirMotDePassePage() {
           <label htmlFor="motDePasse" className="text-abeil-navy mb-1.5 block text-sm font-bold">
             Nouveau mot de passe
           </label>
-          <Input
-            id="motDePasse"
-            name="motDePasse"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={motDePasse}
-            onChange={(e) => setMotDePasse(e.target.value)}
-            className="!border-slate w-full rounded-md text-xs"
-          />
+          <div className="relative">
+            <Input
+              id="motDePasse"
+              name="motDePasse"
+              type={afficherMotDePasse ? "text" : "password"}
+              required
+              autoComplete="new-password"
+              value={motDePasse}
+              onChange={(e) => setMotDePasse(e.target.value)}
+              className="!border-slate w-full rounded-md pr-10 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setAfficherMotDePasse((v) => !v)}
+              aria-label={
+                afficherMotDePasse ? "Masquer le mot de passe" : "Afficher le mot de passe"
+              }
+              className="text-ink-500 hover:text-ink-900 absolute top-1/2 right-3 -translate-y-1/2"
+            >
+              {afficherMotDePasse ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <ul className="mt-1.5 flex flex-col gap-1">
+            <CritereMotDePasse rempli={criteres.longueur} texte="Au moins 8 caractères" />
+            <CritereMotDePasse rempli={criteres.majuscule} texte="Une majuscule" />
+            <CritereMotDePasse rempli={criteres.caractereSpecial} texte="Un caractère spécial" />
+          </ul>
         </div>
 
         <div>
           <label htmlFor="confirmation" className="text-abeil-navy mb-1.5 block text-sm font-bold">
             Confirmer le mot de passe
           </label>
-          <Input
-            id="confirmation"
-            name="confirmation"
-            type="password"
-            required
-            autoComplete="new-password"
-            value={confirmation}
-            onChange={(e) => setConfirmation(e.target.value)}
-            error={mismatch}
-            className={`w-full rounded-md text-xs ${mismatch ? "" : "!border-slate"}`}
-          />
+          <div className="relative">
+            <Input
+              id="confirmation"
+              name="confirmation"
+              type={afficherConfirmation ? "text" : "password"}
+              required
+              autoComplete="new-password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              error={mismatch}
+              className={`w-full rounded-md pr-10 text-xs ${mismatch ? "" : "!border-slate"}`}
+            />
+            <button
+              type="button"
+              onClick={() => setAfficherConfirmation((v) => !v)}
+              aria-label={
+                afficherConfirmation ? "Masquer le mot de passe" : "Afficher le mot de passe"
+              }
+              className="text-ink-500 hover:text-ink-900 absolute top-1/2 right-3 -translate-y-1/2"
+            >
+              {afficherConfirmation ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {mismatch && (
+            <p className="text-status-danger-fg mt-1.5 text-xs">
+              Les mots de passe ne correspondent pas.
+            </p>
+          )}
+          {match && (
+            <p className="text-status-success-fg mt-1.5 flex items-center gap-1 text-xs">
+              <Check size={14} />
+              Les mots de passe correspondent.
+            </p>
+          )}
         </div>
 
         {erreur && (
@@ -93,7 +159,11 @@ export default function DefinirMotDePassePage() {
           </div>
         )}
 
-        <Button type="submit" disabled={pending} className="rounded-card w-full py-3">
+        <Button
+          type="submit"
+          disabled={pending || !match || !respectePolitiqueMotDePasse(motDePasse)}
+          className="rounded-card w-full py-3"
+        >
           {pending ? "Enregistrement…" : "Définir le mot de passe"}
         </Button>
       </form>

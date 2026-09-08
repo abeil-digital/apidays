@@ -2,12 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { MESSAGE_POLITIQUE_MOT_DE_PASSE, respectePolitiqueMotDePasse } from "@/lib/passwordPolicy";
 
 export interface DefinirMotDePasseState {
   error?: string;
 }
-
-const LONGUEUR_MIN = 8;
 
 /**
  * Écran commun à l'invitation (nouveau collaborateur) et au "mot de passe
@@ -22,8 +21,8 @@ export async function definirMotDePasse(
   const motDePasse = String(formData.get("motDePasse") ?? "");
   const confirmation = String(formData.get("confirmation") ?? "");
 
-  if (motDePasse.length < LONGUEUR_MIN) {
-    return { error: `Le mot de passe doit contenir au moins ${LONGUEUR_MIN} caractères.` };
+  if (!respectePolitiqueMotDePasse(motDePasse)) {
+    return { error: MESSAGE_POLITIQUE_MOT_DE_PASSE };
   }
   if (motDePasse !== confirmation) {
     return { error: "Les deux mots de passe ne correspondent pas." };

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 export interface MotDePasseOublieState {
   envoye?: boolean;
@@ -19,7 +20,7 @@ export async function demanderReinitialisation(
   const supabase = await createClient();
 
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/connexion/confirmer/recovery`,
+    redirectTo: `${await getSiteUrl()}/connexion/confirmer/recovery`,
   });
 
   return { envoye: true };

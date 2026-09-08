@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 export interface InviterUtilisateurState {
   ok: boolean;
@@ -16,21 +17,38 @@ export interface InviterUtilisateurState {
  * client de session normal de l'admin connecté (RLS "utilisateurs: admin
  * modifie les profils") — le service_role reste cantonné au seul appel
  * qui l'exige réellement.
+ *
+ * `prenom` (le nouveau collaborateur) est transmis en `data` d'invitation
+ * (08/09/2026) pour personnaliser l'email ("Bienvenue {{ .Data.prenom }}")
+ * — le prénom de l'admin à l'origine de l'invitation ("Contactez
+ * {{ .Data.adminPrenom }}") est résolu ici via la session en cours, pas
+ * passé en paramètre par l'appelant.
  */
 export async function inviterUtilisateur(
   utilisateurId: string,
   email: string,
+  prenom: string,
 ): Promise<InviterUtilisateurState> {
-  const admin = createAdminClient();
-  const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL}/connexion/confirmer/invite`;
+  const supabase = await createClient();
+  const {
+    data: { user: adminAuthUser },
+  } = await supabase.auth.getUser();
+  const { data: adminProfil } = adminAuthUser
+    ? await supabase.from("utilisateurs").select("prenom").eq("auth_id", adminAuthUser.id).single()
+    : { data: null };
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
+  const admin = createAdminClient();
+  const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;
+
+  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { prenom, adminPrenom: adminProfil?.prenom ?? "l'administrateur" },
+  });
 
   if (error || !data.user) {
     return { ok: false, erreur: "invite_echouee" };
   }
 
-  const supabase = await createClient();
   const { error: updateError } = await supabase
     .from("utilisateurs")
     .update({ auth_id: data.user.id })
@@ -57,7 +75,7 @@ export async function inviterUtilisateur(
 export async function envoyerLienReinitialisation(email: string): Promise<{ ok: boolean }> {
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/connexion/confirmer/recovery`,
+    redirectTo: `${await getSiteUrl()}/connexion/confirmer/recovery`,
   });
   return { ok: !error };
 }

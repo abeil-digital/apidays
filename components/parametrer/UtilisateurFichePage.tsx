@@ -1153,7 +1153,7 @@ function Formulaire({
           soldeInitialInput,
           champs.natureContrat === "cdd" && dateSortieCdd ? dateSortieCdd : undefined,
         );
-        const invite = await inviterUtilisateur(resultat.id, resultat.email);
+        const invite = await inviterUtilisateur(resultat.id, resultat.email, resultat.prenom);
         if (!invite.ok) {
           setErreur(
             "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
@@ -1414,7 +1414,7 @@ function Formulaire({
                         if (!id) return;
                         setInvitationEnvoi(true);
                         setInvitationErreur(false);
-                        const resultat = await inviterUtilisateur(id, champs.email);
+                        const resultat = await inviterUtilisateur(id, champs.email, champs.prenom);
                         setInvitationEnvoi(false);
                         if (resultat.ok) {
                           setInvitationRenvoyee(true);

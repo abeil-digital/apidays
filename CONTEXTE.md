@@ -4682,6 +4682,81 @@ n'importe quelle route protégée. Corrigé en excluant par extension
 (`.*\.(?:svg|png|jpe?g|gif|webp|ico)$`) plutôt que de lister chaque fichier, pour ne pas retomber
 dans le même piège au prochain asset ajouté.
 
+## Authentification — toaster de création, contenu email FR, règle de mot de passe (08/09/2026)
+
+Suite de la passe UI de ce jour, trois ajouts sur le parcours de création de compte :
+
+- **Toaster de confirmation** (`UtilisateursListPage.tsx`) : à la création réussie (`onCreated`),
+  affiche "Compte de {Nom} {Prénom} créé. {Prénom} a reçu un e-mail pour initialiser son compte."
+  via le composant `Toast` déjà existant (`tone="success"` par défaut), plutôt qu'une simple
+  fermeture silencieuse de la popin.
+- **Contenu de l'email d'invitation en français** : template Supabase "Invite user" réécrit
+  (objet "Créer votre compte sur Apidays-Abeil", corps personnalisé). Personnalisation par
+  `{{ .Data.prenom }}` (le nouveau collaborateur) et `{{ .Data.adminPrenom }}` (l'admin à l'origine
+  de l'invitation) — ces deux valeurs sont désormais transmises par `inviterUtilisateur`
+  (`app/(app)/parametrer/utilisateurs/actions.ts`) via l'option `data` de `inviteUserByEmail`. Le
+  prénom de l'admin est résolu côté serveur (session en cours), pas passé par l'appelant. Le lien
+  reste à un seul paramètre de requête (`token_hash`) — `{{ .Data.* }}` est du texte de corps, pas
+  concerné par le bug de troncature des query params découvert hier, seul le `href` l'était.
+  Template "Reset Password" laissé inchangé pour l'instant (hors demande explicite de cette passe).
+- **Règle de mot de passe renforcée** : 8 caractères + une majuscule + un caractère spécial (au lieu
+  de la seule longueur). Factorisée dans un nouveau fichier partagé `lib/passwordPolicy.ts`
+  (`criteresMotDePasse`/`respectePolitiqueMotDePasse`/`MESSAGE_POLITIQUE_MOT_DE_PASSE`) — un seul
+  endroit à faire évoluer, importé à la fois par la Server Action (vérité qui fait foi) et par la
+  page (retour visuel en direct). Checklist à 3 lignes sous le champ "Nouveau mot de passe", chaque
+  critère passant au vert/coché dès qu'il est satisfait. Bouton "Définir le mot de passe" désactivé
+  tant que la politique n'est pas respectée ET que les deux champs ne correspondent pas (pas
+  seulement la correspondance comme avant). Icônes œil/œil barré ajoutées sur les deux champs mot
+  de passe (`lucide-react` `Eye`/`EyeOff`, état d'affichage indépendant par champ).
+
+**Contexte du test qui a motivé ces ajouts** : Vincent a signalé n'avoir reçu aucun email
+d'invitation après avoir recréé un utilisateur test — diagnostic non conclu à ce stade (deux pistes
+évoquées : compte `auth.users` déjà existant pour cet email empêchant un nouvel envoi, ou popin
+ayant affiché une erreur d'invitation passée inaperçue). Les comptes de test
+`vincent.mayol@gmail.com` et `abeil-it@proton.me` ont été supprimés une seconde fois (même script
+SQL que la première fois, voir plus haut) avant de reprendre les tests avec ces nouveaux ajouts
+(toaster, email FR) qui devraient aider à mieux diagnostiquer un éventuel prochain échec silencieux.
+**Toujours pas testé à ce stade** : la réception réelle de l'email personnalisé, ni la soumission
+du mot de passe avec la nouvelle politique, ni la reconnexion.
+
+## Authentification — parcours validé de bout en bout en local (08/09/2026)
+
+**Jalon atteint** : création d'un utilisateur → email d'invitation reçu → clic sur le lien →
+définition du mot de passe → connexion réussie, testé en local avec `vincent.mayol@gmail.com`.
+C'est le premier test concluant depuis le début de ce chantier (les tentatives précédentes
+échouaient soit sur le bug de troncature des liens Supabase — résolu le 07/09 —, soit sur un compte
+`auth.users` déjà existant pour l'email de test empêchant un nouvel envoi). Cause probable des
+échecs silencieux précédents ("pas d'email reçu") : un compte Auth déjà présent sur cet email suite
+à un essai antérieur, non supprimé du dashboard (la suppression SQL ne touche que
+`public.utilisateurs`, jamais `auth.users`) — confirmé indirectement par le fait que ça a fonctionné
+juste après un nettoyage complet (SQL + suppression manuelle du compte Auth). **Pas un bug
+applicatif**, mais un point de vigilance à garder en tête pour les prochains tests avec un compte
+réutilisé. **Encore à faire** : reproduire le test en prod (`https://apidays-seven.vercel.app`).
+
+Deux ajouts complémentaires dans la foulée :
+- **`lib/siteUrl.ts`** (nouveau) : l'origine du site (`https://.../http://localhost:...`) utilisée
+  pour construire les liens email est désormais déduite des en-têtes de la requête
+  (`x-forwarded-host`/`x-forwarded-proto`, posés par la plupart des plateformes dont Vercel) plutôt
+  que lue depuis `NEXT_PUBLIC_SITE_URL` — plus besoin de changer cette variable entre localhost et
+  la prod. Les 3 Server Actions qui construisaient un `redirectTo` (`inviterUtilisateur`,
+  `envoyerLienReinitialisation`, `demanderReinitialisation`) utilisent maintenant `getSiteUrl()`.
+  Reste néanmoins une étape manuelle **ponctuelle** par nouveau domaine (pas récurrente) : ajouter
+  ses URLs à la liste "Redirect URLs" du dashboard Supabase (sécurité, pas de wildcard cross-domaine
+  possible) — fait le 08/09/2026 pour `https://apidays-seven.vercel.app`, à refaire une fois par
+  domaine client le jour du multi-tenant.
+- **`components/ui/Toast.tsx`** (refonte demande explicite) : passe d'une pastille flottante centrée
+  en haut à un bandeau pleine largeur positionné sous `HeaderBar` (`top-14`, sa hauteur exacte),
+  fond `bg-mint-tint`/texte `text-mint` pour le ton "success" (le ton "error" garde les couleurs
+  danger existantes). Durée d'affichage par défaut passée de 5 à 8 secondes. Composant partagé —
+  répercuté automatiquement sur tous ses appelants existants (`SuivreDemandesPage`,
+  `ProchainsJoursOffCard`, et le nouveau toaster de création d'utilisateur).
+
+**Point annexe rencontré, sans lien avec l'app** : au moment de définir le mot de passe, Chrome a
+proposé de "mettre à jour" un identifiant enregistré sous un mauvais libellé
+(`test-manager@abeil.local`) — artefact du gestionnaire de mots de passe du navigateur (pas de champ
+email visible sur cette page pour bien identifier le compte), sans impact sur le compte Supabase
+réel.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
