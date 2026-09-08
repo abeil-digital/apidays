@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { Suspense, useActionState, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { login, type LoginState } from "@/app/connexion/actions";
 import { Button } from "@/components/ui/Button";
@@ -9,9 +10,24 @@ import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: LoginState = {};
 
+// `useSearchParams()` (pour `next`, voir plus bas) exige une frontière
+// Suspense pour rester prérendable statiquement — sinon `next build` échoue
+// ("should be wrapped in a suspense boundary").
 export default function ConnexionPage() {
+  return (
+    <Suspense>
+      <FormulaireConnexion />
+    </Suspense>
+  );
+}
+
+function FormulaireConnexion() {
   const [state, formAction, pending] = useActionState(login, INITIAL_STATE);
   const [afficherMotDePasse, setAfficherMotDePasse] = useState(false);
+  // Posé par `proxy.ts` avant de rediriger ici (ex. lien de notification
+  // email) — retransmis à `login()` via un champ caché pour y renvoyer une
+  // fois connecté, voir `app/connexion/actions.ts`.
+  const next = useSearchParams().get("next") ?? "";
 
   return (
     <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
@@ -19,6 +35,7 @@ export default function ConnexionPage() {
         action={formAction}
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
       >
+        <input type="hidden" name="next" value={next} />
         <div className="flex flex-col items-start gap-3">
           {/* Version couleur fond clair (07/09/2026, Charte-abeil/2026_New_Logo)
               — le logo blanc (`logo-abeil.svg`, utilisé sur `HeaderBar`) n'a

@@ -21,7 +21,12 @@ export async function login(
     return { error: "Email ou mot de passe incorrect." };
   }
 
-  redirect("/");
+  // `next` (08/09/2026) : renvoie vers la destination d'origine (ex. lien de
+  // notification email) plutôt que toujours l'Accueil — voir `proxy.ts`.
+  // Revalidé ici (chemin relatif uniquement) même si `proxy.ts` l'a déjà
+  // posé, `next` restant un champ de formulaire modifiable côté client.
+  const next = String(formData.get("next") ?? "");
+  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");
 }
 
 export async function logout() {

@@ -65,8 +65,15 @@ export async function proxy(request: NextRequest) {
   const routePublique = estRoutePublique(request.nextUrl.pathname);
 
   if (!user && !routePublique) {
+    // `next` (08/09/2026) : conserve la destination d'origine (ex. lien de
+    // notification email vers `/suivre/demandes?statut=en_attente`) pour y
+    // renvoyer une fois connecté, plutôt que de perdre le contexte et
+    // atterrir sur l'Accueil — voir `app/connexion/actions.ts`.
+    const next = request.nextUrl.pathname + request.nextUrl.search;
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTE_CONNEXION;
+    redirectUrl.search = "";
+    redirectUrl.searchParams.set("next", next);
     return NextResponse.redirect(redirectUrl);
   }
 
@@ -96,10 +103,13 @@ export async function proxy(request: NextRequest) {
     }
 
     if (isRouteConnexion) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/";
-      redirectUrl.search = "";
-      return NextResponse.redirect(redirectUrl);
+      // Honore `next` si présent et sûr (chemin relatif, pas de
+      // `//host-externe` — un utilisateur authentifié peut arriver ici via
+      // un lien avec `?next=...` déjà consommé par la page de connexion,
+      // ou en visitant directement l'URL).
+      const next = request.nextUrl.searchParams.get("next");
+      const cible = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      return NextResponse.redirect(new URL(cible, request.nextUrl.origin));
     }
 
     if (
