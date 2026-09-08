@@ -4,6 +4,7 @@ import { envoyerEmail } from "@/lib/resend/notifications";
 import { resolverDestinataires } from "@/lib/resend/destinataires";
 import { formatPeriodeDemande } from "@/lib/format";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { echapperHtml } from "@/lib/html";
 
 // Watermark de garde anti-doublon : tolère un cron raté jusqu'à cette durée
 // sans jamais renvoyer deux fois le même récap (voir plan §4).
@@ -55,7 +56,9 @@ export async function GET(request: NextRequest) {
   const depuis = dernierEnvoi ?? new Date(0);
   const { data: demandes } = await admin
     .from("demandes_conges")
-    .select("date_debut, date_fin, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)")
+    .select(
+      "date_debut, date_fin, commentaire_salarie, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
+    )
     .eq("statut", "en_attente")
     .gte("created_at", depuis.toISOString());
 
@@ -84,7 +87,8 @@ export async function GET(request: NextRequest) {
         if (!typeAbsence || !requerant) return "";
         const libelleType = LABEL_LONG[typeAbsence.code as TypeBadgeCode] ?? typeAbsence.code;
         const periode = formatPeriodeDemande(demande.date_debut, demande.date_fin);
-        return `<li>${requerant.prenom} ${requerant.nom} — <strong>${libelleType}</strong> — ${periode}</li>`;
+        const commentaire = demande.commentaire_salarie?.trim();
+        return `<li>${requerant.prenom} ${requerant.nom} — <strong>${libelleType}</strong> — ${periode}${commentaire ? ` — «&nbsp;${echapperHtml(commentaire)}&nbsp;»` : ""}</li>`;
       })
       .join("");
 

@@ -6,6 +6,7 @@ import { resolverDestinataires } from "@/lib/resend/destinataires";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { formatPeriodeDemande } from "@/lib/format";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { echapperHtml } from "@/lib/html";
 
 /**
  * Déclenchée en fire-and-forget juste après la création d'une demande
@@ -27,7 +28,7 @@ export async function notifierNouvelleDemande(demandeId: string): Promise<void> 
     const { data: demande } = await admin
       .from("demandes_conges")
       .select(
-        "date_debut, date_fin, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
+        "date_debut, date_fin, commentaire_salarie, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
       )
       .eq("id", demandeId)
       .single();
@@ -52,12 +53,15 @@ export async function notifierNouvelleDemande(demandeId: string): Promise<void> 
     const nomRequerant = `${requerant.prenom} ${requerant.nom}`;
     const siteUrl = await getSiteUrl();
 
+    const commentaire = demande.commentaire_salarie?.trim();
+
     await envoyerEmail({
       destinataires,
       sujet: `Nouvelle demande de congé — ${nomRequerant}`,
       html: `
         <p>${nomRequerant} a posé une nouvelle demande de congé.</p>
         <p><strong>${libelleType}</strong><br>${periode}</p>
+        ${commentaire ? `<p>&laquo;&nbsp;${echapperHtml(commentaire)}&nbsp;&raquo;</p>` : ""}
         <p><a href="${siteUrl}/suivre/demandes?statut=en_attente">Voir la demande</a></p>
       `,
     });
