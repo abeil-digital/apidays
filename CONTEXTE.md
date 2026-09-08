@@ -4937,6 +4937,34 @@ depuis la fiche (Paramétrer > Utilisateurs), qui a bien déclenché `synchronis
 Auth confirmés identiques (`michelle.mayol1944@gmail.com`) des deux côtés — validation en conditions
 réelles du correctif ci-dessus, au-delà du test avec un compte dédié.
 
+## Notifications — décisions de demandes envoyées au collaborateur (08/09/2026)
+
+**Deuxième volet de Paramétrer > Notifications**, à la demande de Vincent après le premier chantier
+(notifications manager/admin) : le collaborateur peut désormais être notifié par email quand sa
+demande est validée/refusée. Avant de construire, vérifié que le volume Resend n'était pas un frein
+(dashboard : 21/3 000 emails utilisés ce mois sur le plan gratuit, 13/100 aujourd'hui — très large
+marge pour une appli à usage interne).
+
+Réglage à trois niveaux (`notif_decision_collaborateur`, nouvelle colonne sur
+`parametrage_notifications`) : **Tous**, **Refus uniquement** (jugé plus utile à notifier qu'une
+validation déjà attendue par le collaborateur), **Aucune** (défaut). `notifierDecisionDemande`
+(`lib/data/notificationsDemandes.actions.ts`) déclenchée en fire-and-forget depuis
+`useDemandesEquipe.ts` (`valider`/`refuser`) — même principe que `notifierNouvelleDemande` : n'échoue
+jamais visiblement pour le manager qui vient de décider. Inclut le commentaire de décision du
+manager (échappé via `lib/html.ts`, comme le commentaire du collaborateur dans l'email de demande).
+
+**Testé en conditions quasi réelles** : connexion successive en local comme admin (`Delphine
+Admin-test`) puis manager (seuls les managers valident/refusent, pas l'admin — rappel du principe
+déjà acté au chantier précédent), demandes de test créées directement en base puis décidées via
+l'interface réelle (clic sur la ligne → panneau détail → Valider/Refuser) : les deux chemins
+exécutés sans erreur, confirmé par les logs serveur.
+
+**Point technique rencontré en testant** : le clic simulé (`computer` du navigateur automatisé) ne
+déclenchait pas les gestionnaires `onClick` React sur cette page (ligne de tableau, boutons
+Valider/Refuser/Confirmer) — cause non identifiée avec certitude, contournée en déclenchant les clics
+via `element.click()` en JavaScript direct depuis la console, qui fonctionne correctement. Sans
+rapport avec un bug de l'application (le clic humain normal fonctionne).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
