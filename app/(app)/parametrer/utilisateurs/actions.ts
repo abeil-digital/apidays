@@ -29,36 +29,52 @@ export async function inviterUtilisateur(
   email: string,
   prenom: string,
 ): Promise<InviterUtilisateurState> {
-  const supabase = await createClient();
-  const {
-    data: { user: adminAuthUser },
-  } = await supabase.auth.getUser();
-  const { data: adminProfil } = adminAuthUser
-    ? await supabase.from("utilisateurs").select("prenom").eq("auth_id", adminAuthUser.id).single()
-    : { data: null };
+  // Ne jamais laisser une exception remonter jusqu'à l'appelant (07/09/2026,
+  // corrigé le 08/09/2026 après un cas réel en prod) — le profil
+  // `utilisateurs` est déjà créé au moment où cette fonction est appelée
+  // (voir `Formulaire.handleSubmit`) ; si `createAdminClient()` ou l'appel
+  // Admin API plante (ex. `SUPABASE_SERVICE_ROLE_KEY` absente en prod),
+  // l'appelant doit recevoir un échec propre `{ ok: false }` pour afficher
+  // "profil créé, invitation à renvoyer" — pas une exception qui ferait
+  // croire à un échec total de la création.
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user: adminAuthUser },
+    } = await supabase.auth.getUser();
+    const { data: adminProfil } = adminAuthUser
+      ? await supabase
+          .from("utilisateurs")
+          .select("prenom")
+          .eq("auth_id", adminAuthUser.id)
+          .single()
+      : { data: null };
 
-  const admin = createAdminClient();
-  const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;
+    const admin = createAdminClient();
+    const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;
 
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo,
-    data: { prenom, adminPrenom: adminProfil?.prenom ?? "l'administrateur" },
-  });
+    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: { prenom, adminPrenom: adminProfil?.prenom ?? "l'administrateur" },
+    });
 
-  if (error || !data.user) {
+    if (error || !data.user) {
+      return { ok: false, erreur: "invite_echouee" };
+    }
+
+    const { error: updateError } = await supabase
+      .from("utilisateurs")
+      .update({ auth_id: data.user.id })
+      .eq("id", utilisateurId);
+
+    if (updateError) {
+      return { ok: false, erreur: "liaison_echouee" };
+    }
+
+    return { ok: true };
+  } catch {
     return { ok: false, erreur: "invite_echouee" };
   }
-
-  const { error: updateError } = await supabase
-    .from("utilisateurs")
-    .update({ auth_id: data.user.id })
-    .eq("id", utilisateurId);
-
-  if (updateError) {
-    return { ok: false, erreur: "liaison_echouee" };
-  }
-
-  return { ok: true };
 }
 
 /**
@@ -73,9 +89,13 @@ export async function inviterUtilisateur(
  * observer : l'admin sait déjà que ce compte existe.
  */
 export async function envoyerLienReinitialisation(email: string): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${await getSiteUrl()}/connexion/confirmer/recovery`,
-  });
-  return { ok: !error };
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${await getSiteUrl()}/connexion/confirmer/recovery`,
+    });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
 }
