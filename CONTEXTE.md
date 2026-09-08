@@ -4912,6 +4912,29 @@ et "Suivi des modifications" (demande explicite de Vincent) — reprend le style
 `bg-surface-app` d'origine plutôt que le style "card" du rôle/de l'historique, en `flex-col` plutôt
 qu'en ligne pour s'accommoder de la largeur plus étroite de cette colonne (`xl:w-72`).
 
+**Notifications — commentaire du collaborateur inclus dans l'email (08/09/2026)** : `commentaire_salarie`
+ajouté à la sélection (email immédiat et digest), échappé via un nouveau `lib/html.ts`
+(`echapperHtml`) avant insertion dans le HTML composé par simple concaténation — testé en local avec
+des caractères spéciaux HTML dans le commentaire.
+
+**Connexion — destination d'origine perdue après connexion, corrigé (08/09/2026)** : cliquer sur le
+lien d'un email de notification en étant déconnecté renvoyait vers l'Accueil après connexion, pas
+vers la page visée (bug remonté par Vincent en testant la copie carbone). `proxy.ts` pose désormais
+`?next=<destination>` en redirigeant vers `/connexion`, honoré à la fois si un utilisateur déjà
+connecté visite `/connexion` avec ce paramètre, et par `login()` (`app/connexion/actions.ts`) après
+connexion réussie — `next` toujours revalidé côté serveur (chemin relatif uniquement) avant d'y
+rediriger, jamais fait confiance tel quel puisque c'est un champ de formulaire modifiable côté
+client. `useSearchParams()` (pour lire `next` sur la page) a nécessité une frontière `Suspense`
+(page découpée en wrapper + `FormulaireConnexion`) — sans ça, `next build` échouait
+("should be wrapped in a suspense boundary"), leçon à retenir pour toute future page utilisant ce
+hook. Testé en local bout en bout (déconnecté → lien direct → connexion → atterrissage confirmé sur
+la page visée) et build complet vérifié.
+
+**Repéré en testant ce correctif, pas encore creusé** : le compte `test-admin@abeil.local`
+(fiche) a un email Auth différent (`michelle.mayol1944@gmail.com`) — pourrait être un compte de test
+volontairement configuré avec une vraie adresse pour recevoir des emails de test, à confirmer avec
+Vincent avant de le considérer comme un cas du bug déjà corrigé plus haut.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
