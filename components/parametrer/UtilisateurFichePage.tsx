@@ -1442,30 +1442,6 @@ function Formulaire({
                   {invitationErreur && <span>Échec de l&rsquo;envoi, réessayez.</span>}
                 </div>
               )}
-              {modeEdition && authId && (
-                <div className="bg-surface-app text-ink-500 flex items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
-                  <span>
-                    {reinitEnvoyee
-                      ? "Lien de réinitialisation envoyé."
-                      : "Le collaborateur a oublié son mot de passe ?"}
-                  </span>
-                  {!reinitEnvoyee && (
-                    <button
-                      type="button"
-                      disabled={reinitEnvoi}
-                      onClick={async () => {
-                        setReinitEnvoi(true);
-                        const resultat = await envoyerLienReinitialisation(champs.email);
-                        setReinitEnvoi(false);
-                        if (resultat.ok) setReinitEnvoyee(true);
-                      }}
-                      className="text-abeil-navy shrink-0 underline disabled:opacity-50"
-                    >
-                      {reinitEnvoi ? "Envoi…" : "Envoyer un lien de réinitialisation"}
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Rôle juste après l'identité (05/09/2026, demande explicite :
@@ -1931,6 +1907,30 @@ function Formulaire({
         {modeEdition && (
           <div className="flex w-full flex-col gap-4 xl:w-72 xl:shrink-0">
             {carteRole}
+            {authId && (
+              <div className="bg-surface-app text-ink-500 flex flex-col gap-1.5 px-3.5 py-2.5 text-sm">
+                <span>
+                  {reinitEnvoyee
+                    ? "Lien de réinitialisation envoyé."
+                    : "Le collaborateur a oublié son mot de passe ?"}
+                </span>
+                {!reinitEnvoyee && (
+                  <button
+                    type="button"
+                    disabled={reinitEnvoi}
+                    onClick={async () => {
+                      setReinitEnvoi(true);
+                      const resultat = await envoyerLienReinitialisation(champs.email);
+                      setReinitEnvoi(false);
+                      if (resultat.ok) setReinitEnvoyee(true);
+                    }}
+                    className="text-abeil-navy w-fit shrink-0 underline disabled:opacity-50"
+                  >
+                    {reinitEnvoi ? "Envoi…" : "Envoyer un lien de réinitialisation"}
+                  </button>
+                )}
+              </div>
+            )}
             {suiviEntrees && (
               <SuiviModifications entrees={suiviEntrees} soldeInitial={soldeInitial} />
             )}

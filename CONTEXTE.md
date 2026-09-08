@@ -4893,11 +4893,24 @@ reçu par le manager (`RESEND_API_KEY` confirmée fonctionnelle). Lien de l'emai
 page) pour arriver directement sur les demandes à valider, plutôt que sur la liste complète —
 appliqué aux deux emails (immédiat et digest, qui n'avait pas de lien du tout jusque-là).
 
-**Bug annexe découvert pendant ce test** (sans lien avec les notifications, documenté au Backlog) :
-changer l'email d'un utilisateur depuis sa fiche (Paramétrer > Utilisateurs) ne met à jour que la
-table applicative `utilisateurs`, jamais `auth.users` côté Supabase Auth — la connexion continue
-d'exiger l'ancien email. A bloqué un manager en prod, débloqué manuellement via le dashboard
-Supabase (Authentication > Users).
+**Bug annexe découvert pendant ce test, corrigé le 08/09/2026** (sans lien avec les notifications) :
+changer l'email d'un utilisateur depuis sa fiche (Paramétrer > Utilisateurs) ne mettait à jour que
+la table applicative `utilisateurs`, jamais `auth.users` côté Supabase Auth — la connexion
+continuait d'exiger l'ancien email. A bloqué un manager en prod, débloqué manuellement via le
+dashboard Supabase (Authentication > Users) en attendant. Corrigé par une nouvelle Server Action
+`synchroniserEmailAuth` (`app/(app)/parametrer/utilisateurs/actions.ts`, service_role,
+`updateUserById` + `email_confirm: true` pour un changement immédiat — l'admin sait déjà que le
+compte est légitime), appelée depuis `handleModifierIdentite`
+(`components/parametrer/UtilisateurFichePage.tsx`) avant l'enregistrement de la fiche : si la
+synchronisation échoue, la fiche n'est pas enregistrée plutôt que de laisser les deux diverger de
+nouveau. Testé en local (aller-retour d'email sur un compte de test, email Auth et table confirmés
+synchronisés).
+
+**Fiche utilisateur — "Envoyer un lien de réinitialisation" déplacé (08/09/2026)** : ce bloc vivait
+sous la card identité, dans la colonne principale ; déplacé dans la colonne de droite, entre le rôle
+et "Suivi des modifications" (demande explicite de Vincent) — reprend le style neutre
+`bg-surface-app` d'origine plutôt que le style "card" du rôle/de l'historique, en `flex-col` plutôt
+qu'en ligne pour s'accommoder de la largeur plus étroite de cette colonne (`xl:w-72`).
 
 ## À faire
 
