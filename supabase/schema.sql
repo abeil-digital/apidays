@@ -300,6 +300,28 @@ create table objectifs_calendrier (
 
 insert into objectifs_calendrier (id) values ('00000000-0000-0000-0000-000000000001');
 
+-- Réglage des notifications email de nouvelle demande de congé (Paramétrer >
+-- Notifications, 08/09/2026) — même idiome singleton qu'objectifs_calendrier.
+-- jour_recap/heure_recap : jour ISO (1=lundi...7=dimanche) et heure UTC du
+-- récap hebdomadaire (conversion Paris → UTC faite côté page de paramétrage).
+-- dernier_envoi_digest sert de watermark anti-doublon au cron
+-- (app/api/cron/notifications-digest).
+create type frequence_notification as enum ('immediate', 'hebdomadaire');
+
+create table parametrage_notifications (
+  id uuid primary key default '00000000-0000-0000-0000-000000000001',
+  frequence frequence_notification not null default 'immediate',
+  jour_recap int not null default 1,
+  heure_recap int not null default 9,
+  copie_administrateur boolean not null default false,
+  dernier_envoi_digest timestamptz,
+  updated_at timestamptz not null default now(),
+  constraint jour_recap_valide check (jour_recap between 1 and 7),
+  constraint heure_recap_valide check (heure_recap between 0 and 23)
+);
+
+insert into parametrage_notifications (id) values ('00000000-0000-0000-0000-000000000001');
+
 -- Jours supplémentaires selon l'ancienneté — rattaché aux CP uniquement
 create table regles_anciennete (
   id uuid primary key default gen_random_uuid(),
@@ -460,6 +482,7 @@ alter table ajustements_solde enable row level security;
 alter table historique_utilisateur enable row level security;
 alter table soldes_initiaux enable row level security;
 alter table objectifs_calendrier enable row level security;
+alter table parametrage_notifications enable row level security;
 alter table regles_anciennete enable row level security;
 alter table faqs enable row level security;
 alter table exports_paie enable row level security;
@@ -792,6 +815,15 @@ create policy "objectifs_calendrier: manager et admin modifient"
   using (my_role() in ('manager', 'admin'))
   with check (my_role() in ('manager', 'admin'));
 
+create policy "parametrage_notifications: lecture par manager et admin"
+  on parametrage_notifications for select
+  using (my_role() in ('manager', 'admin'));
+
+create policy "parametrage_notifications: manager et admin modifient"
+  on parametrage_notifications for all
+  using (my_role() in ('manager', 'admin'))
+  with check (my_role() in ('manager', 'admin'));
+
 create policy "regles_anciennete: lecture par tout utilisateur authentifié"
   on regles_anciennete for select
   using (auth.role() = 'authenticated');
@@ -945,6 +977,7 @@ grant select, insert, update, delete on
   regles_acquisition,
   regles_anciennete,
   objectifs_calendrier,
+  parametrage_notifications,
   ajustements_solde,
   historique_utilisateur,
   soldes_initiaux,
@@ -952,3 +985,16 @@ grant select, insert, update, delete on
   export_paie_lignes,
   faqs
 to authenticated;
+
+-- `service_role` (client admin serveur, `lib/supabase/admin.ts`) contourne
+-- RLS mais reste soumis aux mêmes GRANTs Postgres de base — jusqu'ici jamais
+-- nécessaire car l'admin client ne servait qu'à l'API Auth (invitations),
+-- jamais à lire une table. Devient bloquant avec les notifications email
+-- (08/09/2026, `resolverDestinataires`/`notifierNouvelleDemande`/le cron
+-- digest lisent `utilisateurs`/`demandes_conges`/`parametrage_notifications`
+-- via ce rôle). `alter default privileges` couvre aussi les tables créées
+-- après ce script (pas de GRANT à ajouter à chaque nouvelle table).
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to service_role;

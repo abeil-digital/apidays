@@ -1,4 +1,5 @@
 import {
+  Bell,
   CalendarClock,
   CalendarDays,
   ClipboardCheck,
@@ -27,6 +28,7 @@ const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/conges-rtt", label: "Congés & RTT", Icon: CalendarClock },
   { href: "/parametrer/calendrier2", label: "Calendrier", Icon: CalendarDays },
   { href: "/parametrer/faq", label: "FAQ", Icon: HelpCircle },
+  { href: "/parametrer/notifications", label: "Notifications", Icon: Bell },
 ];
 
 const SUIVRE_TABS: NavTab[] = [

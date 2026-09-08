@@ -4821,6 +4821,54 @@ Ajout mineur au passage : icône œil/œil-barré ajoutée au champ mot de passe
 **Ce chantier peut être considéré fonctionnellement complet** pour la première itération — reste au
 Backlog uniquement : évaluer une version HTML/stylée des emails (actuellement texte brut).
 
+## Notifications email des demandes de congés — volet réglages/immédiat/digest livré (08/09/2026)
+
+**Nouvelle page `Paramétrer > Notifications`** : les managers sont notifiés par email à chaque
+nouvelle demande de congé (mode par défaut), avec une bascule vers un récap hebdomadaire groupé
+(jour + heure de bureau, converti Paris → UTC à l'enregistrement) et une copie carbone
+administrateur optionnelle. Spec initiale de Vincent couvrait aussi une "délégation des droits de
+validation" — **explicitement mise de côté pour un chantier séparé** (touche la RLS de
+`demandes_conges`/`decisions_demande`, aujourd'hui purement basée sur le rôle global, sans notion
+de délégation par utilisateur).
+
+Architecture : table singleton `parametrage_notifications` (même idiome qu'`objectifs_calendrier`,
+une seule ligne à id fixe) ; envoi via l'API HTTP Resend en `fetch` direct
+(`lib/resend/notifications.ts`), pas de nouvelle dépendance npm, réutilise le domaine déjà vérifié
+`abeil-conges.citizen-d.fr` ; déclenchement immédiat en fire-and-forget depuis
+`useDemandes.ts` (`notifierNouvelleDemande`, n'échoue jamais visiblement, cohérent avec le principe
+"une notification ratée ne doit jamais bloquer la création d'une demande") ; digest hebdomadaire
+via un cron Vercel horaire (`vercel.json`, `0 * * * *`) qui compare le jour/heure choisis à l'heure
+UTC courante et garde un watermark (`dernier_envoi_digest`) anti-doublon tolérant un cron raté
+jusqu'à 6 jours.
+
+**Deux bugs trouvés et corrigés pendant la vérification locale**, tous deux plus larges que cette
+seule fonctionnalité :
+
+- **`proxy.ts` redirigeait `/api/cron/*` vers `/connexion`** : le cron Vercel n'a pas de cookie de
+  session, or le middleware exigeait une session pour toute route non listée en public. Corrigé en
+  ajoutant `/api/cron/` aux routes publiques d'`estRoutePublique` — l'authentification de cette
+  route se fait via `CRON_SECRET` (en-tête `Authorization: Bearer`), pas via Supabase.
+- **`service_role` n'a en réalité jamais eu les GRANTs Postgres pour lire une table** dans ce
+  projet — masqué jusqu'ici car `createAdminClient()` (le client admin serveur) n'était utilisé que
+  pour l'API Auth (invitations), jamais pour une requête `.from()`. Cette fonctionnalité est la
+  première à lire des tables (`utilisateurs`, `demandes_conges`, `parametrage_notifications`) via ce
+  rôle, ce qui a rendu le problème visible : `resolverDestinataires()`/`notifierNouvelleDemande`
+  échouaient silencieusement (permission denied avalée par le `try/catch` fire-and-forget), aucun
+  email n'aurait jamais pu partir. Corrigé par un `grant` large sur `service_role` (toutes les
+  tables actuelles + `alter default privileges` pour les futures), passé par Vincent en SQL editor
+  et reporté dans `supabase/schema.sql`.
+
+**Vérifié en local** (RLS + service_role + cron testés directement, `RESEND_API_KEY` non configurée
+en local donc envoi Resend en échec silencieux volontaire, à confirmer en prod) : sauvegarde et
+persistance des réglages, conversion Paris/UTC de l'heure de récap, création de demande en mode
+immédiat sans blocage, digest hebdomadaire déclenché au bon créneau avec le bon nombre de demandes,
+garde anti-doublon confirmée par un second appel sans nouvel envoi.
+
+**Reste à faire avant mise en prod** : ajouter `RESEND_API_KEY` et `CRON_SECRET` dans les variables
+d'environnement Vercel (Production), déployer avec `vercel.json` pour activer le cron, puis
+vérifier le support des cron jobs horaires sur le plan Vercel actuel (Hobby) — Project Settings >
+Cron Jobs après le premier déploiement.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -278,6 +278,20 @@ export interface ObjectifsCalendrierInput {
   cibleDemiJourneesDji: number;
 }
 
+/** Réglage des notifications email de nouvelle demande de congé
+ * (Paramétrer > Notifications, 08/09/2026) — table singleton, comme
+ * `ObjectifsCalendrier`. `jourRecap` en ISO (1=lundi…7=dimanche),
+ * `heureRecap` en UTC (0-23) — voir `app/api/cron/notifications-digest`
+ * pour la conversion depuis l'heure de Paris au moment de la saisie. */
+export interface ParametrageNotifications {
+  frequence: "immediate" | "hebdomadaire";
+  jourRecap: number;
+  heureRecap: number;
+  copieAdministrateur: boolean;
+}
+
+export type ParametrageNotificationsInput = ParametrageNotifications;
+
 /** FAQ (Accueil, `FaqCard.tsx`) — administrée depuis Paramétrer > FAQ
  * (07/09/2026). `ordre` pilote l'affichage (drag and drop en admin) ;
  * `publie` distingue une FAQ visible des collaborateurs d'un brouillon —

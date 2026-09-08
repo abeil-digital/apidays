@@ -20,11 +20,14 @@ const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
 // définition de mot de passe — cette dernière posée via une session
 // temporaire par /auth/confirm, pas une vraie connexion) + /auth/confirm
 // lui-même (pose justement cette session avant de rediriger).
+// /api/cron/* (08/09/2026) : appelé par le cron Vercel, sans cookie de
+// session — l'authentification s'y fait via `CRON_SECRET`, pas Supabase.
 function estRoutePublique(pathname: string): boolean {
   return (
     pathname === "/auth/confirm" ||
     pathname === ROUTE_CONNEXION ||
-    pathname.startsWith(`${ROUTE_CONNEXION}/`)
+    pathname.startsWith(`${ROUTE_CONNEXION}/`) ||
+    pathname.startsWith("/api/cron/")
   );
 }
 

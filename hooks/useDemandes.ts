@@ -8,6 +8,7 @@ import {
   marquerDemandeVue,
   retirerDemande,
 } from "@/lib/data/demandes.repository";
+import { notifierNouvelleDemande } from "@/lib/data/notificationsDemandes.actions";
 
 // Clés de stockage pour le principe "vu depuis votre dernière connexion" —
 // voir le commentaire sur l'effet correspondant plus bas.
@@ -135,6 +136,7 @@ export function useDemandes(utilisateurId?: string): UseDemandesResult {
   const ajouterDemande = useCallback(async (input: NouvelleDemandeInput) => {
     const demande = await creerDemande(input);
     setDemandes((prev) => [demande, ...prev]);
+    notifierNouvelleDemande(demande.id).catch(() => {});
     return demande;
   }, []);
 
