@@ -140,6 +140,21 @@ systématiquement après une réécriture de policies — un `grep` sur les noms
 `pg_policies` ne suffit pas si le nom lui-même n'a pas été mis à jour à l'ancien renommage;
 comparer plutôt le NOMBRE de policies par table entre schema.sql (état cible) et `pg_policies` (état
 réel) aurait révélé l'écart (4 au lieu de 2 attendues).
+
+**Audit systématique effectué dans la foulée** — comparaison du nombre de policies par table entre
+`schema.sql` et `pg_policies` réel (`select tablename, count(*) from pg_policies where schemaname =
+'public' group by tablename`) sur les 25 tables RLS. Une seconde table trouvée en écart :
+**`export_paie_lignes`** (5 policies réelles contre 4 attendues). Cause différente cette fois — pas
+un renommage de table, mais un doublon d'`INSERT` créé avec un nom trop long (> 63 caractères,
+limite `NAMEDATALEN` de Postgres, tronqué silencieusement à la création :
+`"export_paie_lignes: manager et admin créent/modifient (check p"`), coexistant avec la bonne policy
+`"export_paie_lignes: manager et admin créent"`. Celle-ci avait un `with check` **sans filtre
+`entreprise_id`** — pas une fuite en lecture, mais une faille d'écriture : un manager/admin
+authentifié pouvait forcer `entreprise_id` d'un AUTRE tenant sur une ligne insérée (vérifié en
+reproduisant l'insertion avec l'uuid d'Abeil depuis une session test3 avant correctif : acceptée).
+Corrigé par `drop policy` (exécuté par Vincent), reproduction re-testée après coup : rejetée par la
+RLS (`42501`). Les 23 autres tables correspondent exactement entre `schema.sql` et l'état réel — pas
+d'autre écart trouvé lors de cet audit.
 C'est délibéré : créer un tenant est un acte platform-level, pas un acte d'un admin d'entreprise
 (voir "Super-admin & onboarding" plus bas).
 

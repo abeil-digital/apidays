@@ -5403,8 +5403,16 @@ policies fantômes de l'ancien nom (`rtt_imposes: ...`, sans filtre tenant) sont
 côté des 2 bonnes policies (nommées `demi_journees_imposees: ...`) écrites lors de la passe de
 réécriture RLS multi-tenant — laquelle n'avait touché que les policies portant le nom actuel de la
 table, donc ratée pour ces 2-là. Diagnostiqué via `pg_policies`, corrigé par Vincent (`drop policy`
-des 2 fantômes en SQL Editor), revérifié : test3 ne voit plus les 32 lignes d'Abeil, l'accès légitime
-d'Abeil intact. Détail et "leçon pour la suite" dans [MULTI-TENANT.md](MULTI-TENANT.md).
+des 2 fantômes en SQL Editor), revérifié : test3 ne voit plus les 32 lignes d'Abeil, accès légitime
+d'Abeil intact. Détail dans [MULTI-TENANT.md](MULTI-TENANT.md).
+
+Audit étendu à toutes les tables (comparaison du nombre de policies par table entre `schema.sql` et
+`pg_policies` réel) : une seconde table trouvée en écart, `export_paie_lignes` (5 policies au lieu de
+4) — un doublon d'`INSERT` créé avec un nom tronqué à 63 caractères (limite Postgres), sans filtre
+`entreprise_id` dans son `with check` : faille d'écriture (un manager/admin pouvait forcer
+l'`entreprise_id` d'un autre tenant sur une ligne insérée), pas une fuite en lecture. Corrigé par
+Vincent (`drop policy`), reproduction re-testée après coup : rejetée par la RLS. Les 23 autres tables
+correspondent exactement — pas d'autre écart trouvé.
 
 Corrigé dans la foulée un second bug signalé au même moment : `enregistrerParametragePeriode()`
 (`lib/data/calendrier.repository.ts`) upsertait avec `onConflict: "annee"`, obsolète depuis que
