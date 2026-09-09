@@ -4991,6 +4991,56 @@ attendu.
 partielle, bascule de période, articulation avec le report) — la logique de base fonctionne, mais le
 sujet n'a pas été creusé au-delà du cas nominal.
 
+## Multi-tenant — fondations schéma + RLS livrées (09/09/2026)
+
+**Première étape du chantier multi-tenant** (voir Backlog item 41 pour le chiffrage complet du
+08/09/2026) : plan validé en mode Plan avec Vincent, scope volontairement réduit à
+"schéma + RLS" pour cette session — pas encore le branding, le routing par sous-domaine, ni la
+sécurisation des points qui contournent la RLS via `service_role` (ces volets restent au Backlog,
+chantiers séparés).
+
+**Décisions prises avec Vincent avant de coder** : `types_absences` et `jours_feries` restent des
+tables de référence **globales**, partagées par toutes les entreprises — pas de `entreprise_id`
+dessus, plus simple pour démarrer.
+
+**Approche retenue** : une colonne `entreprise_id` directe sur chaque table concernée (19 tables),
+plutôt qu'un scoping par jointure via `utilisateurs` — chaque policy RLS devient un simple
+`and entreprise_id = my_entreprise_id()`, mécanique et facile à auditer une par une (le risque
+identifié la veille : "63 policies = 63 occasions de se tromper" se réduit à vérifier que chacune
+contient bien cette clause). Chaque colonne porte un `default` vers l'unique entreprise réelle
+aujourd'hui (Abeil, uuid `c52b18b8-73b0-403c-990c-b2b4894acb92`) — migration non-cassante : aucune
+requête existante n'a eu besoin de changer, la RLS filtre déjà automatiquement sur l'entreprise
+déduite de la session (comme elle filtre déjà par rôle). Ce `default` est un pont temporaire, à
+retirer une fois la résolution du tenant courant câblée dans l'app (chantier séparé).
+
+Nouveau helper `my_entreprise_id()` (même forme que `my_role()`/`my_utilisateur_id()`). Les 2 tables
+singleton (`objectifs_calendrier`, `parametrage_notifications`, id fixe global) transformées en une
+ligne par entreprise (`entreprise_id` devenu clé primaire) — `lib/data/objectifsCalendrier.repository.ts`
+et `lib/data/parametrageNotifications.repository.ts` simplifiés en conséquence (RLS filtre déjà à la
+bonne ligne, plus besoin de `.eq("id", ...)` côté client). Le cron de digest
+(`app/api/cron/notifications-digest/route.ts`) référençait encore l'ancien id fixe pour la mise à
+jour du watermark — corrigé avec l'uuid Abeil en dur (ce fichier tourne en `service_role`, hors RLS ;
+le filtrer proprement par tenant résolu fait partie du chantier séparé "sécuriser les points
+RLS-bypass").
+
+**SQL généré directement depuis le nouveau `supabase/schema.sql`** (script Python, pas tapé à la
+main) pour éviter toute divergence entre le fichier de référence et la migration réellement exécutée
+par Vincent sur la base existante — table `entreprises`, 19 `alter table ... add column
+entreprise_id ... default ...`, contraintes uniques reperimétrées (`regles_acquisition`,
+`parametrage_periode`, `exports_paie_periode_unique`), bascule des 2 tables singleton, le helper, et
+59 `drop policy` + `create policy` (63 policies existantes moins les 4 des 2 tables restées
+globales) plus la nouvelle policy `entreprises`.
+
+**Vérifié avant de committer** : `tsc`/`eslint`/`npm run build` propres ; non-régression confirmée en
+se reconnectant avec les comptes de test existants (Accueil, Suivre les demandes, Paramétrer >
+Congés & RTT et Notifications tous identiques à avant la migration) ; **test d'étanchéité réel** —
+une deuxième entreprise de test + un compte admin qui lui est rattaché créés via `service_role`,
+connexion avec ce compte : soldes à 0, calendrier vide (aucune donnée Abeil visible), seuls les
+jours fériés (table globale, volontairement partagée) restaient affichés — page Notifications
+correctement vide plutôt que de montrer les réglages d'Abeil (cette nouvelle entreprise n'a pas
+encore de ligne dans la table singleton, la création automatique à l'onboarding d'un tenant est un
+chantier futur, pas un bug). Tenant et compte de test supprimés une fois le test concluant.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
