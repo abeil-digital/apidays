@@ -5169,6 +5169,47 @@ temporairement forcé vers `?slug=testsub`) : capture d'écran confirmant le tit
 Apidays" rendu en vert au lieu de navy. Fetch revenu à la normale, capture de confirmation : retour
 au branding Abeil par défaut. Tenant de test supprimé après vérification.
 
+## Multi-tenant — logo par entreprise (09/09/2026)
+
+**Dernier volet resté "à faire"** du chantier multi-tenant après la résolution par sous-domaine
+ci-dessus : le logo restait en dur (`/logo-abeil.svg`, `/logo-abeil-fond-clair.png`,
+`/abeil-signe.png`) alors que les couleurs sont déjà configurables par entreprise depuis les
+Phases 3-4. Complète le même principe pour le logo, sur exactement le même périmètre déjà établi
+pour les couleurs — pas plus.
+
+**Décisions prises avec Vincent avant de coder** : 3 variantes couvertes, symétriques aux 3 usages
+réels du logo dans l'app (logo header fond navy post-connexion, logo des pages `/connexion` fond
+clair pré-connexion, signe abeille du rail `SideNav` post-connexion). URL texte saisie à la main
+(colonnes `text` nullable sur `entreprises`, même principe que `couleur_navy`/`couleur_yellow`) —
+pas de Supabase Storage (première utilisation potentielle dans ce projet, chantier bien plus lourd,
+non justifié pour un seul tenant réel aujourd'hui et sans écran d'onboarding pour le déclencher) :
+Vincent colle une URL d'image hébergée ailleurs, **ou un chemin vers un fichier posé dans `public/`**
+(servi automatiquement par Vercel comme les logos Abeil actuels, pas besoin d'hébergement externe).
+Périmètre pré-connexion limité à `app/connexion/page.tsx` (le formulaire de login lui-même), même
+limite déjà actée en Phase 4 pour les couleurs — les 3 autres pages `/connexion/*` restent en
+branding Abeil fixe. Nullable, pas de `default` (contrairement aux couleurs) : `null` → fallback sur
+le fichier Abeil en dur côté composant, pas de valeur par défaut en base qui dupliquerait un chemin
+de fichier.
+
+**Mécanique** : `entreprises.logo_url`/`logo_url_fond_clair`/`logo_url_signe` (text, nullable).
+`lib/data/branding.repository.ts` (`Branding`, `fetchBrandingCourant()`) sélectionne les 3 colonnes
+en plus des couleurs. `AppShell.tsx` passe désormais `branding.logoUrl`/`branding.logoUrlSigne` à
+`HeaderBar`/`SideNav` (nouvelles props optionnelles `logoUrl`/`logoUrlSigne`, fallback sur les
+fichiers Abeil actuels si `null`/absent). `app/api/branding-public/route.ts` ajoute
+`logo_url_fond_clair` à la résolution par sous-domaine ; `app/connexion/page.tsx` applique
+`branding.logoUrlFondClair` avec le même fallback.
+
+**Vérifié** : `tsc`/`eslint`/`npm run build` propres, mêmes routes dynamiques/statiques qu'avant
+(pas de changement de forme). Non-régression visuelle Abeil confirmée (toutes les colonnes `null`
+aujourd'hui, capture d'écran header + SideNav + page de connexion identiques à avant). **Test réel** :
+entreprise de test créée via `service_role` (slug `testlogo`, les 3 colonnes logo pointant vers un
+fichier `public/` existant déjà non utilisé) + utilisateur de test rattaché, connexion → capture
+d'écran confirmant que header et signe SideNav affichent bien l'image de test au lieu des logos
+Abeil ; `/api/branding-public?slug=testlogo` confirmé renvoyant `logoUrlFondClair` ; vérification
+visuelle sur `/connexion` (fetch temporairement forcé vers `?slug=testlogo`, capture confirmant le
+logo de test) puis retour à la normale confirmé (capture identique au défaut Abeil). Tenant de test,
+utilisateur et profil supprimés après vérification.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
