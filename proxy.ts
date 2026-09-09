@@ -7,13 +7,17 @@ import { createServerClient } from "@supabase/ssr";
  * Rôle : rafraîchir la session Supabase à chaque requête (cookies), protéger
  * les routes de l'Espace Salarié tant qu'aucune session n'existe, bloquer
  * /parametrer/* et /suivre/* pour les salariés (manager/admin uniquement,
- * voir niveau1.ts), et déconnecter un profil dont le contrat est terminé
+ * voir niveau1.ts), /admin/* pour tout le monde sauf les super-admins
+ * (09/09/2026, flux d'onboarding d'un tenant — voir `super_admins` dans
+ * `supabase/schema.sql`, statut orthogonal à `role`/`entreprise_id`, donc
+ * vérifié séparément), et déconnecter un profil dont le contrat est terminé
  * (04/09/2026, "Fin de contrat" — voir `definirFinContrat` dans
  * `utilisateurs.repository.ts`). La RLS reste la protection de fond côté
  * données ; ceci n'est qu'une redirection optimiste côté route.
  */
 const ROUTE_CONNEXION = "/connexion";
 const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
+const PREFIXE_SUPER_ADMIN = "/admin";
 
 // Routes accessibles sans session "réelle" (07/09/2026, parcours mot de
 // passe) : toute la famille /connexion/* (login, mot de passe oublié,
@@ -124,6 +128,21 @@ export async function proxy(request: NextRequest) {
       redirectUrl.pathname = "/";
       redirectUrl.search = "";
       return NextResponse.redirect(redirectUrl);
+    }
+
+    if (request.nextUrl.pathname.startsWith(PREFIXE_SUPER_ADMIN)) {
+      const { data: superAdmin } = await supabase
+        .from("super_admins")
+        .select("auth_id")
+        .eq("auth_id", user.id)
+        .maybeSingle();
+
+      if (!superAdmin) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/";
+        redirectUrl.search = "";
+        return NextResponse.redirect(redirectUrl);
+      }
     }
   }
 

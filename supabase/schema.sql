@@ -622,6 +622,38 @@ as $$
   select entreprise_id from utilisateurs where auth_id = auth.uid();
 $$;
 
+-- Statut super-admin (09/09/2026, flux d'onboarding d'un tenant) — identité
+-- séparée de `utilisateurs`/`entreprise_id`/`role` : créer un tenant est un
+-- acte platform-level, pas un acte d'un admin d'entreprise (aucun `role`
+-- n'a d'autorité au-dessus d'une seule entreprise). Une personne peut avoir
+-- à la fois un profil `utilisateurs` normal (ex. salarié d'Abeil) ET un
+-- statut super-admin, sans lien entre les deux. Aucune policy
+-- INSERT/UPDATE/DELETE : accorder/retirer ce statut reste un acte manuel via
+-- SQL, même niveau de confiance que la création d'un tenant elle-même (voir
+-- lib/supabase/superAdmin.ts, app/admin/).
+create table super_admins (
+  auth_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table super_admins enable row level security;
+
+create policy "super_admins: lecture de son propre statut"
+  on super_admins for select
+  using (auth_id = auth.uid());
+
+create or replace function est_super_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (select 1 from super_admins where auth_id = auth.uid());
+$$;
+
+insert into super_admins (auth_id) values ('b1a7898d-6b83-4ca2-beeb-49a12327b8e5');
+
 -- Plus utilisée par les policies (manager = directeur, autorité globale,
 -- pas une équipe rattachée) — conservée au cas où une délégation plus fine
 -- reviendrait un jour, voir manager_salaries.
@@ -1097,7 +1129,8 @@ grant select, insert, update, delete on
   soldes_initiaux,
   exports_paie,
   export_paie_lignes,
-  faqs
+  faqs,
+  super_admins
 to authenticated;
 
 -- `service_role` (client admin serveur, `lib/supabase/admin.ts`) contourne
