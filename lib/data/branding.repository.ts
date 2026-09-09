@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 
 export interface Branding {
+  nom: string;
+  slug: string;
   couleurNavy: string;
   couleurJaune: string;
   logoUrl: string | null;
@@ -13,6 +15,8 @@ export interface Branding {
  * session pour toute route de l'app connectée. Logos à `null` : fallback
  * sur les fichiers Abeil en dur côté composant (HeaderBar.tsx/SideNav.tsx). */
 const DEFAULT_BRANDING: Branding = {
+  nom: "Abeil",
+  slug: "abeil",
   couleurNavy: "#001e32",
   couleurJaune: "#ebc850",
   logoUrl: null,
@@ -36,12 +40,14 @@ export async function fetchBrandingCourant(): Promise<Branding> {
 
   const { data } = await supabase
     .from("entreprises")
-    .select("couleur_navy, couleur_yellow, logo_url, logo_url_fond_clair, logo_url_signe")
+    .select("nom, slug, couleur_navy, couleur_yellow, logo_url, logo_url_fond_clair, logo_url_signe")
     .single();
 
   if (!data) return DEFAULT_BRANDING;
 
   return {
+    nom: data.nom,
+    slug: data.slug,
     couleurNavy: data.couleur_navy,
     couleurJaune: data.couleur_yellow,
     logoUrl: data.logo_url,

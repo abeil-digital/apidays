@@ -1,6 +1,8 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { fetchBrandingParSlug } from "@/lib/data/brandingPublic";
 
 /**
  * Page intermédiaire entre le lien email et /auth/confirm (07/09/2026,
@@ -20,6 +22,14 @@ import type { EmailOtpType } from "@supabase/supabase-js";
  * y compris avec du texte 100% statique dans le template (vérifié sur le
  * HTML brut de l'email reçu, hors influence de l'éditeur du dashboard).
  * Un seul paramètre dans l'URL email (`token_hash`) contourne le problème.
+ *
+ * `slug` (09/09/2026, e-mails d'invitation brandés par tenant) fait
+ * exception à la mise en garde ci-dessus : il n'est plus ajouté par un
+ * template Supabase (celui-ci n'envoie plus l'e-mail d'invitation, voir
+ * `lib/resend/invitation.ts`) mais construit par l'app elle-même dans le
+ * HTML qu'elle envoie via Resend — aucun risque de corruption. Propagé
+ * dans `next` vers `/connexion/definir-mot-de-passe` (`app/auth/confirm/route.ts`
+ * relaie déjà `next` verbatim, aucun changement nécessaire là-bas).
  */
 const TYPES_VALIDES: EmailOtpType[] = ["invite", "recovery"];
 const NEXT_PAR_DEFAUT = "/connexion/definir-mot-de-passe";
@@ -29,28 +39,38 @@ export default async function ConfirmerPage({
   searchParams,
 }: {
   params: Promise<{ type: string }>;
-  searchParams: Promise<{ token_hash?: string }>;
+  searchParams: Promise<{ token_hash?: string; slug?: string }>;
 }) {
   const { type } = await params;
-  const { token_hash } = await searchParams;
+  const { token_hash, slug } = await searchParams;
+  const branding = await fetchBrandingParSlug(slug);
 
   if (!TYPES_VALIDES.includes(type as EmailOtpType)) {
     notFound();
   }
 
   const lienInvalide = !token_hash;
+  const next = slug ? `${NEXT_PAR_DEFAUT}?slug=${encodeURIComponent(slug)}` : NEXT_PAR_DEFAUT;
   const lienConfirmation = `/auth/confirm?token_hash=${encodeURIComponent(
     token_hash ?? "",
-  )}&type=${type}&next=${encodeURIComponent(NEXT_PAR_DEFAUT)}`;
+  )}&type=${type}&next=${encodeURIComponent(next)}`;
 
   return (
-    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
+    <div
+      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
+      style={
+        {
+          "--color-brand-primary": branding.couleurNavy,
+          "--color-brand-accent": branding.couleurJaune,
+        } as CSSProperties
+      }
+    >
       <div className="bg-surface-card rounded-card flex w-full max-w-sm flex-col items-start gap-5 p-6 shadow-sm">
         <div className="flex flex-col items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
           <img
-            src="/logo-abeil-fond-clair.png"
-            alt="Abeil"
+            src={branding.logoUrlFondClair ?? "/logo-abeil-fond-clair.png"}
+            alt={branding.nom}
             width={1676}
             height={710}
             className="h-12 w-auto"

@@ -3,6 +3,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { fetchBrandingCourant } from "@/lib/data/branding.repository";
+import { envoyerInvitation } from "@/lib/resend/invitation";
 
 export interface InviterUtilisateurState {
   ok: boolean;
@@ -12,17 +14,18 @@ export interface InviterUtilisateurState {
 /**
  * Appelée juste après `creerUtilisateurAdmin` (insert `public.utilisateurs`,
  * toujours côté navigateur/anon — inchangé) et depuis le bouton "Renvoyer
- * l'invitation" en vue fiche. Invite le collaborateur via l'API Admin
- * (service_role) puis relie `auth_id` sur la ligne déjà créée avec le
- * client de session normal de l'admin connecté (RLS "utilisateurs: admin
- * modifie les profils") — le service_role reste cantonné au seul appel
- * qui l'exige réellement.
+ * l'invitation" en vue fiche. Génère le lien d'invitation via l'API Admin
+ * (service_role, `generateLink` plutôt que `inviteUserByEmail` — ne
+ * déclenche pas l'envoi natif Supabase, voir `lib/resend/invitation.ts`)
+ * puis relie `auth_id` sur la ligne déjà créée avec le client de session
+ * normal de l'admin connecté (RLS "utilisateurs: admin modifie les
+ * profils") — le service_role reste cantonné au seul appel qui l'exige
+ * réellement.
  *
- * `prenom` (le nouveau collaborateur) est transmis en `data` d'invitation
- * (08/09/2026) pour personnaliser l'email ("Bienvenue {{ .Data.prenom }}")
- * — le prénom de l'admin à l'origine de l'invitation ("Contactez
- * {{ .Data.adminPrenom }}") est résolu ici via la session en cours, pas
- * passé en paramètre par l'appelant.
+ * E-mail envoyé "maison" via Resend (09/09/2026), brandé au nom du tenant
+ * de l'admin qui invite (`fetchBrandingCourant()`, RLS-scopée à sa propre
+ * entreprise — l'admin est forcément membre du tenant du collaborateur
+ * qu'il invite) — remplace le template Supabase unique pour tout le projet.
  */
 export async function inviterUtilisateur(
   utilisateurId: string,
@@ -39,39 +42,40 @@ export async function inviterUtilisateur(
   // croire à un échec total de la création.
   try {
     const supabase = await createClient();
-    const {
-      data: { user: adminAuthUser },
-    } = await supabase.auth.getUser();
-    const { data: adminProfil } = adminAuthUser
-      ? await supabase
-          .from("utilisateurs")
-          .select("prenom")
-          .eq("auth_id", adminAuthUser.id)
-          .single()
-      : { data: null };
+    const branding = await fetchBrandingCourant();
 
     const admin = createAdminClient();
     const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;
 
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: { prenom, adminPrenom: adminProfil?.prenom ?? "l'administrateur" },
+    const { data: lien, error } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: { redirectTo },
     });
 
-    if (error || !data.user) {
+    if (error || !lien.user || !lien.properties?.hashed_token) {
       return { ok: false, erreur: "invite_echouee" };
     }
 
     const { error: updateError } = await supabase
       .from("utilisateurs")
-      .update({ auth_id: data.user.id })
+      .update({ auth_id: lien.user.id })
       .eq("id", utilisateurId);
 
     if (updateError) {
       return { ok: false, erreur: "liaison_echouee" };
     }
 
-    return { ok: true };
+    const lienAction = `${redirectTo}?token_hash=${lien.properties.hashed_token}&slug=${encodeURIComponent(branding.slug)}`;
+    const { ok: emailEnvoye } = await envoyerInvitation({
+      email,
+      prenom,
+      entrepriseNom: branding.nom,
+      lienAction,
+      logoUrlFondClair: branding.logoUrlFondClair,
+    });
+
+    return emailEnvoye ? { ok: true } : { ok: false, erreur: "invite_echouee" };
   } catch {
     return { ok: false, erreur: "invite_echouee" };
   }

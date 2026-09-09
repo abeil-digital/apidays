@@ -51,15 +51,15 @@ async function fetchTenants(): Promise<TenantResume[]> {
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cree?: string }>;
+  searchParams: Promise<{ cree?: string; emailEchoue?: string }>;
 }) {
   await assertSuperAdmin();
   const tenants = await fetchTenants();
-  const { cree } = await searchParams;
+  const { cree, emailEchoue } = await searchParams;
 
   return (
     <div className="flex flex-col gap-6">
-      <TenantsToast nomCree={cree} />
+      <TenantsToast nomCree={cree} emailEchoue={emailEchoue} />
 
       <div className="flex items-center justify-between">
         <h1 className="text-ink-900 text-2xl font-semibold">Tenants</h1>

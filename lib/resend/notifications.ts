@@ -7,6 +7,10 @@ interface EnvoyerEmailInput {
   destinataires: string[];
   sujet: string;
   html: string;
+  /** Expéditeur custom (09/09/2026, e-mails d'invitation brandés par
+   * tenant, voir `lib/resend/invitation.ts`) — défaut inchangé pour les
+   * appelants existants (notifications de demandes de congés, Abeil). */
+  expediteur?: string;
 }
 
 /**
@@ -35,7 +39,7 @@ export async function envoyerEmail(input: EnvoyerEmailInput): Promise<{ ok: bool
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: EXPEDITEUR,
+        from: input.expediteur ?? EXPEDITEUR,
         to: input.destinataires,
         subject: input.sujet,
         html: input.html,

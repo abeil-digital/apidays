@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, type FormEvent } from "react";
+import { Suspense, useActionState, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Check, Eye, EyeOff } from "lucide-react";
 import {
   definirMotDePasse,
@@ -16,6 +17,16 @@ import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: DefinirMotDePasseState = {};
 
+// Défaut = charte Abeil (`app/globals.css`) — affiché le temps du fetch
+// vers `/api/branding-public`, même mécanisme que `app/connexion/page.tsx`
+// (09/09/2026, e-mails d'invitation brandés par tenant — `slug` arrive ici
+// via `app/connexion/confirmer/[type]/page.tsx` puis `/auth/confirm`).
+const BRANDING_DEFAUT = {
+  couleurNavy: "#001e32",
+  couleurJaune: "#ebc850",
+  logoUrlFondClair: null as string | null,
+};
+
 function CritereMotDePasse({ rempli, texte }: { rempli: boolean; texte: string }) {
   return (
     <li
@@ -27,19 +38,55 @@ function CritereMotDePasse({ rempli, texte }: { rempli: boolean; texte: string }
   );
 }
 
+// `useSearchParams()` (pour `slug`, voir plus bas) exige une frontière
+// Suspense pour rester prérendable statiquement — même contournement que
+// `app/connexion/page.tsx`.
+export default function DefinirMotDePassePage() {
+  return (
+    <Suspense>
+      <FormulaireDefinirMotDePasse />
+    </Suspense>
+  );
+}
+
 /**
  * Écran partagé invitation/mot de passe oublié — atteint via
  * `app/auth/confirm/route.ts` qui a déjà posé la session temporaire.
  * Validation de correspondance des deux champs côté client, avant tout
  * aller-retour serveur (la vraie vérification reste côté action).
  */
-export default function DefinirMotDePassePage() {
+function FormulaireDefinirMotDePasse() {
   const [state, formAction, pending] = useActionState(definirMotDePasse, INITIAL_STATE);
   const [motDePasse, setMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [erreurLocale, setErreurLocale] = useState("");
   const [afficherMotDePasse, setAfficherMotDePasse] = useState(false);
   const [afficherConfirmation, setAfficherConfirmation] = useState(false);
+
+  // Résolution du tenant par `slug` (09/09/2026, e-mails d'invitation
+  // brandés par tenant) — propagé depuis l'e-mail via
+  // `app/connexion/confirmer/[type]/page.tsx` puis `/auth/confirm`. Même
+  // mécanisme que `app/connexion/page.tsx`.
+  const slug = useSearchParams().get("slug");
+  const [branding, setBranding] = useState(BRANDING_DEFAUT);
+  useEffect(() => {
+    let cancelled = false;
+    const url = slug ? `/api/branding-public?slug=${encodeURIComponent(slug)}` : "/api/branding-public";
+    fetch(url)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled)
+          setBranding({
+            couleurNavy: data.couleurNavy,
+            couleurJaune: data.couleurJaune,
+            logoUrlFondClair: data.logoUrlFondClair,
+          });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   const mismatch = confirmation.length > 0 && motDePasse !== confirmation;
   const match = confirmation.length > 0 && motDePasse === confirmation;
@@ -62,7 +109,15 @@ export default function DefinirMotDePassePage() {
   const erreur = erreurLocale || state.error;
 
   return (
-    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
+    <div
+      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
+      style={
+        {
+          "--color-brand-primary": branding.couleurNavy,
+          "--color-brand-accent": branding.couleurJaune,
+        } as CSSProperties
+      }
+    >
       <form
         action={formAction}
         onSubmit={handleSubmit}
@@ -71,8 +126,8 @@ export default function DefinirMotDePassePage() {
         <div className="flex flex-col items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
           <img
-            src="/logo-abeil-fond-clair.png"
-            alt="Abeil"
+            src={branding.logoUrlFondClair ?? "/logo-abeil-fond-clair.png"}
+            alt="Apidays"
             width={1676}
             height={710}
             className="h-12 w-auto"

@@ -22,11 +22,11 @@ const MESSAGE_ERREUR: Record<string, string> = {
 /**
  * Formulaire de création d'un tenant (09/09/2026, flux d'onboarding) —
  * remplace les scripts `service_role` jetables utilisés jusqu'ici. Champs
- * volontairement réduits au strict nécessaire : pas de logo (reste réglable
- * par SQL comme aujourd'hui), pas de date d'entrée/nature de contrat/taux
- * d'activité pour le premier admin (posés par défaut côté action, voir
- * `app/admin/actions.ts`). Couleurs optionnelles — laissées vides, le
- * défaut DB (charte Abeil) s'applique.
+ * volontairement réduits au strict nécessaire : pas de date d'entrée/nature
+ * de contrat/taux d'activité pour le premier admin (posés par défaut côté
+ * action, voir `app/admin/actions.ts`). Couleurs/logos optionnels — laissés
+ * vides, le défaut DB (charte Abeil, ou `null` ⇒ fallback fichier Abeil côté
+ * composant pour les logos) s'applique.
  */
 export default function NouveauTenantPage() {
   const router = useRouter();
@@ -34,6 +34,9 @@ export default function NouveauTenantPage() {
   const [slug, setSlug] = useState("");
   const [couleurNavy, setCouleurNavy] = useState("");
   const [couleurJaune, setCouleurJaune] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoUrlFondClair, setLogoUrlFondClair] = useState("");
+  const [logoUrlSigne, setLogoUrlSigne] = useState("");
   const [prenomAdmin, setPrenomAdmin] = useState("");
   const [nomAdmin, setNomAdmin] = useState("");
   const [emailAdmin, setEmailAdmin] = useState("");
@@ -50,6 +53,9 @@ export default function NouveauTenantPage() {
       slug,
       couleurNavy: couleurNavy || undefined,
       couleurJaune: couleurJaune || undefined,
+      logoUrl: logoUrl || undefined,
+      logoUrlFondClair: logoUrlFondClair || undefined,
+      logoUrlSigne: logoUrlSigne || undefined,
       prenomAdmin,
       nomAdmin,
       emailAdmin,
@@ -62,7 +68,8 @@ export default function NouveauTenantPage() {
       return;
     }
 
-    router.push(`/admin?cree=${encodeURIComponent(nom)}`);
+    const avertissement = resultat.avertissement ? "&emailEchoue=1" : "";
+    router.push(`/admin?cree=${encodeURIComponent(nom)}${avertissement}`);
   }
 
   return (
@@ -122,6 +129,42 @@ export default function NouveauTenantPage() {
               placeholder="#ebc850"
             />
           </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="logoUrl" className="text-ink-900 text-sm font-bold">
+            Logo header, fond navy (optionnel)
+          </label>
+          <Input
+            id="logoUrl"
+            value={logoUrl}
+            onChange={(e) => setLogoUrl(e.target.value)}
+            placeholder="/mon-logo.svg ou https://…"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="logoUrlFondClair" className="text-ink-900 text-sm font-bold">
+            Logo connexion, fond clair (optionnel)
+          </label>
+          <Input
+            id="logoUrlFondClair"
+            value={logoUrlFondClair}
+            onChange={(e) => setLogoUrlFondClair(e.target.value)}
+            placeholder="/mon-logo-fond-clair.png ou https://…"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="logoUrlSigne" className="text-ink-900 text-sm font-bold">
+            Signe SideNav (optionnel)
+          </label>
+          <Input
+            id="logoUrlSigne"
+            value={logoUrlSigne}
+            onChange={(e) => setLogoUrlSigne(e.target.value)}
+            placeholder="/mon-signe.png ou https://…"
+          />
         </div>
 
         <hr className="border-ink-300" />

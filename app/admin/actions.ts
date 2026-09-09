@@ -4,12 +4,16 @@ import { assertSuperAdmin } from "@/lib/supabase/superAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { todayISO } from "@/lib/format";
+import { envoyerInvitation } from "@/lib/resend/invitation";
 
 export interface CreerTenantInput {
   nom: string;
   slug: string;
   couleurNavy?: string;
   couleurJaune?: string;
+  logoUrl?: string;
+  logoUrlFondClair?: string;
+  logoUrlSigne?: string;
   prenomAdmin: string;
   nomAdmin: string;
   emailAdmin: string;
@@ -18,6 +22,11 @@ export interface CreerTenantInput {
 export interface CreerTenantState {
   ok: boolean;
   erreur?: string;
+  /** Tenant créé mais l'e-mail d'invitation n'a pas pu être envoyé (Resend
+   * indisponible, domaine `apidays.citizen-d.fr` pas encore vérifié...) —
+   * pas un échec de la création elle-même (`ok: true` quand même), juste un
+   * avertissement à afficher (09/09/2026). */
+  avertissement?: string;
 }
 
 const REGEX_SLUG = /^[a-z0-9-]+$/;
@@ -29,12 +38,15 @@ const ID_ABEIL = "c52b18b8-73b0-403c-990c-b2b4894acb92";
 
 /**
  * Crée un tenant (`entreprises`) + son premier admin (`utilisateurs`,
- * invité via Supabase Auth) — 09/09/2026, flux d'onboarding, remplace les
- * scripts `service_role` jetables utilisés jusqu'ici pour les tenants de
- * test. `assertSuperAdmin()` revérifie l'autorité avant tout accès
- * `service_role` (même rigueur que la sécurisation des points RLS-bypass
- * du chantier multi-tenant) — `proxy.ts` n'est qu'une première ligne de
- * défense côté route.
+ * invité via un lien généré par `generateLink` puis envoyé "maison" via
+ * Resend — `lib/resend/invitation.ts`, 09/09/2026 : l'e-mail natif
+ * Supabase Auth ne peut pas refléter le tenant du destinataire, template
+ * unique pour tout le projet) — flux d'onboarding, remplace les scripts
+ * `service_role` jetables utilisés jusqu'ici pour les tenants de test.
+ * `assertSuperAdmin()` revérifie l'autorité avant tout accès `service_role`
+ * (même rigueur que la sécurisation des points RLS-bypass du chantier
+ * multi-tenant) — `proxy.ts` n'est qu'une première ligne de défense côté
+ * route.
  *
  * Best-effort de nettoyage si la création de l'admin ou l'invitation
  * échoue après que l'entreprise a été créée : supprime la ligne
@@ -66,11 +78,14 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
   const entrepriseInsert: Record<string, string> = { nom, slug };
   if (input.couleurNavy) entrepriseInsert.couleur_navy = input.couleurNavy;
   if (input.couleurJaune) entrepriseInsert.couleur_yellow = input.couleurJaune;
+  if (input.logoUrl) entrepriseInsert.logo_url = input.logoUrl;
+  if (input.logoUrlFondClair) entrepriseInsert.logo_url_fond_clair = input.logoUrlFondClair;
+  if (input.logoUrlSigne) entrepriseInsert.logo_url_signe = input.logoUrlSigne;
 
   const { data: entreprise, error: erreurEntreprise } = await admin
     .from("entreprises")
     .insert(entrepriseInsert)
-    .select("id")
+    .select("id, logo_url_fond_clair")
     .single();
 
   if (erreurEntreprise || !entreprise) {
@@ -103,12 +118,13 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
   }
 
   const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;
-  const { data: invite, error: erreurInvite } = await admin.auth.admin.inviteUserByEmail(
-    emailAdmin,
-    { redirectTo, data: { prenom: prenomAdmin, adminPrenom: "L'équipe Apidays" } },
-  );
+  const { data: lien, error: erreurLien } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email: emailAdmin,
+    options: { redirectTo },
+  });
 
-  if (erreurInvite || !invite.user) {
+  if (erreurLien || !lien.user || !lien.properties?.hashed_token) {
     await admin.from("utilisateurs").delete().eq("id", utilisateur.id);
     await admin.from("entreprises").delete().eq("id", entreprise.id);
     return { ok: false, erreur: "invite_echouee" };
@@ -116,7 +132,7 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
 
   const { error: erreurLiaison } = await admin
     .from("utilisateurs")
-    .update({ auth_id: invite.user.id })
+    .update({ auth_id: lien.user.id })
     .eq("id", utilisateur.id);
 
   if (erreurLiaison) {
@@ -125,7 +141,22 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
     return { ok: false, erreur: "liaison_echouee" };
   }
 
-  return { ok: true };
+  // E-mail envoyé "maison" via Resend, brandé au nom du tenant (09/09/2026)
+  // — remplace l'e-mail natif Supabase (template unique pour tout le
+  // projet). Échec de l'envoi : le tenant/compte restent créés (valides,
+  // fonctionnels), juste un avertissement plutôt qu'un rollback complet —
+  // supprimer un compte qui marche à cause d'un e-mail non envoyé serait
+  // pire que le problème.
+  const lienAction = `${redirectTo}?token_hash=${lien.properties.hashed_token}&slug=${encodeURIComponent(slug)}`;
+  const { ok: emailEnvoye } = await envoyerInvitation({
+    email: emailAdmin,
+    prenom: prenomAdmin,
+    entrepriseNom: nom,
+    lienAction,
+    logoUrlFondClair: entreprise.logo_url_fond_clair,
+  });
+
+  return emailEnvoye ? { ok: true } : { ok: true, avertissement: "invitation_email_echouee" };
 }
 
 export interface SupprimerTenantState {
