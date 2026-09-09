@@ -5431,6 +5431,20 @@ foulée** : un seul autre `onConflict` dans tout le code (`soldes_initiaux.utili
 `lib/data/utilisateurs.repository.ts`) — contrainte simple non re-périmétrée à raison
 (`utilisateur_id` seul est déjà unique tous tenants confondus), pas de bug là.
 
+## Multi-tenant — e-mails d'invitation testés de bout en bout en prod, clé Resend dédiée (09/09/2026)
+
+Après vérification du domaine `apidays.citizen-d.fr` dans Resend, premier test réel d'envoi via
+`/admin/nouveau` en prod : le tenant se créait mais l'e-mail échouait sans aucune trace exploitable
+(`envoyerEmail()` avalait l'erreur Resend silencieusement — corrigé en ajoutant un `console.error`).
+Cause trouvée en comparant le dashboard Resend (chaque clé API Resend est restreinte à un seul
+domaine d'expédition) à la variable posée sur Vercel : `RESEND_API_KEY` est restreinte à
+`abeil-conges.citizen-d.fr`, incompatible avec `apidays.citizen-d.fr` utilisé pour les invitations —
+Resend authentifiait la requête mais rejetait l'envoi, sans même l'entrée habituelle dans le log
+"Sending" du dashboard. Corrigé par une clé dédiée (`RESEND_API_KEY_INVITATIONS`, restreinte au bon
+domaine, posée dans Vercel), `envoyerEmail()` acceptant désormais un nom de variable d'env
+alternatif. Redéployé et retesté : "Invitation envoyée au premier admin.", confirmé reçu côté Resend.
+Détail dans [MULTI-TENANT.md](MULTI-TENANT.md), section "E-mails d'invitation brandés par tenant".
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -380,6 +380,32 @@ aussi appelable directement depuis un Server Component).
 Supabase par défaut — chantier séparé si besoin (même mécanisme réutilisable). La page
 `/connexion/mot-de-passe-oublie` reste donc aussi non brandée (aucun `slug` n'y transite).
 
+### Livré : domaine vérifié + clé API dédiée (09/09/2026)
+
+`apidays.citizen-d.fr` vérifié dans Resend (DNS SPF/DKIM corrigés sur Gandi par Vincent — les CNAME
+avaient besoin d'un point final, contrairement à ce qu'affichait Gandi par défaut). Premier test réel
+d'envoi en prod : le tenant se créait ("Tenant créé, mais l'envoi de l'e-mail d'invitation a échoué")
+sans aucune trace dans les logs Vercel — `envoyerEmail()` (`lib/resend/notifications.ts`) avalait
+l'erreur Resend silencieusement (`{ ok: reponse.ok }` sans logger le corps de la réponse en cas
+d'échec), corrigé en ajoutant un `console.error` sur toute réponse non-OK ou exception.
+
+**Cause réelle** : `RESEND_API_KEY` (utilisée pour tout le projet) est **restreinte au domaine
+`abeil-conges.citizen-d.fr`** côté Resend (une clé API Resend ne peut être scopée qu'à un seul
+domaine d'expédition). Resend authentifiait la requête (la clé est valide, "last used" à jour) mais
+rejetait l'envoi car `notifications@apidays.citizen-d.fr` ne correspond pas au domaine autorisé de
+la clé — sans même créer d'entrée dans le log "Sending" du dashboard (un rejet par restriction de
+domaine n'est pas traité comme une tentative d'envoi). Diagnostiqué en comparant le dashboard Resend
+("API keys" → domaine associé à chaque clé) avec la variable réellement posée sur Vercel.
+
+**Fix** : nouvelle clé Resend dédiée (`apidays-invitations`), restreinte à `apidays.citizen-d.fr`,
+posée dans Vercel sous `RESEND_API_KEY_INVITATIONS` (Production uniquement, comme `RESEND_API_KEY`).
+`envoyerEmail()` accepte désormais un nom de variable d'env alternatif (`apiKeyEnvVar`, défaut
+`RESEND_API_KEY`) ; `lib/resend/invitation.ts` (seul appelant concerné) pointe vers cette nouvelle
+clé. Redéployé, testé de bout en bout via `/admin/nouveau` en prod (2 tenants créés avec un e-mail
+`+alias` Gmail pour recevoir l'invitation sans polluer le vrai compte) : "Invitation envoyée au
+premier admin.", confirmé reçu côté Resend. Tenants de test supprimés ensuite via le bouton
+"Supprimer" de `/admin` (confirmation par saisie du slug, irréversible).
+
 ## Comment créer/tester un tenant
 
 **Via `/admin`** (recommandé, remplace les scripts `service_role` utilisés pendant la construction
