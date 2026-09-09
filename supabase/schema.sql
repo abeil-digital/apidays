@@ -24,15 +24,20 @@ create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee
 -- ------------------------------------------------------------
 -- ENTREPRISES (multi-tenant, 09/09/2026 — fondations)
 -- Une ligne par client. `entreprise_id` posé sur chaque table métier ci-
--- dessous, valeur par défaut vers Abeil (seul tenant réel aujourd'hui) pour
--- que le code applicatif existant continue de fonctionner sans changement —
--- ce `default` est un pont temporaire, à retirer une fois la résolution du
--- tenant courant câblée dans l'app (routing par sous-domaine, chantier
--- séparé, voir Backlog). `types_absences`/`jours_feries` restent des tables
--- de référence globales, partagées par toutes les entreprises — pas de
--- `entreprise_id` dessus (décision du 09/09/2026, plus simple pour démarrer ;
--- une entreprise peut désactiver un type via une règle d'acquisition à
--- zéro).
+-- dessous, avec `default my_entreprise_id()` (fonction définie juste après
+-- `utilisateurs` plus bas — résout dynamiquement l'entreprise de
+-- l'utilisateur authentifié qui insère la ligne) : aucune insertion
+-- applicative n'a besoin de préciser `entreprise_id` explicitement pour
+-- fonctionner correctement, quel que soit le tenant. Corrige un bug réel
+-- découvert le 09/09/2026 — un ancien `default` fixe vers Abeil (repéré
+-- comme "pont temporaire" à l'origine) faisait échouer silencieusement
+-- toute insertion sans `entreprise_id` explicite pour un tenant autre
+-- qu'Abeil (rejetée par la policy RLS `entreprise_id = my_entreprise_id()`),
+-- dans une quinzaine de repositories différents. `types_absences`/
+-- `jours_feries` restent des tables de référence globales, partagées par
+-- toutes les entreprises — pas de `entreprise_id` dessus (décision du
+-- 09/09/2026, plus simple pour démarrer ; une entreprise peut désactiver un
+-- type via une règle d'acquisition à zéro).
 -- ------------------------------------------------------------
 create table entreprises (
   id uuid primary key default gen_random_uuid(),
@@ -69,7 +74,11 @@ insert into entreprises (id, nom, slug) values ('c52b18b8-73b0-403c-990c-b2b4894
 -- ------------------------------------------------------------
 create table utilisateurs (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  -- Pas de `default` ici (contrairement aux autres tables ci-dessous) :
+  -- `my_entreprise_id()` n'existe pas encore à ce stade du script (elle
+  -- interroge cette table même) — posé juste après sa création, voir plus
+  -- bas.
+  entreprise_id uuid not null references entreprises(id),
   auth_id uuid unique references auth.users(id) on delete set null,
   prenom text not null,
   nom text not null,
@@ -103,6 +112,44 @@ create table utilisateurs (
   updated_at timestamptz not null default now()
 );
 
+-- Multi-tenant (09/09/2026, fondations ; définie ici — juste après
+-- `utilisateurs`, la seule table dont elle dépend — pour pouvoir servir de
+-- `default` sur `entreprise_id` dans toutes les tables suivantes, voir
+-- plus bas). Même forme que `my_role()`/`my_utilisateur_id()`
+-- (`supabase/schema.sql`, section RLS/helpers) : celles-ci restent
+-- définies plus loin dans le fichier faute d'être nécessaires comme
+-- `default` de colonne.
+--
+-- `default my_entreprise_id()` (09/09/2026, corrige un bug réel : une
+-- insertion sans `entreprise_id` explicite — ex. `creerFaq`,
+-- `creerUtilisateurAdmin` — recevait jusqu'ici le défaut fixe vers Abeil,
+-- rejeté par la policy RLS `with check (... entreprise_id = my_entreprise_id())`
+-- pour tout autre tenant, silencieusement, aucune erreur claire à
+-- l'utilisateur) remplace l'ancien défaut fixe vers l'uuid Abeil : résout
+-- dynamiquement l'entreprise de l'utilisateur AUTHENTIFIÉ qui insère la
+-- ligne (`auth.uid()`), correct pour n'importe quel tenant sans que le
+-- code applicatif n'ait besoin de le préciser. Remplace définitivement le
+-- "pont temporaire" décrit dans les commentaires plus bas — la résolution
+-- du tenant courant, alors prévue comme un chantier séparé, est
+-- maintenant câblée ici.
+create or replace function my_entreprise_id()
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select entreprise_id from utilisateurs where auth_id = auth.uid();
+$$;
+
+-- Posé ici plutôt que directement dans `create table utilisateurs`
+-- ci-dessus, faute d'y avoir accès à `my_entreprise_id()` (voir
+-- commentaire sur la colonne). Un `service_role` sans session (ex.
+-- `creerTenant`, premier admin d'un tenant) n'a pas d'`auth.uid()` — ce
+-- défaut ne sert donc jamais dans ce cas précis, ces appels fixent déjà
+-- `entreprise_id` explicitement.
+alter table utilisateurs alter column entreprise_id set default my_entreprise_id();
+
 -- "Manager" = directeur de l'entreprise, autorité globale sur toute
 -- l'entreprise (pas une équipe rattachée) — cette table n'est donc plus
 -- utilisée par les policies RLS. Conservée en base, sans donnée exploitée,
@@ -110,7 +157,7 @@ create table utilisateurs (
 -- d'un manager sur un sous-ensemble de salariés) reviendrait un jour.
 create table manager_salaries (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   salarie_id uuid not null references utilisateurs(id) on delete cascade,
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -120,7 +167,7 @@ create table manager_salaries (
 -- Délégation temporaire du droit de validation
 create table delegations_validation (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   delegataire_id uuid not null references utilisateurs(id) on delete cascade,
   date_debut date not null,
@@ -131,7 +178,7 @@ create table delegations_validation (
 -- Destinataires en copie des notifications de validation/refus d'un manager
 create table copies_notifications (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   copie_utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -173,7 +220,7 @@ insert into types_absences (code, libelle, necessite_solde) values
 -- ------------------------------------------------------------
 create table soldes (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   periode_debut date not null,
@@ -187,7 +234,7 @@ create table soldes (
 -- Historique des ajustements manuels de solde par Delphine (traçabilité obligatoire)
 create table historique_soldes (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   solde_id uuid not null references soldes(id) on delete cascade,
   ancien_solde_reel numeric(5,2) not null,
   nouveau_solde_reel numeric(5,2) not null,
@@ -201,7 +248,7 @@ create table historique_soldes (
 -- ------------------------------------------------------------
 create table demandes_conges (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date_debut date not null,
@@ -246,7 +293,7 @@ create table demandes_conges (
 -- décision — voir le repli côté app sur `dateDecision` pour ce cas.
 create table decisions_demande (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   demande_id uuid not null references demandes_conges(id) on delete cascade,
   statut statut_demande not null,
   commentaire text,
@@ -273,7 +320,7 @@ create table jours_feries (
 -- ------------------------------------------------------------
 create table parametrage_periode (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   annee int not null,
   semaine_aout_imposee date not null, -- lundi de la semaine du 15 août, calculé automatiquement
   nb_demi_journees_cible int not null default 16, -- configurable, pas figé en dur
@@ -289,7 +336,7 @@ create table parametrage_periode (
 -- DJ_IMPOSEE de types_absences, indépendant du solde RTT (regles_acquisition).
 create table demi_journees_imposees (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date date not null,
@@ -301,7 +348,7 @@ create table demi_journees_imposees (
 -- indépendant du solde CP (regles_acquisition).
 create table conges_imposes (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date_debut date not null,
@@ -334,7 +381,7 @@ alter table demandes_conges
 -- ------------------------------------------------------------
 create table regles_acquisition (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   type_absence_id uuid not null references types_absences(id),
   periode_debut_mois int not null,  -- 1-12
   periode_debut_jour int not null,  -- 1-31
@@ -392,7 +439,7 @@ insert into parametrage_notifications (entreprise_id) values ('c52b18b8-73b0-403
 -- Jours supplémentaires selon l'ancienneté — rattaché aux CP uniquement
 create table regles_anciennete (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   type_absence_id uuid not null references types_absences(id),
   seuil_annees int not null,
   jours_supplementaires numeric(4,1) not null,
@@ -406,7 +453,7 @@ create table regles_anciennete (
 -- non publiée par défaut à la création.
 create table faqs (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   question text not null,
   reponse text not null,
   publie boolean not null default false,
@@ -423,7 +470,7 @@ create table faqs (
 -- (correction à la baisse).
 create table ajustements_solde (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   delta_jours numeric(5,2) not null,
@@ -447,7 +494,7 @@ create table ajustements_solde (
 -- informatif/RH ici.
 create table historique_utilisateur (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   champ text not null check (champ in ('taux_activite', 'nature_contrat')),
   ancienne_valeur text,
@@ -469,7 +516,7 @@ create table historique_utilisateur (
 -- la valeur précédente, pas de "Suivi des modifications".
 create table soldes_initiaux (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   utilisateur_id uuid not null unique references utilisateurs(id) on delete cascade,
   date_reference date not null,
   cp numeric not null default 0,
@@ -486,7 +533,7 @@ create table soldes_initiaux (
 -- rechargement).
 create table exports_paie (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   periode_debut date not null,
   periode_fin date not null,
   genere_le timestamptz not null default now(),
@@ -508,7 +555,7 @@ create unique index exports_paie_periode_unique on exports_paie (entreprise_id, 
 -- aucun appelant).
 create table export_paie_lignes (
   id uuid primary key default gen_random_uuid(),
-  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
   export_paie_id uuid not null references exports_paie(id) on delete cascade,
   demande_id uuid not null references demandes_conges(id) on delete cascade,
   jours_inclus numeric(5,1) not null,
@@ -609,18 +656,10 @@ as $$
   select role from utilisateurs where auth_id = auth.uid();
 $$;
 
--- Multi-tenant (09/09/2026, fondations) — même forme que my_role()/
--- my_utilisateur_id() ci-dessus. Chaque policy scope désormais aussi sur
--- `entreprise_id = my_entreprise_id()`.
-create or replace function my_entreprise_id()
-returns uuid
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select entreprise_id from utilisateurs where auth_id = auth.uid();
-$$;
+-- `my_entreprise_id()` : définie juste après `utilisateurs`, tout en haut
+-- du fichier — nécessaire dès le `default` de `entreprise_id` sur les
+-- tables suivantes, voir ce commentaire pour le détail. Chaque policy
+-- ci-dessous scope aussi sur `entreprise_id = my_entreprise_id()`.
 
 -- Statut super-admin (09/09/2026, flux d'onboarding d'un tenant) — identité
 -- séparée de `utilisateurs`/`entreprise_id`/`role` : créer un tenant est un
