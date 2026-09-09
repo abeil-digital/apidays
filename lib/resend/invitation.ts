@@ -52,6 +52,11 @@ export async function envoyerInvitation(input: EnvoyerInvitationInput): Promise<
     destinataires: [input.email],
     sujet: `Bienvenue sur Apidays, ${input.prenom}`,
     expediteur,
+    // Clé dédiée, restreinte à ce domaine sur Resend (09/09/2026, correctif
+    // — voir doc de `envoyerEmail`) : `RESEND_API_KEY` par défaut est
+    // restreinte à `abeil-conges.citizen-d.fr`, incompatible avec ce
+    // domaine d'expédition.
+    apiKeyEnvVar: "RESEND_API_KEY_INVITATIONS",
     html: `
       ${logoHtml}
       <p>Bonjour ${input.prenom},</p>

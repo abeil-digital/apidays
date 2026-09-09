@@ -11,6 +11,16 @@ interface EnvoyerEmailInput {
    * tenant, voir `lib/resend/invitation.ts`) — défaut inchangé pour les
    * appelants existants (notifications de demandes de congés, Abeil). */
   expediteur?: string;
+  /** Clé API custom (09/09/2026, correctif) — les clés Resend sont
+   * restreintes à UN SEUL domaine d'expédition ; `RESEND_API_KEY` (défaut)
+   * est restreinte à `abeil-conges.citizen-d.fr`, donc impropre pour les
+   * e-mails d'invitation qui partent de `apidays.citizen-d.fr`. Découvert
+   * en testant l'envoi réel en prod : Resend authentifie la requête (la clé
+   * est valide) mais rejette l'envoi silencieusement, sans même l'entrée
+   * habituelle dans le log "Sending" du dashboard — d'où le `console.error`
+   * ajouté ci-dessous, seul moyen de voir l'erreur passer autrement
+   * inaperçue. */
+  apiKeyEnvVar?: string;
 }
 
 /**
@@ -26,7 +36,7 @@ interface EnvoyerEmailInput {
  * décider si l'échec doit être surfacé ou ignoré silencieusement.
  */
 export async function envoyerEmail(input: EnvoyerEmailInput): Promise<{ ok: boolean }> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env[input.apiKeyEnvVar ?? "RESEND_API_KEY"];
   if (!apiKey || input.destinataires.length === 0) {
     return { ok: false };
   }
