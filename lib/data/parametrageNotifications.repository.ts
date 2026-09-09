@@ -8,9 +8,12 @@ import { createClient } from "@/lib/supabase/client";
 /**
  * Repository des réglages de notification email (`parametrage_notifications`)
  * — table singleton (une seule ligne PAR ENTREPRISE depuis le 09/09/2026, clé
- * primaire `entreprise_id`), même idiome que `objectifs_calendrier` — RLS
- * filtre déjà sur `entreprise_id = my_entreprise_id()`, plus besoin de
- * filtre explicite côté client.
+ * primaire `entreprise_id`), même idiome que `objectifs_calendrier`. La RLS
+ * scope bien la ligne à l'entreprise courante, mais PostgREST refuse tout
+ * `UPDATE`/`DELETE` sans clause `WHERE` explicite dans la requête (garde
+ * indépendante de la RLS) — d'où le `.not("entreprise_id", "is", null)`
+ * ci-dessous sur `mettreAJourParametrageNotifications` : toujours vrai (PK
+ * NOT NULL), sert uniquement à satisfaire cette exigence syntaxique.
  */
 
 interface ParametrageNotificationsRow {
@@ -65,6 +68,7 @@ export async function mettreAJourParametrageNotifications(
       copie_administrateur: input.copieAdministrateur,
       notif_decision_collaborateur: input.notifDecisionCollaborateur,
     })
+    .not("entreprise_id", "is", null)
     .select(SELECT_PARAMETRAGE_NOTIFICATIONS)
     .single();
 

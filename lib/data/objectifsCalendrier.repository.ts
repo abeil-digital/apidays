@@ -8,7 +8,11 @@ import { createClient } from "@/lib/supabase/client";
  * consommée par l'écran Calendrier. RLS : lecture large authentifiée,
  * écriture manager/admin, comme `regles_acquisition` — filtre déjà sur
  * `entreprise_id = my_entreprise_id()`, donc `.single()` résout directement
- * la ligne de l'entreprise courante sans filtre explicite côté client.
+ * la ligne de l'entreprise courante sans filtre explicite côté client. Sauf
+ * pour l'`UPDATE` : PostgREST exige une clause `WHERE` explicite dans la
+ * requête indépendamment de la RLS, d'où le `.not("entreprise_id", "is",
+ * null)` ci-dessous (toujours vrai, PK NOT NULL — sert uniquement à
+ * satisfaire cette exigence syntaxique).
  */
 
 interface ObjectifsCalendrierRow {
@@ -51,6 +55,7 @@ export async function enregistrerObjectifsCalendrier(
       cible_jours_cpi: input.cibleJoursCpi,
       cible_demi_journees_dji: input.cibleDemiJourneesDji,
     })
+    .not("entreprise_id", "is", null)
     .select(SELECT_OBJECTIFS_CALENDRIER)
     .single();
 

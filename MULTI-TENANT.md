@@ -41,27 +41,46 @@ create table entreprises (
 ### `entreprise_id` sur les tables métier
 
 19 tables portent une colonne `entreprise_id uuid not null references entreprises(id) default
-'<uuid Abeil>'` : `utilisateurs`, `manager_salaries`, `delegations_validation`,
+my_entreprise_id()` : `utilisateurs`, `manager_salaries`, `delegations_validation`,
 `copies_notifications`, `soldes`, `historique_soldes`, `demandes_conges`, `decisions_demande`,
 `parametrage_periode`, `demi_journees_imposees`, `conges_imposes`, `regles_acquisition`,
 `regles_anciennete`, `faqs`, `ajustements_solde`, `historique_utilisateur`, `soldes_initiaux`,
 `exports_paie`, `export_paie_lignes`.
 
-Le `default` vers l'uuid Abeil est un **pont temporaire, assumé** : il permet à toute requête
-applicative existante (aucune ne passe `entreprise_id` explicitement) de continuer à fonctionner
-sans changement — la RLS filtre automatiquement sur l'entreprise déduite de la session, comme elle
-filtre déjà par rôle. Sans ce défaut, la moindre requête d'écriture depuis du code qui ne connaît
-pas encore la notion de tenant échouerait sur la contrainte `not null`.
+**Correctif du 09/09/2026** : à l'origine (phase mono-tenant), ce `default` pointait vers l'uuid
+Abeil en dur — "pont temporaire" censé permettre à toute requête applicative existante (aucune ne
+passe `entreprise_id` explicitement) de continuer à fonctionner sans changement de code. En pratique
+ce pont s'est révélé **cassé pour tout tenant autre qu'Abeil** : la première vraie utilisation d'un
+second tenant ("test3") via l'UI a montré qu'écrire une FAQ, un objectif CPI/DJI, etc. échouait
+systématiquement — chaque `INSERT` sans `entreprise_id` explicite tentait d'écrire l'uuid Abeil,
+rejeté par la RLS `with check (entreprise_id = my_entreprise_id())` pour tout autre tenant. Corrigé
+en remplaçant le `default` par la fonction `my_entreprise_id()` (`security definer stable`, déjà
+utilisée pour la RLS elle-même) — la fonction doit être définie juste après la table `utilisateurs`
+(dont elle dépend), donc AVANT toutes les autres tables de `supabase/schema.sql`, avec un
+`alter table utilisateurs alter column entreprise_id set default my_entreprise_id();` séparé juste
+après (chicken-and-egg : `utilisateurs` elle-même ne peut pas référencer la fonction dans sa propre
+définition de colonne).
 
 **Tables volontairement globales, sans `entreprise_id`** (décision actée avant de coder) :
 `types_absences`, `jours_feries` — partagées par tous les tenants, plus simple pour démarrer ; un
 tenant peut désactiver un type via une règle d'acquisition à zéro plutôt que via une table séparée.
 
 **2 tables singleton devenues une ligne par tenant** — `id` fixe remplacé par `entreprise_id` comme
-clé primaire : `objectifs_calendrier`, `parametrage_notifications`. Leurs repositories
-(`lib/data/objectifsCalendrier.repository.ts`, `lib/data/parametrageNotifications.repository.ts`)
-n'ont plus besoin de filtrer par un id fixe — `.single()` suffit, la RLS restreint déjà à l'unique
-ligne du tenant courant.
+clé primaire : `objectifs_calendrier`, `parametrage_notifications`. Doivent être explicitement
+seedées (une ligne) à la création d'un tenant — `creerTenant()` (`app/admin/actions.ts`) s'en charge
+depuis le 09/09/2026 (absent initialement, provoquait "Impossible de charger…" pour tout nouveau
+tenant tant qu'aucune ligne n'existait).
+
+Leurs repositories (`lib/data/objectifsCalendrier.repository.ts`,
+`lib/data/parametrageNotifications.repository.ts`) n'ont plus besoin de filtrer par un id fixe en
+**lecture** — `.single()` suffit, la RLS restreint déjà à l'unique ligne du tenant courant. **Piège
+sur l'`UPDATE`** (bug du 09/09/2026, corrigé le jour même) : la RLS scope bien la ligne, mais
+PostgREST refuse tout `UPDATE`/`DELETE` sans clause `WHERE` explicite dans la requête — une garde
+syntaxique indépendante de la RLS. Un `.update({...}).select().single()` sans `.eq(...)` ni
+équivalent échoue donc avec `21000 "UPDATE requires a WHERE clause"`, quelle que soit la RLS. Les
+deux repositories utilisent `.not("entreprise_id", "is", null)` (toujours vrai, colonne `NOT NULL`)
+pour satisfaire cette exigence tout en laissant la RLS faire le vrai scoping — le client ne connaît
+pas nécessairement `entreprise_id` pour poser un `.eq()` explicite.
 
 ## RLS — isolation des données
 
@@ -118,20 +137,35 @@ Points identifiés et sécurisés :
 ### Couleurs
 
 `--color-brand-primary`/`--color-brand-accent` (tokens `app/globals.css`, ex-`abeil-navy`/
-`abeil-yellow`) — noms de rôle plutôt que d'apparence. Scope volontairement réduit à ces 2 tokens :
-`--color-slate`, encore utilisée pour la plupart des boutons/liens dans le reste de l'app, n'est
-**pas** encore généralisée à la vraie charte (chantier séparé "Refacto & récap Design System").
+`abeil-yellow`) — noms de rôle plutôt que d'apparence.
+
+**Scope resserré au header + à la nav secondaire uniquement** (09/09/2026, correction — voir
+plus bas) : `--color-slate`, encore utilisée pour la plupart des boutons/liens dans le reste de
+l'app, n'est **pas** généralisée à la vraie charte (chantier séparé "Refacto & récap Design
+System") — et depuis cette correction, **les titres/labels/montants du contenu de page ne le sont
+plus non plus**, ils utilisent `text-ink-900` (noir générique) comme partout ailleurs.
 
 - **Post-connexion** : `lib/data/branding.repository.ts` (`fetchBrandingCourant()`) lit
   `couleur_navy`/`couleur_yellow` via la session normale (RLS `entreprises`, `.single()` sans
   `.eq()` nécessaire — même principe singleton que les tables ci-dessus). `app/(app)/layout.tsx`
   (Server Component async) les passe à `AppShell.tsx`, qui les applique en variables CSS inline sur
-  son conteneur racine — la cascade CSS fait le reste, tous les descendants héritent sans code
-  supplémentaire.
-- **Pré-connexion** (page `/connexion` uniquement, pas les 3 autres pages `/connexion/*`) : la RLS
-  ne peut rien renvoyer avant authentification, d'où une route publique dédiée,
-  `app/api/branding-public/route.ts`, en `service_role` — voir "Résolution par sous-domaine"
-  ci-dessous, qui explique comment elle sait quel tenant demander.
+  son conteneur racine — la cascade CSS atteint tous les descendants, mais **seuls `HeaderBar.tsx`
+  (fond) et `SideNav.tsx`/`BottomNav.tsx` (icônes/état actif) consomment encore ces variables** ;
+  le contenu de page (H1, labels, montants de solde...) a été délibérément désabonné.
+- **Pré-connexion** : plus aucune page `/connexion/*` n'applique de couleur de tenant (seul le
+  logo, voir "Logo" ci-dessous, y reste spécifique) — `/connexion` étant la seule à avoir jamais eu
+  ce mécanisme (les 3 autres pages `/connexion/*` ne l'ont jamais eu), sa surcharge CSS
+  `--color-brand-primary`/`--color-brand-accent` posée en `style` inline a été retirée avec ses
+  derniers consommateurs.
+
+**Correction du 09/09/2026** : en testant "test3" avec un header changé en orange, Vincent a
+constaté que la couleur se propageait bien au-delà du header — H1, labels, montants de solde,
+chevrons de menus déroulants (87 usages de `brand-primary`/`brand-accent` dans le code, dont
+seulement 7 réellement dans `HeaderBar.tsx`/`SideNav.tsx`/`BottomNav.tsx`, tout le reste — 80
+occurrences dans 20 fichiers de contenu — a été retiré). Un cas particulier : le bandeau de modale
+`EnTeteModalNavy` (`UtilisateurFichePage.tsx`) utilisait `bg-brand-primary` pour son fond sombre ;
+remplacé par `bg-slate` (déjà la couleur générique des boutons primaires), faute de fond sombre
+générique déjà établi dans le codebase pour ce cas précis.
 
 ### Logo
 

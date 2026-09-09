@@ -5335,6 +5335,65 @@ Tenant de test entièrement supprimé (données + comptes auth) après vérifica
 un tenant orphelin (`test3`, slug `test`) visiblement créé par Vincent lui-même en testant — laissé
 en place, à supprimer par lui via `/admin` s'il confirme que c'est un reste de test.
 
+## Multi-tenant — bug critique corrigé : `entreprise_id` par défaut cassait l'écriture pour tout
+tenant non-Abeil (09/09/2026)
+
+Vincent a créé un vrai second tenant ("test3") et l'a exercé via la vraie UI (pas juste des scripts
+`service_role`) — ce qui a immédiatement révélé un bug systémique resté invisible jusque-là :
+impossible d'enregistrer une FAQ, un objectif CPI/DJI, ou tout autre écran d'écriture. Cause : les
+colonnes `entreprise_id` de 18 des 19 tables du schéma avaient un `default` codé en dur pointant sur
+l'UUID d'Abeil (reste du "pont temporaire" mono-tenant) — tout `INSERT` ne posant pas explicitement
+`entreprise_id` (la quasi-totalité du code repository) tentait donc silencieusement d'écrire l'UUID
+d'Abeil, rejeté par la RLS pour n'importe quel autre tenant. Corrigé en basculant tous les defaults
+vers la fonction `my_entreprise_id()` (`security definer`, déjà utilisée pour la RLS) — chaque tenant
+écrit désormais automatiquement dans ses propres lignes sans changement de code applicatif. Détail
+complet (mécanisme, script SQL exécuté, réorganisation de `supabase/schema.sql`) dans
+[MULTI-TENANT.md](MULTI-TENANT.md).
+
+Corrigé dans la foulée : les 2 tables "singleton par tenant" (`objectifs_calendrier`,
+`parametrage_notifications`, PK = `entreprise_id`) n'étaient jamais seedées à la création d'un
+tenant — `creerTenant()` (`app/admin/actions.ts`) les initialise désormais, avec rollback sur échec.
+
+## Multi-tenant — bug corrigé : hang "Chargement…" sur "Suivre mon solde" si aucune règle
+d'acquisition (09/09/2026)
+
+En testant "test3" sans `regles_acquisition` configurées (règles d'acquisition CP/RTT), la popin
+"Suivre mon solde" restait bloquée indéfiniment sur "Chargement…" au lieu d'afficher une erreur —
+alors que le calcul lève bien une erreur explicite dans ce cas. Bug React latent, jamais manifesté
+sur Abeil (toujours des règles valides) : `SoldeDetailPanel.tsx` avait un ordre de condition de rendu
+qui masquait la branche erreur (`loading || !historique` restait vrai indéfiniment sur un fetch en
+échec, empêchant d'atteindre `error ? ...`). Corrigé en réordonnant les conditions.
+
+## Multi-tenant — bug corrigé : sauvegarde des réglages Notifications/Congés & RTT cassée pour tous
+les tenants (09/09/2026)
+
+Repéré par Vincent en testant "test3" : impossible d'enregistrer un changement dans Paramétrer >
+Notifications (`parametrage_notifications`) — message "Impossible d'enregistrer les réglages."
+Régression du même jour : en passant `objectifs_calendrier`/`parametrage_notifications` en tables
+singleton PAR TENANT (voir ci-dessus), les `UPDATE` de leurs repositories avaient perdu tout filtre
+`.eq(...)` (jugé inutile puisque la RLS scope déjà la ligne) — mais PostgREST refuse tout
+`UPDATE`/`DELETE` sans clause `WHERE` explicite dans la requête, indépendamment de la RLS (garde
+syntaxique, pas une règle de sécurité contournable). Le bug touchait donc TOUS les tenants, y compris
+Abeil, pas seulement test3. Corrigé dans `lib/data/parametrageNotifications.repository.ts` et
+`lib/data/objectifsCalendrier.repository.ts` : ajout de `.not("entreprise_id", "is", null)` sur les
+deux `UPDATE` (toujours vrai — PK `NOT NULL` — sert uniquement à satisfaire PostgREST, la RLS reste
+le vrai scoping).
+
+## Multi-tenant — recentrage du branding couleur sur le header + la nav secondaire (09/09/2026)
+
+En testant "test3" (couleur du header passée en orange pour observer l'effet), Vincent a constaté que
+la couleur de tenant se propageait bien au-delà du header : titres H1, montants de solde, labels,
+chevrons de menus — décision explicite : *"le multi-tenant ne concerne que la gestion des couleurs du
+header et de la nav secondaire, les couleurs des H1 et compagnie sont génériques pour tous les
+tenants"*. Refactor : 80 usages de `text-brand-primary` (22 fichiers de contenu de page) remplacés
+par `text-ink-900` (couleur générique déjà utilisée partout ailleurs) ; seuls `HeaderBar.tsx` (fond)
+et `SideNav.tsx`/`BottomNav.tsx` (icônes/état actif) restent branchés sur la couleur du tenant. Les 3
+pages `/connexion/*` perdent leur surcharge CSS de couleur (devenue inutile, seul le logo y reste
+spécifique au tenant). Cas particulier : bandeau de modale `EnTeteModalNavy`
+(`UtilisateurFichePage.tsx`) utilisait `bg-brand-primary` pour son fond — remplacé par `bg-slate`
+(couleur générique déjà utilisée pour les boutons primaires). Détail complet dans
+[MULTI-TENANT.md](MULTI-TENANT.md), section "Branding par tenant".
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
