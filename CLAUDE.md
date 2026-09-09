@@ -5,8 +5,10 @@
 Avant toute action, lis [CONTEXTE.md](CONTEXTE.md) (résumé rapide : stack, état actuel,
 décisions, à faire). Pour le détail des choix d'architecture et du principe "provisoire", voir
 [projet.md](projet.md) ; pour le schéma de base de données cible, voir
-[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md). Ne les relis pas plusieurs fois dans la même session —
-une fois en tout début suffit.
+[BASE-DE-DONNEES.md](BASE-DE-DONNEES.md) ; pour l'architecture multi-tenant (isolation RLS,
+branding par tenant, résolution par sous-domaine, super-admin/onboarding), voir
+[MULTI-TENANT.md](MULTI-TENANT.md). Ne les relis pas plusieurs fois dans la même session — une fois
+en tout début suffit.
 
 # Vérification — allégée par défaut
 
