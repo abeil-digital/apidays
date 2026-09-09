@@ -104,6 +104,10 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
       email: emailAdmin,
       role: "admin",
       date_entree: todayISO(),
+      // "Non précisé" à l'écran sinon (09/09/2026, remarque de Vincent en
+      // testant) — CDI est le défaut logique pour le premier admin d'une
+      // entreprise, pas de champ à ajouter au formulaire pour ça.
+      nature_contrat: "cdi",
       statut: "actif",
     })
     .select("id")
