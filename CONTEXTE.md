@@ -5420,6 +5420,17 @@ Corrigé dans la foulée un second bug signalé au même moment : `enregistrerPa
 paramétrage d'une année encore vierge (`42P10`), bloquant en cascade la création du premier DJI/congé
 imposé de l'année. Corrigé en alignant `onConflict` sur `"entreprise_id,annee"`.
 
+**Même pattern retrouvé une 3ᵉ fois** (09/09/2026) sur Paramétrer > Congés & RTT :
+`enregistrerRegleAcquisition()` (`lib/data/reglesConges.repository.ts`) upsertait avec `onConflict:
+"type_absence_id"`, alors que `regles_acquisition` porte désormais `unique (entreprise_id,
+type_absence_id)` — cassait 100% des sauvegardes CP **et** RTT (chacune passe par cette même
+fonction), remontant le message générique "Certains réglages n'ont pas pu être enregistrés" sur
+l'écran (le bloc "Objectifs", table différente, sauvegardait correctement à côté). Corrigé en
+alignant `onConflict` sur `"entreprise_id,type_absence_id"`, vérifié en base. **Audit fait dans la
+foulée** : un seul autre `onConflict` dans tout le code (`soldes_initiaux.utilisateur_id`,
+`lib/data/utilisateurs.repository.ts`) — contrainte simple non re-périmétrée à raison
+(`utilisateur_id` seul est déjà unique tous tenants confondus), pas de bug là.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
