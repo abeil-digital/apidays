@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { envoyerEmail } from "@/lib/resend/notifications";
 import { resolverDestinataires } from "@/lib/resend/destinataires";
@@ -10,40 +11,30 @@ import { echapperHtml } from "@/lib/html";
 // sans jamais renvoyer deux fois le même récap (voir plan §4).
 const TOLERANCE_MS = 6 * 24 * 60 * 60 * 1000;
 
-// Unique tenant réel aujourd'hui (fondations multi-tenant, 09/09/2026) —
-// voir le commentaire plus bas sur les deux `.eq("entreprise_id", ...)`.
-const ABEIL_ENTREPRISE_ID = "c52b18b8-73b0-403c-990c-b2b4894acb92";
+interface Parametrage {
+  entreprise_id: string;
+  jour_recap: number;
+  heure_recap: number;
+  copie_administrateur: boolean;
+  dernier_envoi_digest: string | null;
+}
 
 /**
- * Cron Vercel quotidien (`vercel.json`, 18h UTC — plan Hobby limité à une
- * exécution/jour, un cron horaire est refusé au déploiement). Le
- * jour/heure choisis par l'admin ne peuvent donc plus être comparés à
- * l'égalité : `heureRecap` devient une heure "au plus tôt" (envoi dès que
- * l'unique passage quotidien du cron, tard dans la journée, tombe après
- * cette heure) plutôt qu'une heure exacte — dégradation actée avec Vincent
- * le 08/09/2026 plutôt que bloquer sur un upgrade de plan. Le cron
- * immédiat (`notifierNouvelleDemande`) ne passe pas par cette route.
+ * Traite le digest d'une seule entreprise — factorisé hors de `GET` car le
+ * cron (09/09/2026, fondations multi-tenant) boucle désormais sur toutes
+ * les entreprises en mode hebdomadaire plutôt que de supposer un unique
+ * tenant. `service_role` contourne la RLS, donc chaque requête ici filtre
+ * explicitement sur `entreprise_id` — sans ça, une entreprise recevrait le
+ * récap d'une autre.
  */
-export async function GET(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ ok: false, erreur: "non autorisé" }, { status: 401 });
-  }
-
-  const admin = createAdminClient();
-  const { data: parametrage } = await admin
-    .from("parametrage_notifications")
-    .select("frequence, jour_recap, heure_recap, copie_administrateur, dernier_envoi_digest")
-    .single();
-
-  if (!parametrage || parametrage.frequence !== "hebdomadaire") {
-    return NextResponse.json({ ok: true, envoye: false, raison: "mode immédiat" });
-  }
-
-  const maintenant = new Date();
-  const jourISO = maintenant.getUTCDay() === 0 ? 7 : maintenant.getUTCDay();
-  const heure = maintenant.getUTCHours();
-
+async function traiterDigestEntreprise(
+  admin: SupabaseClient,
+  parametrage: Parametrage,
+  maintenant: Date,
+  jourISO: number,
+  heure: number,
+  origin: string,
+) {
   const dernierEnvoi = parametrage.dernier_envoi_digest
     ? new Date(parametrage.dernier_envoi_digest)
     : null;
@@ -51,10 +42,10 @@ export async function GET(request: NextRequest) {
     dernierEnvoi !== null && maintenant.getTime() - dernierEnvoi.getTime() < TOLERANCE_MS;
 
   if (jourISO !== parametrage.jour_recap || heure < parametrage.heure_recap) {
-    return NextResponse.json({ ok: true, envoye: false, raison: "hors créneau" });
+    return { entrepriseId: parametrage.entreprise_id, envoye: false, raison: "hors créneau" };
   }
   if (dejaEnvoyeRecemment) {
-    return NextResponse.json({ ok: true, envoye: false, raison: "déjà envoyé" });
+    return { entrepriseId: parametrage.entreprise_id, envoye: false, raison: "déjà envoyé" };
   }
 
   const depuis = dernierEnvoi ?? new Date(0);
@@ -63,6 +54,7 @@ export async function GET(request: NextRequest) {
     .select(
       "date_debut, date_fin, commentaire_salarie, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
     )
+    .eq("entreprise_id", parametrage.entreprise_id)
     .eq("statut", "en_attente")
     .gte("created_at", depuis.toISOString());
 
@@ -70,11 +62,11 @@ export async function GET(request: NextRequest) {
     await admin
       .from("parametrage_notifications")
       .update({ dernier_envoi_digest: maintenant.toISOString() })
-      .eq("entreprise_id", ABEIL_ENTREPRISE_ID); // voir commentaire plus bas
-    return NextResponse.json({ ok: true, envoye: false, raison: "aucune demande" });
+      .eq("entreprise_id", parametrage.entreprise_id);
+    return { entrepriseId: parametrage.entreprise_id, envoye: false, raison: "aucune demande" };
   }
 
-  const { managers, administrateurs } = await resolverDestinataires();
+  const { managers, administrateurs } = await resolverDestinataires(parametrage.entreprise_id);
   const destinataires = parametrage.copie_administrateur
     ? [...managers, ...administrateurs]
     : managers;
@@ -96,7 +88,7 @@ export async function GET(request: NextRequest) {
       })
       .join("");
 
-    const lienSuivi = `${request.nextUrl.origin}/suivre/demandes?statut=en_attente`;
+    const lienSuivi = `${origin}/suivre/demandes?statut=en_attente`;
     await envoyerEmail({
       destinataires,
       sujet: `Récap hebdomadaire — ${demandes.length} demande(s) de congé en attente`,
@@ -104,16 +96,67 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // 09/09/2026, fondations multi-tenant : `parametrage_notifications` a
-  // maintenant `entreprise_id` comme clé primaire (plus de `id` fixe). Ce
-  // fichier tourne en `service_role` (hors RLS), donc encore en dur sur
-  // l'unique tenant réel — filtrer proprement par tenant résolu fait partie
-  // du chantier "sécuriser les points RLS-bypass" (Backlog, explicitement
-  // hors scope de ce correctif).
   await admin
     .from("parametrage_notifications")
     .update({ dernier_envoi_digest: maintenant.toISOString() })
-    .eq("entreprise_id", ABEIL_ENTREPRISE_ID);
+    .eq("entreprise_id", parametrage.entreprise_id);
 
-  return NextResponse.json({ ok: true, envoye: destinataires.length > 0, nb: demandes.length });
+  return {
+    entrepriseId: parametrage.entreprise_id,
+    envoye: destinataires.length > 0,
+    nb: demandes.length,
+  };
+}
+
+/**
+ * Cron Vercel quotidien (`vercel.json`, 18h UTC — plan Hobby limité à une
+ * exécution/jour, un cron horaire est refusé au déploiement). Le
+ * jour/heure choisis par l'admin ne peuvent donc plus être comparés à
+ * l'égalité : `heureRecap` devient une heure "au plus tôt" (envoi dès que
+ * l'unique passage quotidien du cron, tard dans la journée, tombe après
+ * cette heure) plutôt qu'une heure exacte — dégradation actée avec Vincent
+ * le 08/09/2026 plutôt que bloquer sur un upgrade de plan. Le cron
+ * immédiat (`notifierNouvelleDemande`) ne passe pas par cette route.
+ *
+ * Boucle sur toutes les entreprises en mode hebdomadaire (09/09/2026,
+ * fondations multi-tenant) — un job planifié n'a pas de "tenant courant"
+ * comme une requête authentifiée, donc `service_role` (hors RLS) doit
+ * traiter chaque entreprise explicitement plutôt que de supposer un unique
+ * tenant.
+ */
+export async function GET(request: NextRequest) {
+  const auth = request.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ ok: false, erreur: "non autorisé" }, { status: 401 });
+  }
+
+  const admin = createAdminClient();
+  const { data: parametrages } = await admin
+    .from("parametrage_notifications")
+    .select("entreprise_id, jour_recap, heure_recap, copie_administrateur, dernier_envoi_digest")
+    .eq("frequence", "hebdomadaire");
+
+  if (!parametrages || parametrages.length === 0) {
+    return NextResponse.json({ ok: true, entreprises: 0 });
+  }
+
+  const maintenant = new Date();
+  const jourISO = maintenant.getUTCDay() === 0 ? 7 : maintenant.getUTCDay();
+  const heure = maintenant.getUTCHours();
+
+  const resultats = [];
+  for (const parametrage of parametrages) {
+    resultats.push(
+      await traiterDigestEntreprise(
+        admin,
+        parametrage,
+        maintenant,
+        jourISO,
+        heure,
+        request.nextUrl.origin,
+      ),
+    );
+  }
+
+  return NextResponse.json({ ok: true, resultats });
 }

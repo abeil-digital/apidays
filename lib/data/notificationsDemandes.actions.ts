@@ -19,22 +19,29 @@ import { echapperHtml } from "@/lib/html";
 export async function notifierNouvelleDemande(demandeId: string): Promise<void> {
   try {
     const admin = createAdminClient();
-    const { data: parametrage } = await admin
-      .from("parametrage_notifications")
-      .select("frequence, copie_administrateur")
-      .single();
-    if (!parametrage || parametrage.frequence !== "immediate") return;
 
+    // La demande d'abord (avant le réglage) : `entreprise_id` en résulte,
+    // indispensable pour scoper `parametrage_notifications`/
+    // `resolverDestinataires` correctement — `service_role` contourne la
+    // RLS, donc sans ce filtre explicite on lirait les réglages/managers
+    // d'une autre entreprise (09/09/2026, fondations multi-tenant).
     const { data: demande } = await admin
       .from("demandes_conges")
       .select(
-        "date_debut, date_fin, commentaire_salarie, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
+        "entreprise_id, date_debut, date_fin, commentaire_salarie, types_absences(code), utilisateurs!utilisateur_id(prenom, nom)",
       )
       .eq("id", demandeId)
       .single();
     if (!demande) return;
 
-    const { managers, administrateurs } = await resolverDestinataires();
+    const { data: parametrage } = await admin
+      .from("parametrage_notifications")
+      .select("frequence, copie_administrateur")
+      .eq("entreprise_id", demande.entreprise_id)
+      .single();
+    if (!parametrage || parametrage.frequence !== "immediate") return;
+
+    const { managers, administrateurs } = await resolverDestinataires(demande.entreprise_id);
     const destinataires = parametrage.copie_administrateur
       ? [...managers, ...administrateurs]
       : managers;
@@ -83,24 +90,28 @@ export async function notifierDecisionDemande(
 ): Promise<void> {
   try {
     const admin = createAdminClient();
+
+    // La demande d'abord — voir le même commentaire dans
+    // `notifierNouvelleDemande` ci-dessus.
+    const { data: demande } = await admin
+      .from("demandes_conges")
+      .select(
+        "entreprise_id, date_debut, date_fin, commentaire_decision, types_absences(code), utilisateurs!utilisateur_id(email, prenom)",
+      )
+      .eq("id", demandeId)
+      .single();
+    if (!demande) return;
+
     const { data: parametrage } = await admin
       .from("parametrage_notifications")
       .select("notif_decision_collaborateur")
+      .eq("entreprise_id", demande.entreprise_id)
       .single();
     if (!parametrage) return;
     if (parametrage.notif_decision_collaborateur === "aucune") return;
     if (parametrage.notif_decision_collaborateur === "refus_uniquement" && statut !== "refusee") {
       return;
     }
-
-    const { data: demande } = await admin
-      .from("demandes_conges")
-      .select(
-        "date_debut, date_fin, commentaire_decision, types_absences(code), utilisateurs!utilisateur_id(email, prenom)",
-      )
-      .eq("id", demandeId)
-      .single();
-    if (!demande) return;
 
     const typeAbsence = Array.isArray(demande.types_absences)
       ? demande.types_absences[0]
