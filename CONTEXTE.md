@@ -5394,6 +5394,24 @@ spécifique au tenant). Cas particulier : bandeau de modale `EnTeteModalNavy`
 (couleur générique déjà utilisée pour les boutons primaires). Détail complet dans
 [MULTI-TENANT.md](MULTI-TENANT.md), section "Branding par tenant".
 
+## Multi-tenant — fuite de données cross-tenant trouvée et corrigée (09/09/2026)
+
+Vincent a constaté sur test3 que la table `demi_journees_imposees` renvoyait les données d'Abeil au
+lieu des siennes. Cause : cette table a été renommée depuis `rtt_imposes` avant le chantier
+multi-tenant — Postgres ne supprime ni ne renomme les policies RLS lors d'un renommage de table, 2
+policies fantômes de l'ancien nom (`rtt_imposes: ...`, sans filtre tenant) sont restées actives à
+côté des 2 bonnes policies (nommées `demi_journees_imposees: ...`) écrites lors de la passe de
+réécriture RLS multi-tenant — laquelle n'avait touché que les policies portant le nom actuel de la
+table, donc ratée pour ces 2-là. Diagnostiqué via `pg_policies`, corrigé par Vincent (`drop policy`
+des 2 fantômes en SQL Editor), revérifié : test3 ne voit plus les 32 lignes d'Abeil, l'accès légitime
+d'Abeil intact. Détail et "leçon pour la suite" dans [MULTI-TENANT.md](MULTI-TENANT.md).
+
+Corrigé dans la foulée un second bug signalé au même moment : `enregistrerParametragePeriode()`
+(`lib/data/calendrier.repository.ts`) upsertait avec `onConflict: "annee"`, obsolète depuis que
+`parametrage_periode` porte une contrainte unique `(entreprise_id, annee)` — PostgREST rejetait tout
+paramétrage d'une année encore vierge (`42P10`), bloquant en cascade la création du premier DJI/congé
+imposé de l'année. Corrigé en alignant `onConflict` sur `"entreprise_id,annee"`.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -115,6 +115,31 @@ create policy "entreprises: lecture de sa propre entreprise"
 
 Aucune policy INSERT/UPDATE/DELETE sur `entreprises` — créer ou modifier un tenant n'est possible
 que via `service_role` (bypass RLS), jamais depuis une session normale, quel que soit le rôle.
+
+### Fuite cross-tenant trouvée et corrigée : policies fantômes après renommage de table (09/09/2026)
+
+En testant test3, Vincent a constaté que son compte admin lisait les **32 lignes
+`demi_journees_imposees` d'Abeil** au lieu des siennes. Cause : cette table s'appelait `rtt_imposes`
+avant un renommage antérieur au chantier multi-tenant — **renommer une table en Postgres ne
+supprime ni ne renomme les policies RLS qui lui sont attachées**, elles restent visibles dans
+`pg_policies` sous l'ancien nom (`"rtt_imposes: lecture par tout utilisateur authentifié"` /
+`"rtt_imposes: manager et admin modifient"`), toujours actives, et n'avaient jamais reçu le filtre
+`entreprise_id = my_entreprise_id()` de la passe de réécriture multi-tenant (qui n'a touché que les
+2 policies visibles sous le nom actuel `demi_journees_imposees: ...`). Les policies RLS permissives
+se combinant en OR, ces 2 policies fantômes (`using (auth.role() = 'authenticated')`, sans aucun
+filtre tenant) suffisaient à elles seules à ouvrir la table à tout utilisateur authentifié, tous
+tenants confondus — indépendamment des 2 bonnes policies coexistant à côté.
+
+Diagnostiqué via `select policyname, cmd, qual, with_check from pg_policies where tablename =
+'demi_journees_imposees'`. Corrigé par `drop policy` des 2 policies fantômes (exécuté par Vincent en
+SQL Editor). Vérifié après coup (session authentifiée test3) : 0 ligne visible (était 32) ; les 32
+lignes d'Abeil toujours présentes en base (`service_role`), son accès légitime non affecté.
+
+**Leçon pour la suite** : toute table ayant été renommée un jour est un candidat à vérifier
+systématiquement après une réécriture de policies — un `grep` sur les noms de policies dans
+`pg_policies` ne suffit pas si le nom lui-même n'a pas été mis à jour à l'ancien renommage;
+comparer plutôt le NOMBRE de policies par table entre schema.sql (état cible) et `pg_policies` (état
+réel) aurait révélé l'écart (4 au lieu de 2 attendues).
 C'est délibéré : créer un tenant est un acte platform-level, pas un acte d'un admin d'entreprise
 (voir "Super-admin & onboarding" plus bas).
 
