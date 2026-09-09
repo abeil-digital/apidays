@@ -146,12 +146,14 @@ Même mécanique de propagation que les couleurs (`AppShell.tsx` → `HeaderBar`
 
 ## Résolution du tenant par sous-domaine ou par chemin
 
-Sert à une seule chose : savoir quoi afficher (logo/couleurs) sur la page de connexion **avant**
-authentification. **Ça ne va pas plus loin** — une fois connecté, la RLS
-(`entreprise_id = my_entreprise_id()`) scope déjà tout correctement à partir du profil de la
-personne connectée, indépendamment de comment elle est arrivée. Aucune propagation du tenant dans
-les Server Actions/repositories n'a été nécessaire (une reformulation par rapport à l'inventaire
-initial du chantier, qui redoutait ce point comme le plus complexe).
+Sert principalement à savoir quoi afficher (logo/couleurs) sur la page de connexion **avant**
+authentification, et — depuis le 09/09/2026 — à vérifier **à la connexion** que le compte utilisé
+appartient bien au tenant affiché (voir "Vérification à la connexion" plus bas). **Ça ne va pas plus
+loin que ça** : une fois connecté, la RLS (`entreprise_id = my_entreprise_id()`) scope déjà tout
+correctement à partir du profil de la personne connectée, indépendamment de comment elle est
+arrivée — aucune propagation du tenant dans les Server Actions/repositories n'a été nécessaire (une
+reformulation par rapport à l'inventaire initial du chantier, qui redoutait ce point comme le plus
+complexe).
 
 `entreprises.slug` (unique) identifie le tenant. `app/api/branding-public/route.ts` résout le slug
 de deux façons, qui coexistent sans conflit (la seconde n'empêche pas de basculer sur la première
@@ -172,6 +174,21 @@ plus tard, une fois un vrai domaine configuré) :
 Dans les deux cas, `branding-public/route.ts` ne répond jamais que pour LE tenant demandé (jamais
 une liste) — exposer publiquement la liste des clients via une policy RLS ouverte n'a jamais été
 envisagé.
+
+### Vérification à la connexion
+
+Sans ce contrôle, des identifiants valides pour le tenant A connectés depuis l'espace de connexion
+du tenant B réussissaient quand même — la RLS empêchait bien toute fuite de données (l'utilisateur
+atterrissait sur SON propre tenant, jamais celui affiché), mais rien n'empêchait d'"utiliser" la
+page de connexion d'un tenant avec les identifiants d'un autre, ce qui n'a pas de sens logiquement
+(remarque de Vincent).
+
+`app/connexion/page.tsx` transmet le `slug` déjà résolu pour le branding à `login()`
+(`app/connexion/actions.ts`) via un champ caché. Après authentification réussie, si un `slug` était
+affiché, `login()` vérifie qu'il correspond à l'entreprise du compte (même principe RLS-scopé que
+`fetchBrandingCourant()`) — sinon déconnexion immédiate et message dédié
+("Ce compte n'appartient pas à cet espace de connexion."). Aucune vérification si `slug` absent
+(`/connexion` nu, `/admin/connexion`) : aucun tenant précis n'a été affiché, rien à comparer.
 
 ## Super-admin & onboarding d'un tenant
 
@@ -324,10 +341,6 @@ et retaper son slug dans la popin de confirmation — supprime les comptes `auth
   dédié.
 - **`--color-slate` pas encore branding-able** — dépend du chantier séparé "Refacto & récap Design
   System" (Backlog).
-- **Pas de vérification post-connexion d'un mismatch sous-domaine/tenant** — un utilisateur du
-  tenant A qui se connecte depuis le sous-domaine du tenant B verrait quand même ses propres
-  données (la RLS s'en assure), juste sans que l'app ne le prévienne du mismatch. Confort, pas un
-  problème de sécurité — pas testable de toute façon sans un vrai 2ᵉ sous-domaine.
 - **Pas d'édition/désactivation d'un tenant existant depuis `/admin`** — repoussé faute de besoin
   identifié avec un seul vrai client.
 - **`apidays.citizen-d.fr` pas encore vérifié dans Resend** — les e-mails d'invitation échouent

@@ -5303,6 +5303,38 @@ tolérant à l'échec d'envoi (tenant/compte créés quand même, avertissement 
 rollback pour ce cas précis). Tenant de test supprimé après vérification. Envoi Resend réel à
 confirmer par Vincent une fois le domaine vérifié.
 
+## Multi-tenant — vérification d'isolation + connexion rejetée depuis l'espace d'un autre tenant (09/09/2026)
+
+À la demande de Vincent, audit complet de l'isolation des données entre tenants : entreprise de test
+créée avec des données réelles (demande de congé, ajustement de solde, FAQ, un admin et un salarié)
+via `service_role`. Deux angles de vérification :
+
+**RLS directe** (le test le plus rigoureux — pas juste "l'app ne demande pas cette donnée", mais "la
+base de données refuse de la donner") : connexion authentifiée (client anon, vraie session) en tant
+que salarié du tenant de test, tentative de lecture directe d'une demande et d'une FAQ Abeil par
+leur id connu → bloqué (`null`), lecture non filtrée de `demandes_conges`/`entreprises` → ne renvoie
+que les lignes du tenant de test. Testé aussi dans l'autre sens (compte Abeil tentant de lire les
+données du tenant de test par id) → bloqué, `utilisateurs` non filtré ne renvoie que les 6 profils
+Abeil, aucune fuite du profil de test. Isolation confirmée dans les deux sens, au niveau base de
+données.
+
+**Parcours applicatif** : connexion avec le compte admin du tenant de test, vérifié que Suivre les
+demandes/Paramétrer > FAQ/Paramétrer > Utilisateurs n'affichent que les données du tenant de test
+(1 demande, 1 FAQ, 2 utilisateurs) — aucun mélange avec Abeil.
+
+**Bug trouvé en cours de route et corrigé** : Vincent a soulevé qu'un compte Abeil connecté depuis
+l'espace de connexion d'un AUTRE tenant (résolu par `slug`) réussissait quand même à se connecter —
+sans fuite de données (la RLS aurait de toute façon empêché de voir les données de cet autre tenant,
+l'utilisateur atterrissait sur son propre tenant Abeil), mais logiquement incohérent : rien
+n'empêchait d'utiliser la page de connexion d'un tenant avec les identifiants d'un autre. Corrigé
+dans `app/connexion/actions.ts` (`login()`) — après authentification réussie, si un `slug` était
+affiché, vérifie qu'il correspond à l'entreprise du compte, sinon déconnexion immédiate + message
+dédié. Détail dans [MULTI-TENANT.md](MULTI-TENANT.md), section "Vérification à la connexion".
+
+Tenant de test entièrement supprimé (données + comptes auth) après vérification. Repéré au passage
+un tenant orphelin (`test3`, slug `test`) visiblement créé par Vincent lui-même en testant — laissé
+en place, à supprimer par lui via `/admin` s'il confirme que c'est un reste de test.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
