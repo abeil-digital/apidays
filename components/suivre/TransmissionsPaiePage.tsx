@@ -927,7 +927,7 @@ export function TransmissionsPaiePage({
       </Link>
 
       <h1
-        className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold"
+        className="text-brand-primary animate-stagger-in px-1 text-2xl font-semibold"
         style={{ animationDelay: "60ms" }}
       >
         {titre}

@@ -24,12 +24,19 @@
      provisoire — voir projet.md) */
   --color-slate: #245554;
 
-  /* Charte Abeil réelle (avril 2026, Charte-abeil/ABEIL - Charte graphique_V2.pdf)
-     — déployée pour l'instant sur le bandeau de nav générale et les icônes
-     de la nav secondaire (02/09/2026), pas encore généralisée à `--color-slate`
-     ailleurs dans l'app. */
-  --color-abeil-navy: #001e32;
-  --color-abeil-yellow: #ebc850;
+  /* Couleurs de la charte du tenant courant (renommées depuis
+     --color-abeil-navy/--color-abeil-yellow le 09/09/2026, fondations
+     multi-tenant — valeurs de rôle, pas d'apparence, un futur client n'aura
+     pas forcément du navy/jaune) — déployées pour l'instant sur le bandeau
+     de nav générale et les icônes de la nav secondaire (02/09/2026), pas
+     encore généralisées à `--color-slate` ailleurs dans l'app (voir Backlog
+     "Refacto & récap Design System"). Valeurs ci-dessous = défaut Abeil ;
+     surchargées à l'exécution par entreprise (`lib/data/branding.repository.ts`,
+     appliqué dans `components/layout/AppShell.tsx`) une fois l'utilisateur
+     connecté — la page de connexion, hors de ce mécanisme, reste toujours
+     sur ces valeurs par défaut. */
+  --color-brand-primary: #001e32;
+  --color-brand-accent: #ebc850;
 
   /* Fond d'app / cartes */
   --color-surface-app: #fafbfc;

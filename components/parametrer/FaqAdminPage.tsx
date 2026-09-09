@@ -49,7 +49,7 @@ function LigneFormulaireFaq({ valeurInitiale, onValider, onAnnuler }: LigneFormu
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-4 py-4">
       <div>
-        <label htmlFor="faq-question" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+        <label htmlFor="faq-question" className="text-brand-primary mb-1.5 block text-sm font-bold">
           Question
         </label>
         <Input
@@ -60,7 +60,7 @@ function LigneFormulaireFaq({ valeurInitiale, onValider, onAnnuler }: LigneFormu
         />
       </div>
       <div>
-        <label htmlFor="faq-reponse" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+        <label htmlFor="faq-reponse" className="text-brand-primary mb-1.5 block text-sm font-bold">
           Réponse
         </label>
         <Textarea
@@ -130,7 +130,7 @@ export function FaqAdminPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
-      <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold">FAQ</h1>
+      <h1 className="text-brand-primary animate-stagger-in px-1 text-2xl font-semibold">FAQ</h1>
 
       {error && (
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -143,7 +143,7 @@ export function FaqAdminPage() {
       ) : (
         <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
           <div>
-            <h2 className="text-abeil-navy text-sm font-bold">Questions fréquentes</h2>
+            <h2 className="text-brand-primary text-sm font-bold">Questions fréquentes</h2>
             <p className="text-ink-500 mt-1.5 text-xs">
               Visibles des collaborateurs sur Accueil une fois publiées. Glisser une ligne pour
               changer son ordre d&rsquo;affichage.

@@ -55,7 +55,7 @@ export default async function ConfirmerPage({
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-abeil-navy text-xl font-semibold">
+          <p className="text-brand-primary text-xl font-semibold">
             {lienInvalide ? "Lien invalide" : "Bienvenue sur Apidays"}
           </p>
           <p className="text-ink-500 text-sm">

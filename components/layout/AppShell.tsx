@@ -1,15 +1,32 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { HeaderBar } from "@/components/layout/HeaderBar";
 import { SideNav } from "@/components/layout/SideNav";
 import { BottomNav } from "@/components/layout/BottomNav";
+import type { Branding } from "@/lib/data/branding.repository";
 
 interface AppShellProps {
   children: ReactNode;
+  branding: Branding;
 }
 
-export function AppShell({ children }: AppShellProps) {
+/** `branding` (09/09/2026, phase branding du chantier multi-tenant) —
+ * surcharge `--color-brand-primary`/`--color-brand-accent` (défaut charte
+ * Abeil, `app/globals.css`) en variables CSS inline sur le conteneur
+ * racine ; la cascade CSS fait le reste, tous les descendants (HeaderBar,
+ * SideNav, BottomNav, le contenu de page) héritent de la couleur de
+ * l'entreprise de l'utilisateur connecté sans changement de leur côté.
+ * Même convention `as CSSProperties` que `SoldeCard.tsx`/`DatePicker.tsx`. */
+export function AppShell({ children, branding }: AppShellProps) {
   return (
-    <div className="flex min-h-full flex-col">
+    <div
+      className="flex min-h-full flex-col"
+      style={
+        {
+          "--color-brand-primary": branding.couleurNavy,
+          "--color-brand-accent": branding.couleurJaune,
+        } as CSSProperties
+      }
+    >
       <HeaderBar />
 
       {/* `bg-surface-app` portée ici (pas sur `body`) — le canvas gris

@@ -52,11 +52,11 @@ function FormulaireConnexion() {
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-abeil-navy text-xl font-semibold">Bienvenue sur Apidays</p>
+          <p className="text-brand-primary text-xl font-semibold">Bienvenue sur Apidays</p>
         </div>
 
         <div>
-          <label htmlFor="email" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+          <label htmlFor="email" className="text-brand-primary mb-1.5 block text-sm font-bold">
             Email
           </label>
           <Input
@@ -71,7 +71,7 @@ function FormulaireConnexion() {
         </div>
 
         <div>
-          <label htmlFor="password" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+          <label htmlFor="password" className="text-brand-primary mb-1.5 block text-sm font-bold">
             Mot de passe
           </label>
           <div className="relative">

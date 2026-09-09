@@ -77,11 +77,11 @@ export default function DefinirMotDePassePage() {
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-abeil-navy text-xl font-semibold">Définir un mot de passe</p>
+          <p className="text-brand-primary text-xl font-semibold">Définir un mot de passe</p>
         </div>
 
         <div>
-          <label htmlFor="motDePasse" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+          <label htmlFor="motDePasse" className="text-brand-primary mb-1.5 block text-sm font-bold">
             Nouveau mot de passe
           </label>
           <div className="relative">
@@ -114,7 +114,7 @@ export default function DefinirMotDePassePage() {
         </div>
 
         <div>
-          <label htmlFor="confirmation" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+          <label htmlFor="confirmation" className="text-brand-primary mb-1.5 block text-sm font-bold">
             Confirmer le mot de passe
           </label>
           <div className="relative">

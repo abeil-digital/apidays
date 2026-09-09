@@ -23,14 +23,14 @@ export function BottomNav() {
               href={href}
               className={`flex flex-col items-center gap-1 py-2.5 transition-colors duration-150 ${
                 active
-                  ? "bg-abeil-yellow/8 text-abeil-yellow hover:bg-abeil-yellow/15"
-                  : "text-abeil-navy hover:bg-abeil-navy/5"
+                  ? "bg-brand-accent/8 text-brand-accent hover:bg-brand-accent/15"
+                  : "text-brand-primary hover:bg-brand-primary/5"
               }`}
             >
               <Icon
                 size={20}
                 strokeWidth={active ? 2.4 : 2}
-                className={active ? "text-abeil-yellow" : "text-abeil-navy"}
+                className={active ? "text-brand-accent" : "text-brand-primary"}
               />
               <span className="text-xs font-semibold">{label}</span>
             </Link>

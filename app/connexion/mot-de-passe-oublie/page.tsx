@@ -26,7 +26,7 @@ export default function MotDePasseOubliePage() {
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-abeil-navy text-xl font-semibold">Mot de passe oublié</p>
+          <p className="text-brand-primary text-xl font-semibold">Mot de passe oublié</p>
         </div>
 
         {state.envoye ? (
@@ -38,7 +38,7 @@ export default function MotDePasseOubliePage() {
         ) : (
           <form action={formAction} className="flex flex-col gap-5">
             <div>
-              <label htmlFor="email" className="text-abeil-navy mb-1.5 block text-sm font-bold">
+              <label htmlFor="email" className="text-brand-primary mb-1.5 block text-sm font-bold">
                 Email
               </label>
               <Input

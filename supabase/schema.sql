@@ -37,6 +37,12 @@ create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee
 create table entreprises (
   id uuid primary key default gen_random_uuid(),
   nom text not null,
+  -- Couleurs de la charte du tenant (09/09/2026, phase branding) —
+  -- surchargent à l'exécution --color-brand-primary/--color-brand-accent
+  -- (app/globals.css) une fois l'utilisateur connecté, voir
+  -- lib/data/branding.repository.ts. Défaut = charte Abeil actuelle.
+  couleur_navy text not null default '#001e32',
+  couleur_yellow text not null default '#ebc850',
   created_at timestamptz not null default now()
 );
 

@@ -10,7 +10,7 @@ import { logout } from "@/app/connexion/actions";
 
 /**
  * Header général de l'application — fond bleu nuit (vraie charte Abeil,
- * `--color-abeil-navy`, 02/09/2026 — pas encore généralisé au reste de
+ * `--color-brand-primary`, 02/09/2026 — pas encore généralisé au reste de
  * l'app, qui reste sur le slate provisoire). Porte le logo, la navigation
  * de niveau 1 (Poser / Suivre / Paramétrer) et le profil. "Suivre"/"Paramétrer"
  * n'existent dans cette nav QUE pour manager/admin (07/09/2026, demande
@@ -30,7 +30,7 @@ export function HeaderBar() {
   const niveau1Items = getNiveau1Items(utilisateur?.role);
 
   return (
-    <header className="bg-abeil-navy relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
+    <header className="bg-brand-primary relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
       <Link href="/" className="ml-[25px] shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
             l'optimisation next/image n'apporte rien ici */}
@@ -50,7 +50,7 @@ export function HeaderBar() {
               href={href!}
               className={`flex items-center border-b-2 px-3 pt-[10px] text-sm font-semibold whitespace-nowrap transition-colors duration-150 ${
                 isNiveau1Actif(key, pathname)
-                  ? "border-abeil-yellow text-abeil-yellow hover:bg-abeil-yellow/10"
+                  ? "border-brand-accent text-brand-accent hover:bg-brand-accent/10"
                   : "border-transparent text-white hover:bg-white/10"
               }`}
             >

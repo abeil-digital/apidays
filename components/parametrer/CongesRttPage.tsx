@@ -100,7 +100,7 @@ function RadioOuiNon({
 }) {
   return (
     <div>
-      <div className="text-abeil-navy mb-1.5 text-sm font-bold">{titre}</div>
+      <div className="text-brand-primary mb-1.5 text-sm font-bold">{titre}</div>
       <div className="flex gap-5">
         <label className="text-ink-900 flex items-center gap-1.5 text-sm">
           <input type="radio" name={name} checked={valeur} onChange={() => onChange(true)} />
@@ -212,14 +212,14 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
 
     return (
       <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
-        <h2 className="text-abeil-navy text-sm font-bold">{titre}</h2>
+        <h2 className="text-brand-primary text-sm font-bold">{titre}</h2>
 
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label
                 htmlFor={`${type}-periode`}
-                className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                className="text-brand-primary mb-1.5 block text-sm font-bold"
               >
                 Période de référence
               </label>
@@ -231,7 +231,7 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
                   marquerModifie();
                 }}
                 borderClassName="border-slate"
-                chevronClassName="text-abeil-navy"
+                chevronClassName="text-brand-primary"
                 hoverClassName="enabled:hover:bg-surface-app"
                 className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
               >
@@ -246,7 +246,7 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
             <div>
               <label
                 htmlFor={`${type}-acquisition`}
-                className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                className="text-brand-primary mb-1.5 block text-sm font-bold"
               >
                 Acquisition
               </label>
@@ -274,7 +274,7 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
               <div>
                 <label
                   htmlFor={`${type}-mois`}
-                  className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                  className="text-brand-primary mb-1.5 block text-sm font-bold"
                 >
                   Mois de début
                 </label>
@@ -294,7 +294,7 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
               <div>
                 <label
                   htmlFor={`${type}-jour`}
-                  className="text-abeil-navy mb-1.5 block text-sm font-bold"
+                  className="text-brand-primary mb-1.5 block text-sm font-bold"
                 >
                   Jour de début
                 </label>
@@ -445,7 +445,7 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-abeil-navy text-sm font-bold">Ancienneté</h2>
+      <h2 className="text-brand-primary text-sm font-bold">Ancienneté</h2>
 
       <p className="text-ink-500 text-xs">
         Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté.
@@ -585,14 +585,14 @@ const BlocObjectifsCalendrier = forwardRef<
 
   return (
     <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
-      <h2 className="text-abeil-navy text-sm font-bold">Congés &amp; demi-journées imposés</h2>
+      <h2 className="text-brand-primary text-sm font-bold">Congés &amp; demi-journées imposés</h2>
 
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label
               htmlFor="objectifs-cpi"
-              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+              className="text-brand-primary mb-1.5 block text-sm font-bold"
             >
               CP Imposés
             </label>
@@ -616,7 +616,7 @@ const BlocObjectifsCalendrier = forwardRef<
           <div>
             <label
               htmlFor="objectifs-dji"
-              className="text-abeil-navy mb-1.5 block text-sm font-bold"
+              className="text-brand-primary mb-1.5 block text-sm font-bold"
             >
               Demi-journées imposées
             </label>
@@ -710,7 +710,7 @@ export function CongesRttPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
-      <h1 className="text-abeil-navy animate-stagger-in px-1 text-2xl font-semibold">
+      <h1 className="text-brand-primary animate-stagger-in px-1 text-2xl font-semibold">
         Congés &amp; RTT
       </h1>
 
