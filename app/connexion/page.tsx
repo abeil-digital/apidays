@@ -83,6 +83,13 @@ function FormulaireConnexion() {
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
       >
         <input type="hidden" name="next" value={next} />
+        {/* Posé par app/t/[slug]/route.ts ou le sous-domaine — retransmis à
+            login() pour vérifier que le compte appartient bien à CE tenant
+            (09/09/2026, remarque de Vincent : se connecter avec des
+            identifiants Abeil sur l'espace de connexion d'un autre tenant
+            ne doit pas passer, même si la RLS empêcherait de toute façon
+            toute fuite de données une fois connecté). */}
+        <input type="hidden" name="slug" value={slug ?? ""} />
         <div className="flex flex-col items-start gap-3">
           {/* Version couleur fond clair (07/09/2026, Charte-abeil/2026_New_Logo)
               — le logo blanc (`logo-abeil.svg`, utilisé sur `HeaderBar`) n'a
