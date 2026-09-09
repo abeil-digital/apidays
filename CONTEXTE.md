@@ -5210,6 +5210,59 @@ visuelle sur `/connexion` (fetch temporairement forcé vers `?slug=testlogo`, ca
 logo de test) puis retour à la normale confirmé (capture identique au défaut Abeil). Tenant de test,
 utilisateur et profil supprimés après vérification.
 
+## Multi-tenant — flux d'onboarding d'un tenant, rôle super-admin (09/09/2026)
+
+**Dernier item du chantier multi-tenant.** Créer un tenant se faisait à la main via des scripts
+`service_role` jetables (exactement ceux utilisés pour les tenants de test de ce chantier).
+Objectif : un vrai écran dans l'app.
+
+**Problème de fond identifié en explorant avant de coder** : aucun rôle existant n'a d'autorité
+au-dessus d'une seule entreprise — `salarie`/`manager`/`admin` sont tous scopés à leur propre
+`entreprise_id` par la RLS, même le rôle `admin` ne peut ni lire ni écrire sur `entreprises` (aucune
+policy INSERT/UPDATE dessus, seul `service_role` le peut). Créer un tenant est un acte
+**platform-level**, pas un acte d'un admin d'entreprise.
+
+**Décisions prises avec Vincent avant de coder** : introduction d'un vrai statut **super-admin**,
+mais en **identité séparée** de `utilisateurs`/`entreprise_id`/`role` plutôt qu'une 4ᵉ valeur ajoutée
+à l'enum `role` — vérifié en base avant de choisir : `vincent.mayol@gmail.com` a déjà un compte Auth
+ET un profil `utilisateurs` (rôle `salarie`, rattaché à Abeil, pour poser ses propres congés) ; le
+statut super-admin se superpose à ce compte sans toucher à ce profil ni à son rôle métier — une
+personne peut être à la fois salariée d'une entreprise et super-admin de la plateforme, ce qui est
+exactement le cas de Vincent. Premier (et seul) super-admin : `vincent.mayol@gmail.com`. Portée
+resserrée au strict nécessaire : créer un tenant + inviter son premier admin — pas
+d'édition/désactivation d'un tenant existant (repoussé au Backlog si le besoin apparaît), liste des
+tenants existants en lecture seule.
+
+**Mécanique** : table `super_admins` (`auth_id` → `auth.users`, PRIMARY KEY) + helper
+`est_super_admin()` (même convention que `my_role()`/`my_entreprise_id()`) — aucune policy
+INSERT/UPDATE/DELETE dessus, accorder/retirer ce statut reste un acte manuel via SQL, même niveau de
+confiance que la création de tenant elle-même. `lib/supabase/superAdmin.ts` (`assertSuperAdmin()`) :
+revérifié à chaque point d'entrée qui va utiliser `service_role` (page `/admin` ET Server Action
+`creerTenant`) — ne jamais faire confiance uniquement à `proxy.ts`, même rigueur que la sécurisation
+des points RLS-bypass (Phase 2 du chantier). `proxy.ts` redirige vers `/` tout compte authentifié non
+super-admin visitant `/admin/*`. Nouveau groupe `app/admin/` avec son propre layout minimal (pas
+d'`AppShell` — écran platform-level, pas de branding tenant) : `page.tsx` liste les entreprises
+existantes (nom, slug, date de création, nombre d'utilisateurs, via `service_role`) ;
+`nouveau/page.tsx` le formulaire de création (nom, slug, couleurs optionnelles, prénom/nom/email du
+premier admin — pas de champ logo, reste réglable par SQL ; `date_entree` posée automatiquement à
+aujourd'hui côté action, `nature_contrat` laissé `null`, `taux_activite` garde son défaut DB) ;
+`actions.ts` (`creerTenant`) crée `entreprises`, puis `utilisateurs` (`role: admin`), puis invite via
+`admin.auth.admin.inviteUserByEmail` (même route de confirmation que l'invitation existante) et lie
+`auth_id`. **Rollback best-effort** si une étape échoue après la création de l'entreprise : supprime
+les lignes créées (dans le bon ordre, `utilisateurs` avant `entreprises` — contrainte FK) pour éviter
+un tenant orphelin ; pas une vraie transaction (le reste de l'app n'en utilise pas non plus).
+
+**Vérifié** : `tsc`/`eslint`/`npm run build` propres, mêmes routes qu'avant plus `/admin` (dynamique)
+et `/admin/nouveau` (statique). **Test réel de bout en bout avec le compte réel de Vincent**
+(mot de passe temporaire posé via `service_role` avec son accord explicite, à changer par lui-même
+ensuite via "mot de passe oublié") : `/admin` accessible et affichant Abeil ; un compte admin Abeil
+existant (non super-admin) visitant `/admin` redirigé vers `/` — gate confirmée ; création d'un
+tenant de test (couleurs distinctes, premier admin) confirmée en base (`entreprises` avec les bonnes
+couleurs, `utilisateurs` en `role: admin`, `auth_id` lié) et à l'écran (toast, tenant listé). Rollback
+vérifié séparément (email de test invalide provoquant un échec d'invitation) : entreprise et
+utilisateurs supprimés proprement, aucune ligne orpheline. Tenant de test, profil et compte auth
+supprimés après vérification.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
