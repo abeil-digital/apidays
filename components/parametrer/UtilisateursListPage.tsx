@@ -116,7 +116,7 @@ export function UtilisateursListPage() {
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <div className="animate-stagger-in flex items-center justify-between px-1">
-        <h1 className="text-brand-primary text-2xl font-semibold">Utilisateurs</h1>
+        <h1 className="text-ink-900 text-2xl font-semibold">Utilisateurs</h1>
         <Button
           onClick={() => setCreationOuverte(true)}
           className="shrink-0 rounded-full px-4 py-2.5"

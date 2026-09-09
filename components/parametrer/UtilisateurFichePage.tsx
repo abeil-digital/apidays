@@ -374,15 +374,22 @@ interface ModalModifierChampProps {
   onClose: () => void;
 }
 
-/** En-tête bleu marine commun à toutes les popins de la fiche utilisateur
+/** En-tête sombre commun à toutes les popins de la fiche utilisateur
  * (05/09/2026, demande explicite : "toutes popin de modifications iso...
  * avec la popin création") — remplace le `title` par défaut de `Modal`
  * (barre blanche, texte noir, croix grise) sur `ModalModifierChamp`/
  * `ModalModifierIdentite`/`ModalModifierRole`/`ModalFinContrat`, pour
- * qu'elles soient visuellement identiques à `NouveauUtilisateurModal`. */
+ * qu'elles soient visuellement identiques à `NouveauUtilisateurModal`.
+ * `bg-slate` (09/09/2026, recentrage du branding multi-tenant sur le
+ * header/la nav secondaire uniquement — remarque de Vincent) plutôt que
+ * `bg-brand-primary` : ce bandeau est du contenu de page, pas la nav,
+ * donc ne doit plus suivre la couleur du tenant — `bg-slate` est la
+ * couleur "de travail" déjà générique utilisée pour tous les boutons
+ * primaires (`Button`), garde le même effet visuel (bandeau foncé, texte
+ * blanc déjà en dur ci-dessous). */
 function EnTeteModalNavy({ titre, onClose }: { titre: string; onClose: () => void }) {
   return (
-    <div className="bg-brand-primary flex items-center justify-between px-6 py-4">
+    <div className="bg-slate flex items-center justify-between px-6 py-4">
       <h2 className="text-lg font-semibold text-white">{titre}</h2>
       <button
         type="button"
@@ -524,7 +531,7 @@ function ModalModifierChamp({
     <Modal onClose={onClose} header={<EnTeteModalNavy titre={titre} onClose={onClose} />}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label htmlFor="modif-valeur" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="modif-valeur" className="text-ink-900 mb-1.5 block text-sm font-bold">
             {estTaux ? "Durée de travail" : "Nature du contrat"}
           </label>
           {estTaux ? (
@@ -538,7 +545,7 @@ function ModalModifierChamp({
                   if (v === "autre") setTauxAutre(valeurActuelle);
                 }}
                 borderClassName="border-slate"
-                chevronClassName="text-brand-primary"
+                chevronClassName="text-ink-900"
                 hoverClassName="enabled:hover:bg-surface-app"
                 className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
               >
@@ -571,7 +578,7 @@ function ModalModifierChamp({
               value={natureSelection}
               onChange={(e) => setNatureSelection(e.target.value as NatureContrat)}
               borderClassName="border-slate"
-              chevronClassName="text-brand-primary"
+              chevronClassName="text-ink-900"
               hoverClassName="enabled:hover:bg-surface-app"
               className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
             >
@@ -588,18 +595,18 @@ function ModalModifierChamp({
           <div>
             <label
               htmlFor="modif-date-effet-mois"
-              className="text-brand-primary mb-1.5 block text-sm font-bold"
+              className="text-ink-900 mb-1.5 block text-sm font-bold"
             >
               Date d&rsquo;effet
             </label>
-            <p className="text-brand-primary mb-1.5 text-xs font-semibold">Au début de</p>
+            <p className="text-ink-900 mb-1.5 text-xs font-semibold">Au début de</p>
             <div className="flex gap-2">
               <SelectPille
                 id="modif-date-effet-mois"
                 value={moisSelection}
                 onChange={(e) => setMoisSelection(Number(e.target.value))}
                 borderClassName="border-slate"
-                chevronClassName="text-brand-primary"
+                chevronClassName="text-ink-900"
                 hoverClassName="enabled:hover:bg-surface-app"
                 className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
               >
@@ -621,7 +628,7 @@ function ModalModifierChamp({
                 value={anneeSelection}
                 onChange={(e) => setAnneeSelection(Number(e.target.value))}
                 borderClassName="border-slate"
-                chevronClassName="text-brand-primary"
+                chevronClassName="text-ink-900"
                 hoverClassName="enabled:hover:bg-surface-app"
                 className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
               >
@@ -746,7 +753,7 @@ function ModalModifierIdentite({
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label htmlFor="identite-nom" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="identite-nom" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Nom
           </label>
           <Input
@@ -759,7 +766,7 @@ function ModalModifierIdentite({
         <div>
           <label
             htmlFor="identite-prenom"
-            className="text-brand-primary mb-1.5 block text-sm font-bold"
+            className="text-ink-900 mb-1.5 block text-sm font-bold"
           >
             Prénom
           </label>
@@ -773,7 +780,7 @@ function ModalModifierIdentite({
         <div>
           <label
             htmlFor="identite-email"
-            className="text-brand-primary mb-1.5 block text-sm font-bold"
+            className="text-ink-900 mb-1.5 block text-sm font-bold"
           >
             Email
           </label>
@@ -788,7 +795,7 @@ function ModalModifierIdentite({
         <div>
           <label
             htmlFor="identite-date-entree"
-            className="text-brand-primary mb-1.5 block text-sm font-bold"
+            className="text-ink-900 mb-1.5 block text-sm font-bold"
           >
             Date d&rsquo;entrée
           </label>
@@ -860,7 +867,7 @@ function ModalModifierRole({ role, dernierAdmin, onValider, onClose }: ModalModi
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label htmlFor="role-modif" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="role-modif" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Rôle
           </label>
           <SelectPille
@@ -868,7 +875,7 @@ function ModalModifierRole({ role, dernierAdmin, onValider, onClose }: ModalModi
             value={roleSaisi}
             onChange={(e) => setRoleSaisi(e.target.value as RoleUtilisateur)}
             borderClassName="border-slate"
-            chevronClassName="text-brand-primary"
+            chevronClassName="text-ink-900"
             hoverClassName="enabled:hover:bg-surface-app"
             className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
           >
@@ -951,7 +958,7 @@ function ModalFinContrat({ dernierAdmin, onValider, onClose }: ModalFinContratPr
         <div>
           <label
             htmlFor="fin-contrat-date"
-            className="text-brand-primary mb-1.5 block text-sm font-bold"
+            className="text-ink-900 mb-1.5 block text-sm font-bold"
           >
             Date de fin de contrat
           </label>
@@ -1261,7 +1268,7 @@ function Formulaire({
     </div>
   ) : (
     <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
-      <label htmlFor="role" className="text-brand-primary text-sm font-bold">
+      <label htmlFor="role" className="text-ink-900 text-sm font-bold">
         Rôle
       </label>
       {/* Select en pilule (04/09/2026, demande explicite : "prends les
@@ -1276,7 +1283,7 @@ function Formulaire({
         value={champs.role}
         onChange={(e) => setChamps({ ...champs, role: e.target.value as RoleUtilisateur })}
         borderClassName="border-slate"
-        chevronClassName="text-brand-primary"
+        chevronClassName="text-ink-900"
         hoverClassName="enabled:hover:bg-surface-app"
         className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
       >
@@ -1327,7 +1334,7 @@ function Formulaire({
                information, affichée une seule fois au lieu de deux
                (BackHeader + card). */
                   <div className="flex flex-col gap-1">
-                    <span className="text-brand-primary leading-tight font-semibold">
+                    <span className="text-ink-900 leading-tight font-semibold">
                       <span className="block text-2xl">{champs.nom}</span>
                       <span className="block text-xl">{champs.prenom}</span>
                     </span>
@@ -1344,7 +1351,7 @@ function Formulaire({
                       <div>
                         <label
                           htmlFor="nom"
-                          className="text-brand-primary mb-1.5 block text-sm font-bold"
+                          className="text-ink-900 mb-1.5 block text-sm font-bold"
                         >
                           Nom
                         </label>
@@ -1359,7 +1366,7 @@ function Formulaire({
                       <div>
                         <label
                           htmlFor="prenom"
-                          className="text-brand-primary mb-1.5 block text-sm font-bold"
+                          className="text-ink-900 mb-1.5 block text-sm font-bold"
                         >
                           Prénom
                         </label>
@@ -1375,7 +1382,7 @@ function Formulaire({
                     <div>
                       <label
                         htmlFor="email"
-                        className="text-brand-primary mb-1.5 block text-sm font-bold"
+                        className="text-ink-900 mb-1.5 block text-sm font-bold"
                       >
                         Email
                       </label>
@@ -1466,7 +1473,7 @@ function Formulaire({
               }
             >
               <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
-                <div className="text-brand-primary text-sm font-bold">Nature du contrat</div>
+                <div className="text-ink-900 text-sm font-bold">Nature du contrat</div>
                 {modeEdition ? (
                   <>
                     <div className="flex flex-col gap-1.5">
@@ -1518,7 +1525,7 @@ function Formulaire({
                       setChamps({ ...champs, natureContrat: e.target.value as NatureContrat })
                     }
                     borderClassName="border-slate"
-                    chevronClassName="text-brand-primary"
+                    chevronClassName="text-ink-900"
                     hoverClassName="enabled:hover:bg-surface-app"
                     className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
                   >
@@ -1557,7 +1564,7 @@ function Formulaire({
                     <div>
                       <label
                         htmlFor="dateEntree"
-                        className="text-brand-primary mb-1.5 block text-sm font-bold"
+                        className="text-ink-900 mb-1.5 block text-sm font-bold"
                       >
                         Date d&rsquo;entrée
                       </label>
@@ -1573,7 +1580,7 @@ function Formulaire({
                       <div>
                         <label
                           htmlFor="dateSortieCdd"
-                          className="text-brand-primary mb-1.5 block text-sm font-bold"
+                          className="text-ink-900 mb-1.5 block text-sm font-bold"
                         >
                           Date de sortie
                         </label>
@@ -1591,7 +1598,7 @@ function Formulaire({
               )}
 
               <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
-                <div className="text-brand-primary text-sm font-bold">Durée de travail</div>
+                <div className="text-ink-900 text-sm font-bold">Durée de travail</div>
                 {modeEdition ? (
                   <>
                     <div className="flex flex-col gap-1.5">
@@ -1645,7 +1652,7 @@ function Formulaire({
                         }
                       }}
                       borderClassName="border-slate"
-                      chevronClassName="text-brand-primary"
+                      chevronClassName="text-ink-900"
                       hoverClassName="enabled:hover:bg-surface-app"
                       className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
                     >
@@ -1694,7 +1701,7 @@ function Formulaire({
             une fiche en création n'a pas encore de contrat à terminer. */}
             {modeEdition && (
               <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
-                <div className="text-brand-primary text-sm font-bold">Fin de contrat</div>
+                <div className="text-ink-900 text-sm font-bold">Fin de contrat</div>
                 {dateFinContrat ? (
                   <div className="flex items-center gap-2">
                     <span className="text-status-danger-fg w-fit rounded-full border border-current px-2.5 py-1 text-xs font-bold whitespace-nowrap">
@@ -1744,7 +1751,7 @@ function Formulaire({
                 et plus de sous-titre "Jours restants à cette date" : les
                 labels CP/RTT/CPA suffisent, la card + son titre donnent déjà
                 le contexte. */}
-                <div className="text-brand-primary text-sm font-bold">Solde initial (facultatif)</div>
+                <div className="text-ink-900 text-sm font-bold">Solde initial (facultatif)</div>
                 <div className="mt-2">
                   {/* Sélecteurs mois + année (05/09/2026, demande explicite :
                   "Sélecteur mois puis sélecteur années") — même pattern que
@@ -1755,7 +1762,7 @@ function Formulaire({
                   mois n'est choisi, `soldeInitDate` reste vide et aucun solde
                   initial n'est créé (comportement inchangé, voir
                   `handleSubmit`). */}
-                  <p className="text-brand-primary mb-[9px] text-xs font-semibold">Au début du mois</p>
+                  <p className="text-ink-900 mb-[9px] text-xs font-semibold">Au début du mois</p>
                   {/* `SelectPille` (05/09/2026, demande explicite : "c'est
                   des pills aussi") — même traitement que Nature du
                   contrat/Durée de travail/Rôle, plutôt que `Select` dont le
@@ -1777,7 +1784,7 @@ function Formulaire({
                         setSoldeInitDate(`${annee}-${mois.padStart(2, "0")}-01`);
                       }}
                       borderClassName="border-slate"
-                      chevronClassName="text-brand-primary"
+                      chevronClassName="text-ink-900"
                       hoverClassName="enabled:hover:bg-surface-app"
                       className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
                     >
@@ -1799,7 +1806,7 @@ function Formulaire({
                         setSoldeInitDate(`${e.target.value}-${soldeInitDate.slice(5, 7)}-01`);
                       }}
                       borderClassName="border-slate"
-                      chevronClassName="text-brand-primary"
+                      chevronClassName="text-ink-900"
                       hoverClassName="enabled:hover:bg-surface-app"
                       className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
                     >
@@ -1812,7 +1819,7 @@ function Formulaire({
                   </div>
                 </div>
                 <div className="mt-6">
-                  <div className="text-brand-primary mb-[9px] text-xs font-semibold">
+                  <div className="text-ink-900 mb-[9px] text-xs font-semibold">
                     Le collaborateur dispose de
                   </div>
                   <div className="flex gap-[40px]">
@@ -1924,7 +1931,7 @@ function Formulaire({
                       setReinitEnvoi(false);
                       if (resultat.ok) setReinitEnvoyee(true);
                     }}
-                    className="text-brand-primary w-fit shrink-0 underline disabled:opacity-50"
+                    className="text-ink-900 w-fit shrink-0 underline disabled:opacity-50"
                   >
                     {reinitEnvoi ? "Envoi…" : "Envoyer un lien de réinitialisation"}
                   </button>

@@ -110,13 +110,13 @@ function FormulaireNotifications({
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
-      <h1 className="text-brand-primary animate-stagger-in px-1 text-2xl font-semibold">
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
         Notifications
       </h1>
 
       <ListCard className="flex flex-col gap-4 p-4">
         <div>
-          <p className="text-brand-primary mb-2 text-sm font-bold">Notifications de demande de congés</p>
+          <p className="text-ink-900 mb-2 text-sm font-bold">Notifications de demande de congés</p>
           <p className="text-ink-500 mb-3 text-xs">
             Les managers sont notifiés par e-mail des demandes d&apos;absence.
           </p>
@@ -193,7 +193,7 @@ function FormulaireNotifications({
 
       <ListCard className="flex flex-col gap-3 p-4">
         <div>
-          <p className="text-brand-primary mb-2 text-sm font-bold">
+          <p className="text-ink-900 mb-2 text-sm font-bold">
             Notifications de décisions de demandes (collaborateurs)
           </p>
           <p className="text-ink-500 mb-3 text-xs">

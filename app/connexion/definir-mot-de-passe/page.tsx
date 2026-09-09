@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useActionState, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { Suspense, useActionState, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check, Eye, EyeOff } from "lucide-react";
 import {
@@ -17,13 +17,11 @@ import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: DefinirMotDePasseState = {};
 
-// Défaut = charte Abeil (`app/globals.css`) — affiché le temps du fetch
-// vers `/api/branding-public`, même mécanisme que `app/connexion/page.tsx`
-// (09/09/2026, e-mails d'invitation brandés par tenant — `slug` arrive ici
-// via `app/connexion/confirmer/[type]/page.tsx` puis `/auth/confirm`).
+// Seul le logo est spécifique au tenant sur cette page (09/09/2026,
+// recentrage du branding sur le header/la nav secondaire uniquement) —
+// même mécanisme que `app/connexion/page.tsx` (`slug` arrive ici via
+// `app/connexion/confirmer/[type]/page.tsx` puis `/auth/confirm`).
 const BRANDING_DEFAUT = {
-  couleurNavy: "#001e32",
-  couleurJaune: "#ebc850",
   logoUrlFondClair: null as string | null,
 };
 
@@ -75,12 +73,7 @@ function FormulaireDefinirMotDePasse() {
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled)
-          setBranding({
-            couleurNavy: data.couleurNavy,
-            couleurJaune: data.couleurJaune,
-            logoUrlFondClair: data.logoUrlFondClair,
-          });
+        if (!cancelled) setBranding({ logoUrlFondClair: data.logoUrlFondClair });
       })
       .catch(() => {});
     return () => {
@@ -109,15 +102,7 @@ function FormulaireDefinirMotDePasse() {
   const erreur = erreurLocale || state.error;
 
   return (
-    <div
-      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
-      style={
-        {
-          "--color-brand-primary": branding.couleurNavy,
-          "--color-brand-accent": branding.couleurJaune,
-        } as CSSProperties
-      }
-    >
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
       <form
         action={formAction}
         onSubmit={handleSubmit}
@@ -132,11 +117,11 @@ function FormulaireDefinirMotDePasse() {
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-brand-primary text-xl font-semibold">Définir un mot de passe</p>
+          <p className="text-ink-900 text-xl font-semibold">Définir un mot de passe</p>
         </div>
 
         <div>
-          <label htmlFor="motDePasse" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="motDePasse" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Nouveau mot de passe
           </label>
           <div className="relative">
@@ -169,7 +154,7 @@ function FormulaireDefinirMotDePasse() {
         </div>
 
         <div>
-          <label htmlFor="confirmation" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="confirmation" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Confirmer le mot de passe
           </label>
           <div className="relative">

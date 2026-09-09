@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useActionState, useEffect, useState, type CSSProperties } from "react";
+import { Suspense, useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: LoginState = {};
 
-// Défaut = charte Abeil (`app/globals.css`) — affiché le temps du fetch
-// vers `/api/branding-public`, voir plus bas. `logoUrlFondClair` à `null` :
-// fallback sur `/logo-abeil-fond-clair.png` (09/09/2026, phase logo).
+// `logoUrlFondClair` à `null` : fallback sur `/logo-abeil-fond-clair.png`
+// (09/09/2026, phase logo). Seul le logo reste spécifique au tenant sur
+// cette page — les couleurs de texte ont été retirées le 09/09/2026
+// (recentrage du branding sur le header/la nav secondaire uniquement,
+// remarque de Vincent : "les couleurs des H1 et compagnie sont
+// génériques pour tous les tenants").
 const BRANDING_DEFAUT = {
-  couleurNavy: "#001e32",
-  couleurJaune: "#ebc850",
   logoUrlFondClair: null as string | null,
 };
 
@@ -45,9 +46,10 @@ function FormulaireConnexion() {
   // Résolution du tenant par sous-domaine OU par chemin (09/09/2026, phase
   // routing) — avant connexion, la RLS ne permet pas de lire `entreprises`
   // (réservée à l'entreprise de l'utilisateur déjà connecté), d'où cette
-  // route publique dédiée plutôt qu'un accès direct à la table. Bref flash
-  // de la couleur Abeil par défaut le temps du fetch, assumé (page très
-  // simple).
+  // route publique dédiée plutôt qu'un accès direct à la table. Ne sert
+  // plus qu'à résoudre le logo (les couleurs de texte sont génériques,
+  // voir `BRANDING_DEFAUT` ci-dessus) — bref flash du logo Abeil par
+  // défaut le temps du fetch, assumé (page très simple).
   const [branding, setBranding] = useState(BRANDING_DEFAUT);
   useEffect(() => {
     let cancelled = false;
@@ -55,12 +57,7 @@ function FormulaireConnexion() {
     fetch(url)
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled)
-          setBranding({
-            couleurNavy: data.couleurNavy,
-            couleurJaune: data.couleurJaune,
-            logoUrlFondClair: data.logoUrlFondClair,
-          });
+        if (!cancelled) setBranding({ logoUrlFondClair: data.logoUrlFondClair });
       })
       .catch(() => {});
     return () => {
@@ -69,15 +66,7 @@ function FormulaireConnexion() {
   }, [slug]);
 
   return (
-    <div
-      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
-      style={
-        {
-          "--color-brand-primary": branding.couleurNavy,
-          "--color-brand-accent": branding.couleurJaune,
-        } as CSSProperties
-      }
-    >
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
       <form
         action={formAction}
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
@@ -106,11 +95,11 @@ function FormulaireConnexion() {
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-brand-primary text-xl font-semibold">Bienvenue sur Apidays</p>
+          <p className="text-ink-900 text-xl font-semibold">Bienvenue sur Apidays</p>
         </div>
 
         <div>
-          <label htmlFor="email" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="email" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Email
           </label>
           <Input
@@ -125,7 +114,7 @@ function FormulaireConnexion() {
         </div>
 
         <div>
-          <label htmlFor="password" className="text-brand-primary mb-1.5 block text-sm font-bold">
+          <label htmlFor="password" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Mot de passe
           </label>
           <div className="relative">

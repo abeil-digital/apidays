@@ -126,7 +126,7 @@ export function FaqCard() {
     >
       <div className="flex flex-col gap-8 md:flex-row md:gap-16">
         <div className="shrink-0 md:w-72">
-          <h2 className="text-brand-primary text-2xl font-semibold">Questions fréquentes</h2>
+          <h2 className="text-ink-900 text-2xl font-semibold">Questions fréquentes</h2>
           <p className="text-ink-500 mt-2 text-sm">
             Comprendre les quelques principes qui encadrent les congés
           </p>

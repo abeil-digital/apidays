@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { EmailOtpType } from "@supabase/supabase-js";
@@ -56,15 +55,7 @@ export default async function ConfirmerPage({
   )}&type=${type}&next=${encodeURIComponent(next)}`;
 
   return (
-    <div
-      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
-      style={
-        {
-          "--color-brand-primary": branding.couleurNavy,
-          "--color-brand-accent": branding.couleurJaune,
-        } as CSSProperties
-      }
-    >
+    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
       <div className="bg-surface-card rounded-card flex w-full max-w-sm flex-col items-start gap-5 p-6 shadow-sm">
         <div className="flex flex-col items-start gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
@@ -75,7 +66,7 @@ export default async function ConfirmerPage({
             height={710}
             className="h-12 w-auto"
           />
-          <p className="text-brand-primary text-xl font-semibold">
+          <p className="text-ink-900 text-xl font-semibold">
             {lienInvalide ? "Lien invalide" : "Bienvenue sur Apidays"}
           </p>
           <p className="text-ink-500 text-sm">
