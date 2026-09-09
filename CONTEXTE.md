@@ -5263,6 +5263,20 @@ vérifié séparément (email de test invalide provoquant un échec d'invitation
 utilisateurs supprimés proprement, aucune ligne orpheline. Tenant de test, profil et compte auth
 supprimés après vérification.
 
+## Admin — page de connexion dédiée, neutre (09/09/2026)
+
+Retour de Vincent en testant le flux d'onboarding ci-dessus : se connecter à l'espace super-admin
+via `/connexion`, estampillé du logo/couleurs du tenant résolu par sous-domaine (Abeil aujourd'hui),
+n'a pas de sens logiquement. Correctif : `app/admin/connexion/page.tsx` (nouvelle page, habillage
+neutre hérité du layout `app/admin/layout.tsx` — bandeau "Administration — Apidays", pas de logo ni
+de couleurs de tenant), réutilise le même Server Action `login()` que `/connexion` (l'authentification
+reste unique dans l'app, seul l'habillage change). `proxy.ts` redirige désormais tout visiteur non
+connecté sur `/admin/*` vers cette page plutôt que vers `/connexion` (ancien `isRouteConnexion`
+généralisé en `isPageDeConnexion` pour honorer `next` sur les deux pages de login). `/connexion`
+(tenant) inchangée. Vérifié en réel : `tsc`/`eslint`/`npm run build` propres, visite non connectée de
+`/admin` atterrit bien sur `/admin/connexion`, connexion avec le compte super-admin redirige vers
+`/admin`, `/connexion` reste inchangée (branding Abeil normal).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -200,6 +200,12 @@ fonctionnalité de l'app.
   sécurisation des points RLS-bypass ci-dessus.
 - Layout minimal (`app/admin/layout.tsx`), sans `AppShell` — écran platform-level, pas de branding
   tenant.
+- **Page de connexion dédiée** : `app/admin/connexion/page.tsx`, distincte de `/connexion` —
+  `proxy.ts` y redirige tout visiteur non connecté sur `/admin/*` (plutôt que vers `/connexion`).
+  Se connecter à l'espace super-admin via un écran estampillé du logo/couleurs d'un tenant (Abeil
+  aujourd'hui) n'a pas de sens logiquement — remarque de Vincent en testant. Réutilise le même
+  Server Action `login()` (l'authentification reste unique dans l'app), habillage neutre hérité du
+  layout ci-dessus (bandeau "Administration — Apidays", pas de logo ni de couleurs de tenant).
 - `app/admin/page.tsx` : liste en lecture des tenants existants (nom, slug, date de création,
   nombre d'utilisateurs).
 - `app/admin/nouveau/page.tsx` + `app/admin/actions.ts` (`creerTenant`) : formulaire de création —
@@ -217,8 +223,9 @@ fonctionnalité de l'app.
 
 **Via `/admin`** (recommandé, remplace les scripts `service_role` utilisés pendant la construction
 de ce chantier) :
-1. Se connecter avec `vincent.mayol@gmail.com`.
-2. Aller sur `/admin`, cliquer "Créer un tenant".
+1. Aller sur `/admin` (redirige vers `/admin/connexion`, la page de login dédiée, si pas encore
+   connecté) et se connecter avec `vincent.mayol@gmail.com`.
+2. Cliquer "Créer un tenant".
 3. Renseigner nom, slug (lettres minuscules/chiffres/tirets), couleurs optionnelles, et
    prénom/nom/email du premier admin.
 4. Le premier admin reçoit un email d'invitation (même parcours que "Créer un profil" dans
