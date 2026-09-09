@@ -14,8 +14,15 @@ import { createServerClient } from "@supabase/ssr";
  * (04/09/2026, "Fin de contrat" — voir `definirFinContrat` dans
  * `utilisateurs.repository.ts`). La RLS reste la protection de fond côté
  * données ; ceci n'est qu'une redirection optimiste côté route.
+ *
+ * `/admin/connexion` (09/09/2026) : page de login dédiée, neutre — pas la
+ * charte du tenant résolu par sous-domaine, pour éviter la confusion
+ * relevée par Vincent en testant ("problème logique de se connecter à
+ * l'admin via un espace de login estampillé Abeil"). Un visiteur non
+ * connecté sur /admin/* est redirigé ici plutôt que vers /connexion.
  */
 const ROUTE_CONNEXION = "/connexion";
+const ROUTE_ADMIN_CONNEXION = "/admin/connexion";
 const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
 const PREFIXE_SUPER_ADMIN = "/admin";
 
@@ -34,6 +41,7 @@ function estRoutePublique(pathname: string): boolean {
     pathname === "/auth/confirm" ||
     pathname === ROUTE_CONNEXION ||
     pathname.startsWith(`${ROUTE_CONNEXION}/`) ||
+    pathname === ROUTE_ADMIN_CONNEXION ||
     pathname.startsWith("/api/cron/") ||
     pathname === "/api/branding-public"
   );
@@ -69,17 +77,23 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isRouteConnexion = request.nextUrl.pathname === ROUTE_CONNEXION;
+  const isPageDeConnexion =
+    request.nextUrl.pathname === ROUTE_CONNEXION ||
+    request.nextUrl.pathname === ROUTE_ADMIN_CONNEXION;
   const routePublique = estRoutePublique(request.nextUrl.pathname);
 
   if (!user && !routePublique) {
     // `next` (08/09/2026) : conserve la destination d'origine (ex. lien de
     // notification email vers `/suivre/demandes?statut=en_attente`) pour y
     // renvoyer une fois connecté, plutôt que de perdre le contexte et
-    // atterrir sur l'Accueil — voir `app/connexion/actions.ts`.
+    // atterrir sur l'Accueil — voir `app/connexion/actions.ts`. Un visiteur
+    // non connecté sur /admin/* atterrit sur la page de login dédiée
+    // (09/09/2026), pas la page de connexion tenant.
     const next = request.nextUrl.pathname + request.nextUrl.search;
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = ROUTE_CONNEXION;
+    redirectUrl.pathname = request.nextUrl.pathname.startsWith(PREFIXE_SUPER_ADMIN)
+      ? ROUTE_ADMIN_CONNEXION
+      : ROUTE_CONNEXION;
     redirectUrl.search = "";
     redirectUrl.searchParams.set("next", next);
     return NextResponse.redirect(redirectUrl);
@@ -102,7 +116,7 @@ export async function proxy(request: NextRequest) {
 
     if (contratTermine) {
       await supabase.auth.signOut();
-      if (!isRouteConnexion) {
+      if (!isPageDeConnexion) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = ROUTE_CONNEXION;
         return NextResponse.redirect(redirectUrl);
@@ -110,7 +124,7 @@ export async function proxy(request: NextRequest) {
       return response;
     }
 
-    if (isRouteConnexion) {
+    if (isPageDeConnexion) {
       // Honore `next` si présent et sûr (chemin relatif, pas de
       // `//host-externe` — un utilisateur authentifié peut arriver ici via
       // un lien avec `?next=...` déjà consommé par la page de connexion,
