@@ -10,6 +10,10 @@ import { echapperHtml } from "@/lib/html";
 // sans jamais renvoyer deux fois le même récap (voir plan §4).
 const TOLERANCE_MS = 6 * 24 * 60 * 60 * 1000;
 
+// Unique tenant réel aujourd'hui (fondations multi-tenant, 09/09/2026) —
+// voir le commentaire plus bas sur les deux `.eq("entreprise_id", ...)`.
+const ABEIL_ENTREPRISE_ID = "c52b18b8-73b0-403c-990c-b2b4894acb92";
+
 /**
  * Cron Vercel quotidien (`vercel.json`, 18h UTC — plan Hobby limité à une
  * exécution/jour, un cron horaire est refusé au déploiement). Le
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest) {
     await admin
       .from("parametrage_notifications")
       .update({ dernier_envoi_digest: maintenant.toISOString() })
-      .eq("id", "00000000-0000-0000-0000-000000000001");
+      .eq("entreprise_id", ABEIL_ENTREPRISE_ID); // voir commentaire plus bas
     return NextResponse.json({ ok: true, envoye: false, raison: "aucune demande" });
   }
 
@@ -100,10 +104,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // 09/09/2026, fondations multi-tenant : `parametrage_notifications` a
+  // maintenant `entreprise_id` comme clé primaire (plus de `id` fixe). Ce
+  // fichier tourne en `service_role` (hors RLS), donc encore en dur sur
+  // l'unique tenant réel — filtrer proprement par tenant résolu fait partie
+  // du chantier "sécuriser les points RLS-bypass" (Backlog, explicitement
+  // hors scope de ce correctif).
   await admin
     .from("parametrage_notifications")
     .update({ dernier_envoi_digest: maintenant.toISOString() })
-    .eq("id", "00000000-0000-0000-0000-000000000001");
+    .eq("entreprise_id", ABEIL_ENTREPRISE_ID);
 
   return NextResponse.json({ ok: true, envoye: destinataires.length > 0, nb: demandes.length });
 }

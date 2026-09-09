@@ -22,10 +22,32 @@ create type demi_journee as enum ('matin', 'apres_midi');
 create type statut_demande as enum ('en_attente', 'validee', 'refusee', 'annulee');
 
 -- ------------------------------------------------------------
+-- ENTREPRISES (multi-tenant, 09/09/2026 — fondations)
+-- Une ligne par client. `entreprise_id` posé sur chaque table métier ci-
+-- dessous, valeur par défaut vers Abeil (seul tenant réel aujourd'hui) pour
+-- que le code applicatif existant continue de fonctionner sans changement —
+-- ce `default` est un pont temporaire, à retirer une fois la résolution du
+-- tenant courant câblée dans l'app (routing par sous-domaine, chantier
+-- séparé, voir Backlog). `types_absences`/`jours_feries` restent des tables
+-- de référence globales, partagées par toutes les entreprises — pas de
+-- `entreprise_id` dessus (décision du 09/09/2026, plus simple pour démarrer ;
+-- une entreprise peut désactiver un type via une règle d'acquisition à
+-- zéro).
+-- ------------------------------------------------------------
+create table entreprises (
+  id uuid primary key default gen_random_uuid(),
+  nom text not null,
+  created_at timestamptz not null default now()
+);
+
+insert into entreprises (id, nom) values ('c52b18b8-73b0-403c-990c-b2b4894acb92', 'Abeil');
+
+-- ------------------------------------------------------------
 -- UTILISATEURS
 -- ------------------------------------------------------------
 create table utilisateurs (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   auth_id uuid unique references auth.users(id) on delete set null,
   prenom text not null,
   nom text not null,
@@ -66,6 +88,7 @@ create table utilisateurs (
 -- d'un manager sur un sous-ensemble de salariés) reviendrait un jour.
 create table manager_salaries (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   salarie_id uuid not null references utilisateurs(id) on delete cascade,
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -75,6 +98,7 @@ create table manager_salaries (
 -- Délégation temporaire du droit de validation
 create table delegations_validation (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   delegataire_id uuid not null references utilisateurs(id) on delete cascade,
   date_debut date not null,
@@ -85,6 +109,7 @@ create table delegations_validation (
 -- Destinataires en copie des notifications de validation/refus d'un manager
 create table copies_notifications (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   manager_id uuid not null references utilisateurs(id) on delete cascade,
   copie_utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -92,7 +117,9 @@ create table copies_notifications (
 );
 
 -- ------------------------------------------------------------
--- TYPES D'ABSENCE
+-- TYPES D'ABSENCE — table de référence globale, partagée par toutes les
+-- entreprises (voir commentaire ENTREPRISES ci-dessus) : pas de
+-- entreprise_id.
 -- ------------------------------------------------------------
 create table types_absences (
   id uuid primary key default gen_random_uuid(),
@@ -124,6 +151,7 @@ insert into types_absences (code, libelle, necessite_solde) values
 -- ------------------------------------------------------------
 create table soldes (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   periode_debut date not null,
@@ -137,6 +165,7 @@ create table soldes (
 -- Historique des ajustements manuels de solde par Delphine (traçabilité obligatoire)
 create table historique_soldes (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   solde_id uuid not null references soldes(id) on delete cascade,
   ancien_solde_reel numeric(5,2) not null,
   nouveau_solde_reel numeric(5,2) not null,
@@ -150,6 +179,7 @@ create table historique_soldes (
 -- ------------------------------------------------------------
 create table demandes_conges (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date_debut date not null,
@@ -194,6 +224,7 @@ create table demandes_conges (
 -- décision — voir le repli côté app sur `dateDecision` pour ce cas.
 create table decisions_demande (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   demande_id uuid not null references demandes_conges(id) on delete cascade,
   statut statut_demande not null,
   commentaire text,
@@ -202,7 +233,8 @@ create table decisions_demande (
 );
 
 -- ------------------------------------------------------------
--- JOURS FÉRIÉS
+-- JOURS FÉRIÉS — table de référence globale (voir commentaire ENTREPRISES
+-- ci-dessus) : pas de entreprise_id.
 -- ------------------------------------------------------------
 create table jours_feries (
   id uuid primary key default gen_random_uuid(),
@@ -219,13 +251,15 @@ create table jours_feries (
 -- ------------------------------------------------------------
 create table parametrage_periode (
   id uuid primary key default gen_random_uuid(),
-  annee int not null unique,
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
+  annee int not null,
   semaine_aout_imposee date not null, -- lundi de la semaine du 15 août, calculé automatiquement
   nb_demi_journees_cible int not null default 16, -- configurable, pas figé en dur
   jour_semaine_defaut int not null default 5, -- ISO : 1=lundi … 5=vendredi … 7=dimanche, configurable
   defini_par uuid references utilisateurs(id),
   created_at timestamptz not null default now(),
-  valide_le timestamptz -- date de publication du paramétrage (visible par les collaborateurs) ; null = brouillon
+  valide_le timestamptz, -- date de publication du paramétrage (visible par les collaborateurs) ; null = brouillon
+  unique (entreprise_id, annee)
 );
 
 -- Demi-journées imposées pour une période donnée — nomenclature "DJ imposées"
@@ -233,6 +267,7 @@ create table parametrage_periode (
 -- DJ_IMPOSEE de types_absences, indépendant du solde RTT (regles_acquisition).
 create table demi_journees_imposees (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date date not null,
@@ -244,6 +279,7 @@ create table demi_journees_imposees (
 -- indépendant du solde CP (regles_acquisition).
 create table conges_imposes (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   parametrage_periode_id uuid not null references parametrage_periode(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   date_debut date not null,
@@ -276,6 +312,7 @@ alter table demandes_conges
 -- ------------------------------------------------------------
 create table regles_acquisition (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   type_absence_id uuid not null references types_absences(id),
   periode_debut_mois int not null,  -- 1-12
   periode_debut_jour int not null,  -- 1-31
@@ -283,25 +320,28 @@ create table regles_acquisition (
   report_autorise boolean not null default false,
   anticipation_autorisee boolean not null default false,
   updated_at timestamptz not null default now(),
-  unique (type_absence_id)
+  unique (entreprise_id, type_absence_id)
 );
 
 -- Objectifs annuels de volume CPI/DJI, paramétrés depuis Congés & RTT et
 -- consommés par l'écran Calendrier (cible affichée sur les pastilles de
 -- progression CPI/DJI, condition de publication du paramétrage d'une année).
--- Une seule ligne (id fixe) — pas de table de paramètres génériques dans ce
--- projet, on garde le même schéma singleton que le seed ci-dessous.
+-- Une seule ligne PAR ENTREPRISE (09/09/2026, remplace l'ancien id fixe
+-- global — voir commentaire ENTREPRISES en tête de fichier) — pas de table
+-- de paramètres génériques dans ce projet, on garde le même principe
+-- singleton, juste scopé par tenant désormais.
 create table objectifs_calendrier (
-  id uuid primary key default '00000000-0000-0000-0000-000000000001',
+  entreprise_id uuid primary key references entreprises(id),
   cible_jours_cpi numeric(5,2) not null default 5,
   cible_demi_journees_dji int not null default 16,
   updated_at timestamptz not null default now()
 );
 
-insert into objectifs_calendrier (id) values ('00000000-0000-0000-0000-000000000001');
+insert into objectifs_calendrier (entreprise_id) values ('c52b18b8-73b0-403c-990c-b2b4894acb92');
 
 -- Réglage des notifications email de nouvelle demande de congé (Paramétrer >
--- Notifications, 08/09/2026) — même idiome singleton qu'objectifs_calendrier.
+-- Notifications, 08/09/2026) — même idiome singleton qu'objectifs_calendrier,
+-- une ligne par entreprise depuis le 09/09/2026 (voir commentaire ci-dessus).
 -- jour_recap/heure_recap : jour ISO (1=lundi...7=dimanche) et heure UTC du
 -- récap hebdomadaire (conversion Paris → UTC faite côté page de paramétrage).
 -- dernier_envoi_digest sert de watermark anti-doublon au cron
@@ -311,7 +351,7 @@ create type frequence_notification as enum ('immediate', 'hebdomadaire');
 create type notif_decision_collaborateur as enum ('tous', 'refus_uniquement', 'aucune');
 
 create table parametrage_notifications (
-  id uuid primary key default '00000000-0000-0000-0000-000000000001',
+  entreprise_id uuid primary key references entreprises(id),
   frequence frequence_notification not null default 'immediate',
   jour_recap int not null default 1,
   heure_recap int not null default 9,
@@ -325,11 +365,12 @@ create table parametrage_notifications (
   constraint heure_recap_valide check (heure_recap between 0 and 23)
 );
 
-insert into parametrage_notifications (id) values ('00000000-0000-0000-0000-000000000001');
+insert into parametrage_notifications (entreprise_id) values ('c52b18b8-73b0-403c-990c-b2b4894acb92');
 
 -- Jours supplémentaires selon l'ancienneté — rattaché aux CP uniquement
 create table regles_anciennete (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   type_absence_id uuid not null references types_absences(id),
   seuil_annees int not null,
   jours_supplementaires numeric(4,1) not null,
@@ -343,6 +384,7 @@ create table regles_anciennete (
 -- non publiée par défaut à la création.
 create table faqs (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   question text not null,
   reponse text not null,
   publie boolean not null default false,
@@ -359,6 +401,7 @@ create table faqs (
 -- (correction à la baisse).
 create table ajustements_solde (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   type_absence_id uuid not null references types_absences(id),
   delta_jours numeric(5,2) not null,
@@ -382,6 +425,7 @@ create table ajustements_solde (
 -- informatif/RH ici.
 create table historique_utilisateur (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
   champ text not null check (champ in ('taux_activite', 'nature_contrat')),
   ancienne_valeur text,
@@ -403,6 +447,7 @@ create table historique_utilisateur (
 -- la valeur précédente, pas de "Suivi des modifications".
 create table soldes_initiaux (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   utilisateur_id uuid not null unique references utilisateurs(id) on delete cascade,
   date_reference date not null,
   cp numeric not null default 0,
@@ -413,18 +458,20 @@ create table soldes_initiaux (
 );
 
 -- Transmission paie (24/08/2026) — un enregistrement par clic sur
--- "Transmettre" (Suivre > Clôture paie). Une seule transmission par période
--- (`exports_paie_periode_unique`) : évite un doublon si l'action est rejouée
--- sur la même période (double-clic/rechargement).
+-- "Transmettre" (Suivre > Clôture paie). Une seule transmission par
+-- entreprise et par période (`exports_paie_periode_unique`) : évite un
+-- doublon si l'action est rejouée sur la même période (double-clic/
+-- rechargement).
 create table exports_paie (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   periode_debut date not null,
   periode_fin date not null,
   genere_le timestamptz not null default now(),
   genere_par uuid not null references utilisateurs(id)
 );
 
-create unique index exports_paie_periode_unique on exports_paie (periode_debut, periode_fin);
+create unique index exports_paie_periode_unique on exports_paie (entreprise_id, periode_debut, periode_fin);
 
 -- Ledger de transmission (24/08/2026) — combien de jours d'une demande sont
 -- partis dans quel export. Porté ici plutôt que sur `demandes_conges`
@@ -439,6 +486,7 @@ create unique index exports_paie_periode_unique on exports_paie (periode_debut, 
 -- aucun appelant).
 create table export_paie_lignes (
   id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default 'c52b18b8-73b0-403c-990c-b2b4894acb92',
   export_paie_id uuid not null references exports_paie(id) on delete cascade,
   demande_id uuid not null references demandes_conges(id) on delete cascade,
   jours_inclus numeric(5,1) not null,
@@ -460,6 +508,7 @@ create index historique_utilisateur_utilisateur_id_champ_idx
   on historique_utilisateur (utilisateur_id, champ, date_effet);
 create index export_paie_lignes_demande_idx on export_paie_lignes(demande_id);
 create index export_paie_lignes_export_idx on export_paie_lignes(export_paie_id);
+create index idx_utilisateurs_entreprise on utilisateurs(entreprise_id);
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY
@@ -469,6 +518,7 @@ create index export_paie_lignes_export_idx on export_paie_lignes(export_paie_id)
 -- Le rôle "service_role" (utilisé côté serveur) contourne RLS
 -- par défaut et n'est pas concerné par ce verrou.
 -- ------------------------------------------------------------
+alter table entreprises enable row level security;
 alter table utilisateurs enable row level security;
 alter table manager_salaries enable row level security;
 alter table delegations_validation enable row level security;
@@ -498,6 +548,7 @@ alter table export_paie_lignes enable row level security;
 -- ------------------------------------------------------------
 -- nature_contrat volontairement absent ici : ces profils ont été créés avant
 -- l'ajout de la colonne (nullable, pas de backfill forcé) — voir plus haut.
+-- entreprise_id non précisé : reprend le default (Abeil), seul tenant réel.
 insert into utilisateurs (auth_id, prenom, nom, email, role, date_entree, type_contrat)
 values
   ('44268804-dff6-4d08-a23d-cb452dd83420', 'Delphine', 'Test', 'test-admin@abeil.local', 'admin', '2020-01-01', 'temps_plein'),
@@ -534,6 +585,19 @@ stable
 set search_path = public
 as $$
   select role from utilisateurs where auth_id = auth.uid();
+$$;
+
+-- Multi-tenant (09/09/2026, fondations) — même forme que my_role()/
+-- my_utilisateur_id() ci-dessus. Chaque policy scope désormais aussi sur
+-- `entreprise_id = my_entreprise_id()`.
+create or replace function my_entreprise_id()
+returns uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select entreprise_id from utilisateurs where auth_id = auth.uid();
 $$;
 
 -- Plus utilisée par les policies (manager = directeur, autorité globale,
@@ -574,6 +638,13 @@ end;
 $$;
 
 -- ------------------------------------------------------------
+-- POLICIES — entreprises
+-- ------------------------------------------------------------
+create policy "entreprises: lecture de sa propre entreprise"
+  on entreprises for select
+  using (id = my_entreprise_id());
+
+-- ------------------------------------------------------------
 -- POLICIES — utilisateurs
 -- ------------------------------------------------------------
 create policy "utilisateurs: lecture de son propre profil"
@@ -585,68 +656,69 @@ create policy "utilisateurs: lecture de son propre profil"
 -- ce scope mais conservée en base).
 create policy "utilisateurs: manager lit tous les profils"
   on utilisateurs for select
-  using (my_role() = 'manager');
+  using (my_role() = 'manager' and entreprise_id = my_entreprise_id());
 
 create policy "utilisateurs: admin lit tout"
   on utilisateurs for select
-  using (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 create policy "utilisateurs: admin crée les profils"
   on utilisateurs for insert
-  with check (my_role() = 'admin');
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 create policy "utilisateurs: admin modifie les profils (dont archivage)"
   on utilisateurs for update
-  using (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — manager_salaries
 -- ------------------------------------------------------------
 create policy "manager_salaries: admin gère tout"
   on manager_salaries for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 create policy "manager_salaries: manager voit ses rattachements"
   on manager_salaries for select
-  using (manager_id = my_utilisateur_id());
+  using (manager_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "manager_salaries: salarié voit son rattachement"
   on manager_salaries for select
-  using (salarie_id = my_utilisateur_id());
+  using (salarie_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — delegations_validation
 -- ------------------------------------------------------------
 create policy "delegations: manager gère ses propres délégations"
   on delegations_validation for all
-  using (manager_id = my_utilisateur_id())
-  with check (manager_id = my_utilisateur_id());
+  using (manager_id = my_utilisateur_id() and entreprise_id = my_entreprise_id())
+  with check (manager_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "delegations: admin gère tout"
   on delegations_validation for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 create policy "delegations: délégataire voit ce qu'on lui a délégué"
   on delegations_validation for select
-  using (delegataire_id = my_utilisateur_id());
+  using (delegataire_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — copies_notifications
 -- ------------------------------------------------------------
 create policy "copies: manager gère ses propres copies"
   on copies_notifications for all
-  using (manager_id = my_utilisateur_id())
-  with check (manager_id = my_utilisateur_id());
+  using (manager_id = my_utilisateur_id() and entreprise_id = my_entreprise_id())
+  with check (manager_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "copies: admin gère tout"
   on copies_notifications for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
--- POLICIES — types_absences (référentiel, lecture large)
+-- POLICIES — types_absences (référentiel global, lecture large — pas de
+-- entreprise_id, voir commentaire en tête de fichier)
 -- ------------------------------------------------------------
 create policy "types_absences: lecture par tout utilisateur authentifié"
   on types_absences for select
@@ -662,40 +734,40 @@ create policy "types_absences: admin modifie"
 -- ------------------------------------------------------------
 create policy "soldes: salarié lit son propre solde"
   on soldes for select
-  using (utilisateur_id = my_utilisateur_id());
+  using (utilisateur_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "soldes: manager lit tous les soldes"
   on soldes for select
-  using (my_role() = 'manager');
+  using (my_role() = 'manager' and entreprise_id = my_entreprise_id());
 
 create policy "soldes: admin gère tout"
   on soldes for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — historique_soldes (traçabilité des ajustements, admin)
 -- ------------------------------------------------------------
 create policy "historique_soldes: admin gère tout"
   on historique_soldes for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — demandes_conges
 -- ------------------------------------------------------------
 create policy "demandes: salarié lit ses propres demandes"
   on demandes_conges for select
-  using (utilisateur_id = my_utilisateur_id());
+  using (utilisateur_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "demandes: salarié crée ses propres demandes"
   on demandes_conges for insert
-  with check (utilisateur_id = my_utilisateur_id());
+  with check (utilisateur_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "demandes: salarié modifie une demande en attente"
   on demandes_conges for update
-  using (utilisateur_id = my_utilisateur_id() and statut = 'en_attente')
-  with check (utilisateur_id = my_utilisateur_id());
+  using (utilisateur_id = my_utilisateur_id() and statut = 'en_attente' and entreprise_id = my_entreprise_id())
+  with check (utilisateur_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 -- 28/08/2026 — "Annuler cette demande" étendu aux congés validés pas encore
 -- transmis en paie (aucune ligne export_paie_lignes) : même principe que la
@@ -711,24 +783,25 @@ create policy "demandes: salarié annule un congé validé non transmis"
     utilisateur_id = my_utilisateur_id()
     and statut = 'validee'
     and conge_impose_id is null
+    and entreprise_id = my_entreprise_id()
     and not exists (
       select 1 from export_paie_lignes el where el.demande_id = demandes_conges.id
     )
   )
-  with check (utilisateur_id = my_utilisateur_id());
+  with check (utilisateur_id = my_utilisateur_id() and entreprise_id = my_entreprise_id());
 
 create policy "demandes: manager lit toutes les demandes"
   on demandes_conges for select
-  using (my_role() = 'manager');
+  using (my_role() = 'manager' and entreprise_id = my_entreprise_id());
 
 create policy "demandes: manager valide/refuse toutes les demandes"
   on demandes_conges for update
-  using (my_role() = 'manager');
+  using (my_role() = 'manager' and entreprise_id = my_entreprise_id());
 
 create policy "demandes: admin gère tout (dont dévalidation)"
   on demandes_conges for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — decisions_demande
@@ -736,7 +809,8 @@ create policy "demandes: admin gère tout (dont dévalidation)"
 create policy "decisions_demande: salarié lit celles de ses propres demandes"
   on decisions_demande for select
   using (
-    exists (
+    entreprise_id = my_entreprise_id()
+    and exists (
       select 1 from demandes_conges d
       where d.id = decisions_demande.demande_id
       and d.utilisateur_id = my_utilisateur_id()
@@ -745,19 +819,20 @@ create policy "decisions_demande: salarié lit celles de ses propres demandes"
 
 create policy "decisions_demande: manager et admin lisent tout"
   on decisions_demande for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "decisions_demande: manager et admin créent"
   on decisions_demande for insert
-  with check (my_role() in ('manager', 'admin'));
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "decisions_demande: admin gère tout"
   on decisions_demande for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
--- POLICIES — jours_feries (référentiel, lecture large)
+-- POLICIES — jours_feries (référentiel global, lecture large — pas de
+-- entreprise_id, voir commentaire en tête de fichier)
 -- ------------------------------------------------------------
 create policy "jours_feries: lecture par tout utilisateur authentifié"
   on jours_feries for select
@@ -773,30 +848,30 @@ create policy "jours_feries: manager et admin modifient"
 -- ------------------------------------------------------------
 create policy "parametrage_periode: lecture par tout utilisateur authentifié"
   on parametrage_periode for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "parametrage_periode: manager et admin modifient"
   on parametrage_periode for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "demi_journees_imposees: lecture par tout utilisateur authentifié"
   on demi_journees_imposees for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "demi_journees_imposees: manager et admin modifient"
   on demi_journees_imposees for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "conges_imposes: lecture par tout utilisateur authentifié"
   on conges_imposes for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "conges_imposes: manager et admin modifient"
   on conges_imposes for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — regles_acquisition & regles_anciennete (moteur de calcul,
@@ -804,39 +879,39 @@ create policy "conges_imposes: manager et admin modifient"
 -- ------------------------------------------------------------
 create policy "regles_acquisition: lecture par tout utilisateur authentifié"
   on regles_acquisition for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "regles_acquisition: manager et admin modifient"
   on regles_acquisition for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "objectifs_calendrier: lecture par tout utilisateur authentifié"
   on objectifs_calendrier for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "objectifs_calendrier: manager et admin modifient"
   on objectifs_calendrier for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "parametrage_notifications: lecture par manager et admin"
   on parametrage_notifications for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "parametrage_notifications: manager et admin modifient"
   on parametrage_notifications for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "regles_anciennete: lecture par tout utilisateur authentifié"
   on regles_anciennete for select
-  using (auth.role() = 'authenticated');
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
 
 create policy "regles_anciennete: manager et admin modifient"
   on regles_anciennete for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — faqs (Paramétrer > FAQ, Accueil > FaqCard) — un collaborateur
@@ -845,16 +920,16 @@ create policy "regles_anciennete: manager et admin modifient"
 -- ------------------------------------------------------------
 create policy "faqs: lecture des FAQ publiées par tout utilisateur authentifié"
   on faqs for select
-  using (auth.role() = 'authenticated' and publie = true);
+  using (auth.role() = 'authenticated' and publie = true and entreprise_id = my_entreprise_id());
 
 create policy "faqs: manager et admin lisent tout"
   on faqs for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "faqs: manager et admin modifient"
   on faqs for all
-  using (my_role() in ('manager', 'admin'))
-  with check (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — ajustements_solde (régulation manuelle, Delphine uniquement)
@@ -867,47 +942,56 @@ create policy "faqs: manager et admin modifient"
 -- correctif appliqué à historique_utilisateur/soldes_initiaux ci-dessous.
 create policy "ajustements_solde: lecture manager, admin ou soi-même"
   on ajustements_solde for select
-  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id())
+  );
 
 create policy "ajustements_solde: admin gère tout"
   on ajustements_solde for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — historique_utilisateur (durée de travail / nature du contrat)
 -- ------------------------------------------------------------
 create policy "historique_utilisateur: lecture manager, admin ou soi-même"
   on historique_utilisateur for select
-  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id())
+  );
 
 create policy "historique_utilisateur: admin gère tout"
   on historique_utilisateur for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — soldes_initiaux (report fiche de paie, lancement en prod)
 -- ------------------------------------------------------------
 create policy "soldes_initiaux: lecture manager, admin ou soi-même"
   on soldes_initiaux for select
-  using (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id());
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id())
+  );
 
 create policy "soldes_initiaux: admin gère tout"
   on soldes_initiaux for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
 -- POLICIES — exports_paie / export_paie_lignes (Suivre > Clôture paie)
 -- ------------------------------------------------------------
 create policy "exports_paie: manager et admin lisent tout"
   on exports_paie for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "exports_paie: manager et admin créent"
   on exports_paie for insert
-  with check (my_role() in ('manager', 'admin'));
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 -- Même correctif que "export_paie_lignes: salarié lit ses propres lignes"
 -- (07/09/2026) — la requête de l'historique embarque `export_paie_lignes` en
@@ -917,7 +1001,8 @@ create policy "exports_paie: manager et admin créent"
 create policy "exports_paie: salarié lit les exports où il apparaît"
   on exports_paie for select
   using (
-    exists (
+    entreprise_id = my_entreprise_id()
+    and exists (
       select 1 from export_paie_lignes epl
       join demandes_conges dc on dc.id = epl.demande_id
       where epl.export_paie_id = exports_paie.id
@@ -927,21 +1012,21 @@ create policy "exports_paie: salarié lit les exports où il apparaît"
 
 create policy "exports_paie: admin gère tout"
   on exports_paie for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 create policy "export_paie_lignes: manager et admin lisent tout"
   on export_paie_lignes for select
-  using (my_role() in ('manager', 'admin'));
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "export_paie_lignes: manager et admin créent"
   on export_paie_lignes for insert
-  with check (my_role() in ('manager', 'admin'));
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
 create policy "export_paie_lignes: admin gère tout"
   on export_paie_lignes for all
-  using (my_role() = 'admin')
-  with check (my_role() = 'admin');
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- Un collaborateur doit voir le badge "Transmis" sur SON PROPRE historique
 -- (07/09/2026, bug remonté par Vincent : "aucun congé n'est signifié comme
@@ -950,7 +1035,8 @@ create policy "export_paie_lignes: admin gère tout"
 create policy "export_paie_lignes: salarié lit ses propres lignes"
   on export_paie_lignes for select
   using (
-    exists (
+    entreprise_id = my_entreprise_id()
+    and exists (
       select 1 from demandes_conges dc
       where dc.id = export_paie_lignes.demande_id
       and dc.utilisateur_id = my_utilisateur_id()
@@ -966,6 +1052,7 @@ create policy "export_paie_lignes: salarié lit ses propres lignes"
 grant usage on schema public to authenticated;
 
 grant select, insert, update, delete on
+  entreprises,
   utilisateurs,
   manager_salaries,
   delegations_validation,
@@ -999,6 +1086,14 @@ to authenticated;
 -- digest lisent `utilisateurs`/`demandes_conges`/`parametrage_notifications`
 -- via ce rôle). `alter default privileges` couvre aussi les tables créées
 -- après ce script (pas de GRANT à ajouter à chaque nouvelle table).
+--
+-- Point d'attention multi-tenant (09/09/2026) : `service_role` contourne
+-- aussi le filtre `entreprise_id` des policies ci-dessus — les fichiers qui
+-- l'utilisent (`app/(app)/parametrer/utilisateurs/actions.ts`,
+-- `app/api/cron/notifications-digest/route.ts`,
+-- `lib/data/notificationsDemandes.actions.ts`, `lib/resend/destinataires.ts`)
+-- doivent filtrer manuellement par tenant en code — chantier séparé, pas
+-- encore fait (voir Backlog "Passage en multi-tenant").
 grant usage on schema public to service_role;
 grant select, insert, update, delete on all tables in schema public to service_role;
 alter default privileges in schema public

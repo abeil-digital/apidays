@@ -7,11 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 
 /**
  * Repository des réglages de notification email (`parametrage_notifications`)
- * — table singleton (une seule ligne, id fixe), même idiome que
- * `objectifs_calendrier`.
+ * — table singleton (une seule ligne PAR ENTREPRISE depuis le 09/09/2026, clé
+ * primaire `entreprise_id`), même idiome que `objectifs_calendrier` — RLS
+ * filtre déjà sur `entreprise_id = my_entreprise_id()`, plus besoin de
+ * filtre explicite côté client.
  */
-
-const ID_SINGLETON = "00000000-0000-0000-0000-000000000001";
 
 interface ParametrageNotificationsRow {
   frequence: "immediate" | "hebdomadaire";
@@ -42,7 +42,6 @@ export async function fetchParametrageNotifications(): Promise<ParametrageNotifi
   const { data, error } = await supabase
     .from("parametrage_notifications")
     .select(SELECT_PARAMETRAGE_NOTIFICATIONS)
-    .eq("id", ID_SINGLETON)
     .single();
 
   if (error || !data) {
@@ -66,7 +65,6 @@ export async function mettreAJourParametrageNotifications(
       copie_administrateur: input.copieAdministrateur,
       notif_decision_collaborateur: input.notifDecisionCollaborateur,
     })
-    .eq("id", ID_SINGLETON)
     .select(SELECT_PARAMETRAGE_NOTIFICATIONS)
     .single();
 

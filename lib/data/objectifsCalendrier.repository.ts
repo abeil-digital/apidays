@@ -3,12 +3,13 @@ import { createClient } from "@/lib/supabase/client";
 
 /**
  * Repository des objectifs annuels CPI/DJI (`objectifs_calendrier`) — table
- * singleton (une seule ligne, id fixe), réglée depuis Paramétrer > Congés &
- * RTT et consommée par l'écran Calendrier. RLS : lecture large authentifiée,
- * écriture manager/admin, comme `regles_acquisition`.
+ * singleton (une seule ligne PAR ENTREPRISE depuis le 09/09/2026, clé
+ * primaire `entreprise_id`), réglée depuis Paramétrer > Congés & RTT et
+ * consommée par l'écran Calendrier. RLS : lecture large authentifiée,
+ * écriture manager/admin, comme `regles_acquisition` — filtre déjà sur
+ * `entreprise_id = my_entreprise_id()`, donc `.single()` résout directement
+ * la ligne de l'entreprise courante sans filtre explicite côté client.
  */
-
-const ID_SINGLETON = "00000000-0000-0000-0000-000000000001";
 
 interface ObjectifsCalendrierRow {
   cible_jours_cpi: number | string;
@@ -30,7 +31,6 @@ export async function fetchObjectifsCalendrier(): Promise<ObjectifsCalendrier> {
   const { data, error } = await supabase
     .from("objectifs_calendrier")
     .select(SELECT_OBJECTIFS_CALENDRIER)
-    .eq("id", ID_SINGLETON)
     .single();
 
   if (error || !data) {
@@ -51,7 +51,6 @@ export async function enregistrerObjectifsCalendrier(
       cible_jours_cpi: input.cibleJoursCpi,
       cible_demi_journees_dji: input.cibleDemiJourneesDji,
     })
-    .eq("id", ID_SINGLETON)
     .select(SELECT_OBJECTIFS_CALENDRIER)
     .single();
 
