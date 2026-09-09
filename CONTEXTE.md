@@ -5118,6 +5118,57 @@ savoir quelle couleur afficher, impossible de les pré-générer au build.
 test rattaché, connexion avec ce compte → capture d'écran confirmant que le bandeau et les accents
 changent bien de couleur. Tenant de test supprimé une fois le test concluant.
 
+## Multi-tenant — résolution du tenant par sous-domaine, branding pré-connexion (09/09/2026)
+
+**Quatrième étape** du chantier multi-tenant, juste après le branding par entreprise ci-dessus. La
+page de connexion restait toujours en branding Abeil, faute de savoir quelle entreprise avant que
+l'utilisateur ne s'authentifie.
+
+**Reformulation importante par rapport à l'inventaire du 08/09/2026** ("propager l'identité du
+tenant au-delà du middleware jusqu'aux Server Actions/repositories") : en creusant, ce n'est **pas
+nécessaire**. Une fois connecté, la RLS (`entreprise_id = my_entreprise_id()`, posée en Phase 1)
+scope déjà tout correctement à partir du profil `utilisateurs` de la personne connectée —
+indépendamment du sous-domaine par lequel elle est arrivée. Le sous-domaine ne sert donc qu'à une
+seule chose concrète aujourd'hui : savoir quoi afficher (logo/couleurs) sur la page de connexion
+avant que quiconque ne soit authentifié. Portée du chantier bien plus resserrée que redouté, pas de
+propagation de tenant dans les Server Actions à construire.
+
+**Décisions prises avec Vincent avant de coder** : aucun domaine/sous-domaine réel n'existe encore
+(Phase 0, DNS/Vercel à configurer plus tard par Vincent quand un vrai 2ᵉ client existera) — codé et
+testé avec un hostname simulé en local. La résolution "quelle entreprise pour ce sous-domaine" avant
+connexion passe par une **route dédiée en `service_role`**, jamais par une policy RLS ouverte à tous
+sur `entreprises` (qui exposerait nom/couleurs de tous les clients à n'importe quel visiteur non
+connecté) — la route ne répond que pour LE sous-domaine demandé, jamais une liste.
+
+**Mécanique** : nouvelle colonne `entreprises.slug` (unique, défaut `'abeil'`). Nouvelle route
+`app/api/branding-public/route.ts` (`GET`, `service_role` via `createAdminClient()`) : lit le
+sous-domaine depuis l'en-tête `Host` (premier label du hostname, ex. `abeil` dans
+`abeil.mondomaine.fr` — retombe sur `abeil` pour `localhost`/le domaine Vercel nu, qui n'ont pas de
+sous-domaine réel), interroge `entreprises` par `slug`, renvoie uniquement `{ nom, couleurNavy,
+couleurJaune }` pour cette seule ligne. Accepte aussi un `?slug=` explicite — uniquement pour les
+tests manuels en local, pas un mécanisme de prod. Défaut Abeil si le sous-domaine ne correspond à
+rien. `proxy.ts` : `/api/branding-public` ajoutée aux routes publiques (appelée depuis la page de
+connexion elle-même, avant toute session). `app/connexion/page.tsx` (`FormulaireConnexion`) : fetch
+la route au montage (`useEffect`), applique `couleurNavy`/`couleurJaune` en variable CSS inline sur
+son conteneur racine — même convention `as CSSProperties` que `AppShell.tsx`. Bref flash de la
+couleur Abeil par défaut le temps du fetch, assumé (page très simple).
+
+**Hors scope, explicitement, repoussé au Backlog** : logo par tenant (reste
+`logo-abeil-fond-clair.png` en dur) ; vérification post-connexion que l'entreprise de l'utilisateur
+correspond au sous-domaine visité (pas une question de sécurité, la RLS suffit — juste du confort,
+pas testable sans un vrai 2ᵉ sous-domaine) ; configuration DNS/Vercel réelle (à faire par Vincent
+quand un vrai client existera).
+
+**Vérifié** : `tsc`/`eslint`/`npm run build` propres. `/api/branding-public` sans override → défaut
+Abeil confirmé (pas de sous-domaine en local). Sous-domaine inconnu (`Host:
+unslug-inconnu.exemple.fr`) → retombe proprement sur Abeil, pas d'erreur. Entreprise de test créée
+via `service_role` (slug `testsub`, couleurs vert foncé `#1a4d2e`/orange `#f4a261`) : résolution par
+`?slug=testsub` et par en-tête `Host: testsub.exemple.fr` confirmées identiques (le parsing du vrai
+`Host` fonctionne, pas seulement le paramètre de test). Test visuel réel sur `/connexion` (fetch
+temporairement forcé vers `?slug=testsub`) : capture d'écran confirmant le titre "Bienvenue sur
+Apidays" rendu en vert au lieu de navy. Fetch revenu à la normale, capture de confirmation : retour
+au branding Abeil par défaut. Tenant de test supprimé après vérification.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
