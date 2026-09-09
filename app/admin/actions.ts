@@ -36,6 +36,19 @@ const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // supprimable depuis cet écran, même par erreur.
 const ID_ABEIL = "c52b18b8-73b0-403c-990c-b2b4894acb92";
 
+/** Supprime les deux lignes singleton d'un tenant (`objectifs_calendrier`,
+ * `parametrage_notifications`) — ordre imposé par la contrainte FK (pas de
+ * `on delete cascade`) avant toute suppression de `entreprises`, que ce
+ * soit un rollback (`creerTenant`) ou une vraie suppression
+ * (`supprimerTenant`). */
+async function supprimerLignesSingleton(
+  admin: ReturnType<typeof createAdminClient>,
+  entrepriseId: string,
+) {
+  await admin.from("objectifs_calendrier").delete().eq("entreprise_id", entrepriseId);
+  await admin.from("parametrage_notifications").delete().eq("entreprise_id", entrepriseId);
+}
+
 /**
  * Crée un tenant (`entreprises`) + son premier admin (`utilisateurs`,
  * invité via un lien généré par `generateLink` puis envoyé "maison" via
@@ -95,6 +108,26 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
     return { ok: false, erreur: "creation_entreprise_echouee" };
   }
 
+  // `objectifs_calendrier`/`parametrage_notifications` sont des tables
+  // singleton — une ligne PAR ENTREPRISE, clé primaire `entreprise_id`
+  // (09/09/2026, fondations multi-tenant). Seule la ligne Abeil existait
+  // (seedée à la main dans schema.sql) ; sans celle-ci pour un nouveau
+  // tenant, Paramétrer > Congés & RTT/Notifications échoue immédiatement
+  // ("Impossible de charger…") — bug réel trouvé en testant "test3".
+  // Toutes les autres colonnes ont un défaut DB, `entreprise_id` suffit.
+  const { error: erreurObjectifs } = await admin
+    .from("objectifs_calendrier")
+    .insert({ entreprise_id: entreprise.id });
+  const { error: erreurNotifications } = await admin
+    .from("parametrage_notifications")
+    .insert({ entreprise_id: entreprise.id });
+
+  if (erreurObjectifs || erreurNotifications) {
+    await supprimerLignesSingleton(admin, entreprise.id);
+    await admin.from("entreprises").delete().eq("id", entreprise.id);
+    return { ok: false, erreur: "creation_entreprise_echouee" };
+  }
+
   const { data: utilisateur, error: erreurUtilisateur } = await admin
     .from("utilisateurs")
     .insert({
@@ -114,6 +147,7 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
     .single();
 
   if (erreurUtilisateur || !utilisateur) {
+    await supprimerLignesSingleton(admin, entreprise.id);
     await admin.from("entreprises").delete().eq("id", entreprise.id);
     if (erreurUtilisateur?.code === "23505") {
       return { ok: false, erreur: "email_deja_utilise" };
@@ -130,6 +164,7 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
 
   if (erreurLien || !lien.user || !lien.properties?.hashed_token) {
     await admin.from("utilisateurs").delete().eq("id", utilisateur.id);
+    await supprimerLignesSingleton(admin, entreprise.id);
     await admin.from("entreprises").delete().eq("id", entreprise.id);
     return { ok: false, erreur: "invite_echouee" };
   }
@@ -141,6 +176,7 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
 
   if (erreurLiaison) {
     await admin.from("utilisateurs").delete().eq("id", utilisateur.id);
+    await supprimerLignesSingleton(admin, entreprise.id);
     await admin.from("entreprises").delete().eq("id", entreprise.id);
     return { ok: false, erreur: "liaison_echouee" };
   }
@@ -175,9 +211,10 @@ export interface SupprimerTenantState {
  * ailleurs dans ce fichier. Abeil (seul tenant réel) est protégée en dur —
  * jamais supprimable depuis cet écran.
  *
- * Ordre imposé par la contrainte FK `utilisateurs.entreprise_id` (pas de
- * `on delete cascade`) : les comptes `auth.users` puis les lignes
- * `utilisateurs` avant la ligne `entreprises`.
+ * Ordre imposé par les contraintes FK (pas de `on delete cascade`) : les
+ * comptes `auth.users`, puis les lignes `utilisateurs`, puis les deux
+ * lignes singleton (`objectifs_calendrier`/`parametrage_notifications`,
+ * voir `supprimerLignesSingleton`), avant la ligne `entreprises`.
  */
 export async function supprimerTenant(entrepriseId: string): Promise<SupprimerTenantState> {
   await assertSuperAdmin();
@@ -200,6 +237,7 @@ export async function supprimerTenant(entrepriseId: string): Promise<SupprimerTe
   }
 
   await admin.from("utilisateurs").delete().eq("entreprise_id", entrepriseId);
+  await supprimerLignesSingleton(admin, entrepriseId);
 
   const { error } = await admin.from("entreprises").delete().eq("id", entrepriseId);
 
