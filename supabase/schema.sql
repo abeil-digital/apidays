@@ -43,10 +43,16 @@ create table entreprises (
   -- lib/data/branding.repository.ts. Défaut = charte Abeil actuelle.
   couleur_navy text not null default '#001e32',
   couleur_yellow text not null default '#ebc850',
+  -- Identifiant de sous-domaine (09/09/2026, phase routing) — résout le
+  -- branding AVANT connexion via app/api/branding-public/route.ts
+  -- (service_role : la RLS ci-dessous n'autorise la lecture qu'à un
+  -- utilisateur déjà connecté, inutilisable pour la page de connexion
+  -- elle-même).
+  slug text not null default 'abeil' unique,
   created_at timestamptz not null default now()
 );
 
-insert into entreprises (id, nom) values ('c52b18b8-73b0-403c-990c-b2b4894acb92', 'Abeil');
+insert into entreprises (id, nom, slug) values ('c52b18b8-73b0-403c-990c-b2b4894acb92', 'Abeil', 'abeil');
 
 -- ------------------------------------------------------------
 -- UTILISATEURS

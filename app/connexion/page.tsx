@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useActionState, useState } from "react";
+import { Suspense, useActionState, useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 const INITIAL_STATE: LoginState = {};
+
+// Défaut = charte Abeil (`app/globals.css`) — affiché le temps du fetch
+// vers `/api/branding-public`, voir plus bas.
+const BRANDING_DEFAUT = { couleurNavy: "#001e32", couleurJaune: "#ebc850" };
 
 // `useSearchParams()` (pour `next`, voir plus bas) exige une frontière
 // Suspense pour rester prérendable statiquement — sinon `next build` échoue
@@ -29,8 +33,35 @@ function FormulaireConnexion() {
   // fois connecté, voir `app/connexion/actions.ts`.
   const next = useSearchParams().get("next") ?? "";
 
+  // Résolution du tenant par sous-domaine (09/09/2026, phase routing) —
+  // avant connexion, la RLS ne permet pas de lire `entreprises` (réservée à
+  // l'entreprise de l'utilisateur déjà connecté), d'où cette route publique
+  // dédiée plutôt qu'un accès direct à la table. Bref flash de la couleur
+  // Abeil par défaut le temps du fetch, assumé (page très simple).
+  const [branding, setBranding] = useState(BRANDING_DEFAUT);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/branding-public")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setBranding({ couleurNavy: data.couleurNavy, couleurJaune: data.couleurJaune });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
-    <div className="bg-surface-app flex min-h-screen items-center justify-center px-4">
+    <div
+      className="bg-surface-app flex min-h-screen items-center justify-center px-4"
+      style={
+        {
+          "--color-brand-primary": branding.couleurNavy,
+          "--color-brand-accent": branding.couleurJaune,
+        } as CSSProperties
+      }
+    >
       <form
         action={formAction}
         className="bg-surface-card rounded-card flex w-full max-w-sm flex-col gap-5 p-6 shadow-sm"
