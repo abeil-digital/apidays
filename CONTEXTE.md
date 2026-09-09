@@ -5277,6 +5277,32 @@ généralisé en `isPageDeConnexion` pour honorer `next` sur les deux pages de l
 `/admin` atterrit bien sur `/admin/connexion`, connexion avec le compte super-admin redirige vers
 `/admin`, `/connexion` reste inchangée (branding Abeil normal).
 
+## Multi-tenant — e-mails d'invitation brandés par tenant + logo à la création (09/09/2026)
+
+Retour de Vincent en testant l'onboarding : l'e-mail d'initialisation du compte du premier admin
+d'un tenant était estampillé Apidays de bout en bout — adresse, contenu, ET logo des pages
+`/connexion/confirmer/*`/`/connexion/definir-mot-de-passe` (non branded en Phase 4, seule
+`/connexion` l'était). Détail complet dans [MULTI-TENANT.md](MULTI-TENANT.md), section "E-mails
+d'invitation brandés par tenant".
+
+En bref : `admin.auth.admin.generateLink` remplace `inviteUserByEmail` aux deux points d'appel
+(`creerTenant`, `inviterUtilisateur`) — crée le compte sans envoyer d'e-mail, l'app construit et
+envoie le sien via `lib/resend/invitation.ts` (nouveau), sur un domaine dédié à la plateforme
+(`notifications@apidays.citizen-d.fr`, distinct de `abeil-conges.citizen-d.fr` — "abeil" n'a pas sa
+place dans l'invitation d'un autre tenant) à vérifier dans Resend par Vincent avant de fonctionner
+en prod. `slug` propagé jusqu'aux pages intermédiaires (`lib/data/brandingPublic.ts`, extrait de
+`app/api/branding-public/route.ts`) sans risque de corruption (le lien n'est plus généré par le
+template Supabase). `/admin/nouveau` gagne aussi 3 champs logo optionnels (mêmes colonnes que le
+chantier logo précédent).
+
+Vérifié : `tsc`/`eslint`/`npm run build` propres. `RESEND_API_KEY` absente en local (Vercel
+seulement) — testé le reste du parcours en générant manuellement un lien via `generateLink` :
+`confirmer/invite` et `définir-mot-de-passe` affichent bien le branding du tenant de test (logo +
+couleurs distinctes), mot de passe défini, atterrissage isolé confirmé. `creerTenant` confirmé
+tolérant à l'échec d'envoi (tenant/compte créés quand même, avertissement affiché, pas de
+rollback pour ce cas précis). Tenant de test supprimé après vérification. Envoi Resend réel à
+confirmer par Vincent une fois le domaine vérifié.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

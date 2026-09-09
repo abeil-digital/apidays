@@ -222,21 +222,72 @@ fonctionnalité de l'app.
 - `app/admin/page.tsx` : liste en lecture des tenants existants (nom, slug, date de création,
   nombre d'utilisateurs).
 - `app/admin/nouveau/page.tsx` + `app/admin/actions.ts` (`creerTenant`) : formulaire de création —
-  nom, slug, couleurs optionnelles, prénom/nom/email du premier admin. Crée `entreprises`, puis
-  `utilisateurs` (`role: admin`, `date_entree` = aujourd'hui, `nature_contrat` laissé `null`,
-  `taux_activite` garde son défaut DB), invite le premier admin par email (même route de
-  confirmation que l'invitation existante, `app/connexion/confirmer/invite`). **Rollback
-  best-effort** si une étape échoue après la création de l'entreprise (supprime `utilisateurs` puis
-  `entreprises`, dans cet ordre — contrainte FK) : évite un tenant orphelin sans admin.
-- Pas de champ logo dans le formulaire (reste réglable par SQL, comme les couleurs peuvent aussi
-  l'être directement en base si besoin). Pas d'édition d'un tenant existant depuis `/admin`
-  aujourd'hui (repoussé, pas de besoin identifié avec un seul vrai client).
+  nom, slug, couleurs et logos optionnels (les 3 mêmes champs que `entreprises.logo_url*`),
+  prénom/nom/email du premier admin. Crée `entreprises`, puis `utilisateurs` (`role: admin`,
+  `date_entree` = aujourd'hui, `nature_contrat` laissé `null`, `taux_activite` garde son défaut DB),
+  invite le premier admin par e-mail (voir "E-mails d'invitation brandés par tenant" ci-dessous).
+  **Rollback best-effort** si la création de l'admin échoue après celle de l'entreprise (supprime
+  `utilisateurs` puis `entreprises`, dans cet ordre — contrainte FK) : évite un tenant orphelin sans
+  admin — un échec d'ENVOI de l'e-mail seul ne déclenche PAS ce rollback (voir plus bas).
+- Pas d'édition d'un tenant existant depuis `/admin` aujourd'hui (repoussé, pas de besoin identifié
+  avec un seul vrai client).
 - **Suppression** (`app/admin/actions.ts`, `supprimerTenant`) : ajoutée après le premier test réel
   de création, pour nettoyer les tenants de test. Supprime les comptes `auth.users` de tous les
   utilisateurs du tenant, puis les lignes `utilisateurs`, puis `entreprises` (ordre imposé par la
   FK). Abeil protégée en dur — jamais supprimable depuis cet écran, même par erreur. Confirmation
   "haute" par popin (`components/admin/SupprimerTenantButton.tsx`) : il faut retaper le slug exact
   du tenant pour activer le bouton, pas un simple `window.confirm`.
+
+## E-mails d'invitation brandés par tenant
+
+**Le problème** : l'e-mail envoyé pour initialiser le compte d'un nouvel utilisateur (premier admin
+d'un tenant, ou tout collaborateur invité ensuite via Paramétrer > Utilisateurs) était estampillé
+Apidays/Abeil de bout en bout — adresse d'envoi, contenu, ET logo des pages
+`/connexion/confirmer/*`/`/connexion/definir-mot-de-passe` sur lesquelles ce lien atterrit (ces
+pages n'avaient volontairement pas été branded en Phase 4, seule `/connexion` elle-même l'était).
+Le template natif Supabase Auth est unique pour tout le projet — pas possible de le faire varier
+par tenant sans le remplacer.
+
+**Mécanique** : `admin.auth.admin.generateLink({ type: "invite", email, options: { redirectTo } })`
+remplace `inviteUserByEmail` aux deux points d'appel (`app/admin/actions.ts` `creerTenant`,
+`app/(app)/parametrer/utilisateurs/actions.ts` `inviterUtilisateur`) — crée le compte `auth.users`
+identiquement, mais **sans envoyer d'e-mail**. `lib/resend/invitation.ts` (`envoyerInvitation`)
+envoie le sien à la place, via Resend (déjà utilisé pour les notifications de demandes de congés,
+`lib/resend/notifications.ts`) :
+- Lien construit par l'app elle-même à partir de `properties.hashed_token` renvoyé par
+  `generateLink` — jamais par le moteur de template Supabase (celui qui corrompt tout paramètre de
+  requête au-delà du premier, voir commentaire `app/connexion/confirmer/[type]/page.tsx`), donc
+  libre d'y ajouter `?slug=<slug>` en plus de `token_hash` sans risque.
+- Logo du tenant (`logo_url_fond_clair`, converti en URL absolue si c'est un chemin `public/` — un
+  `<img>` d'e-mail n'a pas de contexte d'origine, contrairement à l'app) ; pas de logo par défaut
+  Abeil si le tenant n'en a pas configuré (jamais le logo d'un AUTRE tenant dans cet e-mail-là).
+- **Domaine d'envoi dédié à la plateforme**, `notifications@apidays.citizen-d.fr` — distinct de
+  `abeil-conges.citizen-d.fr` (notifications propres à Abeil, inchangé) : "abeil" n'a pas sa place
+  dans l'adresse d'invitation d'un AUTRE tenant. Seul le domaine reste unique (vérification
+  DKIM/SPF/DMARC par tenant non réaliste à ce stade) — le **nom d'expéditeur affiché** varie par
+  tenant (ex. `"Mon Client" <notifications@apidays.citizen-d.fr>`). **Ce domaine doit être vérifié
+  dans Resend (DNS) par Vincent avant de fonctionner** — sans ça, l'envoi échoue proprement (voir
+  ci-dessous), rien à corriger côté code dans ce cas.
+
+`slug` propagé jusqu'à `/connexion/definir-mot-de-passe` via `next` (`/auth/confirm` relaie déjà
+`next` verbatim, inchangé) — `app/connexion/confirmer/[type]/page.tsx` et
+`app/connexion/definir-mot-de-passe/page.tsx` appliquent le même mécanisme de branding par slug que
+`/connexion` (`lib/data/brandingPublic.ts`, extrait de `app/api/branding-public/route.ts` pour être
+aussi appelable directement depuis un Server Component).
+
+**Tolérance à l'échec d'envoi** — différente selon le point d'appel :
+- `creerTenant` (`/admin`) : le tenant/compte restent créés même si l'envoi échoue (Resend
+  indisponible, domaine pas encore vérifié...) — supprimer un compte qui fonctionne à cause d'un
+  e-mail non parti serait pire que le problème. Un avertissement (`CreerTenantState.avertissement`)
+  s'affiche à la place du toast de succès sur `/admin`, pas de "renvoyer" pour l'instant (à ajouter
+  si le besoin se confirme).
+- `inviterUtilisateur` (Paramétrer > Utilisateurs) : comportement inchangé, un échec renvoie
+  `{ ok: false }` — l'UI existante propose déjà "Renvoyer l'invitation".
+
+**Hors scope, explicitement** : les e-mails de réinitialisation de mot de passe
+(`resetPasswordForEmail`, self-service et depuis la fiche utilisateur) restent sur le template
+Supabase par défaut — chantier séparé si besoin (même mécanisme réutilisable). La page
+`/connexion/mot-de-passe-oublie` reste donc aussi non brandée (aucun `slug` n'y transite).
 
 ## Comment créer/tester un tenant
 
@@ -245,11 +296,12 @@ de ce chantier) :
 1. Aller sur `/admin` (redirige vers `/admin/connexion`, la page de login dédiée, si pas encore
    connecté) et se connecter avec `vincent.mayol@gmail.com`.
 2. Cliquer "Créer un tenant".
-3. Renseigner nom, slug (lettres minuscules/chiffres/tirets), couleurs optionnelles, et
+3. Renseigner nom, slug (lettres minuscules/chiffres/tirets), couleurs/logos optionnels, et
    prénom/nom/email du premier admin.
-4. Le premier admin reçoit un email d'invitation (même parcours que "Créer un profil" dans
-   Paramétrer > Utilisateurs) — il définit son mot de passe et arrive directement sur son tenant,
-   isolé du reste.
+4. Le premier admin reçoit un e-mail d'invitation brandé à son nom (voir "E-mails d'invitation
+   brandés par tenant" — nécessite `apidays.citizen-d.fr` vérifié dans Resend, sinon `/admin`
+   affiche un avertissement mais le tenant/compte sont quand même créés) — il définit son mot de
+   passe et arrive directement sur son tenant, isolé du reste.
 
 **Pour vérifier l'isolation** : se connecter avec le compte du nouveau tenant, confirmer qu'aucune
 donnée Abeil n'apparaît (soldes, demandes, calendrier, paramétrages tous vides/propres à ce
@@ -278,6 +330,15 @@ et retaper son slug dans la popin de confirmation — supprime les comptes `auth
   problème de sécurité — pas testable de toute façon sans un vrai 2ᵉ sous-domaine.
 - **Pas d'édition/désactivation d'un tenant existant depuis `/admin`** — repoussé faute de besoin
   identifié avec un seul vrai client.
+- **`apidays.citizen-d.fr` pas encore vérifié dans Resend** — les e-mails d'invitation échouent
+  proprement (`{ ok: false }`) tant que Vincent n'a pas ajouté les enregistrements DNS SPF/DKIM/DMARC
+  fournis par Resend pour ce domaine (même chose que ce qui a dû être fait pour
+  `abeil-conges.citizen-d.fr`). Testé en local en générant manuellement un lien
+  (`admin.auth.admin.generateLink`) plutôt qu'en recevant un vrai e-mail —
+  `RESEND_API_KEY` n'existe que sur Vercel, pas en local.
+- **Réinitialisation de mot de passe non brandée** — `resetPasswordForEmail` (self-service et depuis
+  la fiche utilisateur) reste sur le template Supabase par défaut, hors scope du chantier e-mails
+  d'invitation (même mécanisme réutilisable si besoin).
 - **Le `default` vers l'uuid Abeil sur les 19 colonnes `entreprise_id`** reste un pont temporaire.
   Il ne gêne rien tant que toute création de compte/ligne passe par un flux qui connaît déjà le bon
   tenant (RLS post-connexion, ou `service_role` explicite dans `app/admin/actions.ts`) — mais il ne
