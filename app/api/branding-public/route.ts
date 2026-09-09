@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Filet de sécurité — mêmes valeurs que le défaut `entreprises` en base
-// (`supabase/schema.sql`) et que `app/globals.css`.
-const DEFAULT_BRANDING = { nom: "Abeil", couleurNavy: "#001e32", couleurJaune: "#ebc850" };
+// (`supabase/schema.sql`) et que `app/globals.css`. `logoUrlFondClair` à
+// `null` : fallback sur le fichier Abeil en dur côté page de connexion.
+const DEFAULT_BRANDING = {
+  nom: "Abeil",
+  couleurNavy: "#001e32",
+  couleurJaune: "#ebc850",
+  logoUrlFondClair: null as string | null,
+};
 
 /**
  * Résolution publique du branding (nom + couleurs) d'UNE SEULE entreprise,
@@ -34,7 +40,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     const { data } = await admin
       .from("entreprises")
-      .select("nom, couleur_navy, couleur_yellow")
+      .select("nom, couleur_navy, couleur_yellow, logo_url_fond_clair")
       .eq("slug", slug)
       .single();
 
@@ -46,6 +52,7 @@ export async function GET(request: NextRequest) {
       nom: data.nom,
       couleurNavy: data.couleur_navy,
       couleurJaune: data.couleur_yellow,
+      logoUrlFondClair: data.logo_url_fond_clair,
     });
   } catch {
     return NextResponse.json(DEFAULT_BRANDING);

@@ -49,6 +49,16 @@ create table entreprises (
   -- utilisateur déjà connecté, inutilisable pour la page de connexion
   -- elle-même).
   slug text not null default 'abeil' unique,
+  -- Logo du tenant (09/09/2026, phase logo) — 3 variantes selon l'usage
+  -- réel dans l'app (fond navy du header, fond clair des pages /connexion,
+  -- petit signe du rail SideNav), voir lib/data/branding.repository.ts et
+  -- app/api/branding-public/route.ts. Nullable, PAS de défaut : `null` ⇒
+  -- fallback sur le fichier Abeil en dur côté composant
+  -- (HeaderBar.tsx/SideNav.tsx/connexion/page.tsx), pas de chemin de
+  -- fichier dupliqué en base.
+  logo_url text,
+  logo_url_fond_clair text,
+  logo_url_signe text,
   created_at timestamptz not null default now()
 );
 

@@ -11,8 +11,13 @@ import { Input } from "@/components/ui/Input";
 const INITIAL_STATE: LoginState = {};
 
 // Défaut = charte Abeil (`app/globals.css`) — affiché le temps du fetch
-// vers `/api/branding-public`, voir plus bas.
-const BRANDING_DEFAUT = { couleurNavy: "#001e32", couleurJaune: "#ebc850" };
+// vers `/api/branding-public`, voir plus bas. `logoUrlFondClair` à `null` :
+// fallback sur `/logo-abeil-fond-clair.png` (09/09/2026, phase logo).
+const BRANDING_DEFAUT = {
+  couleurNavy: "#001e32",
+  couleurJaune: "#ebc850",
+  logoUrlFondClair: null as string | null,
+};
 
 // `useSearchParams()` (pour `next`, voir plus bas) exige une frontière
 // Suspense pour rester prérendable statiquement — sinon `next build` échoue
@@ -44,7 +49,12 @@ function FormulaireConnexion() {
     fetch("/api/branding-public")
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) setBranding({ couleurNavy: data.couleurNavy, couleurJaune: data.couleurJaune });
+        if (!cancelled)
+          setBranding({
+            couleurNavy: data.couleurNavy,
+            couleurJaune: data.couleurJaune,
+            logoUrlFondClair: data.logoUrlFondClair,
+          });
       })
       .catch(() => {});
     return () => {
@@ -77,7 +87,7 @@ function FormulaireConnexion() {
               chargement de l'image, qui étirait le logo le temps du calcul. */}
           {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
           <img
-            src="/logo-abeil-fond-clair.png"
+            src={branding.logoUrlFondClair ?? "/logo-abeil-fond-clair.png"}
             alt="Abeil"
             width={1676}
             height={710}

@@ -48,7 +48,13 @@ import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
  * header sorti du viewport — demande explicite de Vincent ("qui
  * apparaîtrait au scroll à la place de la navigation principale").
  */
-export function SideNav() {
+interface SideNavProps {
+  // Signe abeille du tenant (09/09/2026, phase logo) — `null`/absent ⇒
+  // fallback sur le signe Abeil en dur, voir lib/data/branding.repository.ts.
+  logoUrlSigne?: string | null;
+}
+
+export function SideNav({ logoUrlSigne }: SideNavProps = {}) {
   const pathname = usePathname();
   const navTabs = getNavTabs(pathname);
   const activeHref = getActiveHref(pathname, navTabs);
@@ -67,7 +73,7 @@ export function SideNav() {
             <div className="flex h-14 shrink-0 items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element -- PNG statique */}
               <img
-                src="/abeil-signe.png"
+                src={logoUrlSigne ?? "/abeil-signe.png"}
                 alt="Abeil"
                 width={12}
                 height={18}

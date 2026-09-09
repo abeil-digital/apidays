@@ -24,7 +24,13 @@ import { logout } from "@/app/connexion/actions";
  * l'écran (page non défilée) ; une fois défilé hors du viewport, le rail
  * n'a plus rien à recouvrir et occupe le haut de l'écran.
  */
-export function HeaderBar() {
+interface HeaderBarProps {
+  // Logo du tenant (09/09/2026, phase logo) — `null`/absent ⇒ fallback sur
+  // le logo Abeil en dur, voir lib/data/branding.repository.ts.
+  logoUrl?: string | null;
+}
+
+export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
   const { utilisateur } = useUtilisateur();
   const pathname = usePathname();
   const niveau1Items = getNiveau1Items(utilisateur?.role);
@@ -35,7 +41,7 @@ export function HeaderBar() {
         {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
             l'optimisation next/image n'apporte rien ici */}
         <img
-          src="/logo-abeil.svg"
+          src={logoUrl ?? "/logo-abeil.svg"}
           alt="Abeil"
           className="h-[25.6px] w-auto origin-left scale-x-[1.21]"
         />

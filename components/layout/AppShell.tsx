@@ -27,7 +27,7 @@ export function AppShell({ children, branding }: AppShellProps) {
         } as CSSProperties
       }
     >
-      <HeaderBar />
+      <HeaderBar logoUrl={branding.logoUrl} />
 
       {/* `bg-surface-app` portée ici (pas sur `body`) — le canvas gris
           n'occupe que la largeur de travail (1180px), le corps de la page
@@ -37,7 +37,7 @@ export function AppShell({ children, branding }: AppShellProps) {
         data-app-content
         className="bg-surface-app relative mx-auto flex w-full flex-1 md:max-w-[1180px]"
       >
-        <SideNav />
+        <SideNav logoUrlSigne={branding.logoUrlSigne} />
 
         <div className="min-w-0 flex-1">
           {/* `px-3` (12px) — chaque page ajoute déjà `px-1` (4px) sur son
