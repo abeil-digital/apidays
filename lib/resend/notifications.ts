@@ -45,8 +45,16 @@ export async function envoyerEmail(input: EnvoyerEmailInput): Promise<{ ok: bool
         html: input.html,
       }),
     });
+    // Erreur Resend jamais remontée à l'appelant (voir doc ci-dessus) mais
+    // journalisée (09/09/2026, correctif) — sans ça, un échec d'envoi ne
+    // laisse aucune trace exploitable (les logs Vercel `info` ne montrent
+    // que la requête entrante, pas le corps de la réponse Resend).
+    if (!reponse.ok) {
+      console.error("[resend] échec d'envoi", reponse.status, await reponse.text());
+    }
     return { ok: reponse.ok };
-  } catch {
+  } catch (err) {
+    console.error("[resend] exception à l'envoi", err);
     return { ok: false };
   }
 }
