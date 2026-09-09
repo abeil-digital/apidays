@@ -3,6 +3,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateAction } from "@/lib/format";
 import { Button } from "@/components/ui/Button";
 import { TenantsToast } from "@/components/admin/TenantsToast";
+import { SupprimerTenantButton } from "@/components/admin/SupprimerTenantButton";
+
+// Abeil = seul tenant réel — jamais de bouton de suppression sur sa ligne
+// (voir aussi la protection en dur côté action, `app/admin/actions.ts`).
+const ID_ABEIL = "c52b18b8-73b0-403c-990c-b2b4894acb92";
 
 interface TenantResume {
   id: string;
@@ -35,10 +40,11 @@ async function fetchTenants(): Promise<TenantResume[]> {
 }
 
 /**
- * Liste des tenants (09/09/2026, flux d'onboarding) — lecture seule pour
- * aujourd'hui (édition/désactivation d'un tenant existant hors scope, voir
- * Backlog.md). `service_role` : `entreprises` n'a aucune policy
- * SELECT ouverte à tous les tenants (par design, voir schema.sql) —
+ * Liste des tenants (09/09/2026, flux d'onboarding) — lecture + suppression
+ * uniquement (ajoutée après le premier test réel, pour nettoyer les
+ * tenants de test) ; édition (couleurs/logo/nom) toujours hors scope, voir
+ * Backlog.md. `service_role` : `entreprises` n'a aucune policy SELECT
+ * ouverte à tous les tenants (par design, voir schema.sql) —
  * `assertSuperAdmin()` revérifie l'autorité avant tout accès, `proxy.ts`
  * n'est qu'une première ligne de défense côté route.
  */
@@ -68,6 +74,7 @@ export default async function AdminPage({
               <th className="px-4 py-3 font-semibold">Slug</th>
               <th className="px-4 py-3 font-semibold">Créé le</th>
               <th className="px-4 py-3 font-semibold">Utilisateurs</th>
+              <th className="px-4 py-3 font-semibold"></th>
             </tr>
           </thead>
           <tbody>
@@ -77,6 +84,11 @@ export default async function AdminPage({
                 <td className="text-ink-500 px-4 py-3">{tenant.slug}</td>
                 <td className="text-ink-500 px-4 py-3">{formatDateAction(tenant.createdAt.slice(0, 10))}</td>
                 <td className="text-ink-500 px-4 py-3">{tenant.nbUtilisateurs}</td>
+                <td className="px-4 py-3 text-right">
+                  {tenant.id !== ID_ABEIL && (
+                    <SupprimerTenantButton id={tenant.id} nom={tenant.nom} slug={tenant.slug} />
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

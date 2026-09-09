@@ -23,6 +23,10 @@ export interface CreerTenantState {
 const REGEX_SLUG = /^[a-z0-9-]+$/;
 const REGEX_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Abeil = seul tenant réel aujourd'hui (`supabase/schema.sql`) — jamais
+// supprimable depuis cet écran, même par erreur.
+const ID_ABEIL = "c52b18b8-73b0-403c-990c-b2b4894acb92";
+
 /**
  * Crée un tenant (`entreprises`) + son premier admin (`utilisateurs`,
  * invité via Supabase Auth) — 09/09/2026, flux d'onboarding, remplace les
@@ -119,6 +123,53 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
     await admin.from("utilisateurs").delete().eq("id", utilisateur.id);
     await admin.from("entreprises").delete().eq("id", entreprise.id);
     return { ok: false, erreur: "liaison_echouee" };
+  }
+
+  return { ok: true };
+}
+
+export interface SupprimerTenantState {
+  ok: boolean;
+  erreur?: string;
+}
+
+/**
+ * Supprime un tenant de test et son(ses) compte(s) — 09/09/2026, ajouté
+ * après le premier test réel de `creerTenant` (Vincent a besoin de
+ * nettoyer ce qu'il crée). `assertSuperAdmin()` revérifié comme partout
+ * ailleurs dans ce fichier. Abeil (seul tenant réel) est protégée en dur —
+ * jamais supprimable depuis cet écran.
+ *
+ * Ordre imposé par la contrainte FK `utilisateurs.entreprise_id` (pas de
+ * `on delete cascade`) : les comptes `auth.users` puis les lignes
+ * `utilisateurs` avant la ligne `entreprises`.
+ */
+export async function supprimerTenant(entrepriseId: string): Promise<SupprimerTenantState> {
+  await assertSuperAdmin();
+
+  if (entrepriseId === ID_ABEIL) {
+    return { ok: false, erreur: "abeil_protegee" };
+  }
+
+  const admin = createAdminClient();
+
+  const { data: utilisateurs } = await admin
+    .from("utilisateurs")
+    .select("id, auth_id")
+    .eq("entreprise_id", entrepriseId);
+
+  for (const u of utilisateurs ?? []) {
+    if (u.auth_id) {
+      await admin.auth.admin.deleteUser(u.auth_id);
+    }
+  }
+
+  await admin.from("utilisateurs").delete().eq("entreprise_id", entrepriseId);
+
+  const { error } = await admin.from("entreprises").delete().eq("id", entrepriseId);
+
+  if (error) {
+    return { ok: false, erreur: "suppression_echouee" };
   }
 
   return { ok: true };
