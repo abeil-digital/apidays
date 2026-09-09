@@ -68,6 +68,13 @@ export async function fetchParametragePeriode(annee: number): Promise<Parametrag
 export async function enregistrerParametragePeriode(
   input: ParametragePeriodeInput,
 ): Promise<ParametragePeriode> {
+  // `onConflict` doit correspondre EXACTEMENT à la contrainte unique en base
+  // — `unique (entreprise_id, annee)` depuis le passage multi-tenant
+  // (09/09/2026), pas `annee` seule (bug : `onConflict: "annee"` ne
+  // correspondait plus à aucune contrainte, PostgREST rejetait l'upsert
+  // avec 42P10, bloquant tout paramétrage d'une année encore vierge — donc
+  // aussi la création du premier DJI/congé imposé de l'année, qui appelle
+  // cette fonction en préambule).
   const supabase = createClient();
 
   const { data: utilisateurId } = await supabase.rpc("my_utilisateur_id");
@@ -82,7 +89,7 @@ export async function enregistrerParametragePeriode(
         jour_semaine_defaut: input.jourSemaineDefaut,
         defini_par: utilisateurId ?? null,
       },
-      { onConflict: "annee" },
+      { onConflict: "entreprise_id,annee" },
     )
     .select(SELECT_PARAMETRAGE_PERIODE)
     .single();
