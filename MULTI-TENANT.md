@@ -144,21 +144,34 @@ justifiée pour un seul tenant réel) — un logo peut pointer vers un fichier d
 Même mécanique de propagation que les couleurs (`AppShell.tsx` → `HeaderBar`/`SideNav` en props ;
 `branding-public` → page de connexion).
 
-## Résolution du tenant par sous-domaine
+## Résolution du tenant par sous-domaine ou par chemin
 
 Sert à une seule chose : savoir quoi afficher (logo/couleurs) sur la page de connexion **avant**
 authentification. **Ça ne va pas plus loin** — une fois connecté, la RLS
 (`entreprise_id = my_entreprise_id()`) scope déjà tout correctement à partir du profil de la
-personne connectée, indépendamment du sous-domaine par lequel elle est arrivée. Aucune propagation
-du tenant dans les Server Actions/repositories n'a été nécessaire (une reformulation par rapport à
-l'inventaire initial du chantier, qui redoutait ce point comme le plus complexe).
+personne connectée, indépendamment de comment elle est arrivée. Aucune propagation du tenant dans
+les Server Actions/repositories n'a été nécessaire (une reformulation par rapport à l'inventaire
+initial du chantier, qui redoutait ce point comme le plus complexe).
 
-`entreprises.slug` (unique) identifie le sous-domaine. `app/api/branding-public/route.ts` lit le
-premier label de l'en-tête `Host` (`abeil` dans `abeil.mondomaine.fr`), retombe sur `abeil` pour
-localhost/le domaine Vercel nu (pas de sous-domaine réel — DNS/Vercel pas encore configurés,
-Phase 0). Accepte aussi `?slug=` en query param, **uniquement pour les tests manuels en local**, pas
-un mécanisme de prod. Ne répond jamais que pour LE tenant demandé (jamais une liste) — exposer
-publiquement la liste des clients via une policy RLS ouverte n'a jamais été envisagé.
+`entreprises.slug` (unique) identifie le tenant. `app/api/branding-public/route.ts` résout le slug
+de deux façons, qui coexistent sans conflit (la seconde n'empêche pas de basculer sur la première
+plus tard, une fois un vrai domaine configuré) :
+
+- **Sous-domaine** — premier label de l'en-tête `Host` (`abeil` dans `abeil.mondomaine.fr`), retombe
+  sur `abeil` pour localhost/le domaine Vercel nu. Demande un vrai domaine + DNS wildcard configurés
+  côté Vercel (pas possible sur `apidays-seven.vercel.app` tel quel) — DNS/Vercel pas encore
+  configurés, Phase 0.
+- **Chemin** (`/t/<slug>`, 09/09/2026) — `app/t/[slug]/route.ts` redirige vers
+  `/connexion?slug=<slug>`, que la page de connexion transmet à `/api/branding-public`. Utilisable
+  dès aujourd'hui sans domaine dédié. Namespace `/t/` dédié plutôt qu'un slug à la racine (ex.
+  `/abeil`) — choix explicite avec Vincent pour ne jamais entrer en collision avec une route réelle
+  de l'app (`/suivre`, `/parametrer`, `/admin`...), pas de liste de slugs réservés à maintenir. Pas
+  de vérification que le slug existe dans la route `/t/[slug]` elle-même — la résolution (et le
+  fallback Abeil si inconnu) reste entièrement dans `branding-public/route.ts`.
+
+Dans les deux cas, `branding-public/route.ts` ne répond jamais que pour LE tenant demandé (jamais
+une liste) — exposer publiquement la liste des clients via une policy RLS ouverte n'a jamais été
+envisagé.
 
 ## Super-admin & onboarding d'un tenant
 
@@ -242,10 +255,10 @@ de ce chantier) :
 donnée Abeil n'apparaît (soldes, demandes, calendrier, paramétrages tous vides/propres à ce
 tenant).
 
-**Pour vérifier le branding pré-connexion en local** (pas de vrai sous-domaine tant que le DNS
-n'est pas configuré) : `http://localhost:3000/api/branding-public?slug=<slug-du-tenant>` renvoie
-son branding ; ou modifier temporairement l'appel `fetch` dans `app/connexion/page.tsx` pour
-pointer vers ce slug, recharger `/connexion`, observer visuellement, puis annuler la modification.
+**Pour voir le branding pré-connexion d'un tenant** (pas besoin de sous-domaine, ni en local ni en
+prod) : aller sur `/t/<slug-du-tenant>` — redirige vers `/connexion` avec son logo/couleurs
+appliqués. `http://localhost:3000/api/branding-public?slug=<slug>` renvoie directement le JSON si
+besoin de vérifier juste la résolution, sans passer par l'écran.
 
 **Pour nettoyer un tenant de test** : depuis `/admin`, cliquer l'icône de suppression sur sa ligne
 et retaper son slug dans la popin de confirmation — supprime les comptes `auth.users`, les lignes
@@ -253,8 +266,10 @@ et retaper son slug dans la popin de confirmation — supprime les comptes `auth
 
 ## Limites connues, volontairement hors scope aujourd'hui
 
-- **Pas de DNS/Vercel réel configuré** — le sous-domaine est simulé en local (`?slug=`/en-tête
-  `Host` forcé) tant qu'un vrai 2ᵉ client n'existe pas. À faire par Vincent le moment venu.
+- **Pas de DNS/Vercel réel configuré pour le sous-domaine** — reste simulé en local (en-tête `Host`
+  forcé) tant qu'un vrai domaine n'existe pas ; à faire par Vincent le moment venu. Sans impact sur
+  l'usage réel aujourd'hui : `/t/<slug>` (résolution par chemin) fonctionne déjà en prod sans domaine
+  dédié.
 - **`--color-slate` pas encore branding-able** — dépend du chantier séparé "Refacto & récap Design
   System" (Backlog).
 - **Pas de vérification post-connexion d'un mismatch sous-domaine/tenant** — un utilisateur du
