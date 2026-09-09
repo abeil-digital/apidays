@@ -36,17 +36,23 @@ function FormulaireConnexion() {
   // Posé par `proxy.ts` avant de rediriger ici (ex. lien de notification
   // email) — retransmis à `login()` via un champ caché pour y renvoyer une
   // fois connecté, voir `app/connexion/actions.ts`.
-  const next = useSearchParams().get("next") ?? "";
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") ?? "";
+  // Posé par `app/t/[slug]/route.ts` (09/09/2026, résolution par chemin) —
+  // transmis tel quel à `/api/branding-public`, voir plus bas.
+  const slug = searchParams.get("slug");
 
-  // Résolution du tenant par sous-domaine (09/09/2026, phase routing) —
-  // avant connexion, la RLS ne permet pas de lire `entreprises` (réservée à
-  // l'entreprise de l'utilisateur déjà connecté), d'où cette route publique
-  // dédiée plutôt qu'un accès direct à la table. Bref flash de la couleur
-  // Abeil par défaut le temps du fetch, assumé (page très simple).
+  // Résolution du tenant par sous-domaine OU par chemin (09/09/2026, phase
+  // routing) — avant connexion, la RLS ne permet pas de lire `entreprises`
+  // (réservée à l'entreprise de l'utilisateur déjà connecté), d'où cette
+  // route publique dédiée plutôt qu'un accès direct à la table. Bref flash
+  // de la couleur Abeil par défaut le temps du fetch, assumé (page très
+  // simple).
   const [branding, setBranding] = useState(BRANDING_DEFAUT);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/branding-public")
+    const url = slug ? `/api/branding-public?slug=${encodeURIComponent(slug)}` : "/api/branding-public";
+    fetch(url)
       .then((r) => r.json())
       .then((data) => {
         if (!cancelled)
@@ -60,7 +66,7 @@ function FormulaireConnexion() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [slug]);
 
   return (
     <div

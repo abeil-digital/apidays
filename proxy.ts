@@ -36,6 +36,8 @@ const PREFIXE_SUPER_ADMIN = "/admin";
 // /api/branding-public (09/09/2026) : appelé depuis la page de connexion
 // elle-même, avant toute session — voir
 // `app/api/branding-public/route.ts`.
+// /t/<slug> (09/09/2026) : résolution du tenant par chemin, redirige vers
+// /connexion avant toute session — voir `app/t/[slug]/route.ts`.
 function estRoutePublique(pathname: string): boolean {
   return (
     pathname === "/auth/confirm" ||
@@ -43,7 +45,8 @@ function estRoutePublique(pathname: string): boolean {
     pathname.startsWith(`${ROUTE_CONNEXION}/`) ||
     pathname === ROUTE_ADMIN_CONNEXION ||
     pathname.startsWith("/api/cron/") ||
-    pathname === "/api/branding-public"
+    pathname === "/api/branding-public" ||
+    pathname.startsWith("/t/")
   );
 }
 

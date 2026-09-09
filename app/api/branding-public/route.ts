@@ -26,9 +26,11 @@ const DEFAULT_BRANDING = {
  * Sous-domaine dérivé du premier label de l'en-tête `Host` (ex. `abeil`
  * dans `abeil.mondomaine.fr`) — retombe sur `abeil` pour localhost/le
  * domaine Vercel nu (pas de sous-domaine réel encore, Phase 0). `?slug=`
- * en query param : uniquement pour les tests manuels en local, pas un
- * mécanisme de prod — un sous-domaine réel n'a jamais besoin de le passer,
- * l'en-tête `Host` suffit.
+ * en query param : résolution par CHEMIN (09/09/2026, `app/t/[slug]/route.ts`
+ * redirige vers `/connexion?slug=...`) — utilisable dès aujourd'hui sans
+ * DNS/domaine dédié, contrairement au sous-domaine ; les deux mécanismes
+ * coexistent, `?slug=` est prioritaire sur `Host` quand les deux sont
+ * présents.
  */
 export async function GET(request: NextRequest) {
   const slugTest = request.nextUrl.searchParams.get("slug");
