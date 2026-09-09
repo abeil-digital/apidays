@@ -5076,6 +5076,48 @@ mélange). Cron testé en direct (`curl` + `CRON_SECRET`) avec 2 entreprises sim
 hebdomadaire : chacune traitée indépendamment dans la réponse (`resultats: [...]`), watermark et
 demandes non mélangés. Tenants de test supprimés une fois les tests concluants.
 
+## Multi-tenant — branding par entreprise (couleurs) livré (09/09/2026)
+
+**Troisième étape** du chantier multi-tenant, juste après les fondations schéma + RLS et la
+sécurisation des points RLS-bypass ci-dessus. Objectif : rendre les couleurs de la charte Abeil
+configurables par entreprise.
+
+**Décisions prises avec Vincent avant de coder** : périmètre resserré à l'app **connectée**
+uniquement (la page de connexion reste en branding Abeil par défaut — aucun moyen de savoir quelle
+entreprise avant que l'utilisateur ne se connecte, ça dépend du chantier séparé "routing par
+sous-domaine", pas encore fait) ; et resserré à `--color-abeil-navy`/`--color-abeil-yellow`
+uniquement, pas `--color-slate` (découverte en creusant `app/globals.css` : `--color-slate` est la
+couleur "de travail" provisoire encore utilisée pour la plupart des boutons/liens dans le reste de
+l'app — jamais généralisée à la vraie charte Abeil, ça reste le chantier séparé "Refacto & récap
+Design System" déjà au Backlog). Conséquence assumée : pour l'instant, seuls le bandeau de nav et
+les icônes de la nav secondaire varient par entreprise, pas encore les boutons.
+
+**Mécanique** : tokens renommés en noms de rôle plutôt que d'apparence —
+`--color-abeil-navy` → `--color-brand-primary`, `--color-abeil-yellow` → `--color-brand-accent`
+(`app/globals.css`) — remplacement mécanique de la sous-chaîne dans les 24 fichiers consommateurs
+(~93 occurrences confirmées par grep exhaustif, y compris les variantes `hover:`/opacité comme
+`bg-abeil-yellow/8` — un simple remplacement de sous-chaîne couvre toutes les formes). Nouvelles
+colonnes `couleur_navy`/`couleur_yellow` sur `entreprises` (défaut = charte Abeil actuelle,
+migration non-cassante). Nouveau `lib/data/branding.repository.ts` (`fetchBrandingCourant`,
+server-only via `lib/supabase/server.ts`) — même principe singleton que
+`objectifs_calendrier`/`parametrage_notifications` : pas de `.eq()` nécessaire, la policy RLS sur
+`entreprises` (`using (id = my_entreprise_id())`, posée en Phase 1) restreint déjà `.single()` à la
+ligne de l'entreprise de l'utilisateur connecté. `app/(app)/layout.tsx` devient un Server Component
+asynchrone, passe les couleurs à `AppShell` qui les applique en variables CSS inline sur son
+conteneur racine (`style={{ "--color-brand-primary": ..., "--color-brand-accent": ... } as CSSProperties}`,
+même convention déjà utilisée dans `SoldeCard.tsx`/`DatePicker.tsx`) — la cascade CSS fait le reste,
+tous les descendants héritent sans changement de leur côté.
+
+**Conséquence de build à noter** : toutes les pages de l'app connectée sont passées de statiques
+(`○`) à dynamiques (`ƒ`) — attendu et correct, ces pages dépendent désormais de la session pour
+savoir quelle couleur afficher, impossible de les pré-générer au build.
+
+**Vérifié** : `tsc`/`eslint`/`npm run build` propres. Non-régression visuelle confirmée pour Abeil
+(capture d'écran identique à avant). **Test réel du branding** : entreprise de test créée via
+`service_role` avec des couleurs distinctes (rouge foncé `#7a1f2b`/vert `#3fae4a`), utilisateur de
+test rattaché, connexion avec ce compte → capture d'écran confirmant que le bandeau et les accents
+changent bien de couleur. Tenant de test supprimé une fois le test concluant.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
