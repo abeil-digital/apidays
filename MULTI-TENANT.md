@@ -216,8 +216,14 @@ fonctionnalité de l'app.
   best-effort** si une étape échoue après la création de l'entreprise (supprime `utilisateurs` puis
   `entreprises`, dans cet ordre — contrainte FK) : évite un tenant orphelin sans admin.
 - Pas de champ logo dans le formulaire (reste réglable par SQL, comme les couleurs peuvent aussi
-  l'être directement en base si besoin). Pas d'édition/désactivation d'un tenant existant depuis
-  `/admin` aujourd'hui (repoussé, pas de besoin identifié avec un seul vrai client).
+  l'être directement en base si besoin). Pas d'édition d'un tenant existant depuis `/admin`
+  aujourd'hui (repoussé, pas de besoin identifié avec un seul vrai client).
+- **Suppression** (`app/admin/actions.ts`, `supprimerTenant`) : ajoutée après le premier test réel
+  de création, pour nettoyer les tenants de test. Supprime les comptes `auth.users` de tous les
+  utilisateurs du tenant, puis les lignes `utilisateurs`, puis `entreprises` (ordre imposé par la
+  FK). Abeil protégée en dur — jamais supprimable depuis cet écran, même par erreur. Confirmation
+  "haute" par popin (`components/admin/SupprimerTenantButton.tsx`) : il faut retaper le slug exact
+  du tenant pour activer le bouton, pas un simple `window.confirm`.
 
 ## Comment créer/tester un tenant
 
@@ -241,8 +247,9 @@ n'est pas configuré) : `http://localhost:3000/api/branding-public?slug=<slug-du
 son branding ; ou modifier temporairement l'appel `fetch` dans `app/connexion/page.tsx` pour
 pointer vers ce slug, recharger `/connexion`, observer visuellement, puis annuler la modification.
 
-**Pour nettoyer un tenant de test** : supprimer sa ligne `utilisateurs` avant `entreprises` (ordre
-imposé par la contrainte FK), et son compte `auth.users` associé (`admin.auth.admin.deleteUser`).
+**Pour nettoyer un tenant de test** : depuis `/admin`, cliquer l'icône de suppression sur sa ligne
+et retaper son slug dans la popin de confirmation — supprime les comptes `auth.users`, les lignes
+`utilisateurs` et la ligne `entreprises`, dans le bon ordre.
 
 ## Limites connues, volontairement hors scope aujourd'hui
 
