@@ -5041,6 +5041,41 @@ correctement vide plutôt que de montrer les réglages d'Abeil (cette nouvelle e
 encore de ligne dans la table singleton, la création automatique à l'onboarding d'un tenant est un
 chantier futur, pas un bug). Tenant et compte de test supprimés une fois le test concluant.
 
+## Multi-tenant — points RLS-bypass sécurisés (09/09/2026)
+
+**Deuxième étape**, juste après les fondations schéma + RLS ci-dessus : les 5 fichiers qui tournent
+en `service_role` (contourne totalement la RLS, donc aussi le filtre `entreprise_id` que les
+policies portent désormais) ont été audités un par un.
+
+**3 sur 5 n'avaient en fait besoin d'aucun changement** : `inviterUtilisateur`/
+`envoyerLienReinitialisation`/`synchroniserEmailAuth`
+(`app/(app)/parametrer/utilisateurs/actions.ts`) — leur usage de `service_role` se limite à l'API
+Auth Admin (`inviteUserByEmail`/`updateUserById`/`resetPasswordForEmail`), jamais à une requête sur
+une table applicative ; toute lecture/écriture `public.utilisateurs` dans ce fichier passe déjà par
+le client de session normal, RLS active. Confirmé en relisant le fichier ligne par ligne avant de
+toucher à quoi que ce soit — pas de risque de fuite cross-tenant là, contrairement à ce que
+l'inventaire du 08/09/2026 laissait supposer en listant les 5 fichiers ensemble.
+
+**Les 2 vrais points corrigés** :
+- `lib/resend/destinataires.ts` — `resolverDestinataires()` prend désormais un `entrepriseId`
+  obligatoire et filtre `utilisateurs` dessus (avant : remontait les managers/admins de TOUTES les
+  entreprises).
+- `lib/data/notificationsDemandes.actions.ts` — `notifierNouvelleDemande`/`notifierDecisionDemande`
+  récupèrent la demande EN PREMIER (son `entreprise_id` déjà posé dessus détermine ensuite quel
+  réglage `parametrage_notifications` consulter et quels destinataires résoudre), plutôt que de lire
+  un réglage sans savoir de quelle entreprise il s'agissait.
+- `app/api/cron/notifications-digest/route.ts` — un job planifié n'a pas de "tenant courant" comme
+  une requête authentifiée : boucle désormais sur toutes les entreprises en mode hebdomadaire
+  (`parametrage_notifications.frequence = 'hebdomadaire'`), chacune traitée et filtrée
+  indépendamment (logique extraite dans `traiterDigestEntreprise`), watermark anti-doublon propre à
+  chaque entreprise.
+
+**Vérifié** : `tsc`/`eslint`/`npm run build` propres. `resolverDestinataires` testé avec une 2e
+entreprise de test (managers correctement isolés — 2 managers Abeil, 1 manager entreprise 2, aucun
+mélange). Cron testé en direct (`curl` + `CRON_SECRET`) avec 2 entreprises simultanément en mode
+hebdomadaire : chacune traitée indépendamment dans la réponse (`resultats: [...]`), watermark et
+demandes non mélangés. Tenants de test supprimés une fois les tests concluants.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
