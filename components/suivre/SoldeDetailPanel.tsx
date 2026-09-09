@@ -387,12 +387,21 @@ export function SoldeDetailPanel({
 
   const bodyJsx = (
     <div className="border-ink-300/60 border-t">
-      {loading || !historique ? (
+      {loading ? (
         <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
       ) : error ? (
+        // `error` implique `historique === null` (jamais résolu, voir
+        // `useHistoriqueSolde`) — ce cas doit être distingué de "loading"
+        // (09/09/2026, bug réel trouvé en testant un tenant sans règle
+        // d'acquisition CP configurée : `fetchHistoriqueCp` rejette avec un
+        // message clair, mais l'ancien test `loading || !historique`
+        // laissait ce message inaccessible, la popin restait bloquée sur
+        // "Chargement…" indéfiniment au lieu de l'afficher).
         <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 my-3 px-3 py-2.5 text-sm">
           {error}
         </div>
+      ) : !historique ? (
+        <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
       ) : (
         // Hauteur plafonnée + scroll interne (20/08/2026) — un historique
         // avec beaucoup d'entrées ne doit pas faire grandir la popin à
