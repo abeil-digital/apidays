@@ -61,7 +61,12 @@ export async function fetchReglesAcquisition(): Promise<RegleAcquisition[]> {
 
 /**
  * Crée ou remplace la règle d'acquisition d'un type d'absence (contrainte
- * `unique (type_absence_id)` côté base → upsert plutôt qu'insert/update).
+ * `unique (entreprise_id, type_absence_id)` côté base depuis le passage
+ * multi-tenant, 09/09/2026 → upsert plutôt qu'insert/update). `onConflict`
+ * doit correspondre EXACTEMENT à cette contrainte composite (même bug que
+ * celui trouvé sur `parametrage_periode` : un `onConflict` resté sur
+ * `type_absence_id` seul ne correspond plus à aucune contrainte, PostgREST
+ * rejette l'upsert avec 42P10 — cassait 100% des sauvegardes CP/RTT).
  */
 export async function enregistrerRegleAcquisition(
   type: TypeDemande,
@@ -81,7 +86,7 @@ export async function enregistrerRegleAcquisition(
         report_autorise: input.reportAutorise,
         anticipation_autorisee: input.anticipationAutorisee,
       },
-      { onConflict: "type_absence_id" },
+      { onConflict: "entreprise_id,type_absence_id" },
     )
     .select(SELECT_REGLE_ACQUISITION)
     .single();
