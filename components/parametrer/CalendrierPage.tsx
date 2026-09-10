@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PlusCircle, TriangleAlert, X } from "lucide-react";
 import type { CongeImpose, DemandeEquipe, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
 import { formatJourMois, formatJours, nombreJours } from "@/lib/format";
+import { getAujourdhui } from "@/lib/aujourdhui";
 import { dureeCongeImpose, joursFeriesLegaux } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
@@ -327,7 +328,7 @@ function TiroirConflitsAgenda({ conflits }: TiroirConflitsAgendaProps) {
 }
 
 function VueCalendrierGrille({ annee }: { annee: number }) {
-  const estAnneeLive = annee === new Date().getFullYear();
+  const estAnneeLive = annee === getAujourdhui().getFullYear();
   const calendrier = useCalendrier(annee);
   const { objectifs } = useObjectifsCalendrier();
   const { demandes: demandesEquipe } = useDemandesEquipe();
@@ -1018,7 +1019,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
  * si besoin (voir Backlog.md).
  */
 export function Calendrier2Page() {
-  const anneeEnCours = new Date().getFullYear();
+  const anneeEnCours = getAujourdhui().getFullYear();
   const anneeAVenir = anneeEnCours + 1;
   const [annee, setAnnee] = useState(anneeEnCours);
 
@@ -1051,7 +1052,7 @@ export function Calendrier2Page() {
         </button>
       </div>
 
-      {new Date().getMonth() === 11 && (
+      {getAujourdhui().getMonth() === 11 && (
         <div className="bg-status-warning-bg text-status-warning-fg rounded-control flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
           <TriangleAlert size={18} className="shrink-0" />
           {`Pensez à paramétrer les jours imposés de ${anneeAVenir} avant la fin de l’année.`}

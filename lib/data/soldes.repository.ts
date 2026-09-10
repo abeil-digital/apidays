@@ -11,6 +11,7 @@ import type {
   TypeDemande,
 } from "@/lib/types";
 import { formatPeriodePillNumerique, moisEffet } from "@/lib/format";
+import { getAujourdhui } from "@/lib/aujourdhui";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
@@ -636,7 +637,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const dateReferenceAnciennete: string =
     utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
-  const aujourdhui = new Date(`${dateIso(dateReference ?? new Date())}T00:00:00Z`);
+  const aujourdhui = new Date(`${dateIso(dateReference ?? getAujourdhui())}T00:00:00Z`);
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
@@ -1019,7 +1020,7 @@ export async function fetchHistoriqueCp(
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
   const dateReferenceAnciennete: string =
     utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
-  const aujourdhui = new Date(`${dateIso(dateReference ?? new Date())}T00:00:00Z`);
+  const aujourdhui = new Date(`${dateIso(dateReference ?? getAujourdhui())}T00:00:00Z`);
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
@@ -1320,7 +1321,7 @@ export async function fetchHistoriqueRtt(
   }
 
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
-  const aujourdhui = new Date(`${dateIso(dateReference ?? new Date())}T00:00:00Z`);
+  const aujourdhui = new Date(`${dateIso(dateReference ?? getAujourdhui())}T00:00:00Z`);
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
@@ -1595,7 +1596,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   }
 
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
-  const aujourdhui = new Date(`${dateIso(new Date())}T00:00:00Z`);
+  const aujourdhui = new Date(`${dateIso(getAujourdhui())}T00:00:00Z`);
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;

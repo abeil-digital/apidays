@@ -1,4 +1,5 @@
 import type { CongeATransmettre } from "@/lib/types";
+import { getDateSimuleeIso } from "@/lib/aujourdhui";
 
 export function formatDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -106,8 +107,10 @@ export function nombreJours(debut: string, fin: string): number {
   return Math.round((d2.getTime() - d1.getTime()) / 86_400_000) + 1;
 }
 
+/** Date simulée si réglée (bandeau de test, local uniquement — voir
+ * `lib/aujourdhui.ts`), sinon la vraie date du jour. */
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return getDateSimuleeIso() ?? new Date().toISOString().slice(0, 10);
 }
 
 export function formatJours(valeur: number): string {
