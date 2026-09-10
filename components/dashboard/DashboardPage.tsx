@@ -425,18 +425,21 @@ export function DashboardPage() {
   // Phrase "Mes demandes" (18/08/2026, test) — "en attente" (nécessite une
   // action du manager) et "nouvelles décisions" (déjà tranchées, pas encore
   // vues) s'affichent tous les deux en emphase, indépendamment l'un de
-  // l'autre. "vu" se marque à l'OUVERTURE du tiroir journal (10/09/2026,
+  // l'autre. "vu" se marque à la FERMETURE du tiroir journal (10/09/2026,
   // simplifié à la demande de Vincent — remplace l'ancien principe "depuis
   // votre dernière connexion" basé sur sessionStorage/localStorage, retiré
   // de `useDemandes`, voir Backlog "Limites connues du vu par session").
+  // D'abord essayé au moment de l'OUVERTURE (même jour) : les nouveautés
+  // s'effaçaient avant d'avoir pu être vues — à la fermeture, elles restent
+  // mises en emphase tout le temps où le tiroir reste ouvert.
   const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
   const decisionsNonVues = demandes.filter(
     (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
   );
   const nbDecisionsNonVues = decisionsNonVues.length;
 
-  function ouvrirTiroirActivite() {
-    setTiroirActiviteOuvert(true);
+  function fermerTiroirActivite() {
+    setTiroirActiviteOuvert(false);
     decisionsNonVues.forEach((d) => {
       marquerVue(d.id).catch(() => {});
     });
@@ -476,7 +479,7 @@ export function DashboardPage() {
               <span className="text-ink-500">-</span>
               <button
                 type="button"
-                onClick={ouvrirTiroirActivite}
+                onClick={() => setTiroirActiviteOuvert(true)}
                 className="text-ink-900 font-bold underline"
               >
                 voir le journal
@@ -487,7 +490,7 @@ export function DashboardPage() {
               <span className="text-ink-500">aucune décision récente -</span>
               <button
                 type="button"
-                onClick={ouvrirTiroirActivite}
+                onClick={() => setTiroirActiviteOuvert(true)}
                 className="text-ink-500 underline"
               >
                 voir le journal
@@ -782,7 +785,7 @@ export function DashboardPage() {
       <ActiviteRecenteFeed
         demandes={demandes}
         tiroirOuvert={tiroirActiviteOuvert}
-        onFermerTiroir={() => setTiroirActiviteOuvert(false)}
+        onFermerTiroir={fermerTiroirActivite}
       />
     </div>
   );
