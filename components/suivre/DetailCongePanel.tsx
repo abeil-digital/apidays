@@ -867,27 +867,43 @@ export function DetailCongePanel({
 
           {voirDetail && (
             <div className="bg-surface-card w-full px-4 pb-3">
-              {codeSolde && soldesDemandeur && (
-                <div className="mt-3 mb-3 flex items-center justify-center gap-3 text-xs">
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-ink-500">Actuel</span>
-                    <TypeBadge
-                      variant="pill"
-                      code={codeSolde}
-                      label={`${formatJours(soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"].valeur)} j`}
-                    />
-                  </div>
-                  <span className="text-ink-500">→</span>
-                  <div className="flex flex-col items-center gap-1">
-                    <span className="text-ink-500">Après</span>
-                    <TypeBadge
-                      variant="pill"
-                      code={codeSolde}
-                      label={`${formatJours(soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"].valeurApresAttente)} j`}
-                    />
-                  </div>
-                </div>
-              )}
+              {codeSolde &&
+                soldesDemandeur &&
+                (() => {
+                  // Solde théorique après décision (déjà déduit de CETTE
+                  // demande, puisqu'elle est comptée "en attente" — voir
+                  // `soldes.repository.ts`). "Actuel" doit donc la RÉ-ADDITIONNER
+                  // pour montrer le solde tel qu'il était juste avant cette
+                  // demande, pas le solde réel (`valeur`, réglé en paie) qui
+                  // ignore aussi toutes les AUTRES demandes en attente/validées
+                  // non encore transmises — d'où l'écart disproportionné
+                  // constaté par Vincent (10/09/2026) entre "Actuel" et "Après"
+                  // pour une seule demande.
+                  const apres = soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"]
+                    .valeurApresAttente;
+                  const actuel = apres + jours;
+                  return (
+                    <div className="mt-3 mb-3 flex items-center justify-center gap-3 text-xs">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-ink-500">Actuel</span>
+                        <TypeBadge
+                          variant="pill"
+                          code={codeSolde}
+                          label={`${formatJours(actuel)} j`}
+                        />
+                      </div>
+                      <span className="text-ink-500">→</span>
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="text-ink-500">Après</span>
+                        <TypeBadge
+                          variant="pill"
+                          code={codeSolde}
+                          label={`${formatJours(apres)} j`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
               <DetailPeriodeConges
                 debut={selection.debut}
                 fin={selection.fin}
