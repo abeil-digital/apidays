@@ -15,9 +15,15 @@
  *
  * Portée volontairement limitée au premier passage : le moteur de soldes
  * (`lib/data/soldes.repository.ts`) et le Calendrier (bandeau de décembre,
- * année "live"), pas les dizaines d'autres `new Date()` de l'app (filtres
- * "année en cours" de Suivre/Poser, essentiellement cosmétiques) — à
- * étendre au cas par cas si le besoin se confirme.
+ * année "live"), pas les dizaines d'autres `new Date()` de l'app — à étendre
+ * au cas par cas si le besoin se confirme. Étendu le 10/09/2026 (demande
+ * explicite de Vincent, pour pouvoir tester la rotation des 3 onglets
+ * En cours/Période CP/3e onglet) à `anneeActuelle`/`debutMoisActuel` dans
+ * `DashboardPage.tsx`, `CalendrierCollaborateur.tsx` et
+ * `CalendrierGlobal.tsx` — ces 3 écrans suivaient déjà la date simulée via
+ * `todayISO()` pour `todayIso`, mais pas pour l'année civile de référence,
+ * ce qui les désynchronisait dès qu'on simulait une date d'une autre année
+ * que la vraie date système.
  */
 
 const STORAGE_KEY = "apidays_dev_date_override";

@@ -628,14 +628,23 @@ function VueCalendrierGrille({
     const enConge = estEnConge(iso);
 
     if (enConge && dj) {
+      // `couleurCpi` (10/09/2026, correctif — utilisait `var(--color-cp)`,
+      // la couleur CP au lieu de CPI, signalé par Vincent) : DJI et CPI
+      // partagent volontairement la même teinte bleu slate depuis le
+      // 07/09/2026 (voir `app/globals.css`), donc les deux moitiés de ce
+      // partage se confondent visuellement — attendu, la distinction gauche/
+      // droite reste correcte sémantiquement même si elle ne se voit plus.
       const couleurDji = "var(--color-dji)";
-      const couleurCp = "var(--color-cp)";
+      const couleurCpi = "var(--color-cpi)";
       return dj.demiJournee === "matin"
-        ? { partage: { gauche: couleurDji, droite: couleurCp } }
-        : { partage: { gauche: couleurCp, droite: couleurDji } };
+        ? { partage: { gauche: couleurDji, droite: couleurCpi } }
+        : { partage: { gauche: couleurCpi, droite: couleurDji } };
     }
     if (enConge) {
-      return { classeFond: "bg-cp" };
+      // `bg-cpi` (10/09/2026, correctif) — utilisait `bg-cp` (couleur CP),
+      // signalé par Vincent : un CPI s'affichait dans la mauvaise couleur
+      // sur la grille admin.
+      return { classeFond: "bg-cpi" };
     }
     if (dj) {
       return {

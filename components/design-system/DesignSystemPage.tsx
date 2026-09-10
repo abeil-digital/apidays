@@ -170,7 +170,9 @@ function demoEstEnConge(iso: string): boolean {
 
 function demoTipoDuJour(iso: string): PastilleJour | null {
   if (DEMO_FERIES.has(iso)) return { classeFond: "bg-ferie" };
-  if (demoEstEnConge(iso)) return { classeFond: "bg-cp" };
+  // `bg-cpi` (10/09/2026, correctif — même bug que `CalendrierPage.tsx`,
+  // que cette démo illustre) : un congé imposé (CPI), pas un CP personnel.
+  if (demoEstEnConge(iso)) return { classeFond: "bg-cpi" };
   const cote = DEMO_DJI[iso];
   if (cote) return { moitie: { couleur: "var(--color-dji)", cote } };
   return null;

@@ -13,6 +13,7 @@ import {
   classeFondTypeBadge,
   classeTexteTypeBadge,
   TypeBadge,
+  type TypeBadgeCode,
   TypeBadgePillEnhanced,
 } from "@/components/demandes/TypeBadge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -46,6 +47,25 @@ const HOVER_BG_CONGE: Record<CodeSoldeDetail, string> = {
   RTT: "hover:bg-[color-mix(in_srgb,var(--color-rtt)_15%,white)]",
   CPA: "hover:bg-[color-mix(in_srgb,var(--color-cpa)_15%,white)]",
 };
+
+// CPI (10/09/2026, demande explicite) — un mouvement "demande" du panneau CP
+// OU CPA (10/09/2026, étendu — un CPI daté au-delà de la période en cours
+// devient une consommation anticipée, voir `libelleMouvementCpa` dans
+// `soldes.repository.ts`) dont la demande est auto-générée par un congé
+// imposé (`congeImposeId`) prend le code couleur CPI plutôt que celui du
+// panneau, en plus du préfixe déjà présent dans son libellé — même logique
+// que `tipoDuJour` dans `CalendrierPage.tsx`. RTT n'a pas de notion de CPI.
+const VAR_COULEUR_CPI = "--color-cpi";
+const HOVER_BG_CPI = "hover:bg-[color-mix(in_srgb,var(--color-cpi)_15%,white)]";
+
+function codeAffichageMouvement(
+  code: CodeSoldeDetail,
+  m: { type: "demande" | "ajustement" | "acquisition"; congeImposeId?: string | null },
+): TypeBadgeCode {
+  return (code === "CP" || code === "CPA") && m.type === "demande" && m.congeImposeId
+    ? "CPI"
+    : code;
+}
 
 interface SoldeDetailPanelProps {
   code: CodeSoldeDetail;
@@ -463,6 +483,18 @@ export function SoldeDetailPanel({
                 // contour + coins carrés (PAS `rounded-full` comme la pill
                 // congé), cliquable + hover/état "on" quand `avecAjustement`.
                 const carre = m.type === "acquisition" || m.type === "ajustement";
+                // CPI (10/09/2026) — seule une "demande" CP peut être une
+                // consommation auto-générée par un congé imposé (jamais une
+                // acquisition/ajustement) : code couleur dédié plutôt que le
+                // CP générique du panneau, `classeBordure`/`classeTexte`
+                // (calculés une fois sur `code`) restent inchangés pour tout
+                // le reste du panneau (en-tête, "Solde N-1", etc.).
+                const codeAffichage = codeAffichageMouvement(code, m);
+                const estCpi = codeAffichage === "CPI";
+                const classeBordureLigne = estCpi ? classeBordureTypeBadge("CPI") : classeBordure;
+                const classeTexteLigne = estCpi ? classeTexteTypeBadge("CPI") : classeTexte;
+                const hoverBgLigne = estCpi ? HOVER_BG_CPI : HOVER_BG_CONGE[code];
+                const varCouleurLigne = estCpi ? VAR_COULEUR_CPI : VAR_COULEUR[code];
                 const pill = (
                   <span
                     className={`flex w-fit items-center gap-1 px-2.5 py-1 font-semibold ${
@@ -478,8 +510,8 @@ export function SoldeDetailPanel({
                             }`
                           : `rounded-full border text-xs transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
                               active
-                                ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
-                                : `bg-surface-app text-ink-900 ${classeBordure} ${HOVER_BG_CONGE[code]}`
+                                ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
+                                : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
                             }`
                     }`}
                   >
@@ -499,7 +531,7 @@ export function SoldeDetailPanel({
                     style={
                       active
                         ? {
-                            backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`,
+                            backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
                           }
                         : undefined
                     }
@@ -531,7 +563,7 @@ export function SoldeDetailPanel({
                     <td
                       className={`px-4 py-3 text-center font-semibold ${
                         m.jours < 0 || m.type === "acquisition"
-                          ? classeTexte
+                          ? classeTexteLigne
                           : "text-status-success-fg"
                       }`}
                     >
@@ -663,19 +695,19 @@ export function SoldeDetailPanel({
           className="flex items-stretch transition-[gap] duration-300 ease-in-out"
           style={{ ...style, gap: detailOuvert ? "5px" : "0px" }}
         >
-        <div className="flex w-72 shrink-0 flex-col gap-2">
-          <div className="bg-surface-card relative overflow-hidden shadow-sm">
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Fermer"
-              className="text-ink-500 hover:text-ink-900 bg-surface-card absolute top-2 right-2 z-20 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-            >
-              <X size={16} />
-            </button>
-            {bodyJsx}
-          </div>
-          {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
+          <div className="flex w-72 shrink-0 flex-col gap-2">
+            <div className="bg-surface-card relative overflow-hidden shadow-sm">
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Fermer"
+                className="text-ink-500 hover:text-ink-900 bg-surface-card absolute top-2 right-2 z-20 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+              >
+                <X size={16} />
+              </button>
+              {bodyJsx}
+            </div>
+            {/* "Ajuster le solde" (27/08/2026, repris de `PanelJoursMouvement` —
               "Vérifier les fiches de paie") — sorti de la card tableau
               (29/08/2026, demande explicite) : sa propre card en dessous.
               Affichage repris du principe "Annuler cette demande"
@@ -683,147 +715,147 @@ export function SoldeDetailPanel({
               chevron replié par défaut (pas de fond/ombre tant que fermé),
               panneau déplié teinté à 5% de la couleur du type plutôt qu'un
               simple fond blanc. */}
-          <button
-            type="button"
-            onClick={() => {
-              setFormulaireOuvert((v) => !v);
-              setErreurAjustement(null);
-            }}
-            className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
-          >
-            Ajuster le solde
-            {formulaireOuvert ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-
-          {formulaireOuvert && (
-            <div
-              className="w-full shadow-sm"
-              style={{
-                backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 5%, white)`,
+            <button
+              type="button"
+              onClick={() => {
+                setFormulaireOuvert((v) => !v);
+                setErreurAjustement(null);
               }}
+              className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
             >
+              Ajuster le solde
+              {formulaireOuvert ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {formulaireOuvert && (
               <div
-                className={`px-4 pt-3 pb-1 text-sm leading-[1.5] font-bold ${classeTexteTypeBadge(code)}`}
+                className="w-full shadow-sm"
+                style={{
+                  backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 5%, white)`,
+                }}
               >
-                Ajuster le solde
-              </div>
-              <div className="flex flex-col gap-4 px-4 pt-1.5 pb-2">
-                <div className="flex gap-3 text-xs font-semibold">
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      checked={sens === "ajouter"}
-                      onChange={() => setSens("ajouter")}
-                    />
-                    Ajouter
-                  </label>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      checked={sens === "retirer"}
-                      onChange={() => setSens("retirer")}
-                    />
-                    Retirer
-                  </label>
+                <div
+                  className={`px-4 pt-3 pb-1 text-sm leading-[1.5] font-bold ${classeTexteTypeBadge(code)}`}
+                >
+                  Ajuster le solde
                 </div>
-                <div>
-                  <label
-                    htmlFor="ajustement-jours"
-                    className="text-ink-500 mb-1.5 block text-[11px] font-bold"
-                  >
-                    Nombre de jours
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="ajustement-jours"
-                      type="number"
-                      step="any"
-                      min="0"
-                      inputMode="decimal"
-                      value={montant}
-                      onChange={(e) => {
-                        const valeur = e.target.value;
-                        if (/^\d{0,2}([.,]\d{0,2})?$/.test(valeur)) setMontant(valeur);
-                      }}
-                      className="w-20 shrink-0 rounded-md text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                <div className="flex flex-col gap-4 px-4 pt-1.5 pb-2">
+                  <div className="flex gap-3 text-xs font-semibold">
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        checked={sens === "ajouter"}
+                        onChange={() => setSens("ajouter")}
+                      />
+                      Ajouter
+                    </label>
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        checked={sens === "retirer"}
+                        onChange={() => setSens("retirer")}
+                      />
+                      Retirer
+                    </label>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="ajustement-jours"
+                      className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+                    >
+                      Nombre de jours
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="ajustement-jours"
+                        type="number"
+                        step="any"
+                        min="0"
+                        inputMode="decimal"
+                        value={montant}
+                        onChange={(e) => {
+                          const valeur = e.target.value;
+                          if (/^\d{0,2}([.,]\d{0,2})?$/.test(valeur)) setMontant(valeur);
+                        }}
+                        className="w-20 shrink-0 [appearance:textfield] rounded-md text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      />
+                      <span className="text-ink-900 shrink-0 text-xs font-semibold">jours</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="ajustement-commentaire"
+                      className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+                    >
+                      Commentaire (obligatoire)
+                    </label>
+                    <Textarea
+                      id="ajustement-commentaire"
+                      value={motifAjustement}
+                      onChange={(e) => setMotifAjustement(e.target.value)}
+                      rows={2}
+                      placeholder="Ex. régularisation suite à..."
+                      className="w-full rounded-md text-xs placeholder:text-xs"
                     />
-                    <span className="text-ink-900 shrink-0 text-xs font-semibold">jours</span>
                   </div>
                 </div>
-                <div>
-                  <label
-                    htmlFor="ajustement-commentaire"
-                    className="text-ink-500 mb-1.5 block text-[11px] font-bold"
+
+                {erreurAjustement && (
+                  <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
+                    {erreurAjustement}
+                  </div>
+                )}
+
+                <div className="px-4 pb-4">
+                  <Button
+                    variant={montant.trim() && motifAjustement.trim() ? "primary" : "secondary"}
+                    disabled={envoiAjustement || !montant.trim() || !motifAjustement.trim()}
+                    onClick={() => setConfirmationAjustement(true)}
+                    className="w-full justify-center rounded-full px-4 py-2 text-xs"
                   >
-                    Commentaire (obligatoire)
-                  </label>
-                  <Textarea
-                    id="ajustement-commentaire"
-                    value={motifAjustement}
-                    onChange={(e) => setMotifAjustement(e.target.value)}
-                    rows={2}
-                    placeholder="Ex. régularisation suite à..."
-                    className="w-full rounded-md text-xs placeholder:text-xs"
+                    Confirmer
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <div
+            className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
+          >
+            <div className="w-64">
+              {ajustementSelectionne ? (
+                <div className="animate-detail-fade-in">
+                  <DetailAjustementPanel
+                    ajustement={{
+                      code,
+                      nomComplet,
+                      deltaJours: ajustementSelectionne.jours,
+                      date: ajustementSelectionne.date,
+                      auteurNom: ajustementSelectionne.auteurNom,
+                      motif: ajustementSelectionne.motif,
+                    }}
+                    onClose={fermerDetail}
+                    pleineLargeur
                   />
                 </div>
-              </div>
-
-              {erreurAjustement && (
-                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
-                  {erreurAjustement}
+              ) : demandeSelectionnee ? (
+                <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
+                  <DetailCongePanel
+                    selection={demandeSelectionnee}
+                    onClose={fermerDetail}
+                    pleineLargeur
+                    onRetirer={onRetirerDemande}
+                    peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+                    lignesTransmission={lignesTransmission}
+                  />
                 </div>
-              )}
-
-              <div className="px-4 pb-4">
-                <Button
-                  variant={montant.trim() && motifAjustement.trim() ? "primary" : "secondary"}
-                  disabled={envoiAjustement || !montant.trim() || !motifAjustement.trim()}
-                  onClick={() => setConfirmationAjustement(true)}
-                  className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                >
-                  Confirmer
-                </Button>
-              </div>
+              ) : chargementDetail ? (
+                <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in p-8 text-center text-sm">
+                  Chargement…
+                </div>
+              ) : null}
             </div>
-          )}
-        </div>
-        <div
-          className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
-        >
-          <div className="w-64">
-            {ajustementSelectionne ? (
-              <div className="animate-detail-fade-in">
-                <DetailAjustementPanel
-                  ajustement={{
-                    code,
-                    nomComplet,
-                    deltaJours: ajustementSelectionne.jours,
-                    date: ajustementSelectionne.date,
-                    auteurNom: ajustementSelectionne.auteurNom,
-                    motif: ajustementSelectionne.motif,
-                  }}
-                  onClose={fermerDetail}
-                  pleineLargeur
-                />
-              </div>
-            ) : demandeSelectionnee ? (
-              <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-                <DetailCongePanel
-                  selection={demandeSelectionnee}
-                  onClose={fermerDetail}
-                  pleineLargeur
-                  onRetirer={onRetirerDemande}
-                  peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
-                  lignesTransmission={lignesTransmission}
-                />
-              </div>
-            ) : chargementDetail ? (
-              <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in p-8 text-center text-sm">
-                Chargement…
-              </div>
-            ) : null}
           </div>
-        </div>
         </div>
         {confirmationAjustement && (
           <Modal onClose={() => setConfirmationAjustement(false)} className="max-w-sm">

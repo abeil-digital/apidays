@@ -93,6 +93,11 @@ export interface MouvementSolde {
   // éviter les collisions quand une demande génère plusieurs lignes de
   // transmission). Manquant en théorique : `id` y est déjà l'id demande.
   demandeId?: string;
+  // 10/09/2026 — id du congé imposé d'origine pour une consommation CP
+  // auto-générée par un CPI, distincte d'une demande personnelle. Permet à
+  // l'UI (pill du suivi de solde) d'appliquer le code couleur CPI plutôt que
+  // CP, en plus du préfixe déjà présent dans `libelle`.
+  congeImposeId?: string | null;
 }
 
 export interface MoisHistoriqueSolde {

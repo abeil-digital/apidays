@@ -305,8 +305,18 @@ export function ProchainsJoursOffCard({
         ...(anneeSuivanteVisible ? calSuivant.djImposees : []),
       ];
 
+  // `!d.congeImposeId` (10/09/2026, demande explicite) — sans ce filtre, un
+  // CPI apparaissait deux fois pour le collaborateur concerné : une fois via
+  // `congesImposesTous` ci-dessus (la période CPI elle-même), une fois via
+  // cette demande "CP" auto-générée pour lui par `ajouterCongeImpose()`
+  // (`calendrier.repository.ts`) — même dates, même durée, juste un libellé
+  // différent. La ligne CPI suffit, la copie personnelle reste comptée dans
+  // le solde mais n'a plus besoin d'être affichée séparément ici.
   const demandesPerso = (masquerDemandesPerso ? [] : demandes)
-    .filter((d) => (d.statut === "validé" || d.statut === "en attente") && d.fin >= today)
+    .filter(
+      (d) =>
+        (d.statut === "validé" || d.statut === "en attente") && d.fin >= today && !d.congeImposeId,
+    )
     .map((d) => ({
       id: d.id,
       debut: d.debut,

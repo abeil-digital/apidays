@@ -5639,6 +5639,154 @@ visible confirmé et assumé avec Vincent : il doit cliquer "Publier" sur `/para
 en prod juste après ce déploiement, sans quoi les fériés/CPI/DJI 2026 déjà visibles aux
 collaborateurs d'Abeil disparaîtraient jusqu'à ce qu'il le fasse.
 
+## CPI : génération des demandes différée à la publication du calendrier (10/09/2026)
+
+Question de Vincent sur l'enchaînement CPI/publication ("on considère bien que sa date de
+validation comme la date de publication du calendrier, ou cela crée des situations étranges ?") a
+révélé un vrai trou d'architecture : `ajouterCongeImpose()` générait immédiatement, à la CRÉATION
+d'un congé imposé, une demande `CP` `statut: "validee"` par collaborateur actif — **avant même que
+le calendrier de son année ne soit publié**. Un CPI en brouillon décomptait donc déjà le solde des
+collaborateurs en coulisses, sans qu'aucune UI ne le laisse deviner (confirmé avec Vincent : les
+CPI n'ont jamais de flow de validation manager, `statut` passe directement à `"validee"`,
+éliminant l'option d'un flux "en_attente" à faire suivre).
+
+**Option retenue ("Option 1")** : différer entièrement la génération des demandes de la création du
+CPI à la publication du calendrier.
+
+- `genererDemandesCongeImpose(supabase, congeImpose)` (nouvelle fonction privée,
+  `calendrier.repository.ts`) — extrait la logique de génération (une demande `CP`/`statut:
+  "validee"` par collaborateur actif, `conge_impose_id` en FK) de l'ancien `ajouterCongeImpose()`.
+  **Idempotente** : vérifie les paires `conge_impose_id`+`utilisateur_id` déjà en base avant
+  d'insérer — sans risque à rappeler plusieurs fois (ex. `ajouterCongeImpose` sur un calendrier déjà
+  publié, PUIS `publierParametragePeriode` qui la rejoue pour tous les CPI de l'année au moment de
+  la publication).
+- `ajouterCongeImpose()` — ne génère les demandes IMMÉDIATEMENT que si le calendrier de l'année est
+  déjà publié (`parametrage_periode.valide_le` vérifié avant insert) ; sinon, ne fait plus rien de
+  plus que créer la ligne `conges_imposes` — `publierParametragePeriode` s'en chargera au bon
+  moment.
+- `publierParametragePeriode()`/`depublierParametragePeriode()` réécrites : publier rejoue
+  `genererDemandesCongeImpose` pour TOUS les CPI de l'année (rattrapage, idempotent) ; dépublier
+  annule (pas supprime) les demandes générées via `retirerDemande()` déjà existante (gère aussi bien
+  une demande jamais transmise en paie qu'une déjà transmise, avec régularisation) — réutilisée
+  plutôt que réinventée.
+- `calculerNbDemiJournees()` (`demandes.repository.ts`) gagne un 6ᵉ paramètre optionnel
+  `excludeCongeImposeId` — nécessaire car `genererDemandesCongeImpose` calcule la durée d'un CPI
+  déjà persisté en base : sans exclusion, la fonction (qui retire tout CPI chevauchant la période
+  demandée) se serait soustrait à elle-même, retournant systématiquement 0.
+
+**Testé de bout en bout sur test3** : CPI créé en brouillon → 0 ligne `demandes_conges` générée
+(vérifié en base) ; publication du calendrier → génération catch-up correcte pour ce CPI, ET
+absence de doublon sur un CPI plus ancien déjà généré sous l'ancien comportement (idempotence
+confirmée) ; dépublication → toutes les demandes liées passent en `statut: "annulee"` (pas de
+suppression physique). Nettoyage de test3 après coup (CPI/demandes de test supprimés, `valide_le`
+et `objectifs_calendrier.cible_jours_cpi` restaurés à leur état d'origine).
+
+**Bug non lié trouvé en testant** : un CPI configuré sous l'onglet 2027 s'est retrouvé enregistré
+avec des dates de 2026 (dates tapées/sélectionnées à la main dans la modale, pas un bug de code
+identifié avec certitude — le `DatePicker` s'ouvre sur le mois courant sans sélecteur d'année,
+terrain propice à une erreur de navigation). Conséquence concrète : la card "Congés imposés"
+additionnait ce CPI dans son total (non filtré par date), mais le tiroir "Prochains jours off" (qui
+filtre par plage `debutPeriode`/`finPeriode` de l'année de l'onglet) l'excluait — écart visible entre
+les deux ("5 jours" affichés vs "Aucun jour off à venir"). Rien ne valide aujourd'hui qu'un CPI
+créé sous un onglet année tombe bien dans l'année civile de ce même onglet — piste de validation à
+ajouter si le cas se reproduit, pas fait pour l'instant (CPI mal daté simplement supprimé).
+
+## CPI : reconnaissance visuelle et dans les exports paie (10/09/2026)
+
+Suite de demandes explicites de Vincent pour que les CPI restent identifiables partout où ils sont
+comptés comme des CP normaux (accounting inchangé — voir CONTEXTE.md plus haut, "un CPI DOIT
+continuer à décompter le solde CP") :
+
+- **Couleur bleu foncé CPI, pas bleu CP** — `tipoDuJour()` dans `CalendrierPage.tsx` utilisait à
+  tort `bg-cp`/`var(--color-cp)` pour le cas "journée partagée CPI+DJI" ; corrigé en `bg-cpi`/
+  `var(--color-cpi)`. Même bug trouvé et corrigé sur la page de démo `DesignSystemPage.tsx`
+  (`demoTipoDuJour`).
+- **Doublon CP/CPI sur les calendriers collaborateur** — un CPI apparaissait deux fois pour le
+  collaborateur concerné : une fois via `congesImposes` (la période CPI elle-même), une fois via la
+  demande `CP` auto-générée pour lui (même dates, juste un libellé différent). Décision explicite de
+  Vincent : "Supprime la ligne CP en double" — filtre `!d.congeImposeId` ajouté partout où une liste
+  de demandes personnelles est construite à côté d'une liste de CPI : `DashboardPage.tsx`
+  (`demandeDuJour`, priorité d'affichage sur la case du jour), `ProchainsJoursOffCard.tsx`
+  (`demandesPerso`), `compterTypologies.ts` (comptage par typologie), `CalendrierCollaborateur.tsx`/
+  `CalendrierGlobal.tsx` (mêmes fixes que DashboardPage).
+- **Badge CPI dans les écrans paie, écrans in-app uniquement** — décision affinée en 2 temps :
+  d'abord "les CPI doivent être considérés comme des CP normaux dans les exports paie et les suivis
+  de solde, différenciés par le TypeBadge et l'intitulé", puis précisée ("non, en export paie je
+  dois voir les CPI avec badge CPI, les reconnaître" → clarifié : écrans in-app uniquement, **pas**
+  le fichier CSV exporté, qui reste un CP standard pour la comptable). Ajouté : `codeRecap()`
+  (`TransmissionsPaiePage.tsx`), `typeBadgeDeDemande()` (`VerifierFichesPaiePage2.tsx`),
+  `codeDemande()` (`HistoriqueTable.tsx`, extension proactive signalée à Vincent) — branche
+  `demande.type === "CP" && demande.congeImposeId → "CPI"` dans les trois.
+
+## CPI daté au-delà de la période de référence en cours → décompté en CPA (10/09/2026)
+
+Demande explicite de Vincent, dans la continuité du refactor "génération différée" ci-dessus : un
+CPI dont la date dépasse la fin de la période de référence CP en cours doit être décompté en CPA
+(congé anticipé), pas en CP — même principe qu'une demande personnelle "Congés anticipés"
+(`is_anticipation: true`), mais choisi automatiquement (pas de collaborateur pour le sélectionner
+sur un CPI).
+
+- `genererDemandesCongeImpose()` calcule désormais `is_anticipation` : `congeImpose.debut >
+  periodeReferenceCp(regleCp, getAujourdhui()).fin` (comparaison sur la date de début du CPI
+  uniquement — un CPI à cheval sur la frontière reste un cas limite non géré, comme pour une
+  demande personnelle). Testé sur test3 : CPI du 09 au 13/08/2027 (période en cours 01/06/2026 →
+  31/05/2027 au moment du test) correctement enregistré avec `is_anticipation: true`.
+- **Bug annexe découvert en vérifiant l'affichage** : une fois `is_anticipation: true` posé, le CPI
+  n'apparaissait **nulle part** dans le suivi de solde (ni CP, exclu par `is_anticipation`, ni CPA).
+  Cause : `fetchSoldes`/`fetchHistoriqueCpa` (`soldes.repository.ts`) plafonnaient la fenêtre de
+  consommation CPA à la période de référence **en cours** (`periodeEnCours`, fix du 08/09/2026,
+  documenté plus haut dans ce fichier) — un CPA daté dans la période SUIVANTE (le cas normal d'un
+  congé anticipé, ou ici un CPI très en avance) tombait hors fenêtre et restait invisible tant que
+  cette période ne devenait pas elle-même "en cours". Corrigé en retirant le plafond haut : borne
+  basse inchangée (`periodeEnCours.debut`), borne haute déplafonnée via `decalerPeriode(...,
+  50)` (50 ans — en pratique aucun plafond) sur les 3 requêtes CPA de `fetchSoldes`
+  (`consommeCpa`/`enAttenteCpa`/`transmisCpa`) et la requête `demandes_conges` de
+  `fetchHistoriqueCpa`. Conséquence assumée : un CPA très en avance peut désormais faire passer le
+  solde théorique CPA en négatif, sans garde-fou dédié — item ajouté au Backlog ("Analyser le
+  fonctionnement des soldes RTT et CPA").
+- **Même distinction CPI/CPA que côté CP** appliquée au panneau CPA : `libelleMouvementCpa()`
+  (nouvelle fonction, même principe que `libelleMouvementCp` côté CP) préfixe "CPI :" au lieu de
+  "CPA :" quand `conge_impose_id` est renseigné ; `congeImposeId` propagé sur `MouvementSolde`
+  jusqu'à `SoldeDetailPanel.tsx` (`codeAffichageMouvement()`, étendu de "CP uniquement" à "CP OU
+  CPA") — la pill prend le code couleur CPI (bordure/texte bleu foncé, même famille que DJI) au
+  lieu de la couleur générique du panneau, vérifié en direct sur "Suivre mon solde"/"Suivre les
+  soldes" (côté CP ET côté CPA).
+
+## Calendrier collaborateur : rotation des 3 onglets Année/Période CP (10/09/2026)
+
+Proposition de Vincent pour remplacer la fenêtre fixe "Année en cours / Période de référence CP /
+Année suivante" (`DashboardPage.tsx`, `CalendrierCollaborateur.tsx`, `CalendrierGlobal.tsx`) :
+avant le 1er juin (le 3ᵉ onglet, jusque-là toujours "année civile+1", ne montrait rien de la
+prochaine période de référence CP tant qu'elle n'était pas devenue "en cours") le 3ᵉ onglet devient
+la **prochaine période de référence** (ex. "Juin 27 → Mai 28" dès janvier 2027) plutôt que l'année
+civile suivante ; à partir du 1er juin, il reprend son comportement d'origine (année civile+1,
+toujours pleine). L'ordre des 2 premiers onglets s'inverse en miroir (période CP en cours devant
+l'année civile avant le 1er juin, l'inverse après) :
+
+- avant le 1er juin de l'année N : `Juin N-1 → Mai N` | `N` | `Juin N → Mai N+1`
+- à partir du 1er juin de l'année N : `N` | `Juin N → Mai N+1` | `N+1`
+
+Implémenté à l'identique dans les 3 écrans (code dupliqué existant, pas mutualisé — pattern déjà en
+place avant ce fix) : `etatAvantBascule` (`debutPeriodeCp` antérieur à `anneeActuelle`) pilote à la
+fois le contenu du 3ᵉ onglet (`rangeTroisiemeOnglet`) et l'ordre de rendu des 2 premiers (boutons
+extraits en constantes JSX — `boutonEnCours`/`boutonPeriodeCp`/`boutonTroisieme` — pour réordonner
+sans dupliquer le markup). Mêmes attributs qu'avant pour chaque onglet individuellement (gating
+publication `anneeVisiblePourCommuns`, bascule "mois en cours"/"vue complète" via `SelectAffichage`,
+3 années de données déjà chargées suffisantes dans tous les cas de rotation).
+
+**`getAujourdhui()` étendu à ces 3 écrans** (demande explicite de Vincent, "on doit pouvoir tester
+avec le bandeau") : `anneeActuelle`/`debutMoisActuel` utilisaient `new Date()` en dur, désynchronisés
+de `todayIso`/`debutPeriodeCp` (déjà branchés sur `todayISO()`, qui respecte la date simulée) —
+sans ce fix la rotation ne pouvait être vérifiée qu'en attendant la vraie date. Vérifié en direct
+avec le bandeau de date simulée sur les 3 écrans, aux deux bascules (15/01/2027 et 01/06/2027) —
+ordre et libellés conformes à la règle ci-dessus.
+
+**Contexte business** : Abeil n'utilise pas le système de CPI pour l'instant — les 3 sections CPI
+ci-dessus ne sont donc pas visibles en usage réel côté client, mais restent nécessaires pour de
+futurs tenants. 2 items ajoutés au Backlog en conséquence : "Check des règles de gestion des CPI"
+(à revalider avec un vrai usage) et "Analyser le fonctionnement des soldes RTT et CPA" (indicateurs,
+soldes négatifs, remise en question du modèle théorique).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

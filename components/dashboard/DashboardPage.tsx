@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Newspaper, PlusCircle } from "lucide-react";
+import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
@@ -184,7 +185,13 @@ export function DashboardPage() {
   const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
   const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
 
-  const anneeActuelle = new Date().getFullYear();
+  // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
+  // de Vincent) — sans ça, le bandeau de date simulée locale ne pouvait pas
+  // tester la rotation des 3 onglets ci-dessous (`todayIso`/`debutPeriodeCp`
+  // suivaient déjà la date simulée via `todayISO()`, mais pas `anneeActuelle`,
+  // ce qui les désynchronisait dès qu'on simulait une date d'une autre année
+  // civile que la vraie date système).
+  const anneeActuelle = getAujourdhui().getFullYear();
   const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
   // Jours "communs" (Fériés/CPI/DJI) — 3 années possibles selon l'onglet :
@@ -217,7 +224,7 @@ export function DashboardPage() {
   // mois (validé ou encore en attente) disparaissait de la légende/du
   // calendrier alors que le libellé affiché ("Août 26") laisse croire que
   // tout le mois est couvert.
-  const debutMoisActuel = isoDate(anneeActuelle, new Date().getMonth(), 1);
+  const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   // Fenêtre de la période de référence CP contenant aujourd'hui — par
@@ -240,6 +247,29 @@ export function DashboardPage() {
       )
     : finAnneeActuelle;
 
+  // Rotation des 3 onglets (10/09/2026, demande explicite de Vincent) — avant
+  // le 1er juin de l'année en cours (la période CP en cours a démarré l'année
+  // PRÉCÉDENTE, "état avant bascule"), le 3e onglet ("annee_suivante") ne
+  // montre plus l'année civile suivante mais la PROCHAINE période de
+  // référence CP (Juin N → Mai N+1) — sinon rien ne permettait de voir sa
+  // propre prochaine période avant qu'elle ne devienne "en cours" le 1er
+  // juin. Une fois le 1er juin passé ("état après bascule"), ce 3e onglet
+  // reprend son comportement d'origine (année civile suivante, toujours
+  // pleine). Sans règle CP configurée, `debutPeriodeCp` vaut toujours
+  // `debutAnneeActuelle` (même année que `anneeActuelle`) : `etatAvantBascule`
+  // reste `false`, comportement inchangé.
+  const etatAvantBascule = Number(debutPeriodeCp.slice(0, 4)) < anneeActuelle;
+  const rangeTroisiemeOnglet =
+    regleCp && etatAvantBascule
+      ? {
+          debut: isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
+          fin: ajouterJoursIso(
+            isoDate(anneeActuelle + 1, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
+            -1,
+          ),
+        }
+      : { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) };
+
   const ranges: Record<Onglet, { debut: string; fin: string }> = {
     en_cours: {
       debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
@@ -249,7 +279,7 @@ export function DashboardPage() {
       debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
       fin: finPeriodeCp,
     },
-    annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
+    annee_suivante: rangeTroisiemeOnglet,
   };
   const rangeActive = ranges[onglet];
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
@@ -311,9 +341,21 @@ export function DashboardPage() {
     joursFeriesPourDuree: joursFeriesToutesAnnees,
   });
 
+  // `!d.congeImposeId` (10/09/2026, demande explicite) — sans ce filtre, la
+  // demande "CP" auto-générée par un CPI pour ce collaborateur
+  // (`ajouterCongeImpose()`) était trouvée EN PREMIER, avant même le CPI
+  // lui-même (`communDuJour`/`occupantDuJour` ci-dessous testent
+  // `demandeDuJour` avant CPI/DJI) — la case du jour et la popin de détail
+  // affichaient donc "CP" au lieu de "CPI" (mauvaise couleur, mauvais
+  // libellé) pour un jour pourtant imposé par l'entreprise.
   function demandeDuJour(iso: string): Demande | undefined {
     return demandes.find(
-      (d) => d.statut !== "refusé" && d.statut !== "annulé" && iso >= d.debut && iso <= d.fin,
+      (d) =>
+        d.statut !== "refusé" &&
+        d.statut !== "annulé" &&
+        iso >= d.debut &&
+        iso <= d.fin &&
+        !d.congeImposeId,
     );
   }
 
@@ -453,7 +495,13 @@ export function DashboardPage() {
   // s'effaçaient avant d'avoir pu être vues — à la fermeture, elles restent
   // mises en emphase tout le temps où le tiroir reste ouvert.
   const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
-  const decisionsNonVues = demandes.filter(
+  // `!d.congeImposeId` (10/09/2026, demande explicite) — une demande "CP"
+  // auto-générée par un CPI est validée par l'acte même de créer le CPI, pas
+  // une vraie décision manager sur une demande du collaborateur : "Hector a
+  // validé votre CPI" n'aurait pas de sens à notifier ni à lister dans le
+  // journal ("Mon journal", tiroir `ActiviteRecenteFeed`).
+  const demandesPourJournal = demandes.filter((d) => !d.congeImposeId);
+  const decisionsNonVues = demandesPourJournal.filter(
     (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
   );
   const nbDecisionsNonVues = decisionsNonVues.length;
@@ -481,6 +529,74 @@ export function DashboardPage() {
       setJournalFermetureEnCours(false);
     }, DUREE_FONDU_MS);
   }
+
+  // Boutons d'onglet extraits en constantes JSX (10/09/2026) — l'ordre des 2
+  // premiers change selon `etatAvantBascule` (voir plus haut) tout en
+  // réutilisant EXACTEMENT le même markup/comportement, sans le dupliquer 2x.
+  const boutonEnCours = (
+    <>
+      <button
+        type="button"
+        onClick={() => setOnglet("en_cours")}
+        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+          onglet === "en_cours"
+            ? "bg-slate/90 hover:bg-slate text-white"
+            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+        }`}
+      >
+        {anneeActuelle}
+      </button>
+      {onglet === "en_cours" && (
+        <SelectAffichage
+          actif={vueCompleteEnCours}
+          onChange={setVueCompleteEnCours}
+          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+          labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
+        />
+      )}
+    </>
+  );
+  const boutonPeriodeCp = (
+    <>
+      <button
+        type="button"
+        onClick={() => setOnglet("periode_cp")}
+        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+          onglet === "periode_cp"
+            ? "bg-slate/90 hover:bg-slate text-white"
+            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+        }`}
+      >
+        {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
+      </button>
+      {onglet === "periode_cp" && (
+        <SelectAffichage
+          actif={vueCompletePeriodeCp}
+          onChange={setVueCompletePeriodeCp}
+          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
+          labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
+        />
+      )}
+    </>
+  );
+  // 3e onglet (10/09/2026) — jamais "en cours" (toujours une fenêtre future,
+  // avant ou après bascule), donc jamais de `SelectAffichage` : même
+  // comportement "toujours plein" que l'ancien "Année suivante" fixe.
+  const boutonTroisieme = (
+    <button
+      type="button"
+      onClick={() => setOnglet("annee_suivante")}
+      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+        onglet === "annee_suivante"
+          ? "bg-slate/90 hover:bg-slate text-white"
+          : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+      }`}
+    >
+      {etatAvantBascule
+        ? `${formatMoisAnneeCourt(rangeTroisiemeOnglet.debut)} → ${formatMoisAnneeCourt(rangeTroisiemeOnglet.fin)}`
+        : anneeSuivante}
+    </button>
+  );
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
@@ -612,55 +728,23 @@ export function DashboardPage() {
             réellement présente sur la période active. */}
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setOnglet("en_cours")}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-                onglet === "en_cours"
-                  ? "bg-slate/90 hover:bg-slate text-white"
-                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-              }`}
-            >
-              {anneeActuelle}
-            </button>
-            {onglet === "en_cours" && (
-              <SelectAffichage
-                actif={vueCompleteEnCours}
-                onChange={setVueCompleteEnCours}
-                labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-                labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
-              />
+            {/* Ordre des 3 onglets (10/09/2026) — avant le 1er juin
+                (`etatAvantBascule`), la période CP en cours passe devant
+                l'année civile ("Juin N-1 → Mai N", "N", "Juin N → Mai N+1"),
+                miroir de l'ordre après le 1er juin ("N", "Juin N → Mai N+1",
+                "N+1") — voir le commentaire sur `etatAvantBascule` plus haut. */}
+            {etatAvantBascule ? (
+              <>
+                {boutonPeriodeCp}
+                {boutonEnCours}
+              </>
+            ) : (
+              <>
+                {boutonEnCours}
+                {boutonPeriodeCp}
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => setOnglet("periode_cp")}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-                onglet === "periode_cp"
-                  ? "bg-slate/90 hover:bg-slate text-white"
-                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-              }`}
-            >
-              {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-            </button>
-            {onglet === "periode_cp" && (
-              <SelectAffichage
-                actif={vueCompletePeriodeCp}
-                onChange={setVueCompletePeriodeCp}
-                labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-                labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
-              />
-            )}
-            <button
-              type="button"
-              onClick={() => setOnglet("annee_suivante")}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-                onglet === "annee_suivante"
-                  ? "bg-slate/90 hover:bg-slate text-white"
-                  : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-              }`}
-            >
-              {anneeSuivante}
-            </button>
+            {boutonTroisieme}
           </div>
 
           <CompteurTypologies typologies={typologies} />
@@ -826,7 +910,7 @@ export function DashboardPage() {
       )}
 
       <ActiviteRecenteFeed
-        demandes={demandes}
+        demandes={demandesPourJournal}
         tiroirOuvert={tiroirActiviteOuvert}
         onFermerTiroir={fermerTiroirActivite}
       />

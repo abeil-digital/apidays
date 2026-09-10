@@ -155,6 +155,14 @@ export async function calculerNbDemiJournees(
   fin: string,
   demiDebut: DemiJournee,
   demiFin: DemiJournee,
+  /** Exclut ce CPI de la soustraction "congés imposés déjà posés sur la
+   * plage" (10/09/2026) — nécessaire pour recalculer la durée d'un CPI
+   * DÉJÀ EN BASE (ex. au moment de générer ses demandes à la publication du
+   * calendrier, `genererDemandesCongeImpose`) : sans exclusion, ce CPI se
+   * soustrairait à lui-même et renverrait toujours 0 (même piège que documenté
+   * sur `ajouterCongeImpose`, qui l'évitait en calculant AVANT l'insertion —
+   * plus possible une fois le calcul déplacé après coup, à la publication). */
+  excludeCongeImposeId?: string,
 ): Promise<number> {
   const [{ data: feries }, { data: djis }, { data: cpis }] = await Promise.all([
     supabase.from("jours_feries").select("date").gte("date", debut).lte("date", fin),
@@ -163,11 +171,15 @@ export async function calculerNbDemiJournees(
       .select("date, demi_journee")
       .gte("date", debut)
       .lte("date", fin),
-    supabase
-      .from("conges_imposes")
-      .select("date_debut, date_fin, demi_debut, demi_fin")
-      .lte("date_debut", fin)
-      .gte("date_fin", debut),
+    (() => {
+      let requete = supabase
+        .from("conges_imposes")
+        .select("date_debut, date_fin, demi_debut, demi_fin")
+        .lte("date_debut", fin)
+        .gte("date_fin", debut);
+      if (excludeCongeImposeId) requete = requete.neq("id", excludeCongeImposeId);
+      return requete;
+    })(),
   ]);
   const joursFeries = new Set((feries ?? []).map((f: { date: string }) => f.date));
   const djiParDemiJour = new Set(

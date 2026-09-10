@@ -76,13 +76,19 @@ export function compterTypologies({
     totaux.set(code, (totaux.get(code) ?? 0) + jours);
   }
 
+  // `!d.congeImposeId` (10/09/2026, demande explicite) — une demande "CP"
+  // auto-générée par un CPI (`ajouterCongeImpose()`) compte déjà dans le
+  // total "CPI" via `congesImposes` juste en dessous ; sans ce filtre, ses
+  // jours étaient comptés deux fois (une fois sous "C. payés", une fois
+  // sous "C. imposés").
   demandes
     .filter(
       (d) =>
         d.statut !== "refusé" &&
         d.statut !== "annulé" &&
         d.debut <= rangeActive.fin &&
-        d.fin >= rangeActive.debut,
+        d.fin >= rangeActive.debut &&
+        !d.congeImposeId,
     )
     .forEach((d) => ajouter(codeBadgeDemande(d), d.nbDemiJournees / 2));
 

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CongeImpose,
   CongeImposeInput,
@@ -17,6 +18,9 @@ import {
   retirerDemande,
 } from "@/lib/data/demandes.repository";
 import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
+import { fetchReglesAcquisition } from "@/lib/data/reglesConges.repository";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
+import { getAujourdhui } from "@/lib/aujourdhui";
 
 /**
  * Repository de l'écran Paramétrer > Calendrier (`parametrage_periode`,
@@ -124,7 +128,18 @@ export async function enregistrerParametragePeriode(
   return mapParametragePeriodeDepuisDb(data);
 }
 
-/** Publie le paramétrage de l'année — le rend visible par les collaborateurs. */
+/**
+ * Publie le paramétrage de l'année — et génère, pour CHAQUE congé imposé
+ * (CPI) déjà posé sur cette année, les demandes `CP` manquantes (une par
+ * collaborateur actif) — 10/09/2026, refonte : voir le commentaire de
+ * `genererDemandesCongeImpose` plus bas pour le "pourquoi" (aligner l'impact
+ * sur le solde avec le moment où le calendrier devient réellement visible
+ * aux collaborateurs, pas la date de création du CPI). "Manquantes" :
+ * rattrape les CPI ajoutés pendant que le calendrier était encore en
+ * brouillon — `genererDemandesCongeImpose` est idempotente, sans effet sur
+ * un CPI déjà doté de ses demandes (ex. ajouté APRÈS une publication
+ * précédente, voir `ajouterCongeImpose`).
+ */
 export async function publierParametragePeriode(id: string): Promise<ParametragePeriode> {
   const supabase = createClient();
 
@@ -139,12 +154,62 @@ export async function publierParametragePeriode(id: string): Promise<Parametrage
     throw new Error("Impossible de publier le paramétrage de l'année.");
   }
 
+  const { data: congesImposes, error: erreurConges } = await supabase
+    .from("conges_imposes")
+    .select(SELECT_CONGE_IMPOSE)
+    .eq("parametrage_periode_id", id);
+
+  if (erreurConges) {
+    throw new Error(
+      "Calendrier publié, mais impossible de charger ses congés imposés pour générer les demandes associées.",
+    );
+  }
+
+  for (const c of congesImposes ?? []) {
+    await genererDemandesCongeImpose(supabase, mapCongeImposeDepuisDb(c));
+  }
+
   return mapParametragePeriodeDepuisDb(data);
 }
 
-/** Annule la publication du paramétrage de l'année — repasse en brouillon. */
+/**
+ * Annule la publication du paramétrage de l'année — repasse en brouillon.
+ * Symétrique de `publierParametragePeriode` (10/09/2026) : annule aussi
+ * (statut → `annulé`, via `retirerDemande` — jamais un hard delete, gère
+ * déjà correctement le cas d'une demande entre-temps transmise en paie) les
+ * demandes `CP` générées par les CPI de cette année, encore validées. Sans
+ * ça, dépublier ne faisait que masquer la visibilité collaborateur sans
+ * annuler son effet déjà pris sur le solde — la publication redeviendrait
+ * incohérente avec le solde réel du collaborateur.
+ */
 export async function depublierParametragePeriode(id: string): Promise<ParametragePeriode> {
   const supabase = createClient();
+
+  const { data: congesImposes, error: erreurConges } = await supabase
+    .from("conges_imposes")
+    .select("id")
+    .eq("parametrage_periode_id", id);
+
+  if (erreurConges) {
+    throw new Error("Impossible d'annuler la publication du paramétrage de l'année.");
+  }
+
+  const congeImposeIds = (congesImposes ?? []).map((c) => c.id);
+  if (congeImposeIds.length > 0) {
+    const { data: demandesLiees, error: erreurDemandes } = await supabase
+      .from("demandes_conges")
+      .select("id")
+      .in("conge_impose_id", congeImposeIds)
+      .eq("statut", "validee");
+
+    if (erreurDemandes) {
+      throw new Error("Impossible d'annuler la publication du paramétrage de l'année.");
+    }
+
+    for (const d of demandesLiees ?? []) {
+      await retirerDemande(d.id, "Publication du calendrier annulée");
+    }
+  }
 
   const { data, error } = await supabase
     .from("parametrage_periode")
@@ -260,32 +325,128 @@ export async function fetchCongesImposes(parametragePeriodeId: string): Promise<
 }
 
 /**
- * Ajoute une période de congés imposés — et, depuis le 29/08/2026 ("mêmes
- * règles de gestion que des CP normaux"), une vraie ligne `demandes_conges`
- * (type CP, statut validée) par collaborateur actif, liée à la période via
- * `conge_impose_id`. Ces lignes traversent ensuite tout le pipeline
- * solde/export paie existant sans aucun changement de code ailleurs
- * (`fetchSoldes`, `fetchDemandesAvecSoldeTransmission`/`genererExportPaie`
- * ne filtrent ni sur l'origine ni sur l'utilisateur).
+ * Génère, pour un congé imposé (CPI) déjà en base, les demandes `CP`
+ * manquantes (une par collaborateur actif, liée via `conge_impose_id`) —
+ * 10/09/2026, extrait de l'ancien `ajouterCongeImpose` (voir CONTEXTE.md,
+ * "CPI : la date de décompte suit la publication du calendrier, pas la
+ * création").
  *
- * `nbDemiJournees` est calculé AVANT l'insertion de la période elle-même :
- * `calculerNbDemiJournees` déduit déjà les CPI existants sur la plage — s'il
- * incluait la période en cours de création, il se soustrairait à lui-même et
- * renverrait 0. Fériés/DJI déjà en base restent correctement déduits, la
- * même valeur s'applique à tous (donnée d'entreprise, pas personnelle).
+ * Idempotente : ne génère rien pour un collaborateur qui a déjà une demande
+ * pour ce CPI (`demandes_conges.conge_impose_id`) — permet de rappeler cette
+ * fonction sans risque de doublon (ex. `publierParametragePeriode`, qui la
+ * rejoue pour TOUS les CPI de l'année, y compris ceux déjà traités par un
+ * appel précédent de `ajouterCongeImpose` si le calendrier était déjà
+ * publié à ce moment-là).
+ *
+ * `excludeCongeImposeId` sur `calculerNbDemiJournees` (voir sa doc) :
+ * indispensable ici, ce CPI est TOUJOURS déjà en base au moment de l'appel
+ * (jamais avant, contrairement à l'ancien `ajouterCongeImpose`).
+ *
+ * `is_anticipation` (10/09/2026, demande explicite de Vincent) : un CPI dont
+ * la date tombe APRÈS la fin de la période de référence CP en cours (ex. un
+ * CPI d'août 2027 paramétré alors qu'on est encore dans la période
+ * 01/06/2026 → 31/05/2027) doit être décompté en CPA, pas en CP — même
+ * logique que l'option "Congés anticipés" du formulaire personnel
+ * (`PoserDemandeModal.tsx`), mais choisie ici automatiquement (pas de
+ * collaborateur pour la sélectionner sur un CPI). Comparaison sur
+ * `congeImpose.debut` uniquement (un CPI à cheval sur la frontière reste un
+ * cas limite non géré, comme pour une demande personnelle).
+ */
+async function genererDemandesCongeImpose(
+  supabase: SupabaseClient,
+  congeImpose: CongeImpose,
+): Promise<void> {
+  const [
+    typeCpId,
+    nbDemiJournees,
+    auteurId,
+    utilisateurs,
+    { data: dejaGenerees, error: erreurDejaGenerees },
+    reglesAcquisition,
+  ] = await Promise.all([
+    getTypeAbsenceId(supabase, "CP"),
+    calculerNbDemiJournees(
+      supabase,
+      congeImpose.debut,
+      congeImpose.fin,
+      congeImpose.demiDebut,
+      congeImpose.demiFin,
+      congeImpose.id,
+    ),
+    getUtilisateurId(supabase),
+    fetchUtilisateursAdmin(),
+    supabase.from("demandes_conges").select("utilisateur_id").eq("conge_impose_id", congeImpose.id),
+    fetchReglesAcquisition(),
+  ]);
+
+  if (erreurDejaGenerees) {
+    throw new Error("Impossible de générer les demandes associées à ce congé imposé.");
+  }
+
+  const idsDejaGeneres = new Set((dejaGenerees ?? []).map((d) => d.utilisateur_id));
+  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !idsDejaGeneres.has(u.id));
+  if (actifs.length === 0) return;
+
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const periodeActuelle = periodeReferenceCp(regleCp, getAujourdhui());
+  const estAnticipation = congeImpose.debut > periodeActuelle.fin;
+
+  const commentaire = `Congé imposé du ${congeImpose.debut} au ${congeImpose.fin}`;
+
+  const { error: errorDemandes } = await supabase.from("demandes_conges").insert(
+    actifs.map((u) => ({
+      utilisateur_id: u.id,
+      type_absence_id: typeCpId,
+      date_debut: congeImpose.debut,
+      date_fin: congeImpose.fin,
+      demi_debut: congeImpose.demiDebut,
+      demi_fin: congeImpose.demiFin,
+      nb_demi_journees: nbDemiJournees,
+      is_anticipation: estAnticipation,
+      statut: "validee",
+      validateur_id: auteurId,
+      commentaire_decision: commentaire,
+      date_decision: new Date().toISOString(),
+      conge_impose_id: congeImpose.id,
+    })),
+  );
+
+  if (errorDemandes) {
+    throw new Error(
+      "Congé imposé créé mais impossible de générer les demandes associées aux collaborateurs.",
+    );
+  }
+}
+
+/**
+ * Ajoute une période de congés imposés — sans effet immédiat sur le solde
+ * des collaborateurs (10/09/2026, revu — voir CONTEXTE.md) : les demandes
+ * `CP` associées (une par collaborateur actif, "mêmes règles de gestion
+ * qu'un CP normal" depuis le 29/08/2026) ne sont générées QUE si le
+ * calendrier de cette année est DÉJÀ publié (`valide_le` non nul) — sinon,
+ * `publierParametragePeriode` s'en chargera pour tous les CPI de l'année
+ * d'un coup, au moment où le calendrier devient réellement visible aux
+ * collaborateurs — évite un solde qui bouge silencieusement pendant qu'un
+ * CPI est encore en brouillon, sans que rien n'explique pourquoi côté
+ * collaborateur (bug réel trouvé en testant, voir CONTEXTE.md).
  */
 export async function ajouterCongeImpose(
   parametragePeriodeId: string,
   input: CongeImposeInput,
 ): Promise<CongeImpose> {
   const supabase = createClient();
-  const [typeAbsenceId, typeCpId, nbDemiJournees, auteurId, utilisateurs] = await Promise.all([
+  const [typeAbsenceId, { data: parametrage, error: erreurParametrage }] = await Promise.all([
     getTypeAbsenceId(supabase, "CP_IMPOSE"),
-    getTypeAbsenceId(supabase, "CP"),
-    calculerNbDemiJournees(supabase, input.debut, input.fin, input.demiDebut, input.demiFin),
-    getUtilisateurId(supabase),
-    fetchUtilisateursAdmin(),
+    supabase
+      .from("parametrage_periode")
+      .select("valide_le")
+      .eq("id", parametragePeriodeId)
+      .single(),
   ]);
+
+  if (erreurParametrage) {
+    throw new Error("Impossible d'ajouter cette période de congés imposés.");
+  }
 
   const { data, error } = await supabase
     .from("conges_imposes")
@@ -305,33 +466,13 @@ export async function ajouterCongeImpose(
   }
 
   const congeImpose = mapCongeImposeDepuisDb(data);
-  const actifs = utilisateurs.filter((u) => u.statut === "actif");
-  const commentaire = `Congé imposé du ${input.debut} au ${input.fin}`;
 
-  if (actifs.length > 0) {
-    const { error: errorDemandes } = await supabase.from("demandes_conges").insert(
-      actifs.map((u) => ({
-        utilisateur_id: u.id,
-        type_absence_id: typeCpId,
-        date_debut: input.debut,
-        date_fin: input.fin,
-        demi_debut: input.demiDebut,
-        demi_fin: input.demiFin,
-        nb_demi_journees: nbDemiJournees,
-        is_anticipation: false,
-        statut: "validee",
-        validateur_id: auteurId,
-        commentaire_decision: commentaire,
-        date_decision: new Date().toISOString(),
-        conge_impose_id: congeImpose.id,
-      })),
-    );
-
-    if (errorDemandes) {
-      throw new Error(
-        "Congé imposé créé mais impossible de générer les demandes associées aux collaborateurs.",
-      );
-    }
+  // Calendrier déjà publié : ce nouveau CPI doit avoir un effet immédiat,
+  // comme s'il avait toujours fait partie du paramétrage déjà visible —
+  // sinon (encore en brouillon), rien à faire ici, `publierParametragePeriode`
+  // le rattrapera.
+  if (parametrage?.valide_le) {
+    await genererDemandesCongeImpose(supabase, congeImpose);
   }
 
   return congeImpose;

@@ -95,7 +95,12 @@ function formatJjMmAjustement(dateIso: string): string {
 /** CP anticipé (`is_anticipation`) affiché sous le code CPA, pas CP — même
  * convention que partout ailleurs dans l'app (`SoldeDetailPanel`, feed de
  * détail de "Générer l'export"...). */
+// "CPI" pour une demande "CP" auto-générée par un congé imposé (10/09/2026,
+// demande explicite de Vincent) — voir même commentaire dans
+// `TransmissionsPaiePage.tsx` (`codeRecap`) : reconnaissable sur cet écran,
+// sans changer le montant transmis ni le CSV exporté (toujours "CP").
 function typeBadgeDeDemande(demande: DemandeEquipe): TypeBadgeCode {
+  if (demande.type === "CP" && demande.congeImposeId) return "CPI";
   if (demande.type === "CP" && demande.isAnticipation) return "CPA";
   return demande.type as TypeBadgeCode;
 }

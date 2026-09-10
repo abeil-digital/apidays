@@ -286,7 +286,11 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
 
   if (props.demandes.length === 0) return <EmptyRow text={emptyText} />;
 
+  // "CPI" pour une demande "CP" auto-générée par un congé imposé
+  // (10/09/2026, demande explicite de Vincent) — voir même commentaire dans
+  // `TransmissionsPaiePage.tsx` (`codeRecap`).
   function codeDemande(demande: Demande) {
+    if (demande.type === "CP" && demande.congeImposeId) return "CPI";
     return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
   }
 

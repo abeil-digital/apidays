@@ -502,6 +502,7 @@ interface LigneTransmise {
   date_debut: string;
   date_fin: string;
   jours_inclus: number;
+  conge_impose_id: string | null;
 }
 
 /**
@@ -522,7 +523,7 @@ async function fetchLignesTransmises(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation), exports_paie!inner(genere_le)",
+      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation, conge_impose_id), exports_paie!inner(genere_le)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
@@ -542,13 +543,14 @@ async function fetchLignesTransmises(
   return (data ?? []).map((row) => {
     const demande = (
       Array.isArray(row.demandes_conges) ? row.demandes_conges[0] : row.demandes_conges
-    ) as { date_debut: string; date_fin: string };
+    ) as { date_debut: string; date_fin: string; conge_impose_id: string | null };
     return {
       id: row.id,
       demande_id: row.demande_id,
       date_debut: demande.date_debut,
       date_fin: demande.date_fin,
       jours_inclus: Number(row.jours_inclus),
+      conge_impose_id: demande.conge_impose_id,
     };
   });
 }
@@ -752,19 +754,31 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         moisEcoulesCpa,
         moisLimite,
       );
-    // Consommation CPA comptée sur la période **en cours** (08/09/2026,
-    // corrige un bug réel remonté par Vincent : une demande CPA datée dans la
-    // période en cours n'était jamais décomptée) — un CPA s'utilise dès
-    // maintenant, dans la limite de ce qui est déjà/sera acquis à sa date,
-    // pas seulement à partir de la période suivante. Voir aussi
-    // `fetchSoldeAnticipe`/`fetchHistoriqueCpa`, même correctif.
+    // Consommation CPA comptée à partir de la période **en cours**, SANS
+    // plafond haut (10/09/2026, étendu — voir CONTEXTE.md "CPI après la
+    // période en cours → CPA") : un CPI/une demande anticipée datée au-delà
+    // de la période en cours (ex. un CPI paramétré un an à l'avance) doit
+    // rester visible et décomptée dès sa validation, pas seulement une fois
+    // "aujourd'hui" entré dans sa propre période de référence — sinon un CPA
+    // très en avance n'apparaissait nulle part (ni en CP, exclu par
+    // `is_anticipation`, ni en CPA, hors fenêtre) tant que sa période ne
+    // devenait pas la période en cours (bug réel remonté par Vincent).
+    // `periodeSansPlafond` ne relève QUE la borne haute (`decalerPeriode`,
+    // 50 ans — en pratique "pas de plafond") ; la borne basse reste
+    // `periodeEnCours.debut`, comportement inchangé pour la fenêtre proche
+    // (08/09/2026, voir juste en dessous). Voir aussi `fetchHistoriqueCpa`,
+    // même fenêtre.
+    const periodeConsoCpaSansPlafond: Periode = {
+      debut: periodeEnCours.debut,
+      fin: decalerPeriode(periodeEnCours, 50).fin,
+    };
     const consommeCpa = await sommeJours(
       supabase,
       id,
       "CP",
       ["validee"],
       true,
-      periodeEnCours,
+      periodeConsoCpaSansPlafond,
       aujourdhui,
     );
     const enAttenteCpa = await sommeJours(
@@ -773,10 +787,17 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       "CP",
       ["en_attente"],
       true,
-      periodeEnCours,
+      periodeConsoCpaSansPlafond,
       aujourdhui,
     );
-    const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeEnCours, aujourdhui);
+    const transmisCpa = await sommeTransmis(
+      supabase,
+      id,
+      "CP",
+      true,
+      periodeConsoCpaSansPlafond,
+      aujourdhui,
+    );
     const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
     // Pas de `Math.max(0, ...)` ici non plus (10/09/2026, même correctif que
     // RTT juste au-dessus — voir son commentaire pour le détail du bug).
@@ -1094,7 +1115,7 @@ export async function fetchHistoriqueCp(
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
     supabase
       .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", false)
@@ -1142,6 +1163,24 @@ export async function fetchHistoriqueCp(
     jours: number;
     motif?: string;
     auteurNom?: string;
+    congeImposeId?: string | null;
+  }
+
+  // "CPI" plutôt que "CP" pour une demande auto-générée par un congé imposé
+  // (`conge_impose_id` non nul, `ajouterCongeImpose()` dans
+  // `calendrier.repository.ts`) — 10/09/2026, demande explicite de Vincent :
+  // même si elle compte dans le solde/l'export paie comme un CP normal (voir
+  // CONTEXTE.md), le suivi de solde doit rendre visible que ce mouvement
+  // vient d'un congé imposé, pas d'une demande personnelle. Définie avant
+  // `mouvementsBruts` (réel) pour être réutilisée par les 3 blocs (réel,
+  // théorique, en attente) plutôt que dupliquée.
+  function libelleMouvementCp(d: {
+    date_debut: string;
+    date_fin: string;
+    conge_impose_id?: string | null;
+  }): string {
+    const prefixe = d.conge_impose_id ? "CPI" : "CP";
+    return `${prefixe} : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`;
   }
 
   const mouvementsBruts: MouvementBrut[] = [
@@ -1150,8 +1189,13 @@ export async function fetchHistoriqueCp(
       demandeId: l.demande_id,
       type: "demande",
       date: l.date_debut,
-      libelle: `CP : ${formatPeriodePillNumerique(l.date_debut, l.date_fin)}`,
+      libelle: libelleMouvementCp({
+        date_debut: l.date_debut,
+        date_fin: l.date_fin,
+        conge_impose_id: l.conge_impose_id,
+      }),
       jours: -l.jours_inclus,
+      congeImposeId: l.conge_impose_id,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
@@ -1225,8 +1269,9 @@ export async function fetchHistoriqueCp(
       id: d.id,
       type: "demande",
       date: d.date_debut,
-      libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+      libelle: libelleMouvementCp(d),
       jours: -(Number(d.nb_demi_journees) / 2),
+      congeImposeId: d.conge_impose_id,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
@@ -1257,7 +1302,7 @@ export async function fetchHistoriqueCp(
         id: d.id,
         type: "demande",
         date: d.date_debut,
-        libelle: `CP : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+        libelle: libelleMouvementCp(d),
         jours: -(Number(d.nb_demi_journees) / 2),
         soldeApres: cumulTheorique,
       };
@@ -1559,13 +1604,21 @@ export async function fetchHistoriqueRtt(
  * Feed d'historique du solde CPA d'un salarié (Espace Suivre, popin ouverte
  * au clic sur le solde CPA) — même principe d'accrual mensuel que RTT (pas de
  * capital connu d'avance, `type: "acquisition"` un événement par mois entier
- * écoulé). Acquisition et consommation partagent la même période CP **en
- * cours** (`periodeEnCours`, même horloge que `regleCP`, `is_anticipation =
- * true` — même logique que `fetchSoldes` ; corrigé le 08/09/2026, la
- * consommation était auparavant comptée sur la période suivante, ce qui
- * ignorait silencieusement toute demande CPA datée dans la période en
- * cours). Les clés de mois du feed sont dérivées des dates réelles des
- * mouvements plutôt que d'un simple parcours calendaire borné à aujourd'hui.
+ * écoulé). L'acquisition reste bornée à la période CP **en cours**
+ * (`periodeEnCours`, même horloge que `regleCP`) — mais la consommation
+ * (`is_anticipation = true`) n'a PLUS de plafond haut depuis le 10/09/2026
+ * (`periodeConsoCpaSansPlafond`, même fenêtre que `fetchSoldes`) : un CPA/CPI
+ * daté au-delà de la période en cours (ex. paramétré un an à l'avance) reste
+ * décompté et visible dès sa validation, plutôt que de rester invisible
+ * jusqu'à ce que sa propre période devienne "en cours" (bug réel remonté par
+ * Vincent). Historique de cette borne : bornée sur la période suivante à
+ * l'origine, corrigée le 08/09/2026 pour la période en cours (la
+ * consommation ignorait silencieusement toute demande CPA datée dans la
+ * période en cours), puis déplafonnée le 10/09/2026. Les clés de mois du
+ * feed sont dérivées des dates réelles des mouvements plutôt que d'un simple
+ * parcours calendaire borné à aujourd'hui — un mouvement loin dans le futur
+ * obtient donc naturellement sa propre clé de mois, sans changement
+ * nécessaire à cette partie du code.
  */
 export async function fetchHistoriqueCpa(utilisateurId: string): Promise<HistoriqueSolde> {
   const supabase = createClient();
@@ -1614,18 +1667,27 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
+  // Sans plafond haut (10/09/2026) — même fenêtre que `fetchSoldes`
+  // (`periodeConsoCpaSansPlafond`, voir son commentaire) : un CPA/CPI daté
+  // au-delà de la période en cours doit rester visible dans ce feed, pas
+  // seulement une fois sa propre période devenue "en cours".
+  const periodeConsoCpaSansPlafond: Periode = {
+    debut: periodeEnCours.debut,
+    fin: decalerPeriode(periodeEnCours, 50).fin,
+  };
+
   const [
     { data: demandesRowsBrutes, error: erreurDemandes },
     { data: ajustementsRows, error: erreurAjustements },
   ] = await Promise.all([
     supabase
       .from("demandes_conges")
-      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
       .eq("is_anticipation", true)
-      .gte("date_debut", dateIso(periodeEnCours.debut))
-      .lte("date_debut", dateIso(periodeEnCours.fin)),
+      .gte("date_debut", dateIso(periodeConsoCpaSansPlafond.debut))
+      .lte("date_debut", dateIso(periodeConsoCpaSansPlafond.fin)),
     supabase
       .from("ajustements_solde")
       .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
@@ -1658,6 +1720,22 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     jours: number;
     motif?: string;
     auteurNom?: string;
+    congeImposeId?: string | null;
+  }
+
+  // "CPI" plutôt que "CPA" pour une consommation anticipée auto-générée par
+  // un congé imposé (10/09/2026, même principe que `libelleMouvementCp` côté
+  // CP) — désormais atteignable ici depuis que la fenêtre de consommation
+  // CPA n'a plus de plafond haut (un CPI daté au-delà de la période en cours
+  // devient une demande `is_anticipation = true`, voir
+  // `genererDemandesCongeImpose` dans `calendrier.repository.ts`).
+  function libelleMouvementCpa(d: {
+    date_debut: string;
+    date_fin: string;
+    conge_impose_id?: string | null;
+  }): string {
+    const prefixe = d.conge_impose_id ? "CPI" : "CPA";
+    return `${prefixe} : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`;
   }
 
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
@@ -1686,8 +1764,9 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       id: d.id,
       type: "demande",
       date: d.date_debut,
-      libelle: `CPA : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+      libelle: libelleMouvementCpa(d),
       jours: -(Number(d.nb_demi_journees) / 2),
+      congeImposeId: d.conge_impose_id,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;

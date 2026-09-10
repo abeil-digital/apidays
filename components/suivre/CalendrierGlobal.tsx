@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
+import { getAujourdhui } from "@/lib/aujourdhui";
 import { formatPeriodePillNumerique, nomJourSemaine, todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
@@ -188,7 +189,10 @@ export function CalendrierGlobal() {
   // `estAujourdhui` déjà mis en avant sur la grille dès l'ouverture.
   const [dateSelectionnee, setDateSelectionnee] = useState<string | null>(() => todayISO());
 
-  const anneeActuelle = new Date().getFullYear();
+  // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
+  // de Vincent) — voir DashboardPage.tsx, même correctif : sans ça, le
+  // bandeau de date simulée ne pouvait pas tester la rotation des 3 onglets.
+  const anneeActuelle = getAujourdhui().getFullYear();
   const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
   const calendrierAnneePrecedente = useCalendrier(anneePrecedente);
@@ -213,7 +217,7 @@ export function CalendrierGlobal() {
   const todayIso = todayISO();
   const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
   const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
-  const debutMoisActuel = isoDate(anneeActuelle, new Date().getMonth(), 1);
+  const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const debutPeriodeCp = regleCp
@@ -232,6 +236,20 @@ export function CalendrierGlobal() {
       )
     : finAnneeActuelle;
 
+  // Rotation des 3 onglets (10/09/2026) — voir le commentaire détaillé dans
+  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
+  const etatAvantBascule = Number(debutPeriodeCp.slice(0, 4)) < anneeActuelle;
+  const rangeTroisiemeOnglet =
+    regleCp && etatAvantBascule
+      ? {
+          debut: isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
+          fin: ajouterJoursIso(
+            isoDate(anneeActuelle + 1, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
+            -1,
+          ),
+        }
+      : { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) };
+
   const ranges: Record<Onglet, { debut: string; fin: string }> = {
     en_cours: {
       debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
@@ -241,7 +259,7 @@ export function CalendrierGlobal() {
       debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
       fin: finPeriodeCp,
     },
-    annee_suivante: { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) },
+    annee_suivante: rangeTroisiemeOnglet,
   };
   const rangeActive = ranges[onglet];
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
@@ -398,69 +416,96 @@ export function CalendrierGlobal() {
     dji: s.cle === sectionDji,
   })).filter((s) => s.demandes.length > 0 || s.dji);
 
+  // Boutons d'onglet extraits en constantes JSX (10/09/2026) — voir
+  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
+  const boutonEnCours = (
+    <>
+      <button
+        type="button"
+        onClick={() => setOnglet("en_cours")}
+        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+          onglet === "en_cours"
+            ? "bg-slate/90 hover:bg-slate text-white"
+            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+        }`}
+      >
+        {anneeActuelle}
+      </button>
+      {onglet === "en_cours" && (
+        <div className="relative inline-flex w-fit items-center gap-1.5">
+          <span className="text-ink-500 text-xs">Débute :</span>
+          <select
+            value={vueCompleteEnCours ? "complete" : "mois_en_cours"}
+            onChange={(e) => setVueCompleteEnCours(e.target.value === "complete")}
+            className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
+          >
+            <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
+            <option value="complete">{formatMoisAnneeCourt(debutAnneeActuelle)}</option>
+          </select>
+        </div>
+      )}
+    </>
+  );
+  const boutonPeriodeCp = (
+    <>
+      <button
+        type="button"
+        onClick={() => setOnglet("periode_cp")}
+        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+          onglet === "periode_cp"
+            ? "bg-slate/90 hover:bg-slate text-white"
+            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+        }`}
+      >
+        {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
+      </button>
+      {onglet === "periode_cp" && (
+        <div className="relative inline-flex w-fit items-center gap-1.5">
+          <span className="text-ink-500 text-xs">Débute :</span>
+          <select
+            value={vueCompletePeriodeCp ? "complete" : "mois_en_cours"}
+            onChange={(e) => setVueCompletePeriodeCp(e.target.value === "complete")}
+            className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
+          >
+            <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
+            <option value="complete">{formatMoisAnneeCourt(debutPeriodeCp)}</option>
+          </select>
+        </div>
+      )}
+    </>
+  );
+  const boutonTroisieme = (
+    <button
+      type="button"
+      onClick={() => setOnglet("annee_suivante")}
+      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+        onglet === "annee_suivante"
+          ? "bg-slate/90 hover:bg-slate text-white"
+          : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+      }`}
+    >
+      {etatAvantBascule
+        ? `${formatMoisAnneeCourt(rangeTroisiemeOnglet.debut)} → ${formatMoisAnneeCourt(rangeTroisiemeOnglet.fin)}`
+        : anneeSuivante}
+    </button>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <div className="flex flex-wrap items-center gap-2 px-1">
-          <button
-            type="button"
-            onClick={() => setOnglet("en_cours")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-              onglet === "en_cours"
-                ? "bg-slate/90 hover:bg-slate text-white"
-                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-            }`}
-          >
-            {anneeActuelle}
-          </button>
-          {onglet === "en_cours" && (
-            <div className="relative inline-flex w-fit items-center gap-1.5">
-              <span className="text-ink-500 text-xs">Débute :</span>
-              <select
-                value={vueCompleteEnCours ? "complete" : "mois_en_cours"}
-                onChange={(e) => setVueCompleteEnCours(e.target.value === "complete")}
-                className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-              >
-                <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
-                <option value="complete">{formatMoisAnneeCourt(debutAnneeActuelle)}</option>
-              </select>
-            </div>
+          {etatAvantBascule ? (
+            <>
+              {boutonPeriodeCp}
+              {boutonEnCours}
+            </>
+          ) : (
+            <>
+              {boutonEnCours}
+              {boutonPeriodeCp}
+            </>
           )}
-          <button
-            type="button"
-            onClick={() => setOnglet("periode_cp")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-              onglet === "periode_cp"
-                ? "bg-slate/90 hover:bg-slate text-white"
-                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-            }`}
-          >
-            {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-          </button>
-          {onglet === "periode_cp" && (
-            <div className="relative inline-flex w-fit items-center gap-1.5">
-              <span className="text-ink-500 text-xs">Débute :</span>
-              <select
-                value={vueCompletePeriodeCp ? "complete" : "mois_en_cours"}
-                onChange={(e) => setVueCompletePeriodeCp(e.target.value === "complete")}
-                className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-              >
-                <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
-                <option value="complete">{formatMoisAnneeCourt(debutPeriodeCp)}</option>
-              </select>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setOnglet("annee_suivante")}
-            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-              onglet === "annee_suivante"
-                ? "bg-slate/90 hover:bg-slate text-white"
-                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-            }`}
-          >
-            {anneeSuivante}
-          </button>
+          {boutonTroisieme}
         </div>
       </div>
 

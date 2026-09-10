@@ -62,7 +62,14 @@ const TYPES_RECAP: TypeBadgeCode[] = ["CP", "RTT", "CPA", "CSS", "CE", "RECUP", 
 // types de `TYPES_RECAP`, qui restent masqués quand ils sont nuls).
 const TYPES_PRINCIPAUX: TypeBadgeCode[] = ["CP", "RTT", "CPA"];
 
+// "CPI" pour une demande "CP" auto-générée par un congé imposé
+// (`congeImposeId` non nul) — 10/09/2026, demande explicite de Vincent : ces
+// lignes comptent comme un CP normal pour le paiement (montant transmis
+// inchangé, le CSV exporté au comptable reste "CP" sans distinction — voir
+// `genererCsv`, typé `TypeConsomme`, ne connaît pas "CPI"), mais doivent
+// rester reconnaissables comme telles sur CET écran, en interne.
 function codeRecap(demande: DemandeEquipe): TypeBadgeCode {
+  if (demande.type === "CP" && demande.congeImposeId) return "CPI";
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
