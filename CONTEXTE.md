@@ -5480,6 +5480,16 @@ Version retenue : les décisions restent surlignées tout le temps où le tiroir
 sont marquées vues qu'à sa fermeture (croix, clic hors panneau, Échap) — le fade n'a plus lieu d'être
 puisque le tiroir entier disparaît avec elles, `duration-150` d'origine restaurée.
 
+**Fondu ajouté sur le pill "n nouvelles décisions" d'Accueil à la fermeture** (10/09/2026, même jour,
+2e retour de Vincent) : ce pill (surlignage jaune de la phrase "Depuis ma dernière visite") disparaissait
+lui aussi instantanément à la fermeture — `fermerTiroirActivite()` et `marquerVue()` mettaient à jour
+l'état React dans le même tick, aucune transition CSS n'avait le temps de jouer. Corrigé en retardant
+l'appel à `marquerVue()` de 500ms (`journalFermetureEnCours`, déclaré avec les autres `useState` —
+attention aux règles des hooks, ne pas le déclarer après le `if (loading...) return` du haut du
+composant) : le tiroir se ferme immédiatement, mais le pill reste affiché (les décisions restent
+comptées "non vues" côté état local) le temps qu'un `transition-opacity duration-500` joue
+`opacity-100 → opacity-0`.
+
 `hooks/useDemandes.ts` : retire les deux `useEffect` de persistance (recopie continue dans
 `localStorage`, lecture au montage d'une nouvelle `sessionStorage`) — `marquerVue(id)` reste
 exposée mais n'est plus appelée automatiquement en interne, à l'appelant de décider quand une
