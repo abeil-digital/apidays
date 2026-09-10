@@ -49,6 +49,29 @@ function mapParametragePeriodeDepuisDb(row: ParametragePeriodeRow): ParametrageP
   };
 }
 
+/**
+ * Toutes les années paramétrées de l'entreprise (année + statut de
+ * publication uniquement — pas le détail complet) (10/09/2026) — pilote la
+ * liste d'onglets dynamique de `Calendrier2Page` (archivées / année en
+ * cours / brouillon(s)), voir son commentaire pour le détail de la règle.
+ */
+export async function fetchAnneesParametrage(): Promise<
+  { annee: number; valideLe: string | null }[]
+> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("parametrage_periode")
+    .select("annee, valide_le")
+    .order("annee");
+
+  if (error) {
+    throw new Error("Impossible de charger les années paramétrées.");
+  }
+
+  return (data ?? []).map((row) => ({ annee: row.annee, valideLe: row.valide_le }));
+}
+
 export async function fetchParametragePeriode(annee: number): Promise<ParametragePeriode | null> {
   const supabase = createClient();
 

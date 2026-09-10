@@ -7,6 +7,7 @@ import type { CongeImpose, DemandeEquipe, DemiJournee, DjImposee, JourFerie } fr
 import { formatJourMois, formatJours, nombreJours } from "@/lib/format";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { dureeCongeImpose, joursFeriesLegaux } from "@/lib/joursFeries";
+import { fetchAnneesParametrage } from "@/lib/data/calendrier.repository";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
@@ -55,6 +56,8 @@ interface SnippetCongeProps {
   ancre: DOMRect;
   onSupprimer: () => Promise<void>;
   onFermer: () => void;
+  /** Année archivée (10/09/2026) — masque le bouton "Supprimer". */
+  lectureSeule?: boolean;
 }
 
 /**
@@ -74,7 +77,13 @@ interface SnippetCongeProps {
  * l'écran) au lieu de juste sous le jour/segment cliqué, signalé par
  * Vincent.
  */
-function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps) {
+function SnippetConge({
+  conge,
+  ancre,
+  onSupprimer,
+  onFermer,
+  lectureSeule = false,
+}: SnippetCongeProps) {
   const [confirmation, setConfirmation] = useState(false);
   const [suppression, setSuppression] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -111,37 +120,38 @@ function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps
         <div className="text-ink-500 text-xs">{nombreJours(conge.debut, conge.fin)} jours</div>
       </div>
 
-      {confirmation ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-ink-900 text-xs">Supprimer cette période ?</p>
-          {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handleConfirmerSuppression}
-              disabled={suppression}
-              className="text-status-danger-fg text-xs font-semibold underline"
-            >
-              Confirmer
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmation(false)}
-              className="text-ink-500 text-xs font-semibold underline"
-            >
-              Annuler
-            </button>
+      {!lectureSeule &&
+        (confirmation ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-ink-900 text-xs">Supprimer cette période ?</p>
+            {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleConfirmerSuppression}
+                disabled={suppression}
+                className="text-status-danger-fg text-xs font-semibold underline"
+              >
+                Confirmer
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmation(false)}
+                className="text-ink-500 text-xs font-semibold underline"
+              >
+                Annuler
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirmation(true)}
-          className="text-status-danger-fg w-fit text-xs font-semibold underline"
-        >
-          Supprimer
-        </button>
-      )}
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmation(true)}
+            className="text-status-danger-fg w-fit text-xs font-semibold underline"
+          >
+            Supprimer
+          </button>
+        ))}
     </div>,
     document.body,
   );
@@ -152,12 +162,14 @@ interface SnippetDjiProps {
   ancre: DOMRect;
   onSupprimer: () => Promise<void>;
   onFermer: () => void;
+  /** Année archivée (10/09/2026) — masque le bouton "Supprimer". */
+  lectureSeule?: boolean;
 }
 
 /** Équivalent de `SnippetConge` pour une DJI cliquée sur le calendrier —
  * suppression uniquement (pas d'édition de créneau depuis le calendrier).
  * Portail `document.body` — voir le commentaire de `SnippetConge`. */
-function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
+function SnippetDji({ dj, ancre, onSupprimer, onFermer, lectureSeule = false }: SnippetDjiProps) {
   const [confirmation, setConfirmation] = useState(false);
   const [suppression, setSuppression] = useState(false);
   const [erreur, setErreur] = useState("");
@@ -192,37 +204,38 @@ function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
         <div className="text-ink-500 text-xs">{LABEL_TAG_DEMI_JOURNEE[dj.demiJournee]}</div>
       </div>
 
-      {confirmation ? (
-        <div className="flex flex-col gap-2">
-          <p className="text-ink-900 text-xs">Supprimer cette demi-journée ?</p>
-          {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handleConfirmerSuppression}
-              disabled={suppression}
-              className="text-status-danger-fg text-xs font-semibold underline"
-            >
-              Confirmer
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmation(false)}
-              className="text-ink-500 text-xs font-semibold underline"
-            >
-              Annuler
-            </button>
+      {!lectureSeule &&
+        (confirmation ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-ink-900 text-xs">Supprimer cette demi-journée ?</p>
+            {erreur && <p className="text-status-danger-fg text-xs">{erreur}</p>}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleConfirmerSuppression}
+                disabled={suppression}
+                className="text-status-danger-fg text-xs font-semibold underline"
+              >
+                Confirmer
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmation(false)}
+                className="text-ink-500 text-xs font-semibold underline"
+              >
+                Annuler
+              </button>
+            </div>
           </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setConfirmation(true)}
-          className="text-status-danger-fg w-fit text-xs font-semibold underline"
-        >
-          Supprimer
-        </button>
-      )}
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmation(true)}
+            className="text-status-danger-fg w-fit text-xs font-semibold underline"
+          >
+            Supprimer
+          </button>
+        ))}
     </div>,
     document.body,
   );
@@ -343,7 +356,18 @@ function TiroirConflitsAgenda({ conflits }: TiroirConflitsAgendaProps) {
   );
 }
 
-function VueCalendrierGrille({ annee }: { annee: number }) {
+function VueCalendrierGrille({
+  annee,
+  lectureSeule = false,
+}: {
+  annee: number;
+  /** Année archivée (10/09/2026) — passée, déjà écoulée : plus d'ajout/
+   * suppression de CPI/DJI/férié ni de publication/dépublication, pour ne
+   * pas modifier rétroactivement des jours déjà consommés dans les calculs
+   * de solde. Décision explicite de Vincent lors du paramétrage du flux de
+   * publication. */
+  lectureSeule?: boolean;
+}) {
   const estAnneeLive = annee === getAujourdhui().getFullYear();
   const calendrier = useCalendrier(annee);
   const { objectifs } = useObjectifsCalendrier();
@@ -358,8 +382,16 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
   // chevauche plusieurs jours d'un même CPI ne compte qu'une fois pour ce
   // CPI).
   const conflitsAgenda = useMemo<ConflitAgenda[]>(() => {
+    // `congeImposeId` non nul (10/09/2026, correctif) — `ajouterCongeImpose`
+    // matérialise automatiquement une demande "CP" par collaborateur actif
+    // pour chaque CPI créé (`calendrier.repository.ts`, pour que ça compte
+    // dans le solde/l'export paie comme un vrai CP). Sans ce filtre, CETTE
+    // demande générée par le CPI lui-même ressortait comme un "conflit"
+    // avec le CPI qui vient de la créer — un faux positif systématique
+    // signalé par Vincent, pas une vraie demande personnelle du
+    // collaborateur à arbitrer.
     const demandesActives = demandesEquipe.filter(
-      (d) => d.statut !== "refusé" && d.statut !== "annulé",
+      (d) => d.statut !== "refusé" && d.statut !== "annulé" && !d.congeImposeId,
     );
     function demiEnConflit(iso: string, demi: DemiJournee): DemandeEquipe[] {
       return demandesActives.filter((d) =>
@@ -682,29 +714,31 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
                 {totalDemiJourneesDji === 1 ? "demi-journée" : "demi-journées"}
               </span>
             </div>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                setDateInitialeCreation(undefined);
-                setModaleCreation("DJI");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
+            {!lectureSeule && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
                   e.stopPropagation();
-                  e.preventDefault();
                   setDateInitialeCreation(undefined);
                   setModaleCreation("DJI");
-                }
-              }}
-              className="shrink-0 cursor-pointer self-center"
-            >
-              <PlusCircle
-                size={18}
-                className="text-mint transition-transform duration-150 hover:scale-125"
-              />
-            </span>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setDateInitialeCreation(undefined);
+                    setModaleCreation("DJI");
+                  }
+                }}
+                className="shrink-0 cursor-pointer self-center"
+              >
+                <PlusCircle
+                  size={18}
+                  className="text-mint transition-transform duration-150 hover:scale-125"
+                />
+              </span>
+            )}
           </div>
 
           {tiroirDjiOuvert && (
@@ -724,7 +758,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
                   masquerDemandesPerso
                   separerCpiDji
                   filtreCode="DJI"
-                  avecSuppression
+                  avecSuppression={!lectureSeule}
                   toutAfficher
                   donneesInjectees={{
                     congesImposes: calendrier.congesImposes,
@@ -765,29 +799,31 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
                   {formatJours(totalJoursCpi)} {totalJoursCpi === 1 ? "jour" : "jours"}
                 </span>
               </div>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDateInitialeCreation(undefined);
-                  setModaleCreation("CPI");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+              {!lectureSeule && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
                     e.stopPropagation();
-                    e.preventDefault();
                     setDateInitialeCreation(undefined);
                     setModaleCreation("CPI");
-                  }
-                }}
-                className="shrink-0 cursor-pointer self-center"
-              >
-                <PlusCircle
-                  size={18}
-                  className="text-mint transition-transform duration-150 hover:scale-125"
-                />
-              </span>
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setDateInitialeCreation(undefined);
+                      setModaleCreation("CPI");
+                    }
+                  }}
+                  className="shrink-0 cursor-pointer self-center"
+                >
+                  <PlusCircle
+                    size={18}
+                    className="text-mint transition-transform duration-150 hover:scale-125"
+                  />
+                </span>
+              )}
             </div>
 
             {tiroirCpiOuvert && (
@@ -807,7 +843,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
                     masquerDemandesPerso
                     separerCpiDji
                     filtreCode="CPI"
-                    avecSuppression
+                    avecSuppression={!lectureSeule}
                     toutAfficher
                     donneesInjectees={{
                       congesImposes: calendrier.congesImposes,
@@ -871,7 +907,9 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
                     role="switch"
                     aria-checked={!pentecoteTravaillee}
                     aria-label="Lundi de Pentecôte férié"
-                    disabled={pentecoteEnCours || calendrier.joursFeries.length === 0}
+                    disabled={
+                      pentecoteEnCours || calendrier.joursFeries.length === 0 || lectureSeule
+                    }
                     onClick={handleTogglePentecote}
                     className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-150 disabled:opacity-50 ${
                       pentecoteTravaillee ? "bg-ink-300" : "bg-mint"
@@ -930,7 +968,14 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
           </div>
         )}
 
-        {estAnneeLive && (
+        {lectureSeule && (
+          <p className="text-ink-500 px-1 text-sm">
+            <span className="bg-surface-app text-ink-500 px-1">Archivé</span> ce calendrier est
+            passé, lecture seule
+          </p>
+        )}
+
+        {estAnneeLive && !lectureSeule && (
           <p className="text-ink-500 px-1 text-sm">
             <span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce
             calendrier est visible par les collaborateurs
@@ -938,6 +983,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
         )}
 
         {!estAnneeLive &&
+          !lectureSeule &&
           (calendrier.parametrage?.valideLe ? (
             <div className="flex flex-col gap-1 px-1">
               <p className="text-ink-500 text-sm">
@@ -987,6 +1033,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
             setSnippetConge(null);
           }}
           onFermer={() => setSnippetConge(null)}
+          lectureSeule={lectureSeule}
         />
       )}
 
@@ -999,6 +1046,7 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
             setSnippetDji(null);
           }}
           onFermer={() => setSnippetDji(null)}
+          lectureSeule={lectureSeule}
         />
       )}
 
@@ -1028,55 +1076,87 @@ function VueCalendrierGrille({ annee }: { annee: number }) {
 
 /**
  * Écran Paramétrer > Calendrier (route `/parametrer/calendrier2`) — vue
- * synthétique (12 mini-calendriers + pastilles), onglets année en cours /
- * année à venir, publication du paramétrage. Remplace l'ancien écran
- * Calendrier (route `/parametrer/calendrier`, supprimée) — le nom
- * "Calendrier2" reste pour l'instant côté code/route, à renommer plus tard
- * si besoin (voir Backlog.md).
+ * synthétique (12 mini-calendriers + pastilles), publication du
+ * paramétrage. Remplace l'ancien écran Calendrier (route
+ * `/parametrer/calendrier`, supprimée) — le nom "Calendrier2" reste pour
+ * l'instant côté code/route, à renommer plus tard si besoin (voir
+ * Backlog.md).
+ *
+ * Liste d'années dynamique (10/09/2026, remplace les 2 onglets fixes
+ * "année en cours"/"année à venir") : archivées (les 4 dernières années
+ * passées réellement paramétrées, lecture seule) + année en cours (civile,
+ * toujours affichée par défaut au chargement — décision explicite de
+ * Vincent, indépendante du statut de publication) + brouillon(s) à venir.
+ * Publier une année révèle automatiquement le brouillon de l'année
+ * suivante (`anneeMaxAffichable`) — jusque-là, seules les 2 années
+ * classiques (en cours + suivante) sont proposées, comme avant.
  */
 export function Calendrier2Page() {
   const anneeEnCours = getAujourdhui().getFullYear();
-  const anneeAVenir = anneeEnCours + 1;
   const [annee, setAnnee] = useState(anneeEnCours);
+  const [anneesParametrage, setAnneesParametrage] = useState<
+    { annee: number; valideLe: string | null }[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAnneesParametrage()
+      .then((data) => {
+        if (!cancelled) setAnneesParametrage(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const derniereAnneePubliee = anneesParametrage
+    .filter((a) => a.valideLe && a.annee >= anneeEnCours)
+    .reduce((max, a) => Math.max(max, a.annee), anneeEnCours - 1);
+  const anneeMaxAffichable = Math.max(anneeEnCours + 1, derniereAnneePubliee + 1);
+  const anneesArchivees = anneesParametrage
+    .map((a) => a.annee)
+    .filter((a) => a >= anneeEnCours - 4 && a < anneeEnCours)
+    .sort((a, b) => a - b);
+  const anneesAVenir: number[] = [];
+  for (let a = anneeEnCours + 1; a <= anneeMaxAffichable; a++) anneesAVenir.push(a);
+  const anneesAffichees = [...anneesArchivees, anneeEnCours, ...anneesAVenir];
+  const prochaineAnneeAParametrer = anneeEnCours + 1;
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
       <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Calendrier</h1>
 
-      <div className="animate-stagger-in flex gap-2 px-1" style={{ animationDelay: "60ms" }}>
-        <button
-          type="button"
-          onClick={() => setAnnee(anneeEnCours)}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-            annee === anneeEnCours
-              ? "bg-slate/90 hover:bg-slate text-white"
-              : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-          }`}
-        >
-          {anneeEnCours}
-        </button>
-        <button
-          type="button"
-          onClick={() => setAnnee(anneeAVenir)}
-          className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-            annee === anneeAVenir
-              ? "bg-slate/90 hover:bg-slate text-white"
-              : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-          }`}
-        >
-          {anneeAVenir} - Brouillon
-        </button>
+      <div
+        className="animate-stagger-in flex flex-wrap gap-2 px-1"
+        style={{ animationDelay: "60ms" }}
+      >
+        {anneesAffichees.map((a) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() => setAnnee(a)}
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
+              annee === a
+                ? "bg-slate/90 hover:bg-slate text-white"
+                : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
+            }`}
+          >
+            {a}
+            {a < anneeEnCours ? " · Archivé" : a > anneeEnCours ? " - Brouillon" : ""}
+          </button>
+        ))}
       </div>
 
       {getAujourdhui().getMonth() === 11 && (
         <div className="bg-status-warning-bg text-status-warning-fg rounded-control flex items-center gap-2.5 px-4 py-3 text-sm font-semibold">
           <TriangleAlert size={18} className="shrink-0" />
-          {`Pensez à paramétrer les jours imposés de ${anneeAVenir} avant la fin de l’année.`}
+          {`Pensez à paramétrer les jours imposés de ${prochaineAnneeAParametrer} avant la fin de l’année.`}
         </div>
       )}
 
       <div className="animate-stagger-in" style={{ animationDelay: "120ms" }}>
-        <VueCalendrierGrille key={annee} annee={annee} />
+        <VueCalendrierGrille key={annee} annee={annee} lectureSeule={annee < anneeEnCours} />
       </div>
     </div>
   );
