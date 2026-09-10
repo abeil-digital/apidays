@@ -672,6 +672,25 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     );
     const periodePrecedente = decalerPeriode(periodeEnCours, -1);
 
+    // Base CPA de la période précédente (10/09/2026, correctif "solde
+    // initial CPA qui s'évapore à la bascule") — si un solde initial existe
+    // et que sa date de référence tombe dans la période PRÉCÉDENTE, sa base
+    // `cpa` a financé l'accrual CPA de cette période-là (voir
+    // `resolverPointDepartAccrual`, "cpa") — un capital qui, par
+    // construction, doit devenir exactement le capital CP de LA PÉRIODE QUI
+    // COMMENCE (même principe que "le CPA accumulé sur 12 mois pleins =
+    // le nouveau capital CP", confirmé par Vincent). Sans ce terme, cette
+    // base disparaissait silencieusement à la bascule : elle alimentait bien
+    // l'accrual CPA affiché jusqu'au 31 mai, mais n'avait aucun chemin vers
+    // le capital CP du 1er juin, qui se recalculait à neuf sans en tenir
+    // compte (confirmé par test réel — écart de 6j retrouvé entre les
+    // totaux CP+CPA juste avant/après la bascule, voir CONTEXTE.md).
+    const cpaBasePeriodePrecedente =
+      soldeInitial &&
+      soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
+      soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
+        ? soldeInitial.cpa
+        : 0;
     const capitalBase =
       accrualMensuelSomme(
         regleCP.tauxAcquisitionMensuel,
@@ -680,31 +699,40 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         periodeEnCours.debut,
         12,
         moisLimite,
-      ) + bonus;
-    // Capital de la période PRÉCÉDENTE, recalculé indépendamment (10/09/2026,
-    // correctif "bonus d'ancienneté compté deux fois") — sert de plafond au
-    // report ci-dessous. Avant ce correctif, `capitalBase` (celui de la
-    // période EN COURS, bonus d'aujourd'hui inclus) servait à tort de proxy :
-    // au moment où un salarié franchit un palier d'ancienneté, son nouveau
-    // bonus se retrouvait comptabilisé une 2e fois via le report (le plafond
-    // grossissait du même montant que le bonus lui-même). Le bonus d'ancienneté
-    // de la période précédente doit être évalué à SA propre date de début, pas
-    // à "aujourd'hui" — le CP est un capital figé une fois pour toute la
-    // période (voir `resolverCapitalCpTotal`), le report doit refléter ce qui
-    // était réellement disponible à l'époque, pas la situation actuelle.
+      ) +
+      bonus +
+      cpaBasePeriodePrecedente;
+    // Capital de la période PRÉCÉDENTE (10/09/2026, correctif "bonus
+    // d'ancienneté compté deux fois", étendu au solde initial) — sert de
+    // plafond au report ci-dessous. Doit refléter le capital RÉELLEMENT en
+    // vigueur pendant la période précédente, pas une reformulation : si un
+    // solde initial gouvernait déjà cette période précédente (via
+    // `resolverCapitalCpTotal`, qui remplace alors tout calcul par
+    // `soldeInitial.cp`), le reprendre tel quel plutôt que de le
+    // recalculer par la formule générique — sinon le report s'appuyait sur
+    // un capital fictif au lieu du vrai (même famille de bug que le solde
+    // initial CPA ci-dessus : un nombre réellement en vigueur qu'une
+    // reformulation indépendante ignore). Sinon (pas de solde initial
+    // applicable à la période précédente), calcul automatique inchangé —
+    // bonus d'ancienneté évalué à la propre date de début de la période
+    // précédente, pas à "aujourd'hui" (le CP est un capital figé une fois
+    // pour toute la période, voir `resolverCapitalCpTotal`).
     const bonusPeriodePrecedente = bonusAnciennete(
       reglesAnciennete,
       ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
     );
     const capitalBasePeriodePrecedente =
-      accrualMensuelSomme(
-        regleCP.tauxAcquisitionMensuel,
-        historiqueTaux,
-        tauxActuel,
-        periodePrecedente.debut,
-        12,
-        moisLimite,
-      ) + bonusPeriodePrecedente;
+      soldeInitial &&
+      dateIso(decalerPeriode(periodePrecedente, -1).fin) <= soldeInitial.dateReference
+        ? soldeInitial.cp
+        : accrualMensuelSomme(
+            regleCP.tauxAcquisitionMensuel,
+            historiqueTaux,
+            tauxActuel,
+            periodePrecedente.debut,
+            12,
+            moisLimite,
+          ) + bonusPeriodePrecedente;
     // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
     // revu) — un CP et un CPA se déduisent tous les deux du MÊME capital dès
     // que leur date tombe dans la période considérée : `is_anticipation` ne
@@ -1093,6 +1121,16 @@ export async function fetchHistoriqueCp(
   );
   const periodePrecedente = decalerPeriode(periodeEnCours, -1);
 
+  // Base CPA de la période précédente (10/09/2026, correctif "solde initial
+  // CPA qui s'évapore à la bascule") — voir le commentaire détaillé dans
+  // `fetchSoldes`. Même calcul, indispensable pour que "Solde N-1" reste
+  // cohérent avec la carte Accueil.
+  const cpaBasePeriodePrecedente =
+    soldeInitial &&
+    soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
+    soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
+      ? soldeInitial.cpa
+      : 0;
   const capitalBase =
     accrualMensuelSomme(
       regleCP.tauxAcquisitionMensuel,
@@ -1101,24 +1139,28 @@ export async function fetchHistoriqueCp(
       periodeEnCours.debut,
       12,
       moisLimite,
-    ) + bonus;
-  // Capital de la période PRÉCÉDENTE, recalculé indépendamment (10/09/2026,
-  // correctif "bonus d'ancienneté compté deux fois") — voir le commentaire
-  // détaillé dans `fetchSoldes`. Même calcul, indispensable pour que
-  // "Solde N-1" reste cohérent avec la carte Accueil.
+    ) +
+    bonus +
+    cpaBasePeriodePrecedente;
+  // Capital de la période PRÉCÉDENTE (10/09/2026, correctif "bonus
+  // d'ancienneté compté deux fois", étendu au solde initial) — voir le
+  // commentaire détaillé dans `fetchSoldes`. Même calcul, indispensable pour
+  // que "Solde N-1" reste cohérent avec la carte Accueil.
   const bonusPeriodePrecedente = bonusAnciennete(
     reglesAnciennete,
     ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
   );
   const capitalBasePeriodePrecedente =
-    accrualMensuelSomme(
-      regleCP.tauxAcquisitionMensuel,
-      historiqueTaux,
-      tauxActuel,
-      periodePrecedente.debut,
-      12,
-      moisLimite,
-    ) + bonusPeriodePrecedente;
+    soldeInitial && dateIso(decalerPeriode(periodePrecedente, -1).fin) <= soldeInitial.dateReference
+      ? soldeInitial.cp
+      : accrualMensuelSomme(
+          regleCP.tauxAcquisitionMensuel,
+          historiqueTaux,
+          tauxActuel,
+          periodePrecedente.debut,
+          12,
+          moisLimite,
+        ) + bonusPeriodePrecedente;
   // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
   // revu) — voir le commentaire détaillé dans `fetchSoldes`.
   const consommePeriodePrecedente = await sommeJours(

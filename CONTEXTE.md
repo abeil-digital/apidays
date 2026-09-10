@@ -5900,6 +5900,51 @@ quand une date d'entrée ancienne est saisie sans solde initial associé) ; le m
 d'ancienneté (date anniversaire vs période de référence, avec piste de régul visible) ; remplacer les
 3 onglets "Mon Calendrier" par un vrai sélecteur de date de fin.
 
+## Solde initial CPA : la base s'évaporait à la bascule, report de la période précédente idem (10/09/2026)
+
+Signalé par Vincent en comparant le suivi des soldes de test3 juste avant/après la bascule 31/05 →
+01/06 ("j'ai l'impression que rien ne correspond") — vérifié précisément (recalcul manuel de chaque
+formule contre les vraies données) : chaque chiffre affiché était individuellement exact, mais
+**1,96j disparaissaient silencieusement** entre le total CP+CPA du 31 mai et celui du 1er juin, sans
+qu'aucune demande ne l'explique.
+
+Décomposition trouvée :
+
+- **~2,08j** : non-bug, un simple effet d'affichage — l'accrual CPA au 31 mai ne compte que 11 mois
+  pleins (le 12ᵉ, celui en cours, ne se crédite qu'au 1er juin), alors que le nouveau capital CP
+  compte directement 12 mois pleins dès la bascule.
+- **~1j** : l'asymétrie déjà connue du bonus d'ancienneté (compté dans le capital CP, absent de
+  l'accrual CPA) — reste au Backlog, pas retouché ici.
+- **6j : le vrai trou.** La base `soldes_initiaux.cpa` (saisie à la main, ex. "6j déjà acquis en CPA
+  à la date de référence") finance bien l'accrual CPA affiché pendant toute sa période — mais
+  n'avait **aucun chemin vers le capital CP de la période suivante**, qui se recalculait à neuf sans
+  en tenir compte. Une base CPA saisie en démarrant un tenant s'évaporait donc silencieusement à la
+  première bascule.
+
+**Deuxième trou trouvé en creusant le même sujet** : `capitalBasePeriodePrecedente` (utilisé pour
+plafonner le report, introduit plus tôt le 10/09/2026 pour corriger le double comptage du bonus
+d'ancienneté) recalculait le capital de la période précédente **par la formule générique**, même
+quand cette période précédente était elle-même gouvernée par un solde initial (`resolverCapitalCpTotal`
+remplace alors tout calcul par `soldeInitial.cp` — un nombre réel, différent de la formule). Le
+report s'appuyait donc sur un capital fictif plutôt que sur celui réellement en vigueur.
+
+**Fix** (`lib/data/soldes.repository.ts`, `fetchSoldes` et `fetchHistoriqueCp`) :
+
+- `cpaBasePeriodePrecedente` : si `soldeInitial.dateReference` tombe dans la période PRÉCÉDENTE,
+  sa base `cpa` s'ajoute au `capitalBase` de la période qui commence — même principe déjà établi que
+  "le CPA accumulé sur 12 mois pleins = le nouveau capital CP" (confirmé par Vincent), appliqué à la
+  base initiale comme au reste de l'accrual.
+- `capitalBasePeriodePrecedente` reprend `soldeInitial.cp` tel quel (au lieu de le recalculer) quand
+  la période précédente était elle-même gouvernée par le solde initial — même logique récursive que
+  `resolverCapitalCpTotal`, un niveau plus loin.
+- N'affecte que la toute première bascule suivant un solde initial (la condition ne matche plus
+  ensuite) — pas d'effet sur un salarié sans solde initial renseigné.
+
+**Vérifié en direct** (bandeau de date simulée, Vincent — solde initial 01/06/2026 : CP 25j, RTT 3j,
+CPA 6j) : 31/05/2027 inchangé (15,5j CP / 23,88j CPA, la bascule n'a pas encore eu lieu) ; 01/06/2027
+passé de 37,42j à **42,46j** de CP (+5,04j, cohérent avec la base CPA de 6j moins l'écart résiduel de
+timing/bonus déjà identifié) — recalcul manuel confirmé formule par formule pour les deux dates.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
