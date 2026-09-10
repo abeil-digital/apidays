@@ -777,8 +777,10 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     );
     const transmisCpa = await sommeTransmis(supabase, id, "CP", true, periodeEnCours, aujourdhui);
     const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
-    const soldeCpaValidee = Math.max(0, accrualCpa - consommeCpa + ajustementsCpa);
-    const soldeCpaTransmis = Math.max(0, accrualCpa - transmisCpa + ajustementsCpa);
+    // Pas de `Math.max(0, ...)` ici non plus (10/09/2026, même correctif que
+    // RTT juste au-dessus — voir son commentaire pour le détail du bug).
+    const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
+    const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
 
     cpa = {
       valeur: soldeCpaTransmis,
@@ -838,8 +840,17 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     );
     const transmis = await sommeTransmis(supabase, id, "RTT", null, periodeConsoRtt, aujourdhui);
     const ajustementsRtt = await sommeAjustements(supabase, id, "RTT", periodeConsoRtt, false);
-    const soldeValidee = Math.max(0, accrual - consomme + ajustementsRtt);
-    const soldeTransmis = Math.max(0, accrual - transmis + ajustementsRtt);
+    // Pas de `Math.max(0, ...)` ici (10/09/2026, correctif) — contrairement à
+    // CP, qui ne plafonne jamais ses soldes intermédiaires. Un plafond à 0
+    // posé sur `soldeValidee` AVANT de soustraire `enAttente` masque un
+    // déficit réel dès que la seule consommation validée dépasse déjà
+    // l'acquis : une demande en attente affichait correctement le solde
+    // négatif (ex. -0,25), mais sa VALIDATION le faisait remonter à tort à 0
+    // (le déficit, une fois "absorbé" dans `soldeValidee`, se faisait
+    // silencieusement plafonner) — signalé par Vincent sur les données
+    // réelles d'Abeil (Delphine).
+    const soldeValidee = accrual - consomme + ajustementsRtt;
+    const soldeTransmis = accrual - transmis + ajustementsRtt;
 
     rtt = {
       valeur: soldeTransmis,
@@ -1526,15 +1537,19 @@ export async function fetchHistoriqueRtt(
       };
     });
 
+  // Pas de `Math.max(0, ...)` (10/09/2026, correctif — même bug que
+  // `fetchSoldes`, voir son commentaire) : ce plancher masquait un déficit
+  // réel et pouvait afficher un solde théorique différent de celui de la
+  // carte Accueil (`fetchSoldes`, qui ne plafonne plus non plus).
   return {
     periodeDebut: dateIso(periodeRtt.debut),
     periodeFin: dateIso(periodeRtt.fin),
     soldeDepart: baseRtt,
     soldeDepartDate,
     mois: moisListe,
-    soldeActuel: Math.max(0, cumul),
+    soldeActuel: cumul,
     enAttente,
-    soldeTheorique: Math.max(0, cumulTheorique),
+    soldeTheorique: cumulTheorique,
     mouvementsTheorique,
   };
 }
@@ -1721,15 +1736,17 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       };
     });
 
+  // Pas de `Math.max(0, ...)` ici non plus (10/09/2026, même correctif que
+  // `fetchHistoriqueRtt` juste au-dessus).
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
     soldeDepart: baseCpa,
     soldeDepartDate,
     mois: moisListe,
-    soldeActuel: Math.max(0, cumul),
+    soldeActuel: cumul,
     enAttente,
-    soldeTheorique: Math.max(0, cumulTheorique),
+    soldeTheorique: cumulTheorique,
   };
 }
 
