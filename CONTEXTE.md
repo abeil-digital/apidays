@@ -5978,6 +5978,38 @@ au centime près pour les deux profils. Le CPA affiché au 01/06 (0j pour Hector
 son propre bonus, appliqué dès le 1er jour de SA nouvelle période) n'a pas de rapport avec cette
 vérification, c'est le tout début d'un nouveau cycle d'accrual, indépendant.
 
+## Bonus d'ancienneté dans l'accrual CPA : limité au dernier jour, pas tous les jours (10/09/2026)
+
+Correction du fix précédent (section ci-dessus) — Vincent a remarqué, en revérifiant le 01/06/2027,
+que le CPA de Vincent affichait 1j dès le premier jour de sa nouvelle période ("pourquoi on rajoute
+un jour à Vincent, ce n'est pas logique ?"). À raison : le bonus d'ancienneté avait été ajouté à
+`accrualCpa` **sans condition**, alors que le comptage du mois en cours (+1, plafonné à 12) était
+lui bien limité au dernier jour de la période. Résultat : le bonus apparaissait artificiellement dès
+le jour 1 d'un cycle CPA qui vient de démarrer (0 mois écoulés, rien de réellement accumulé) —
+un jour fantôme visible toute l'année, pas seulement au moment de la bascule où il sert à la
+vérification.
+
+**Fix** (`fetchSoldes` et `fetchHistoriqueCpa`) : le bonus ne s'ajoute plus à `accrualCpa`
+(`baseCpa + bonus + accrual...`) que lorsque `dernierJourPeriode` est vrai — exactement la même
+condition que le comptage du mois en cours. Le reste de l'année, l'accrual CPA reste honnête
+(progressif, sans bonus), et ne "préfigure" ce qu'il vaudra à la bascule que le tout dernier jour.
+
+**Revérifié en direct** (test3, après nettoyage des CPI de test — voir section suivante, qui a aussi
+changé les montants bruts) : au 31/05/2027, Vincent CP 20,5j + CPA 31,96j = 52,46j ; au 01/06/2027,
+CP = 52,46j et **CPA = 0j** (plus de jour fantôme). Hector : 25j + 30,96j = 55,96j au 31/05, CP =
+55,96j au 01/06. L'égalité de contrôle continue de tenir exactement, sans plus créer d'artefact
+visible en dehors du jour de bascule.
+
+## Nettoyage des CPI de test sur test3 (10/09/2026)
+
+Abeil n'utilisant pas le système de CPI (voir Backlog), demande de Vincent de nettoyer les congés
+imposés de test accumulés sur test3 au fil de la session ("on peut désactiver les CPI ?" — clarifié :
+suppression des données de test, pas une nouvelle fonctionnalité de désactivation). Un seul CPI
+restait en base (17-21 août 2026, avec ses 2 demandes générées pour Hector et Vincent) — supprimé
+avec ses demandes et son journal de décisions. `test3` a désormais 0 CPI. Conséquence attendue sur
+les montants CP/CPA de test (visible dans la section ci-dessus) : +5j de CP pour les deux
+collaborateurs (le CPI consommait 5j chacun), pas un effet du fix du jour.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

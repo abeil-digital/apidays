@@ -823,16 +823,19 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       12,
       moisEntiersEcoules(debutCpa, aujourdhui) + (dernierJourPeriode ? 1 : 0),
     );
-    // `+ bonus` (10/09/2026, même correctif) — le bonus d'ancienneté est un
-    // montant forfaitaire au franchissement d'un seuil, pas une acquisition
-    // progressive : `capitalBase` (CP) l'ajoute déjà tel quel, une seule
-    // fois, dès le 1er jour de sa période. L'accrual CPA en était privé,
-    // seule asymétrie qui subsistait entre "ce que finance le CPA" et "ce
-    // que vaut le capital CP qu'il anticipe" (même `bonus`, déjà calculé
-    // plus haut à la date d'aujourd'hui, réutilisé tel quel ici).
+    // `+ bonus` UNIQUEMENT le dernier jour (10/09/2026, même correctif —
+    // revu après retour de Vincent : "pourquoi Vincent a un CPA à 1 le
+    // 01/06 ?", à raison) — l'ajouter tous les jours faisait apparaître le
+    // bonus dès le tout premier jour d'un cycle CPA qui vient de démarrer
+    // (0 mois écoulés, rien de réel accumulé), ce qui n'a pas de sens : le
+    // bonus doit seulement anticiper CE QU'IL VAUDRA le lendemain matin, au
+    // moment précis de la bascule — pas apparaître pendant toute l'année
+    // qui suit. Même principe que `moisEcoulesCpa` juste au-dessus : les
+    // deux corrections ne s'activent QUE le dernier jour, l'accrual CPA
+    // reste honnête (progressif, sans bonus) tout le reste du temps.
     const accrualCpa =
       baseCpa +
-      bonus +
+      (dernierJourPeriode ? bonus : 0) +
       accrualMensuelSomme(
         regleCP.tauxAcquisitionMensuel,
         historiqueTaux,
@@ -1928,11 +1931,12 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
 
-  // `+ bonus` (10/09/2026, correctif "égalité CP(bascule) = CP(veille) +
-  // CPA(veille)") — plié dans le point de départ plutôt qu'un événement
-  // séparé, même convention que `baseCpa` (pas de ligne dédiée dans ce
-  // feed pour l'instant, voir Backlog "template de détail du Solde N-1").
-  let cumul = baseCpa + bonus;
+  // `+ bonus` UNIQUEMENT le dernier jour (10/09/2026, revu — voir le
+  // commentaire détaillé dans `fetchSoldes`) — plié dans le point de départ
+  // plutôt qu'un événement séparé, même convention que `baseCpa` (pas de
+  // ligne dédiée dans ce feed pour l'instant, voir Backlog "template de
+  // détail du Solde N-1").
+  let cumul = baseCpa + (dernierJourPeriode ? bonus : 0);
   const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
     const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
       .filter((m) => m.date.slice(0, 7) === cle)
@@ -1969,7 +1973,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
-    soldeDepart: baseCpa + bonus,
+    soldeDepart: baseCpa + (dernierJourPeriode ? bonus : 0),
     soldeDepartDate,
     mois: moisListe,
     soldeActuel: cumul,
