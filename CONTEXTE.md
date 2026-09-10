@@ -5561,6 +5561,19 @@ pas être négatif par définition).
 réellement (comme CP le fait déjà) — `formatJours` (Intl.NumberFormat) gère nativement les nombres
 négatifs, aucun changement d'affichage nécessaire.
 
+## Fix : popover de détail jour mal positionné sur le Calendrier (10/09/2026)
+
+Signalé par Vincent : cliquer sur une DJI (ou un CPI/férié) dans Paramétrer > Calendrier affichait
+son détail dans un coin de l'écran au lieu de juste sous le jour cliqué. Cause : la grille des mois
+est enveloppée dans un conteneur `animate-stagger-in` — animation CSS `transform` en
+`fill-mode: both`, dont l'état final (`transform: translateY(0)`) reste appliqué indéfiniment après
+coup. Un ancêtre avec `transform` devient le référentiel de positionnement pour tout descendant
+`position: fixed` (piège CSS classique) au lieu du viewport — le popover se positionnait n'importe
+où plutôt que sous son ancre. Corrigé en rendant `SnippetConge`/`SnippetDji`/`SnippetFerie`
+(`CalendrierPage.tsx`) dans un portail React (`createPortal` vers `document.body`) — même pattern
+déjà utilisé par `DatePicker.tsx` pour exactement ce problème. Même bug trouvé et corrigé sur
+`SnippetJourCalendrier.tsx` (Accueil/`/suivre/calendrier`, même genre de conteneur animé parent).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
