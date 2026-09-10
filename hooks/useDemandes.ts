@@ -10,11 +10,6 @@ import {
 } from "@/lib/data/demandes.repository";
 import { notifierNouvelleDemande } from "@/lib/data/notificationsDemandes.actions";
 
-// Clés de stockage pour le principe "vu depuis votre dernière connexion" —
-// voir le commentaire sur l'effet correspondant plus bas.
-const SESSION_FLAG = "apidays_journal_session_started";
-const CARRYOVER_KEY = "apidays_journal_non_vues";
-
 interface UseDemandesResult {
   demandes: Demande[];
   loading: boolean;
@@ -39,12 +34,17 @@ interface UseDemandesResult {
  *
  * `utilisateurId` optionnel (24/08/2026, même principe que `useSoldes`) :
  * sans argument, l'utilisateur connecté ; avec, les demandes d'un autre
- * collaborateur (`/suivre/calendrier`, manager/admin). Dans ce cas, tout le
- * mécanisme "vu"/journal ci-dessous est désactivé — il est scopé par des
- * clés `sessionStorage`/`localStorage` globales au NAVIGATEUR, pas par
- * utilisateur consulté : le laisser tourner marquerait les demandes du
- * collaborateur regardé comme "vues" en se basant sur l'état de session du
- * manager, corrompant son propre journal.
+ * collaborateur (`/suivre/calendrier`, manager/admin).
+ *
+ * "Vu" des décisions (validée/refusée/annulée) — `marquerVue` est exposée
+ * mais jamais appelée automatiquement ici : à l'appelant de décider quand
+ * une décision devient "vue" (10/09/2026, simplifié à la demande de
+ * Vincent — une décision est vue dès l'ouverture du tiroir "Mon journal",
+ * voir `ActiviteRecenteFeed`/`DashboardPage.tsx`). Ancien principe "vu
+ * depuis votre dernière connexion" (persistance `sessionStorage`/
+ * `localStorage`, 18/08/2026) retiré le 10/09/2026 : reposait sur des clés
+ * globales au NAVIGATEUR (pas une vraie session d'authentification, pas
+ * scopées par utilisateur — voir SUIVI-DECISIONS.md, "Limites connues").
  */
 export function useDemandes(utilisateurId?: string): UseDemandesResult {
   const [demandes, setDemandes] = useState<Demande[]>([]);
@@ -83,55 +83,6 @@ export function useDemandes(utilisateurId?: string): UseDemandesResult {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
-
-  // "Vu" des décisions (validée/refusée/annulée) — "depuis votre dernière connexion"
-  // plutôt que "tant que le tiroir journal est fermé" (18/08/2026, retour de
-  // Vincent : perturbant que la mise en avant disparaisse dès qu'on
-  // ouvre/ferme le volet). Principe : une décision reste mise en avant toute
-  // la session en cours (l'onglet reste ouvert), quel que soit le nombre
-  // d'ouvertures/fermetures du journal, et n'est marquée "vu" qu'au tout
-  // début de la session SUIVANTE — pas à la fin de celle-ci (rien ne se
-  // déclenche fiablement à la fermeture d'un onglet).
-  //
-  // Implémentation : la liste des décisions encore non vues est recopiée en
-  // continu dans `localStorage` (survit à la fermeture de l'onglet) ; au tout
-  // premier montage d'une nouvelle session (`sessionStorage`, vidé à la
-  // fermeture de l'onglet — sert de marqueur "déjà traité cette session"),
-  // cette liste précédente est marquée "vu" d'un coup — elle représente ce
-  // qui était déjà resté affiché toute la session précédente.
-  useEffect(() => {
-    if (utilisateurId) return;
-    if (loading) return;
-    if (sessionStorage.getItem(SESSION_FLAG)) return;
-    sessionStorage.setItem(SESSION_FLAG, "1");
-
-    let precedentes: string[] = [];
-    try {
-      precedentes = JSON.parse(localStorage.getItem(CARRYOVER_KEY) ?? "[]");
-    } catch {
-      precedentes = [];
-    }
-    precedentes.forEach((id) => {
-      setDemandes((prev) => prev.map((d) => (d.id === id ? { ...d, vu: true } : d)));
-      marquerDemandeVue(id).catch(() => {});
-    });
-  }, [loading, utilisateurId]);
-
-  // Garde `loading` : sans elle, ce `useEffect` s'exécute dès le tout premier
-  // rendu (`demandes` encore à `[]`, avant la résolution du fetch initial) et
-  // écrase la liste persistée avec un tableau vide — juste avant que l'effet
-  // ci-dessus n'ait la chance de la lire (bug constaté le 18/08/2026 : la
-  // mise en avant ne survivait jamais à un changement de session).
-  useEffect(() => {
-    if (utilisateurId) return;
-    if (loading) return;
-    const nonVues = demandes
-      .filter(
-        (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
-      )
-      .map((d) => d.id);
-    localStorage.setItem(CARRYOVER_KEY, JSON.stringify(nonVues));
-  }, [loading, demandes, utilisateurId]);
 
   const ajouterDemande = useCallback(async (input: NouvelleDemandeInput) => {
     const demande = await creerDemande(input);

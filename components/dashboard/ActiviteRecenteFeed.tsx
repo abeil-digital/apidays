@@ -184,6 +184,11 @@ function comparerEvenements(a: EvenementFeed, b: EvenementFeed): number {
   return Number(b.id.endsWith("-decision")) - Number(a.id.endsWith("-decision"));
 }
 
+// `duration-500` (10/09/2026) — `marquerVue` est appelée dès l'ouverture du
+// tiroir (`DashboardPage.tsx`, `ouvrirTiroirActivite`), donc `e.nonVu` passe
+// à `false` immédiatement au clic ; ce délai fait s'estomper le surlignage
+// en douceur au lieu de la disparition instantanée d'un simple changement de
+// classe (150ms, trop rapide pour être perçu comme une transition).
 function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
   return (
     <div className="flex flex-col gap-1">
@@ -194,7 +199,7 @@ function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
           <Link
             key={e.id}
             href={`/historique?demande=${e.demandeId}`}
-            className={`flex items-start gap-2.5 px-4 py-3 transition-colors duration-150 ${
+            className={`flex items-start gap-2.5 px-4 py-3 transition-colors duration-500 ${
               e.nonVu ? "bg-yellow-100/40" : "bg-surface-card"
             } ${HOVER_TEINTE[e.code]}`}
           >

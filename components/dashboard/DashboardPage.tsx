@@ -160,7 +160,12 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
 export function DashboardPage() {
   const { utilisateur, loading: loadingUtilisateur } = useUtilisateur();
   const { soldes, loading: loadingSoldes, refetch: refetchSoldes } = useSoldes();
-  const { demandes, loading: loadingDemandes, refetch: refetchDemandes } = useDemandes();
+  const {
+    demandes,
+    loading: loadingDemandes,
+    refetch: refetchDemandes,
+    marquerVue,
+  } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
   const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
@@ -420,15 +425,22 @@ export function DashboardPage() {
   // Phrase "Mes demandes" (18/08/2026, test) — "en attente" (nécessite une
   // action du manager) et "nouvelles décisions" (déjà tranchées, pas encore
   // vues) s'affichent tous les deux en emphase, indépendamment l'un de
-  // l'autre. "vu" ne se marque plus à la fermeture du volet journal (Vincent :
-  // perturbant que la mise en avant disparaisse dès qu'on ouvre/ferme le
-  // tiroir) — voir `useDemandes` pour le nouveau principe "depuis votre
-  // dernière connexion" (mise en avant conservée toute la session en cours,
-  // effacée au début de la session suivante).
+  // l'autre. "vu" se marque à l'OUVERTURE du tiroir journal (10/09/2026,
+  // simplifié à la demande de Vincent — remplace l'ancien principe "depuis
+  // votre dernière connexion" basé sur sessionStorage/localStorage, retiré
+  // de `useDemandes`, voir Backlog "Limites connues du vu par session").
   const nbEnAttente = demandes.filter((d) => d.statut === "en attente").length;
-  const nbDecisionsNonVues = demandes.filter(
+  const decisionsNonVues = demandes.filter(
     (d) => (d.statut === "validé" || d.statut === "refusé" || d.statut === "annulé") && !d.vu,
-  ).length;
+  );
+  const nbDecisionsNonVues = decisionsNonVues.length;
+
+  function ouvrirTiroirActivite() {
+    setTiroirActiviteOuvert(true);
+    decisionsNonVues.forEach((d) => {
+      marquerVue(d.id).catch(() => {});
+    });
+  }
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
@@ -464,7 +476,7 @@ export function DashboardPage() {
               <span className="text-ink-500">-</span>
               <button
                 type="button"
-                onClick={() => setTiroirActiviteOuvert(true)}
+                onClick={ouvrirTiroirActivite}
                 className="text-ink-900 font-bold underline"
               >
                 voir le journal
@@ -475,7 +487,7 @@ export function DashboardPage() {
               <span className="text-ink-500">aucune décision récente -</span>
               <button
                 type="button"
-                onClick={() => setTiroirActiviteOuvert(true)}
+                onClick={ouvrirTiroirActivite}
                 className="text-ink-500 underline"
               >
                 voir le journal
