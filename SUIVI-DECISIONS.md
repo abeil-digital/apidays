@@ -169,13 +169,13 @@ cohérents.
 | `lib/data/demandes.repository.ts` | `marquerDemandeVue()` (appel RPC) ; `vu: false` forcé dans `deciderDemande()`/`remettreEnAttenteDemande()` |
 | `hooks/useDemandes.ts` | `marquerVue()` (marquage optimiste immédiat, appelée par l'appelant — plus automatiquement en interne depuis le 10/09/2026, voir CONTEXTE.md) |
 | `components/dashboard/DashboardPage.tsx` | La phrase "Depuis ma dernière visite" (calcul `nbEnAttente`/`nbDecisionsNonVues`, rendu) + `ouvrirTiroirActivite()` (ouvre le tiroir ET marque vues les décisions affichées) |
-| `components/dashboard/ActiviteRecenteFeed.tsx` | Tiroir "Mon journal" — génération des événements, garantie d'inclusion des lignes prioritaires, emphase visuelle des décisions non vues (fade 1s à l'ouverture, `duration-1000`) |
+| `components/dashboard/ActiviteRecenteFeed.tsx` | Tiroir "Mon journal" — génération des événements, garantie d'inclusion des lignes prioritaires, emphase visuelle des décisions non vues (reste surlignée tant que le tiroir est ouvert) |
 | `components/historique/HistoriquePage.tsx` | Marquage "vu" immédiat à la consultation du détail d'une demande ; filtres `?statut=valide_non_vu`/`refuse_non_vu` (pré-sélection venant d'anciens liens, voir Backlog) |
 
 ## Limites connues / non traité
 
 **Principe de "vu" simplifié le 10/09/2026** (voir CONTEXTE.md) : une décision est désormais marquée
-vue dès l'ouverture du tiroir "Mon journal", plus "depuis votre dernière connexion" — les 2 limites
+vue à la fermeture du tiroir "Mon journal", plus "depuis votre dernière connexion" — les 2 limites
 ci-dessous liées à `sessionStorage`/`localStorage` sont donc caduques, retirées avec le mécanisme.
 
 - Aucune notion équivalente côté manager (voir Backlog : "Gestion du Journal côté manager").

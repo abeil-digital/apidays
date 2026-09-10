@@ -5470,22 +5470,23 @@ L'ancien principe "vu depuis votre dernière connexion" (`useDemandes.ts`, persi
 [SUIVI-DECISIONS.md](SUIVI-DECISIONS.md)) : pas une vraie session d'authentification (un onglet
 resté ouvert plusieurs jours ne "change" jamais de session) et pas scopé par utilisateur (poste
 partagé = journal contaminé entre comptes). Remplacé sur demande de Vincent par un principe plus
-simple : une décision (validée/refusée/annulée) est marquée vue dès l'ouverture du tiroir "Mon
+simple : une décision (validée/refusée/annulée) est marquée vue à la **fermeture** du tiroir "Mon
 journal", pas à la session suivante.
+
+**Itéré une fois** : premier essai en marquant "vu" à l'OUVERTURE du tiroir plutôt qu'à sa fermeture
+(avec un fade de 500ms puis 1s sur le surlignage pour rendre le changement perceptible) — retour de
+Vincent : les nouveautés s'effaçaient avant d'avoir pu être vues, pas assez de temps pour les lire.
+Version retenue : les décisions restent surlignées tout le temps où le tiroir reste ouvert, et ne
+sont marquées vues qu'à sa fermeture (croix, clic hors panneau, Échap) — le fade n'a plus lieu d'être
+puisque le tiroir entier disparaît avec elles, `duration-150` d'origine restaurée.
 
 `hooks/useDemandes.ts` : retire les deux `useEffect` de persistance (recopie continue dans
 `localStorage`, lecture au montage d'une nouvelle `sessionStorage`) — `marquerVue(id)` reste
 exposée mais n'est plus appelée automatiquement en interne, à l'appelant de décider quand une
-décision devient vue. `components/dashboard/DashboardPage.tsx` : `ouvrirTiroirActivite()` (appelée
-par les deux boutons "voir le journal") ouvre le tiroir ET marque vues toutes les décisions non
-vues d'un coup.
-
-`components/dashboard/ActiviteRecenteFeed.tsx` : le surlignage jaune (`bg-yellow-100/40`) des
-lignes non vues passe de `duration-150` à `duration-1000` — comme `marquerVue` est appelée
-synchrone à l'ouverture, `nonVu` passe à `false` immédiatement ; sans ce délai plus long, le
-changement de classe Tailwind (150ms) était trop rapide pour être perçu comme une transition, le
-surlignage disparaissait plutôt qu'il ne s'estompait. Demande initiale de Vincent à 500ms, ajustée à
-1s après premier essai.
+décision devient vue. `components/dashboard/DashboardPage.tsx` : `fermerTiroirActivite()` (passée en
+`onFermerTiroir` à `ActiviteRecenteFeed`, déclenchée par sa croix/le clic sur le fond assombri/Échap)
+ferme le tiroir ET marque vues toutes les décisions qui étaient non vues à ce moment — les 2 boutons
+"voir le journal" se contentent d'ouvrir (`setTiroirActiviteOuvert(true)`), sans marquage.
 
 ## À faire
 
