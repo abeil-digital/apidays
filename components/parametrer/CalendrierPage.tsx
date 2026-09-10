@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PlusCircle, TriangleAlert, X } from "lucide-react";
 import type { CongeImpose, DemandeEquipe, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
 import { formatJourMois, formatJours, nombreJours } from "@/lib/format";
@@ -62,6 +63,16 @@ interface SnippetCongeProps {
  * (bascule sur une confirmation inline avant d'agir, avec gestion d'erreur) :
  * une période de congés imposés déjà posée ne se modifie pas, seulement
  * supprimer puis reposer si besoin.
+ *
+ * Rendu dans un portail (`document.body`, 10/09/2026, correctif — même
+ * principe que `DatePicker.tsx`) : le conteneur de la grille des mois porte
+ * `animate-stagger-in`, une animation `transform` en `fill-mode: both` —
+ * son état final (`transform: translateY(0)`) reste appliqué indéfiniment
+ * après coup, ce qui transforme ce conteneur en référentiel de positionnement
+ * pour tout descendant `position: fixed` (piège CSS classique). Résultat
+ * sans portail : le popover se positionnait n'importe où (coin bas-droit de
+ * l'écran) au lieu de juste sous le jour/segment cliqué, signalé par
+ * Vincent.
  */
 function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps) {
   const [confirmation, setConfirmation] = useState(false);
@@ -87,7 +98,7 @@ function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps
     }
   }
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
@@ -131,7 +142,8 @@ function SnippetConge({ conge, ancre, onSupprimer, onFermer }: SnippetCongeProps
           Supprimer
         </button>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -143,7 +155,8 @@ interface SnippetDjiProps {
 }
 
 /** Équivalent de `SnippetConge` pour une DJI cliquée sur le calendrier —
- * suppression uniquement (pas d'édition de créneau depuis le calendrier). */
+ * suppression uniquement (pas d'édition de créneau depuis le calendrier).
+ * Portail `document.body` — voir le commentaire de `SnippetConge`. */
 function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
   const [confirmation, setConfirmation] = useState(false);
   const [suppression, setSuppression] = useState(false);
@@ -168,7 +181,7 @@ function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
     }
   }
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
@@ -210,7 +223,8 @@ function SnippetDji({ dj, ancre, onSupprimer, onFermer }: SnippetDjiProps) {
           Supprimer
         </button>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -222,7 +236,8 @@ interface SnippetFerieProps {
 
 /** Équivalent de `SnippetConge`/`SnippetDji` pour un jour férié cliqué sur le
  * calendrier — purement informatif, aucune action associée (les jours
- * fériés légaux ne s'éditent/suppriment pas depuis le calendrier). */
+ * fériés légaux ne s'éditent/suppriment pas depuis le calendrier). Portail
+ * `document.body` — voir le commentaire de `SnippetConge`. */
 function SnippetFerie({ ferie, ancre, onFermer }: SnippetFerieProps) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -234,7 +249,7 @@ function SnippetFerie({ ferie, ancre, onFermer }: SnippetFerieProps) {
     return () => window.removeEventListener("mousedown", handleClicExterieur);
   }, [onFermer]);
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       style={{ position: "fixed", top: ancre.bottom + 8, left: ancre.left }}
@@ -242,7 +257,8 @@ function SnippetFerie({ ferie, ancre, onFermer }: SnippetFerieProps) {
     >
       <div className="text-ink-900 text-sm font-bold">{formatJourMoisComplet(ferie.date)}</div>
       <div className="text-ink-500 text-xs">{ferie.libelle}</div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

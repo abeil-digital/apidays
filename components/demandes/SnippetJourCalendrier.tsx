@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
 import { dureeCongeImpose } from "@/lib/joursFeries";
 import type { CongeImpose, Demande, DjImposee, JourFerie } from "@/lib/types";
@@ -69,7 +70,15 @@ export function SnippetJourCalendrier({
     duree = jour.ferie.libelle;
   }
 
-  return (
+  // Portail `document.body` (10/09/2026, correctif) — les conteneurs
+  // parents (Accueil/`/suivre/calendrier`) portent `animate-stagger-in`,
+  // une animation `transform` en `fill-mode: both` dont l'état final reste
+  // appliqué indéfiniment — ce qui transforme le conteneur en référentiel
+  // de positionnement pour tout descendant `position: fixed` (piège CSS
+  // classique). Sans portail, ce popover se positionnait n'importe où sur
+  // l'écran au lieu de juste sous le jour cliqué (même bug trouvé et
+  // corrigé sur `CalendrierPage.tsx`, signalé par Vincent).
+  return createPortal(
     <>
       <div className="fixed inset-0 z-20" onClick={onFermer} />
       <div
@@ -83,6 +92,7 @@ export function SnippetJourCalendrier({
         <div className="text-ink-500 text-xs">{duree}</div>
         {jour.kind === "demande" && <StatusBadge statut={jour.demande.statut} />}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
