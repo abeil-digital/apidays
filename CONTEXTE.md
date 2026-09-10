@@ -5514,6 +5514,46 @@ déjà la demande). Vérifié par lecture du code de calcul (pas de test UI bout
 "Suivre les demandes" ne montre Valider/Refuser qu'au rôle exactement `manager`, pas `admin` — sur
 test3, seul Hector a ce rôle, or c'est justement sa demande qui aurait servi de cas de test).
 
+## Fix critique : validation d'une demande RTT/CPA masquait un solde négatif (10/09/2026)
+
+Signalé par Vincent sur les **données réelles d'Abeil** (Delphine, pas un tenant de test) : le solde
+théorique RTT affichait -0,25 j tant que sa dernière demande RTT restait "en attente", puis passait
+à 0 j une fois cette même demande validée — alors que valider une demande déjà comptée "en attente"
+ne doit JAMAIS faire varier le solde théorique (voir principe déjà établi dans ce fichier plus haut,
+section fuites RLS : le passage pending → validé ne change rien au solde tant que rien n'a encore été
+transmis en paie).
+
+**Cause** (`lib/data/soldes.repository.ts`) : `soldeValidee`/`soldeCpaValidee` (RTT/CPA) étaient
+plafonnés à 0 via `Math.max(0, ...)` **avant** de soustraire le solde en attente
+(`valeurApresAttente = soldeValidee - enAttente`). Tant que la demande restait en attente, elle
+était soustraite APRÈS ce plafond — le déficit s'affichait correctement (`soldeValidee` positif
+`0,25` − `enAttente` `0,5` = `-0,25`, visible). Une fois validée, elle rejoignait `soldeValidee`
+lui-même, AVANT le plafond (`accrual 1,75` − `consomme 2,0` = `-0,25`, plafonné à `0`) — la
+validation "réparait" artificiellement un solde qui aurait dû rester identique. **CP n'a jamais eu ce
+plafond** (`soldeCpValidee`/`soldeCpTransmis` sans `Math.max`) — cohérent avec le fait que ce bug ne
+touchait que RTT/CPA.
+
+**Vérifié par calcul manuel** à partir des vraies données de Delphine (regle RTT : 0,25 j/mois depuis
+le 01/01, solde initial 1 j au 01/06/2026 ; 3 demandes RTT validées + celle en question) : accrual à
+date = 1,75 j, consommé validé total = 2,0 j → solde théorique réel = **-0,25 j**, identique avant et
+après validation une fois le plafond retiré — confirme le diagnostic. Pas de reproduction en direct
+sur les données réelles d'Abeil (pas de manipulation de données de production) : validé par lecture
+du code + recalcul manuel contre les vraies valeurs de la base.
+
+**Fix** : retrait du `Math.max(0, ...)` sur `soldeValidee`/`soldeTransmis` (RTT) et
+`soldeCpaValidee`/`soldeCpaTransmis` (CPA) dans `fetchSoldes`, et sur `soldeActuel`/`soldeTheorique`
+dans `fetchHistoriqueRtt`/`fetchHistoriqueCpa` (popin détail du solde côté Suivre — même bug, trouvé
+en auditant tous les `Math.max(0,` du fichier pour ne rien laisser d'incohérent avec la carte
+Accueil). **Laissé inchangé** : `fetchSoldeAnticipe` (vérifie ce qui sera disponible à une date
+future avant de poser un CPA/RTT — valeur finale autonome, pas une étape intermédiaire avant une
+autre soustraction, le plafond y est légitime) et le plafond du report CP (`reportAutomatique =
+Math.max(0, capitalBase - consommePeriodePrecedente)` — règle métier différente, un report ne peut
+pas être négatif par définition).
+
+**Conséquence attendue** : un solde RTT/CPA théorique peut désormais s'afficher négatif quand il l'est
+réellement (comme CP le fait déjà) — `formatJours` (Intl.NumberFormat) gère nativement les nombres
+négatifs, aucun changement d'affichage nécessaire.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
