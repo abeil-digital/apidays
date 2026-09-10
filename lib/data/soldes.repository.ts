@@ -681,17 +681,53 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         12,
         moisLimite,
       ) + bonus;
+    // Capital de la période PRÉCÉDENTE, recalculé indépendamment (10/09/2026,
+    // correctif "bonus d'ancienneté compté deux fois") — sert de plafond au
+    // report ci-dessous. Avant ce correctif, `capitalBase` (celui de la
+    // période EN COURS, bonus d'aujourd'hui inclus) servait à tort de proxy :
+    // au moment où un salarié franchit un palier d'ancienneté, son nouveau
+    // bonus se retrouvait comptabilisé une 2e fois via le report (le plafond
+    // grossissait du même montant que le bonus lui-même). Le bonus d'ancienneté
+    // de la période précédente doit être évalué à SA propre date de début, pas
+    // à "aujourd'hui" — le CP est un capital figé une fois pour toute la
+    // période (voir `resolverCapitalCpTotal`), le report doit refléter ce qui
+    // était réellement disponible à l'époque, pas la situation actuelle.
+    const bonusPeriodePrecedente = bonusAnciennete(
+      reglesAnciennete,
+      ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
+    );
+    const capitalBasePeriodePrecedente =
+      accrualMensuelSomme(
+        regleCP.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        periodePrecedente.debut,
+        12,
+        moisLimite,
+      ) + bonusPeriodePrecedente;
+    // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
+    // revu) — un CP et un CPA se déduisent tous les deux du MÊME capital dès
+    // que leur date tombe dans la période considérée : `is_anticipation` ne
+    // distingue qu'un moment de saisie (avant que sa propre période ne soit
+    // "en cours"), pas une enveloppe séparée à vie. Dès que la période d'un
+    // CPA devient la période en cours, sa consommation doit compter ici —
+    // exactement comme un CP normal — pour que le rapport comme la
+    // consommation en cours en tiennent compte sans mécanisme séparé (voir le
+    // commentaire du bloc CPA plus bas, qui exclut symétriquement ces mêmes
+    // demandes de son propre suivi une fois "graduées"). Remplace l'ancienne
+    // version qui ne soustrayait le CPA qu'à la bascule SUIVANTE (un an trop
+    // tard) via un paramètre dédié sur `resolverCapitalCpTotal`.
     const consommePeriodePrecedente = await sommeJours(
       supabase,
       id,
       "CP",
       ["validee"],
-      false,
+      null,
       periodePrecedente,
       aujourdhui,
     );
     const reportAutomatique = regleCP.reportAutorise
-      ? Math.max(0, capitalBase - consommePeriodePrecedente)
+      ? Math.max(0, capitalBasePeriodePrecedente - consommePeriodePrecedente)
       : 0;
     const capitalCpTotal = resolverCapitalCpTotal(
       capitalBase,
@@ -706,7 +742,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       id,
       "CP",
       ["validee"],
-      false,
+      null,
       periodeConsoCp,
       aujourdhui,
     );
@@ -715,7 +751,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       id,
       "CP",
       ["en_attente"],
-      false,
+      null,
       periodeConsoCp,
       aujourdhui,
     );
@@ -724,7 +760,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       supabase,
       id,
       "CP",
-      false,
+      null,
       periodeConsoCp,
       aujourdhui,
     );
@@ -754,22 +790,22 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         moisEcoulesCpa,
         moisLimite,
       );
-    // Consommation CPA comptée à partir de la période **en cours**, SANS
-    // plafond haut (10/09/2026, étendu — voir CONTEXTE.md "CPI après la
-    // période en cours → CPA") : un CPI/une demande anticipée datée au-delà
-    // de la période en cours (ex. un CPI paramétré un an à l'avance) doit
-    // rester visible et décomptée dès sa validation, pas seulement une fois
-    // "aujourd'hui" entré dans sa propre période de référence — sinon un CPA
-    // très en avance n'apparaissait nulle part (ni en CP, exclu par
-    // `is_anticipation`, ni en CPA, hors fenêtre) tant que sa période ne
-    // devenait pas la période en cours (bug réel remonté par Vincent).
-    // `periodeSansPlafond` ne relève QUE la borne haute (`decalerPeriode`,
-    // 50 ans — en pratique "pas de plafond") ; la borne basse reste
-    // `periodeEnCours.debut`, comportement inchangé pour la fenêtre proche
-    // (08/09/2026, voir juste en dessous). Voir aussi `fetchHistoriqueCpa`,
-    // même fenêtre.
+    // Consommation CPA comptée STRICTEMENT APRÈS la période en cours, sans
+    // plafond haut (10/09/2026, revu — voir CONTEXTE.md "CPA → CP à la
+    // bascule") : un CPI/une demande anticipée datée au-delà de la période en
+    // cours (ex. un CPI paramétré un an à l'avance) doit rester visible et
+    // décomptée dès sa validation (borne haute déplafonnée,
+    // `decalerPeriode`, 50 ans — en pratique "pas de plafond"). Borne BASSE
+    // repoussée d'un jour après la fin de la période en cours (avant :
+    // `periodeEnCours.debut`) — dès qu'une demande anticipée tombe DANS la
+    // période en cours, elle a "gradué" en CP normal (voir `consommeEnCours`
+    // dans le bloc CP plus haut, qui ne filtre plus `is_anticipation`) : la
+    // compter ICI AUSSI la doublerait. Voir aussi `fetchHistoriqueCpa`, même
+    // fenêtre.
+    const debutCpaFutur = new Date(periodeEnCours.fin.getTime());
+    debutCpaFutur.setUTCDate(debutCpaFutur.getUTCDate() + 1);
     const periodeConsoCpaSansPlafond: Periode = {
-      debut: periodeEnCours.debut,
+      debut: debutCpaFutur,
       fin: decalerPeriode(periodeEnCours, 50).fin,
     };
     const consommeCpa = await sommeJours(
@@ -1066,17 +1102,36 @@ export async function fetchHistoriqueCp(
       12,
       moisLimite,
     ) + bonus;
+  // Capital de la période PRÉCÉDENTE, recalculé indépendamment (10/09/2026,
+  // correctif "bonus d'ancienneté compté deux fois") — voir le commentaire
+  // détaillé dans `fetchSoldes`. Même calcul, indispensable pour que
+  // "Solde N-1" reste cohérent avec la carte Accueil.
+  const bonusPeriodePrecedente = bonusAnciennete(
+    reglesAnciennete,
+    ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
+  );
+  const capitalBasePeriodePrecedente =
+    accrualMensuelSomme(
+      regleCP.tauxAcquisitionMensuel,
+      historiqueTaux,
+      tauxActuel,
+      periodePrecedente.debut,
+      12,
+      moisLimite,
+    ) + bonusPeriodePrecedente;
+  // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
+  // revu) — voir le commentaire détaillé dans `fetchSoldes`.
   const consommePeriodePrecedente = await sommeJours(
     supabase,
     utilisateurId,
     "CP",
     ["validee"],
-    false,
+    null,
     periodePrecedente,
     aujourdhui,
   );
   const reportAutomatique = regleCP.reportAutorise
-    ? Math.max(0, capitalBase - consommePeriodePrecedente)
+    ? Math.max(0, capitalBasePeriodePrecedente - consommePeriodePrecedente)
     : 0;
   const soldeDepart = resolverCapitalCpTotal(
     capitalBase,
@@ -1101,7 +1156,7 @@ export async function fetchHistoriqueCp(
       supabase,
       utilisateurId,
       typeAbsenceId,
-      false,
+      null,
       { debut: periodeConsoCp.debut, fin: periodeEnCours.fin },
       aujourdhui,
     ),
@@ -1113,12 +1168,15 @@ export async function fetchHistoriqueCp(
       .eq("is_anticipation", false)
       .gte("created_at", periodeConsoCp.debut.toISOString())
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
+    // `is_anticipation` non filtré (10/09/2026, correctif "CPA → CP à la
+    // bascule") — un CPA dont la date tombe dans la période en cours doit
+    // apparaître dans ce feed comme un CP normal (voir le commentaire dans
+    // `fetchSoldes`).
     supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
-      .eq("is_anticipation", false)
       .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
@@ -1667,12 +1725,15 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
-  // Sans plafond haut (10/09/2026) — même fenêtre que `fetchSoldes`
-  // (`periodeConsoCpaSansPlafond`, voir son commentaire) : un CPA/CPI daté
-  // au-delà de la période en cours doit rester visible dans ce feed, pas
-  // seulement une fois sa propre période devenue "en cours".
+  // Même fenêtre que `fetchSoldes` (`periodeConsoCpaSansPlafond`, voir son
+  // commentaire) : sans plafond haut, mais bornée STRICTEMENT APRÈS la
+  // période en cours — une fois qu'une demande anticipée tombe dans la
+  // période en cours, elle a "gradué" en CP normal et apparaît dans ce feed
+  // via `fetchHistoriqueCp` à la place.
+  const debutCpaFutur = new Date(periodeEnCours.fin.getTime());
+  debutCpaFutur.setUTCDate(debutCpaFutur.getUTCDate() + 1);
   const periodeConsoCpaSansPlafond: Periode = {
-    debut: periodeEnCours.debut,
+    debut: debutCpaFutur,
     fin: decalerPeriode(periodeEnCours, 50).fin,
   };
 

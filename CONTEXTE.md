@@ -5787,6 +5787,119 @@ futurs tenants. 2 items ajoutés au Backlog en conséquence : "Check des règles
 (à revalider avec un vrai usage) et "Analyser le fonctionnement des soldes RTT et CPA" (indicateurs,
 soldes négatifs, remise en question du modèle théorique).
 
+## CPA → CP à la bascule : la transition doit être immédiate, pas différée d'une période (10/09/2026)
+
+Suite de la section "CPI daté au-delà de la période de référence en cours → décompté en CPA"
+ci-dessus — le premier fix (soustraire `consommeCpaPeriodePrecedente` du capital de la période en
+cours) s'est révélé **structurellement en retard d'une période complète**. Trouvé en revérifiant
+avec Vincent sur le vrai CPI de test (09-13/08/2027, période juin27-mai28) : avec ce premier fix, il
+n'aurait basculé en CP qu'au 1er juin **2028**, un an après que sa propre période (juin27-mai28) ait
+réellement commencé.
+
+**Règle confirmée par Vincent** (reprise de l'histoire "Pierre" utilisée pour cadrer le sujet) : au
+moment précis où une période démarre (1er juin), tous les CPA dont la date tombe **dans cette
+période qui vient de démarrer** doivent immédiatement compter comme CP, déduits du capital
+nouvellement calculé — pas seulement une fois cette période elle-même terminée.
+
+**Tension avec un fix antérieur** : le 08/09/2026, un fix avait sciemment décidé qu'un CPA daté
+**dans la période en cours** devait continuer à compter comme CPA (pas CP), pour qu'une demande
+"Congés anticipés" postée sur une date proche reste visible quelque part. Confirmé avec Vincent que
+ce cas était un raccourci de test, pas une vraie règle métier — un CPA "réaliste" anticipe toujours
+une période qui n'a pas encore commencé, jamais la période en cours.
+
+**Fix retenu** (`lib/data/soldes.repository.ts`) : `is_anticipation` n'est plus un compartiment
+étanche, juste un indicateur de "pas encore dans sa période" —
+
+- `consommeEnCours`/`consommePeriodePrecedente` (bloc CP, `fetchSoldes` et `fetchHistoriqueCp`) ne
+  filtrent plus sur `is_anticipation` : une demande CPA dont la date tombe dans la période
+  considérée (en cours ou précédente) compte comme une consommation CP normale de cette période,
+  immédiatement.
+- Le bloc CPA (`periodeConsoCpaSansPlafond`, `fetchSoldes` et `fetchHistoriqueCpa`) est borné
+  **strictement après** la fin de la période en cours (`periodeEnCours.fin + 1 jour`, au lieu de
+  `periodeEnCours.debut`) — dès qu'une demande anticipée "entre" dans sa propre période, elle
+  disparaît du suivi CPA (elle vient de "graduer" en CP, comptée côté CP à la place). Toujours sans
+  plafond haut (déplafonnement du 10/09/2026, inchangé) pour une demande très en avance.
+- `resolverCapitalCpTotal` revient à sa signature d'origine (4 paramètres) — le mécanisme
+  intermédiaire `consommeCpaPeriodePrecedente` devient inutile, absorbé naturellement par
+  `consommePeriodePrecedente` désormais agnostique à `is_anticipation`.
+- Libellé/couleur CPI conservés sans changement : `libelleMouvementCp`/`codeAffichageMouvement`
+  s'appuient sur `conge_impose_id`, pas sur `is_anticipation` — une fois "graduée", une demande CPI
+  continue de s'afficher "CPI : ..." (bleu foncé) dans le feed CP, pas "CP" générique.
+
+**Vérifié en direct** (bandeau de date simulée, CPI réel de test) : à aujourd'hui (sept. 2026,
+période juin26-mai27 encore en cours), le CPI d'août 2027 reste en CPA (7,24j) — sa période n'a pas
+commencé. Simulé au 15/07/2027 (dans sa propre période) : il bascule immédiatement dans le feed CP
+("Solde N-1 - 01/06/27 : 42,42j" puis "CPI : 09/08 au 13/08/27 : -5j" → "37,42j"), et disparaît du
+CPA (7,24j → 2,08j, l'accrual du seul mois de juillet écoulé).
+
+## Bonus d'ancienneté : fausse alerte sur le double comptage, fix du report gardé (10/09/2026)
+
+En vérifiant le fix CPA→CP ci-dessus avec des données de test pour Vincent (date d'entrée
+recalée au 02/01/2020 pour le rendre éligible à une règle d'ancienneté "5 ans → +1 jour", ajoutée
+pour l'occasion), un bonus de **+2 jours** est apparu au lieu de +1 attendu — pris pour un bug de
+double comptage (le bonus, inclus dans `capitalBase` de la période en cours, se retrouvait aussi
+dans le report puisque ce même `capitalBase` servait de proxy au capital de la période précédente).
+Un premier fix a été livré : `capitalBasePeriodePrecedente`, recalculé indépendamment avec le bonus
+d'ancienneté évalué à SA propre date de début plutôt qu'"aujourd'hui".
+
+**Revérification a montré que ce n'était pas un bug pour ce cas précis** : avec une date d'entrée en
+2020, Vincent était déjà éligible au bonus un an avant la période en cours aussi (5,4 ans
+d'ancienneté au 01/06/2025) — le "+2" était donc mathématiquement correct (bonus appliqué
+légitimement sur les deux périodes, capital de cette année + report de l'an dernier qui l'inclut
+aussi puisqu'aucun CP n'avait été consommé). Recalcul exact confirmé : capital période en cours
+25,96j (12×2,08 + bonus 1) + report 25,96j (idem, capital de l'an dernier non consommé) = solde N-1
+51,92j, moins 8j déjà consommés cette période = 43,92j — cohérent avec l'écran.
+
+**Le fix `capitalBasePeriodePrecedente` est gardé** malgré tout : il corrige un vrai cas limite
+(quelqu'un qui franchit son seuil d'ancienneté PENDANT la période en cours, pas avant) même s'il
+n'était pas la cause du "+2" observé sur ce test précis. Pas de régression, coûte rien à garder.
+
+**Pistes ouvertes ajoutées au Backlog** (mode de calcul paramétrable date anniversaire/période de
+référence, affichage en régul visible façon "Ajuster le solde" pour rendre le bonus tangible) — voir
+Backlog.md, rien d'implémenté sur ces points.
+
+## "Poser un congé" : bloquer les dates de CP au-delà de la période de référence (10/09/2026)
+
+Demande explicite de Vincent, dans la continuité du sujet CPA→CP : un CP "normal" (pas anticipé) ne
+doit pas pouvoir être posé sur une date après la fin de la période de référence CP en cours — au-delà,
+ce n'est plus le même capital, donc structurellement un CPA, pas un CP (le formulaire ne forçait pas
+cette distinction, `optionKey` de type "CP" acceptait n'importe quelle date sans contrôle).
+
+- `PoserDemandeModal.tsx` — `jourIndisponible()` bloque désormais tout jour après `finPeriodeCp`
+  (calculée via `periodeReferenceCp()`, `lib/periodeReferenceCp.ts`, déjà utilisée ailleurs) quand
+  `optionKey === "CP"` ; `jourIndisponiblePourFin` en hérite automatiquement (appelle déjà
+  `jourIndisponible`). "Congés anticipés" (`CP_ANTICIPE`) n'est pas concerné, aucune restriction.
+- **Flèche "mois suivant" bloquée en plus des jours grisés** (demande de suivi immédiate de
+  Vincent — sans ça, la grille restait navigable au-delà même si chaque jour y était déjà grisé,
+  seul un utilisateur qui avance dans le calendrier s'en rendait compte) : nouveau prop `moisMax` sur
+  `DatePicker.tsx` (générique, réutilisable), branché sur `endMonth` de `react-day-picker` (v10) —
+  désactive nativement la flèche de navigation dès qu'elle atteint ce mois. Passé aux deux champs
+  Du/Au de `PoserDemandeModal.tsx` avec la même condition `optionKey === "CP"`.
+- Vérifié en direct : calendrier "Congés Payés" navigué jusqu'à mai 2027 → flèche "mois suivant"
+  grisée, impossible d'aller plus loin. Même test avec "Congés anticipés" → navigation libre jusqu'à
+  juin 2027 et au-delà.
+
+## Données de test Vincent Mayol (test3) — ancienneté et solde initial (10/09/2026)
+
+Pour les besoins des vérifications ci-dessus, plusieurs changements appliqués en base sur le compte
+de test `vincentmayol@gmail.com` (tenant test3, `utilisateurs.id = 9335ff34-...`) — **aucun rapport
+avec un vrai salarié Abeil**, pur outillage de test :
+
+- `date_entree` recalée au **06/06/2020**, `nature_contrat: "cdi"`, `type_contrat: "temps_plein"`,
+  `taux_activite: 100` — pour rendre le compte éligible à une ancienneté significative.
+- Règle d'ancienneté ajoutée par Vincent lui-même via l'UI (`regles_anciennete`) : seuil 5 ans → +1
+  jour de CP.
+- Solde initial posé (`soldes_initiaux`) : référence **01/06/2026**, CP=25j, RTT=3j, CPA=6j — pour
+  plafonner le calcul plutôt que de laisser le moteur recalculer depuis la date d'entrée (voir point
+  Backlog "date de début d'utilisation de l'outil", ci-dessous, sur le manque d'un mécanisme
+  équivalent au niveau du tenant).
+
+**3 items ajoutés au Backlog** en cours de route sur ce sujet : une date de "début d'utilisation de
+l'outil" paramétrable (pour éviter au moteur de recalculer un historique jamais réellement suivi
+quand une date d'entrée ancienne est saisie sans solde initial associé) ; le mode de calcul du bonus
+d'ancienneté (date anniversaire vs période de référence, avec piste de régul visible) ; remplacer les
+3 onglets "Mon Calendrier" par un vrai sélecteur de date de fin.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

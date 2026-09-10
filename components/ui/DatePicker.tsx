@@ -54,9 +54,18 @@ interface DatePickerProps {
    * de la date "Du" plutôt que toujours le mois courant, qui n'a pas de sens
    * une fois qu'on a déjà choisi un début de période ailleurs dans l'année. */
   moisInitial?: string;
+  /** Mois ISO (aaaa-mm-jj, jour ignoré) au-delà duquel la navigation est
+   * bloquée — opt-in, défaut inchangé (navigation libre). Désactive la
+   * flèche "mois suivant" dès qu'elle atteint ce mois, en plus des jours déjà
+   * grisés par `disabled` (10/09/2026, "Poser un congé" : un CP normal ne
+   * doit pas pouvoir naviguer au-delà de la fin de la période de référence
+   * en cours — sans ça, la grille elle-même restait navigable même si
+   * chaque jour au-delà était déjà grisé, seul l'utilisateur s'en rendait
+   * compte en avançant). */
+  moisMax?: string;
 }
 
-function isoVersDate(iso: string): Date | undefined {
+function isoVersDate(iso: string | undefined): Date | undefined {
   if (!iso) return undefined;
   const [annee, mois, jour] = iso.split("-").map(Number);
   return new Date(annee, mois - 1, jour);
@@ -91,6 +100,7 @@ export function DatePicker({
   compact = false,
   dateMarquee,
   moisInitial,
+  moisMax,
 }: DatePickerProps) {
   const [ouvert, setOuvert] = useState(false);
   const [texte, setTexte] = useState(value ? formatAffichage(value) : "");
@@ -201,6 +211,7 @@ export function DatePicker({
               locale={fr}
               selected={isoVersDate(value)}
               defaultMonth={isoVersDate(moisInitial ?? value)}
+              endMonth={isoVersDate(moisMax)}
               onSelect={(date) => {
                 if (date) onChange(dateVersIso(date));
                 setOuvert(false);

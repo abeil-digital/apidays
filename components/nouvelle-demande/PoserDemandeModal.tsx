@@ -7,8 +7,10 @@ import { formatJours } from "@/lib/format";
 import { estJourOuvre } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
+import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldeAnticipe } from "@/hooks/useSoldeAnticipe";
 import { useSoldes } from "@/hooks/useSoldes";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { FieldLabel } from "@/components/ui/FieldLabel";
@@ -163,10 +165,20 @@ export function PoserDemandeModal({
 }) {
   const { demandes, ajouterDemande } = useDemandes();
   const { soldes } = useSoldes();
+  const { reglesAcquisition } = useReglesConges();
 
   const anneeActuelle = new Date().getFullYear();
   const calActuel = useCalendrier(anneeActuelle);
   const calSuivant = useCalendrier(anneeActuelle + 1);
+
+  // Fin de la période de référence CP en cours (10/09/2026, demande explicite
+  // de Vincent) — un CP "normal" (pas anticipé) doit être posé AVANT cette
+  // date : au-delà, ce n'est plus le même capital (celui de la période
+  // suivante), donc structurellement un CPA, pas un CP. `periodeReferenceCp`
+  // retombe sur l'année civile si `regleCp` n'est pas encore chargé (défaut
+  // sûr, pas de crash pendant le chargement).
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const finPeriodeCp = periodeReferenceCp(regleCp).fin;
 
   const [optionKey, setOptionKey] = useState("CP");
   const [debut, setDebut] = useState(dateInitiale ?? "");
@@ -226,6 +238,7 @@ export function PoserDemandeModal({
 
   function jourIndisponible(date: Date): boolean {
     const iso = dateVersIsoLocal(date);
+    if (optionKey === "CP" && iso > finPeriodeCp) return true;
     return !estJourOuvre(iso, joursFeries) || jourDejaOccupe(iso);
   }
 
@@ -522,6 +535,7 @@ export function PoserDemandeModal({
                   value={debut}
                   onChange={handleDebutChange}
                   disabled={jourIndisponible}
+                  moisMax={optionKey === "CP" ? finPeriodeCp : undefined}
                   className="border-b-0!"
                   iconClassName="text-ink-900"
                   accentColor={`var(${VAR_COULEUR_TYPE[option.code]})`}
@@ -582,6 +596,7 @@ export function PoserDemandeModal({
                   value={fin}
                   onChange={handleFinChange}
                   disabled={jourIndisponiblePourFin}
+                  moisMax={optionKey === "CP" ? finPeriodeCp : undefined}
                   className="border-b-0!"
                   iconClassName="text-ink-900"
                   accentColor={`var(${VAR_COULEUR_TYPE[option.code]})`}
