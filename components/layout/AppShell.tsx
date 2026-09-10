@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { HeaderBar } from "@/components/layout/HeaderBar";
 import { SideNav } from "@/components/layout/SideNav";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { Footer } from "@/components/layout/Footer";
 import type { Branding } from "@/lib/data/branding.repository";
 
 interface AppShellProps {
@@ -49,6 +50,7 @@ export function AppShell({ children, branding }: AppShellProps) {
         </div>
       </div>
 
+      <Footer />
       <BottomNav />
     </div>
   );

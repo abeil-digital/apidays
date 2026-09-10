@@ -5445,6 +5445,17 @@ domaine, posée dans Vercel), `envoyerEmail()` acceptant désormais un nom de va
 alternatif. Redéployé et retesté : "Invitation envoyée au premier admin.", confirmé reçu côté Resend.
 Détail dans [MULTI-TENANT.md](MULTI-TENANT.md), section "E-mails d'invitation brandés par tenant".
 
+## Pied de page ajouté (10/09/2026)
+
+`components/layout/Footer.tsx`, monté dans `AppShell.tsx` juste avant `BottomNav`. Pleine largeur
+d'écran (contrairement au header/contenu, capés à 1180px) — demande explicite de Vincent, seul
+élément de l'app dans ce cas. Brandé comme le header (`bg-brand-primary`) plutôt que générique
+(`text-ink-900`) comme le reste du contenu depuis le recentrage du branding du 09/09/2026 — un pied
+de page est un élément de structure, pas du contenu de page. Contenu : copyright `© <année> Citizen
+D` + lien vers `/mentions-legales` (nouvelle route, contenu placeholder — le vrai contenu juridique
+n'est pas encore fourni, voir Backlog.md). `mb-24 md:mb-0` sur le footer pour ne pas être recouvert
+par `BottomNav` (`fixed`) sur mobile.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
