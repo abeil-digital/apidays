@@ -203,8 +203,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return calendrierAnneeA;
   }
 
+  // Plus d'exception "année en cours toujours visible" (10/09/2026, retirée
+  // à la demande explicite de Vincent, voir CONTEXTE.md).
   function anneeVisiblePourCommuns(annee: number): boolean {
-    return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
+    return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
   const joursFeriesToutesAnnees = [

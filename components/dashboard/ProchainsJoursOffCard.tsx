@@ -273,15 +273,19 @@ export function ProchainsJoursOffCard({
     ? loadingDemandes
     : calActuel.loading || calSuivant.loading || loadingDemandes;
 
-  // CI/DJI de l'année suivante masqués tant que son calendrier n'est pas
-  // publié (20/08/2026, demande explicite — même garde que
-  // `anneeVisiblePourCommuns` côté `DashboardPage`/grille de calendrier) :
-  // `useCalendrier` charge ces données dès qu'un paramétrage existe, même en
-  // brouillon (`valideLe` null), donc sans ce filtre un CI en brouillon
-  // apparaissait déjà dans cette liste — y compris pour Delphine (admin), qui
-  // ne doit pas non plus voir un brouillon non publié ici. L'année en cours
-  // reste toujours visible. Les fériés restent affichés dans tous les cas
-  // (faits légaux fixes, connus à l'avance — même convention qu'ailleurs).
+  // CI/DJI masqués tant que le calendrier de leur année n'est pas publié
+  // (20/08/2026, demande explicite — même garde que `anneeVisiblePourCommuns`
+  // côté `DashboardPage`/grille de calendrier) : `useCalendrier` charge ces
+  // données dès qu'un paramétrage existe, même en brouillon (`valideLe`
+  // null), donc sans ce filtre un CI en brouillon apparaissait déjà dans
+  // cette liste — y compris pour Delphine (admin), qui ne doit pas non plus
+  // voir un brouillon non publié ici. Plus d'exception pour l'année en cours
+  // (10/09/2026, retirée à la demande explicite de Vincent — un CI/DJI de
+  // l'année en cours restait visible même calendrier jamais publié, voir
+  // CONTEXTE.md) : même règle désormais pour l'année en cours et l'année
+  // suivante. Les fériés restent affichés dans tous les cas (faits légaux
+  // fixes, connus à l'avance — même convention qu'ailleurs).
+  const anneeActuelleVisible = toutAfficher || Boolean(calActuel.parametrage?.valideLe);
   const anneeSuivanteVisible = toutAfficher || Boolean(calSuivant.parametrage?.valideLe);
 
   const today = todayISO();
@@ -290,10 +294,16 @@ export function ProchainsJoursOffCard({
     : [...calActuel.joursFeries, ...calSuivant.joursFeries];
   const congesImposesTous = donneesInjectees
     ? donneesInjectees.congesImposes
-    : [...calActuel.congesImposes, ...(anneeSuivanteVisible ? calSuivant.congesImposes : [])];
+    : [
+        ...(anneeActuelleVisible ? calActuel.congesImposes : []),
+        ...(anneeSuivanteVisible ? calSuivant.congesImposes : []),
+      ];
   const djImposeesTous = donneesInjectees
     ? donneesInjectees.djImposees
-    : [...calActuel.djImposees, ...(anneeSuivanteVisible ? calSuivant.djImposees : [])];
+    : [
+        ...(anneeActuelleVisible ? calActuel.djImposees : []),
+        ...(anneeSuivanteVisible ? calSuivant.djImposees : []),
+      ];
 
   const demandesPerso = (masquerDemandesPerso ? [] : demandes)
     .filter((d) => (d.statut === "validé" || d.statut === "en attente") && d.fin >= today)

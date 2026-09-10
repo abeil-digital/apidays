@@ -266,10 +266,12 @@ export function CalendrierGlobal() {
   }
 
   // Même gating que `DashboardPage`/`CalendrierCollaborateur` : les fériés
-  // sont toujours visibles (fixes, connus à l'avance), CPI/DJI de l'année à
-  // venir seulement si Delphine l'a publiée.
+  // sont toujours visibles (fixes, connus à l'avance), CPI/DJI seulement si
+  // Delphine a publié l'année — plus d'exception pour l'année en cours
+  // (10/09/2026, retirée à la demande explicite de Vincent, voir
+  // CONTEXTE.md).
   function anneeVisiblePourCommuns(annee: number): boolean {
-    return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
+    return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
   // Fériés/CPI/DJI (28/08/2026, demande explicite) — contrairement aux

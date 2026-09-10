@@ -368,7 +368,6 @@ function VueCalendrierGrille({
    * publication. */
   lectureSeule?: boolean;
 }) {
-  const estAnneeLive = annee === getAujourdhui().getFullYear();
   const calendrier = useCalendrier(annee);
   const { objectifs } = useObjectifsCalendrier();
   const { demandes: demandesEquipe } = useDemandesEquipe();
@@ -975,15 +974,15 @@ function VueCalendrierGrille({
           </p>
         )}
 
-        {estAnneeLive && !lectureSeule && (
-          <p className="text-ink-500 px-1 text-sm">
-            <span className="bg-status-success-bg text-status-success-fg px-1">Publié</span> ce
-            calendrier est visible par les collaborateurs
-          </p>
-        )}
-
-        {!estAnneeLive &&
-          !lectureSeule &&
+        {/* Plus d'exception "année en cours toujours Publié" (10/09/2026,
+            retirée à la demande explicite de Vincent) — reflète désormais
+            fidèlement `calendrier.parametrage?.valideLe`, quelle que soit
+            l'année affichée : un calendrier n'est visible aux collaborateurs
+            qu'une fois explicitement publié, même l'année civile en cours
+            (même changement côté collaborateur, `anneeVisiblePourCommuns`
+            dans DashboardPage.tsx/CalendrierGlobal.tsx/
+            CalendrierCollaborateur.tsx). */}
+        {!lectureSeule &&
           (calendrier.parametrage?.valideLe ? (
             <div className="flex flex-col gap-1 px-1">
               <p className="text-ink-500 text-sm">

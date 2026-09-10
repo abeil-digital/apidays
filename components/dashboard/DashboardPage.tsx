@@ -261,8 +261,13 @@ export function DashboardPage() {
     return calendrierAnneeA;
   }
 
+  // Plus d'exception "année en cours toujours visible" (10/09/2026, retirée
+  // à la demande explicite de Vincent) — un calendrier n'est visible aux
+  // collaborateurs qu'une fois explicitement publié par l'admin, même pour
+  // l'année civile en cours (avant : elle l'était par défaut, indépendamment
+  // du statut réel de publication en base).
   function anneeVisiblePourCommuns(annee: number): boolean {
-    return annee === anneeActuelle || Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
+    return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
   // Listes fusionnées des 3 années potentiellement pertinentes, filtrées aux
