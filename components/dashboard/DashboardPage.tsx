@@ -169,6 +169,9 @@ export function DashboardPage() {
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
   const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
+  // Fondu du surlignage "n nouvelles décisions" à la fermeture du tiroir
+  // journal — voir `fermerTiroirActivite` plus bas pour le détail.
+  const [journalFermetureEnCours, setJournalFermetureEnCours] = useState(false);
   const [nouvelleDemandeOuverte, setNouvelleDemandeOuverte] = useState(false);
   // Date pré-remplie de la popin "Poser un congé" (20/08/2026) — non-null
   // uniquement quand ouverte via un clic sur un jour vide du calendrier ;
@@ -438,11 +441,28 @@ export function DashboardPage() {
   );
   const nbDecisionsNonVues = decisionsNonVues.length;
 
+  // Fondu du surlignage "n nouvelles décisions" à la fermeture du tiroir
+  // (10/09/2026, demande explicite) — sans ce délai, `marquerVue` fait
+  // disparaître le surlignage EXACTEMENT au moment de la fermeture (les deux
+  // états React se mettent à jour dans le même tick), aucune transition
+  // visible n'a le temps de jouer. `journalFermetureEnCours` (déclaré plus
+  // haut avec les autres `useState`) garde le surlignage affiché (les
+  // décisions restent non vues côté `demandes` tant que `marquerVue` n'a pas
+  // été appelée) le temps du fondu CSS, puis marque vu une fois l'animation
+  // terminée.
+  const DUREE_FONDU_MS = 500;
+
   function fermerTiroirActivite() {
     setTiroirActiviteOuvert(false);
-    decisionsNonVues.forEach((d) => {
-      marquerVue(d.id).catch(() => {});
-    });
+    if (decisionsNonVues.length === 0) return;
+    setJournalFermetureEnCours(true);
+    const ids = decisionsNonVues.map((d) => d.id);
+    window.setTimeout(() => {
+      ids.forEach((id) => {
+        marquerVue(id).catch(() => {});
+      });
+      setJournalFermetureEnCours(false);
+    }, DUREE_FONDU_MS);
   }
 
   return (
@@ -471,7 +491,11 @@ export function DashboardPage() {
             |
           </span>
           {nbDecisionsNonVues > 0 ? (
-            <>
+            <span
+              className={`inline-flex items-center gap-1.5 transition-opacity duration-500 ${
+                journalFermetureEnCours ? "opacity-0" : "opacity-100"
+              }`}
+            >
               <span className="text-ink-900 rounded-sm bg-yellow-100 px-1 font-semibold">
                 {nbDecisionsNonVues}{" "}
                 {nbDecisionsNonVues === 1 ? "nouvelle décision" : "nouvelles décisions"}
@@ -484,7 +508,7 @@ export function DashboardPage() {
               >
                 voir le journal
               </button>
-            </>
+            </span>
           ) : (
             <>
               <span className="text-ink-500">aucune décision récente -</span>
