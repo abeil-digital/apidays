@@ -5463,6 +5463,30 @@ route, contenu placeholder — le vrai contenu juridique n'est pas encore fourni
 
 `mb-24 md:mb-0` sur le footer pour ne pas être recouvert par `BottomNav` (`fixed`) sur mobile.
 
+## Journal : principe de "vu" simplifié (10/09/2026)
+
+L'ancien principe "vu depuis votre dernière connexion" (`useDemandes.ts`, persistance
+`sessionStorage`/`localStorage`, 18/08/2026) avait 2 limites connues (voir Backlog.md,
+[SUIVI-DECISIONS.md](SUIVI-DECISIONS.md)) : pas une vraie session d'authentification (un onglet
+resté ouvert plusieurs jours ne "change" jamais de session) et pas scopé par utilisateur (poste
+partagé = journal contaminé entre comptes). Remplacé sur demande de Vincent par un principe plus
+simple : une décision (validée/refusée/annulée) est marquée vue dès l'ouverture du tiroir "Mon
+journal", pas à la session suivante.
+
+`hooks/useDemandes.ts` : retire les deux `useEffect` de persistance (recopie continue dans
+`localStorage`, lecture au montage d'une nouvelle `sessionStorage`) — `marquerVue(id)` reste
+exposée mais n'est plus appelée automatiquement en interne, à l'appelant de décider quand une
+décision devient vue. `components/dashboard/DashboardPage.tsx` : `ouvrirTiroirActivite()` (appelée
+par les deux boutons "voir le journal") ouvre le tiroir ET marque vues toutes les décisions non
+vues d'un coup.
+
+`components/dashboard/ActiviteRecenteFeed.tsx` : le surlignage jaune (`bg-yellow-100/40`) des
+lignes non vues passe de `duration-150` à `duration-1000` — comme `marquerVue` est appelée
+synchrone à l'ouverture, `nonVu` passe à `false` immédiatement ; sans ce délai plus long, le
+changement de classe Tailwind (150ms) était trop rapide pour être perçu comme une transition, le
+surlignage disparaissait plutôt qu'il ne s'estompait. Demande initiale de Vincent à 500ms, ajustée à
+1s après premier essai.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -167,20 +167,17 @@ cohérents.
 | `supabase/schema.sql` | Colonne `demandes_conges.vu` + fonction `marquer_demande_vue()` |
 | `lib/types.ts` | Champ `Demande.vu` |
 | `lib/data/demandes.repository.ts` | `marquerDemandeVue()` (appel RPC) ; `vu: false` forcé dans `deciderDemande()`/`remettreEnAttenteDemande()` |
-| `hooks/useDemandes.ts` | `marquerVue()` (marquage optimiste immédiat, utilisé par Historique) ; logique de session "depuis ma dernière visite" (`sessionStorage`/`localStorage`) |
-| `components/dashboard/Dashboard2Page.tsx` | La phrase "Depuis ma dernière visite" (calcul `nbEnAttente`/`nbDecisionsNonVues`, rendu, lien vers le journal) |
-| `components/dashboard/ActiviteRecenteFeed.tsx` | Tiroir "Mon journal" — génération des événements, garantie d'inclusion des lignes prioritaires, emphase visuelle des décisions non vues |
+| `hooks/useDemandes.ts` | `marquerVue()` (marquage optimiste immédiat, appelée par l'appelant — plus automatiquement en interne depuis le 10/09/2026, voir CONTEXTE.md) |
+| `components/dashboard/DashboardPage.tsx` | La phrase "Depuis ma dernière visite" (calcul `nbEnAttente`/`nbDecisionsNonVues`, rendu) + `ouvrirTiroirActivite()` (ouvre le tiroir ET marque vues les décisions affichées) |
+| `components/dashboard/ActiviteRecenteFeed.tsx` | Tiroir "Mon journal" — génération des événements, garantie d'inclusion des lignes prioritaires, emphase visuelle des décisions non vues (fade 1s à l'ouverture, `duration-1000`) |
 | `components/historique/HistoriquePage.tsx` | Marquage "vu" immédiat à la consultation du détail d'une demande ; filtres `?statut=valide_non_vu`/`refuse_non_vu` (pré-sélection venant d'anciens liens, voir Backlog) |
 
 ## Limites connues / non traité
 
-Voir aussi [Backlog.md](Backlog.md) (ligne "URGENT — Vérifier le principe de mise en avant...").
+**Principe de "vu" simplifié le 10/09/2026** (voir CONTEXTE.md) : une décision est désormais marquée
+vue dès l'ouverture du tiroir "Mon journal", plus "depuis votre dernière connexion" — les 2 limites
+ci-dessous liées à `sessionStorage`/`localStorage` sont donc caduques, retirées avec le mécanisme.
 
-- La notion de "session" est liée à l'onglet navigateur (`sessionStorage`), pas à une vraie
-  session d'authentification — un utilisateur qui garde le même onglet ouvert plusieurs jours ne
-  "changera" jamais de session tant qu'il ne le ferme pas.
-- Pas de nettoyage/expiration des clés `localStorage`/`sessionStorage` si plusieurs comptes
-  utilisent le même navigateur (clés non scopées par utilisateur).
 - Aucune notion équivalente côté manager (voir Backlog : "Gestion du Journal côté manager").
 - Formulation exacte de la phrase, couleurs exactes (jaune pâle notamment, pas un token du design
   system) : volontairement provisoires, à retravailler.
