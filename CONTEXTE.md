@@ -5620,6 +5620,25 @@ collaborateurs (et remonter dans l'export paie comme un CP normal) — comportem
 `conflitsAgenda` ci-dessus, pas sur le moteur de solde (`soldes.repository.ts`, qui ne fait — et ne
 doit pas faire — de distinction entre un CP personnel et un CP généré par un CPI).
 
+## Calendrier : plus d'exception "année en cours toujours visible" (10/09/2026)
+
+Suite à la discussion sur le flux de publication (voir section juste au-dessus) : demande explicite
+de Vincent — les CPI/DJI d'un calendrier ne doivent être visibles aux collaborateurs qu'une fois
+explicitement publiés par l'admin, **y compris pour l'année civile en cours**. Avant ce fix,
+`anneeVisiblePourCommuns()` (`DashboardPage.tsx`/`CalendrierGlobal.tsx`/`CalendrierCollaborateur.tsx`)
+traitait l'année en cours comme toujours visible indépendamment de `valide_le` — seules les années
+futures étaient réellement gatées ; même défaut dans `ProchainsJoursOffCard.tsx`
+(`anneeSuivanteVisible` existait déjà, pas d'équivalent pour l'année en cours) et côté admin
+`CalendrierPage.tsx` (`VueCalendrierGrille` affichait "Publié" sans condition pour l'année en cours).
+Les fériés restent affichés dans tous les cas (faits légaux fixes, connus à l'avance) — seuls
+CPI/DJI sont concernés.
+
+**Vérifié en base avant de déployer** : le calendrier 2026 d'**Abeil** (le vrai client, pas un
+tenant de test) n'a jamais été publié (`valide_le: null`) — comme test3. Risque de régression
+visible confirmé et assumé avec Vincent : il doit cliquer "Publier" sur `/parametrer/calendrier2`
+en prod juste après ce déploiement, sans quoi les fériés/CPI/DJI 2026 déjà visibles aux
+collaborateurs d'Abeil disparaîtraient jusqu'à ce qu'il le fasse.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
