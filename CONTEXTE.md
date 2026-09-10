@@ -5574,6 +5574,52 @@ où plutôt que sous son ancre. Corrigé en rendant `SnippetConge`/`SnippetDji`/
 déjà utilisé par `DatePicker.tsx` pour exactement ce problème. Même bug trouvé et corrigé sur
 `SnippetJourCalendrier.tsx` (Accueil/`/suivre/calendrier`, même genre de conteneur animé parent).
 
+## Calendrier — liste d'années dynamique, archivage, fix conflit CPI (10/09/2026)
+
+Suite discussion avec Vincent sur le flux de publication du Calendrier (item Backlog "Préciser les
+règles de paramétrage d'un nouveau calendrier") : `Calendrier2Page` (`/parametrer/calendrier2`)
+passe des 2 onglets fixes ("année en cours"/"année à venir", calqués sur `new Date()`) à une liste
+dynamique construite depuis `fetchAnneesParametrage()` (nouvelle fonction, `calendrier.repository.ts`
+— `année`/`valide_le` de toutes les lignes `parametrage_periode` de l'entreprise) :
+
+- **Archivées** : les 4 dernières années passées ayant réellement une ligne en base (pas d'onglet
+  vide pour une année d'avant l'arrivée du tenant sur l'outil) — **lecture seule**
+  (`VueCalendrierGrille`, prop `lectureSeule`) : plus de "+" DJI/CPI, plus de suppression (légende ET
+  popovers `SnippetConge`/`SnippetDji` cliqués sur le calendrier), toggle Pentecôte désactivé, plus de
+  Publier/Dépublier — juste un badge "Archivé". Décision explicite de Vincent : ne pas modifier
+  rétroactivement des jours déjà consommés dans les calculs de solde.
+- **Année en cours** : toujours l'année civile réelle (`getAujourdhui()`), **affichée par défaut au
+  chargement de la page** quel que soit son statut de publication — décision explicite de Vincent
+  (pas l'année "live"/publiée, qui pourrait différer si Delphine est en avance ou en retard).
+- **Brouillon(s)** : de l'année civile+1 jusqu'à `dernière année publiée + 1` — publier une année
+  révèle donc automatiquement le brouillon de l'année suivante (avant, seule civile+1 était jamais
+  proposée), comme demandé par Vincent ("côté administrateur : il passe en statut publié et le
+  brouillon 2028 apparaît").
+
+**Limite connue, hors scope de ce passage** : les écrans collaborateur (`DashboardPage.tsx`,
+`CalendrierGlobal.tsx`, `CalendrierCollaborateur.tsx`) gardent leur fenêtre fixe de 3 années
+(précédente/actuelle/suivante, déjà filtrée par `anneeVisiblePourCommuns` — un CPI/DJI d'une année pas
+encore publiée y est déjà invisible, ce mécanisme existait avant ce passage). Si Delphine publie 2 ans
+ou plus en avance sur l'année civile, ces écrans ne révéleront pas les CPI/DJI au-delà de civile+1 —
+pas rencontré en pratique, à étendre si le besoin se confirme (nécessiterait de généraliser leur
+fenêtre fixe en une liste dynamique, comme fait ici côté admin).
+
+**Fix associé, trouvé en testant** : créer un CPI faisait apparaître un faux "Conflit d'agenda" avec
+lui-même. `ajouterCongeImpose()` matérialise automatiquement une demande "CP"
+(`demandes_conges.conge_impose_id` pointant vers le CPI) par collaborateur actif pour chaque CPI créé
+— pour qu'il compte dans le solde/l'export paie comme un vrai CP, mécanisme volontaire et déjà en
+place. Le calcul de `conflitsAgenda` (recherche des demandes personnelles chevauchant un CPI/DJI)
+comptait à tort ces demandes auto-générées comme des demandes personnelles en conflit avec le CPI qui
+vient de les créer. Corrigé en filtrant `!d.congeImposeId` (déjà exposé sur `DemandeEquipe`, juste pas
+utilisé ici) — remarque de Vincent : "les congés imposés ne doivent pas être considérés comme des CP
+pour les collaborateurs" [dans ce calcul précis].
+
+**Confirmé avec Vincent après coup** : un CPI DOIT continuer à décompter le solde CP des
+collaborateurs (et remonter dans l'export paie comme un CP normal) — comportement volontaire de
+`ajouterCongeImpose()`, pas remis en cause. Sa remarque ne portait QUE sur le calcul de
+`conflitsAgenda` ci-dessus, pas sur le moteur de solde (`soldes.repository.ts`, qui ne fait — et ne
+doit pas faire — de distinction entre un CP personnel et un CP généré par un CPI).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
