@@ -342,12 +342,19 @@ suite à une question de Vincent sur comment tester tout ça) :
   explicite "créer l'année suivante".
 - Pas de relance/notification si le paramétrage N+1 n'est pas publié à l'approche du 01/01 (le
   bandeau de décembre est un premier pas visuel, pas une vraie relance).
-- **Tester ces comportements conditionnés par la date est aujourd'hui bricolé** (patch de `Date` en
-  console navigateur, non accessible à Delphine). Piste retenue mais pas développée : centraliser
-  tous les appels `new Date()` de ces écrans dans un point unique (`useAujourdhui()`), qui lit un
-  paramètre d'URL `?date=AAAA-MM-JJ` en environnement non-production uniquement (sinon la vraie date
-  système) — permettrait de visiter `/parametrer/calendrier2?date=2026-12-15` pour voir l'état
-  "décembre" sans rien modifier de son horloge.
+- ~~Tester ces comportements conditionnés par la date est aujourd'hui bricolé~~ (→ **livré le
+  10/09/2026**) : `lib/aujourdhui.ts` + `DateOverrideBanner.tsx` (bandeau au-dessus de la nav,
+  visible uniquement en local — `process.env.NODE_ENV !== "production"`, s'élimine du bundle prod).
+  Différent de la piste envisagée (paramètre d'URL `?date=`) : un vrai bandeau avec sélecteur de
+  date, persisté en `localStorage` plutôt que dans l'URL — recharge la page au changement pour que
+  tout reparte d'un état frais. Branché sur le moteur de soldes
+  (`lib/data/soldes.repository.ts`, tous les `dateReference ?? new Date()`), le Calendrier (bandeau
+  de décembre, bascule d'année "live") et `todayISO()` (`lib/format.ts`, utilisée par plusieurs
+  repositories). **Portée volontairement limitée à ce premier passage** : les dizaines d'autres
+  `new Date()` de l'app (filtres "année en cours" cosmétiques sur Suivre/Poser) ne sont pas
+  branchés — à étendre au cas par cas si le besoin se confirme. Testé de bout en bout : régler
+  15/12/2026 fait apparaître le bandeau d'alerte décembre sur `/parametrer/calendrier2`, "Revenir à
+  aujourd'hui" le fait disparaître.
 
 **Debug / dette technique** :
 
