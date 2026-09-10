@@ -5488,6 +5488,22 @@ décision devient vue. `components/dashboard/DashboardPage.tsx` : `fermerTiroirA
 ferme le tiroir ET marque vues toutes les décisions qui étaient non vues à ce moment — les 2 boutons
 "voir le journal" se contentent d'ouvrir (`setTiroirActiviteOuvert(true)`), sans marquage.
 
+## Fix : solde "Actuel" trop élevé dans "Informations complémentaires" (10/09/2026)
+
+Signalé par Vincent : l'encart "Actuel → Après" du panneau détail d'une demande côté manager
+(`DetailCongePanel.tsx`, "Informations complémentaires", visible sur une demande "en attente")
+affichait un écart disproportionné pour une seule demande (ex. 31,75 j → 4,75 j). Cause : "Actuel"
+utilisait le solde **réel** (`valeur`, réglé en paie — ignore toute demande en attente/validée non
+transmise, pas seulement celle affichée) tandis que "Après" utilisait le solde **théorique**
+(`valeurApresAttente`, qui inclut déjà cette demande déduite puisqu'elle est comptée "en attente")
+— deux bases de calcul différentes dans le même encart. Corrigé en alignant les deux sur la base
+théorique : "Après" reste `valeurApresAttente`, "Actuel" devient `valeurApresAttente + jours` (jours
+de la demande affichée) pour reconstituer le solde juste avant cette décision précise — cohérent
+avec `soldes.repository.ts` (`valeurApresAttente = soldeValidée - enAttente`, `enAttente` incluant
+déjà la demande). Vérifié par lecture du code de calcul (pas de test UI bout-en-bout : la page
+"Suivre les demandes" ne montre Valider/Refuser qu'au rôle exactement `manager`, pas `admin` — sur
+test3, seul Hector a ce rôle, or c'est justement sa demande qui aurait servi de cas de test).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
