@@ -5447,14 +5447,21 @@ Détail dans [MULTI-TENANT.md](MULTI-TENANT.md), section "E-mails d'invitation b
 
 ## Pied de page ajouté (10/09/2026)
 
-`components/layout/Footer.tsx`, monté dans `AppShell.tsx` juste avant `BottomNav`. Pleine largeur
-d'écran (contrairement au header/contenu, capés à 1180px) — demande explicite de Vincent, seul
-élément de l'app dans ce cas. Brandé comme le header (`bg-brand-primary`) plutôt que générique
-(`text-ink-900`) comme le reste du contenu depuis le recentrage du branding du 09/09/2026 — un pied
-de page est un élément de structure, pas du contenu de page. Contenu : copyright `© <année> Citizen
-D` + lien vers `/mentions-legales` (nouvelle route, contenu placeholder — le vrai contenu juridique
-n'est pas encore fourni, voir Backlog.md). `mb-24 md:mb-0` sur le footer pour ne pas être recouvert
-par `BottomNav` (`fixed`) sur mobile.
+`components/layout/Footer.tsx`, monté dans `AppShell.tsx` juste avant `BottomNav`. Brandé comme le
+header (`bg-brand-primary`) plutôt que générique (`text-ink-900`) comme le reste du contenu depuis
+le recentrage du branding du 09/09/2026 — un pied de page est un élément de structure, pas du
+contenu de page. Contenu : copyright `© <année> Citizen D` + lien vers `/mentions-legales` (nouvelle
+route, contenu placeholder — le vrai contenu juridique n'est pas encore fourni, voir Backlog.md).
+
+**2 itérations sur la mise en page** (retours de Vincent après un premier essai bord-à-bord) :
+- Même largeur/centrage que le header (`mx-auto md:max-w-[1180px]`), pas pleine largeur d'écran —
+  premier essai bord-à-bord corrigé.
+- `relative z-50` — `SideNav` est un rail `fixed` couvrant toute la hauteur de l'écran (`z-40`,
+  nécessaire pour rester visible au scroll, voir `SideNav.tsx`) ; sans ce `z-50`, ce rail recouvrait
+  visuellement la portion gauche du footer (élément de flux normal, sans contexte d'empilement
+  propre) au lieu de le laisser passer par-dessus.
+
+`mb-24 md:mb-0` sur le footer pour ne pas être recouvert par `BottomNav` (`fixed`) sur mobile.
 
 ## À faire
 
