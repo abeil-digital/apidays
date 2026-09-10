@@ -245,7 +245,6 @@ export function CalendrierGlobal() {
   };
   const rangeActive = ranges[onglet];
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
-  const anneeSuivanteParametree = Boolean(calendrierAnneeB.parametrage?.valideLe);
 
   function occupantsDuJour(iso: string): DemandeEquipe[] {
     const vues = new Set<string>();
@@ -273,6 +272,18 @@ export function CalendrierGlobal() {
   function anneeVisiblePourCommuns(annee: number): boolean {
     return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
+
+  // Message "calendrier(s) pas encore paramétré(s)" (10/09/2026, généralisé
+  // — voir même logique/commentaire dans DashboardPage.tsx) : couvre "En
+  // cours", "Période de référence" (jusqu'à 2 années à cheval) et "Année
+  // suivante", pas seulement cette dernière comme avant.
+  const anneesNonParametrees = (() => {
+    const anneeDebut = Number(rangeActive.debut.slice(0, 4));
+    const anneeFin = Number(rangeActive.fin.slice(0, 4));
+    const annees: number[] = [];
+    for (let a = anneeDebut; a <= anneeFin; a++) annees.push(a);
+    return annees.filter((a) => !anneeVisiblePourCommuns(a));
+  })();
 
   // Fériés/CPI/DJI (28/08/2026, demande explicite) — contrairement aux
   // congés personnels, ces 3 éléments sont communs à TOUS les collaborateurs
@@ -455,10 +466,12 @@ export function CalendrierGlobal() {
 
       <div className="grid grid-cols-1 items-start gap-[10px] xl:grid-cols-[max-content_16rem]">
         <div className="min-w-0">
-          {onglet === "annee_suivante" && !anneeSuivanteParametree && (
+          {anneesNonParametrees.length > 0 && (
             <p className="mb-4 text-sm font-normal">
               <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
-                {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+                {anneesNonParametrees.length === 1
+                  ? `Le calendrier ${anneesNonParametrees[0]} n’est pas encore paramétré par l’administrateur.`
+                  : `Les calendriers ${anneesNonParametrees.join(" et ")} ne sont pas paramétrés par l’administrateur.`}
               </span>
             </p>
           )}

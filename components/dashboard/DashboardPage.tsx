@@ -253,7 +253,6 @@ export function DashboardPage() {
   };
   const rangeActive = ranges[onglet];
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
-  const anneeSuivanteParametree = Boolean(calendrierAnneeB.parametrage?.valideLe);
 
   function calendrierPourAnnee(annee: number) {
     if (annee === anneePrecedente) return calendrierAnneePrecedente;
@@ -269,6 +268,19 @@ export function DashboardPage() {
   function anneeVisiblePourCommuns(annee: number): boolean {
     return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
+
+  // Message "calendrier(s) pas encore paramétré(s)" (10/09/2026, généralisé
+  // à demande explicite de Vincent) — auparavant affiché uniquement sur
+  // l'onglet "Année suivante" ; couvre désormais aussi "En cours" (une
+  // année) et "Période de référence" (juin → mai, jusqu'à 2 années à
+  // cheval — seule(s) celle(s) non publiée(s) parmi les 2 sont listées).
+  const anneesNonParametrees = (() => {
+    const anneeDebut = Number(rangeActive.debut.slice(0, 4));
+    const anneeFin = Number(rangeActive.fin.slice(0, 4));
+    const annees: number[] = [];
+    for (let a = anneeDebut; a <= anneeFin; a++) annees.push(a);
+    return annees.filter((a) => !anneeVisiblePourCommuns(a));
+  })();
 
   // Listes fusionnées des 3 années potentiellement pertinentes, filtrées aux
   // années effectivement visibles (même règle que les pastilles du
@@ -690,14 +702,16 @@ export function DashboardPage() {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-6">
-            {onglet === "annee_suivante" && !anneeSuivanteParametree && (
+            {anneesNonParametrees.length > 0 && (
               // Effet "stabilo" (21/08/2026, demande explicite) — même
               // convention que la phrase "X demandes en attente" plus haut
               // sur cette page (`bg-status-warning-bg`/`rounded-sm`/`px-1`),
               // plutôt qu'un encart plein `rounded-control` avec padding.
               <p className="text-sm font-normal">
                 <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
-                  {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+                  {anneesNonParametrees.length === 1
+                    ? `Le calendrier ${anneesNonParametrees[0]} n’est pas encore paramétré par l’administrateur.`
+                    : `Les calendriers ${anneesNonParametrees.join(" et ")} ne sont pas paramétrés par l’administrateur.`}
                 </span>
               </p>
             )}

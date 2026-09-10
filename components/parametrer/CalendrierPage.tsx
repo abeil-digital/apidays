@@ -359,6 +359,7 @@ function TiroirConflitsAgenda({ conflits }: TiroirConflitsAgendaProps) {
 function VueCalendrierGrille({
   annee,
   lectureSeule = false,
+  onPublicationChangee,
 }: {
   annee: number;
   /** Année archivée (10/09/2026) — passée, déjà écoulée : plus d'ajout/
@@ -367,6 +368,10 @@ function VueCalendrierGrille({
    * de solde. Décision explicite de Vincent lors du paramétrage du flux de
    * publication. */
   lectureSeule?: boolean;
+  /** Appelé après une publication/dépublication réussie (10/09/2026) — pour
+   * que `Calendrier2Page` puisse rafraîchir sa liste d'années (le suffixe
+   * "- Brouillon" et l'apparition du brouillon suivant en dépendent). */
+  onPublicationChangee?: () => void;
 }) {
   const calendrier = useCalendrier(annee);
   const { objectifs } = useObjectifsCalendrier();
@@ -579,6 +584,7 @@ function VueCalendrierGrille({
     setPublicationEnCours(true);
     try {
       await calendrier.publierParametrage();
+      onPublicationChangee?.();
     } catch {
       setErreurPublication("Impossible de publier le paramétrage.");
     } finally {
@@ -591,6 +597,7 @@ function VueCalendrierGrille({
     setPublicationEnCours(true);
     try {
       await calendrier.depublierParametrage();
+      onPublicationChangee?.();
     } catch {
       setErreurPublication("Impossible d'annuler la publication.");
     } finally {
@@ -1097,16 +1104,19 @@ export function Calendrier2Page() {
     { annee: number; valideLe: string | null }[]
   >([]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Extrait de l'effet (10/09/2026) pour être aussi appelable après une
+  // publication/dépublication (`onPublicationChangee`) — sans ça, le
+  // suffixe "- Brouillon" et l'apparition du brouillon suivant restaient
+  // figés sur l'état chargé au montage jusqu'au prochain rechargement de
+  // page.
+  function rafraichirAnnees() {
     fetchAnneesParametrage()
-      .then((data) => {
-        if (!cancelled) setAnneesParametrage(data);
-      })
+      .then((data) => setAnneesParametrage(data))
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+  }
+
+  useEffect(() => {
+    rafraichirAnnees();
   }, []);
 
   const derniereAnneePubliee = anneesParametrage
@@ -1121,6 +1131,14 @@ export function Calendrier2Page() {
   for (let a = anneeEnCours + 1; a <= anneeMaxAffichable; a++) anneesAVenir.push(a);
   const anneesAffichees = [...anneesArchivees, anneeEnCours, ...anneesAVenir];
   const prochaineAnneeAParametrer = anneeEnCours + 1;
+  // Suffixe "- Brouillon" basé sur le vrai statut `valide_le` (10/09/2026,
+  // demande explicite de Vincent) — pas seulement la position par rapport à
+  // l'année civile : l'année en cours elle-même l'affiche désormais si elle
+  // n'a pas été publiée (cohérent avec le fait qu'elle n'est plus visible
+  // par défaut côté collaborateur, voir CONTEXTE.md).
+  function estAnneePubliee(a: number): boolean {
+    return Boolean(anneesParametrage.find((p) => p.annee === a)?.valideLe);
+  }
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
@@ -1142,7 +1160,7 @@ export function Calendrier2Page() {
             }`}
           >
             {a}
-            {a < anneeEnCours ? " · Archivé" : a > anneeEnCours ? " - Brouillon" : ""}
+            {a < anneeEnCours ? " · Archivé" : !estAnneePubliee(a) ? " - Brouillon" : ""}
           </button>
         ))}
       </div>
@@ -1155,7 +1173,12 @@ export function Calendrier2Page() {
       )}
 
       <div className="animate-stagger-in" style={{ animationDelay: "120ms" }}>
-        <VueCalendrierGrille key={annee} annee={annee} lectureSeule={annee < anneeEnCours} />
+        <VueCalendrierGrille
+          key={annee}
+          annee={annee}
+          lectureSeule={annee < anneeEnCours}
+          onPublicationChangee={rafraichirAnnees}
+        />
       </div>
     </div>
   );

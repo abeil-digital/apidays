@@ -195,7 +195,6 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   };
   const rangeActive = ranges[onglet];
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
-  const anneeSuivanteParametree = Boolean(calendrierAnneeB.parametrage?.valideLe);
 
   function calendrierPourAnnee(annee: number) {
     if (annee === anneePrecedente) return calendrierAnneePrecedente;
@@ -208,6 +207,18 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   function anneeVisiblePourCommuns(annee: number): boolean {
     return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
+
+  // Message "calendrier(s) pas encore paramétré(s)" (10/09/2026, généralisé
+  // — voir même logique/commentaire dans DashboardPage.tsx) : couvre "En
+  // cours", "Période de référence" (jusqu'à 2 années à cheval) et "Année
+  // suivante", pas seulement cette dernière comme avant.
+  const anneesNonParametrees = (() => {
+    const anneeDebut = Number(rangeActive.debut.slice(0, 4));
+    const anneeFin = Number(rangeActive.fin.slice(0, 4));
+    const annees: number[] = [];
+    for (let a = anneeDebut; a <= anneeFin; a++) annees.push(a);
+    return annees.filter((a) => !anneeVisiblePourCommuns(a));
+  })();
 
   const joursFeriesToutesAnnees = [
     ...calendrierAnneePrecedente.joursFeries,
@@ -400,10 +411,12 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-6">
-            {onglet === "annee_suivante" && !anneeSuivanteParametree && (
+            {anneesNonParametrees.length > 0 && (
               <p className="text-sm font-normal">
                 <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
-                  {`Le calendrier ${anneeSuivante} n’est pas encore paramétré par l’administrateur.`}
+                  {anneesNonParametrees.length === 1
+                    ? `Le calendrier ${anneesNonParametrees[0]} n’est pas encore paramétré par l’administrateur.`
+                    : `Les calendriers ${anneesNonParametrees.join(" et ")} ne sont pas paramétrés par l’administrateur.`}
                 </span>
               </p>
             )}
