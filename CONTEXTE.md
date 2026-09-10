@@ -5945,6 +5945,39 @@ CPA 6j) : 31/05/2027 inchangé (15,5j CP / 23,88j CPA, la bascule n'a pas encore
 passé de 37,42j à **42,46j** de CP (+5,04j, cohérent avec la base CPA de 6j moins l'écart résiduel de
 timing/bonus déjà identifié) — recalcul manuel confirmé formule par formule pour les deux dates.
 
+## Égalité CP(bascule) = CP(veille) + CPA(veille), rendue exacte (10/09/2026)
+
+Suite directe de la section précédente — Vincent a posé la question de contrôle naturelle : le
+capital CP du 1er juin devrait-il correspondre exactement à la somme CP+CPA de la veille (31 mai) ?
+Vérifié après le fix du solde initial CPA : **non**, un écart résiduel de ~3j subsistait, décomposé
+en deux causes déjà repérées mais jamais corrigées :
+
+- **~2j** : l'accrual CPA au 31 mai ne comptait que 11 mois pleins (le 12ᵉ, celui en cours, ne se
+  crédite qu'au 1er juin) — pur effet de timing, pas une vraie perte, mais qui empêchait l'égalité
+  de tenir exactement au moment précis de la comparaison.
+- **~1j** : le bonus d'ancienneté, déjà présent dans le capital CP, était absent de l'accrual CPA
+  (asymétrie identifiée plus tôt dans la session, jamais corrigée jusqu'ici).
+
+**Fix** (`fetchSoldes` et `fetchHistoriqueCpa`, `lib/data/soldes.repository.ts`) :
+
+- Sur le tout dernier jour de la période en cours (`aujourdhui === periodeEnCours.fin`), le mois en
+  cours est traité comme complet dans l'accrual CPA (+1 mois, plafonné à 12) — l'accrual du 31 mai
+  reflète alors déjà ce qu'il vaudra le lendemain matin, à l'instant près.
+- Le bonus d'ancienneté (même valeur que celle déjà utilisée pour le capital CP, évaluée à
+  "aujourd'hui") s'ajoute désormais à l'accrual CPA, plié dans le point de départ (`baseCpa + bonus`)
+  plutôt qu'un événement séparé dans le feed — pas de nouvelle ligne visible dans le suivi de solde,
+  juste le total qui devient juste.
+- `fetchHistoriqueCpa` ne chargeait jusqu'ici ni les règles d'ancienneté ni la date d'entrée du
+  salarié (aucun bonus calculé du tout dans cette fonction) — ajouté pour s'aligner sur
+  `fetchSoldes`/`fetchHistoriqueCp`.
+
+**Vérifié en direct** (bandeau de date simulée, les deux collaborateurs de test3) : au 31/05/2027,
+Vincent CP 15,5j + CPA 26,96j = 42,46j ; au 01/06/2027, CP = **42,46j** exactement. Hector (sans
+solde initial ni bonus) : 20j + 25,96j = 45,96j au 31/05, CP = **45,96j** au 01/06. L'égalité tient
+au centime près pour les deux profils. Le CPA affiché au 01/06 (0j pour Hector, 1j pour Vincent —
+son propre bonus, appliqué dès le 1er jour de SA nouvelle période) n'a pas de rapport avec cette
+vérification, c'est le tout début d'un nouveau cycle d'accrual, indépendant.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

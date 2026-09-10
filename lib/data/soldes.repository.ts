@@ -807,9 +807,32 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       soldeInitial,
       "cpa",
     );
-    const moisEcoulesCpa = moisEntiersEcoules(debutCpa, aujourdhui);
+    // Dernier jour de la période en cours (10/09/2026, correctif "l'égalité
+    // CP(bascule) = CP(veille) + CPA(veille) ne tenait pas") — les mois
+    // complets écoulés s'arrêtent normalement au dernier mois PLEINEMENT
+    // révolu (le mois en cours, même le 31 mai, ne compte pas tant qu'on n'a
+    // pas atteint le 1er juin). Résultat : la veille de la bascule, l'accrual
+    // CPA sous-estimait toujours d'un mois ce qu'il vaudrait le lendemain
+    // matin, pile au même instant — l'égalité demandée par Vincent ne
+    // pouvait donc jamais tenir exactement. Sur le tout dernier jour de la
+    // période, le mois en cours est traité comme complet (+1, plafonné à
+    // 12) : l'accrual CPA du 31 mai reflète déjà ce qu'il vaudra au 1er
+    // juin, à la seconde près.
+    const dernierJourPeriode = dateIso(aujourdhui) === dateIso(periodeEnCours.fin);
+    const moisEcoulesCpa = Math.min(
+      12,
+      moisEntiersEcoules(debutCpa, aujourdhui) + (dernierJourPeriode ? 1 : 0),
+    );
+    // `+ bonus` (10/09/2026, même correctif) — le bonus d'ancienneté est un
+    // montant forfaitaire au franchissement d'un seuil, pas une acquisition
+    // progressive : `capitalBase` (CP) l'ajoute déjà tel quel, une seule
+    // fois, dès le 1er jour de sa période. L'accrual CPA en était privé,
+    // seule asymétrie qui subsistait entre "ce que finance le CPA" et "ce
+    // que vaut le capital CP qu'il anticipe" (même `bonus`, déjà calculé
+    // plus haut à la date d'aujourd'hui, réutilisé tel quel ici).
     const accrualCpa =
       baseCpa +
+      bonus +
       accrualMensuelSomme(
         regleCP.tauxAcquisitionMensuel,
         historiqueTaux,
@@ -1726,15 +1749,17 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   const [
     { data: utilisateurRow, error: erreurUtilisateur },
     reglesAcquisition,
+    reglesAnciennete,
     historiqueTaux,
     soldeInitial,
   ] = await Promise.all([
     supabase
       .from("utilisateurs")
-      .select("taux_activite, date_fin_contrat")
+      .select("date_entree, anciennete_date_reference, taux_activite, date_fin_contrat")
       .eq("id", utilisateurId)
       .single(),
     fetchReglesAcquisition(),
+    fetchReglesAnciennete(),
     fetchHistoriqueTauxActivite(utilisateurId),
     fetchSoldeInitial(utilisateurId),
   ]);
@@ -1749,7 +1774,16 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   }
 
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
+  const dateReferenceAnciennete: string =
+    utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
   const aujourdhui = new Date(`${dateIso(getAujourdhui())}T00:00:00Z`);
+  // Bonus d'ancienneté (10/09/2026, correctif "égalité CP(bascule) =
+  // CP(veille) + CPA(veille)") — voir le commentaire détaillé dans
+  // `fetchSoldes`.
+  const bonus = bonusAnciennete(
+    reglesAnciennete,
+    ansAnciennete(dateReferenceAnciennete, aujourdhui),
+  );
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
@@ -1763,7 +1797,14 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     base: baseCpa,
     dateAffichage: soldeDepartDate,
   } = resolverPointDepartAccrual(periodeEnCours, soldeInitial, "cpa");
-  const moisEcoules = moisEntiersEcoules(debutCpa, aujourdhui);
+  // Dernier jour de la période + bonus d'ancienneté (10/09/2026, correctif
+  // "égalité CP(bascule) = CP(veille) + CPA(veille)") — voir le commentaire
+  // détaillé dans `fetchSoldes`.
+  const dernierJourPeriode = dateIso(aujourdhui) === dateIso(periodeEnCours.fin);
+  const moisEcoules = Math.min(
+    12,
+    moisEntiersEcoules(debutCpa, aujourdhui) + (dernierJourPeriode ? 1 : 0),
+  );
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
@@ -1887,7 +1928,11 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
 
-  let cumul = baseCpa;
+  // `+ bonus` (10/09/2026, correctif "égalité CP(bascule) = CP(veille) +
+  // CPA(veille)") — plié dans le point de départ plutôt qu'un événement
+  // séparé, même convention que `baseCpa` (pas de ligne dédiée dans ce
+  // feed pour l'instant, voir Backlog "template de détail du Solde N-1").
+  let cumul = baseCpa + bonus;
   const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
     const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
       .filter((m) => m.date.slice(0, 7) === cle)
@@ -1924,7 +1969,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
-    soldeDepart: baseCpa,
+    soldeDepart: baseCpa + bonus,
     soldeDepartDate,
     mois: moisListe,
     soldeActuel: cumul,
