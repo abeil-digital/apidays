@@ -12,7 +12,7 @@ import { useSoldeAnticipe } from "@/hooks/useSoldeAnticipe";
 import { useSoldes } from "@/hooks/useSoldes";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { Button } from "@/components/ui/Button";
-import { DatePicker } from "@/components/ui/DatePicker";
+import { DatePicker, type JourTypeInfo } from "@/components/ui/DatePicker";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Modal } from "@/components/ui/Modal";
 import { SelectPille } from "@/components/ui/SelectPille";
@@ -239,6 +239,32 @@ export function PoserDemandeModal({
   // deux doivent voir EXACTEMENT la même chose. Brique partagée avec le lien
   // "Voir" de la validation manager (`DemandeEquipeRow`, 18/08/2026).
   const occupant = creerResolveurOccupant({ joursFeries, congesImposes, djImposees, demandes });
+
+  // Jours déjà occupés, colorés en demi-cercles dans la grille des deux
+  // `DatePicker` (11/09/2026, demande explicite de Vincent — un demi-cercle
+  // plutôt qu'un rond plein, pour qu'une DJI de vendredi après-midi par
+  // exemple reste lisible comme une demi-journée) — réutilise `occupant`
+  // (même priorité férié > CPI > DJI > demande personnelle) plutôt qu'une
+  // nouvelle logique, en balayant les périodes déjà connues (demandes/
+  // congés imposés/fériés/DJI) au lieu de tout le calendrier visible.
+  const joursTypes: Record<string, JourTypeInfo> = {};
+  function marquerPeriode(debutP: string, finP: string) {
+    const curseur = new Date(`${debutP}T00:00:00Z`);
+    const finDate = new Date(`${finP}T00:00:00Z`);
+    while (curseur <= finDate) {
+      const iso = curseur.toISOString().slice(0, 10);
+      const matin = occupant(iso, "matin");
+      const apresMidi = occupant(iso, "apres_midi");
+      if (matin || apresMidi) joursTypes[iso] = { matin, apresMidi };
+      curseur.setUTCDate(curseur.getUTCDate() + 1);
+    }
+  }
+  for (const d of demandes) {
+    if (d.statut !== "refusé" && d.statut !== "annulé") marquerPeriode(d.debut, d.fin);
+  }
+  for (const c of congesImposes) marquerPeriode(c.debut, c.fin);
+  for (const f of joursFeries) marquerPeriode(f.date, f.date);
+  for (const dj of djImposees) marquerPeriode(dj.date, dj.date);
 
   function jourIndisponible(date: Date): boolean {
     const iso = dateVersIsoLocal(date);
@@ -551,6 +577,7 @@ export function PoserDemandeModal({
                   iconClassName="text-ink-900"
                   accentColor={`var(${VAR_COULEUR_TYPE[option.code]})`}
                   compact
+                  joursTypes={joursTypes}
                 />
               </div>
               {debut && (
@@ -614,6 +641,7 @@ export function PoserDemandeModal({
                   compact
                   dateMarquee={debut || undefined}
                   moisInitial={debut || undefined}
+                  joursTypes={joursTypes}
                 />
               </div>
               {debut && fin && !unSeulJour && (

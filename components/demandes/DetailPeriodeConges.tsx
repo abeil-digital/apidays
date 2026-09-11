@@ -229,6 +229,15 @@ export function DetailPeriodeConges({
                   const codeApresMidi = typeSurDemiJour(j.iso, "apres_midi");
                   const occupantMatin = occupant(j.iso, "matin");
                   const occupantApresMidi = occupant(j.iso, "apres_midi");
+                  // Atténuation réservée à une AUTRE demande personnelle déjà
+                  // posée ailleurs — férié/CPI/DJI (11/09/2026, signalé par
+                  // Vincent : une DJI de vendredi après-midi apparaissait
+                  // délavée au lieu de bleu foncé) restent en pleine couleur,
+                  // ce sont des faits fixes/institutionnels, pas un simple
+                  // "occupé par autre chose" incidental comme une autre
+                  // demande à atténuer pour la distinguer de celle en cours.
+                  const estOccupantFixe = (occ: TypeBadgeCode | null) =>
+                    occ === "FERIE" || occ === "CPI" || occ === "DJI";
                   return (
                     <div
                       key={j.iso}
@@ -237,12 +246,12 @@ export function DetailPeriodeConges({
                       <div
                         className={`absolute inset-y-0 left-0 w-1/2 ${
                           codeMatin ? classeFondTypeBadge(codeMatin) : "bg-ink-300/40"
-                        } ${occupantMatin ? "opacity-45" : ""}`}
+                        } ${occupantMatin && !estOccupantFixe(occupantMatin) ? "opacity-45" : ""}`}
                       />
                       <div
                         className={`absolute inset-y-0 right-0 w-1/2 ${
                           codeApresMidi ? classeFondTypeBadge(codeApresMidi) : "bg-ink-300/40"
-                        } ${occupantApresMidi ? "opacity-45" : ""}`}
+                        } ${occupantApresMidi && !estOccupantFixe(occupantApresMidi) ? "opacity-45" : ""}`}
                       />
                       <span className="relative z-10 text-[10px] font-bold text-white">
                         {j.jour}

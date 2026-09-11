@@ -3,9 +3,75 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CalendarDays } from "lucide-react";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type DayButtonProps } from "react-day-picker";
 import { fr } from "react-day-picker/locale";
 import "react-day-picker/style.css";
+import type { TypeBadgeCode } from "@/components/demandes/TypeBadge";
+
+// Couleur CSS (variable `--color-*`, voir globals.css) d'un code — même
+// mapping que `VAR_COULEUR_TYPE` déjà dupliqué localement dans plusieurs
+// appelants (`PoserDemandeModal.tsx`, `CalendrierCollaborateur.tsx`...),
+// repris ici pour peindre directement les demi-cercles du picker.
+const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
+  CP: "--color-cp",
+  RTT: "--color-rtt",
+  CPA: "--color-cpa",
+  CSS: "--color-css",
+  CE: "--color-ce",
+  RECUP: "--color-recup",
+  EVT_FAM: "--color-evtfam",
+  DJI: "--color-dji",
+  CPI: "--color-cpi",
+  FERIE: "--color-ferie",
+};
+
+/** Jour déjà occupé, avec son type par demi-journée — `null` = demi-journée
+ * libre. Un jour entièrement occupé par le même type a `matin === apresMidi`. */
+export interface JourTypeInfo {
+  matin: TypeBadgeCode | null;
+  apresMidi: TypeBadgeCode | null;
+}
+
+/**
+ * Bouton de jour custom (11/09/2026, demande explicite de Vincent : "les DJI
+ * apparaissent grises et ne signifient pas la notion de demi-journée, un
+ * demi-cercle comme sur les calendriers ?") — remplace le `DayButton` par
+ * défaut de `react-day-picker` UNIQUEMENT quand `joursTypes` est fourni :
+ * peint le cercle du jour en deux moitiés (gauche = matin, droite =
+ * après-midi) à 20% d'opacité sur la couleur du type occupant, un jour
+ * entièrement occupé par un seul type restant un disque plein. Reprend le
+ * strict nécessaire du `DayButton` d'origine (ref + focus, voir
+ * node_modules/react-day-picker) pour ne rien casser du comportement
+ * standard (navigation clavier, sélection, désactivé...).
+ */
+function construireJourBouton(joursTypes: Record<string, JourTypeInfo>) {
+  return function JourBouton({ day, modifiers, className, style, ...buttonProps }: DayButtonProps) {
+    const ref = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+      if (modifiers.focused) ref.current?.focus();
+    }, [modifiers.focused]);
+
+    const info = joursTypes[day.isoDate];
+    const couleur = (code: TypeBadgeCode | null) =>
+      code ? `color-mix(in srgb, var(${VAR_COULEUR_TYPE[code]}) 20%, transparent)` : "transparent";
+
+    const styleFond: React.CSSProperties = info
+      ? {
+          background: `linear-gradient(90deg, ${couleur(info.matin)} 50%, ${couleur(info.apresMidi)} 50%)`,
+          borderRadius: "100%",
+        }
+      : {};
+
+    return (
+      <button
+        ref={ref}
+        className={className}
+        style={{ ...style, ...styleFond }}
+        {...buttonProps}
+      />
+    );
+  };
+}
 
 /**
  * Sélecteur de date custom (remplace `<input type="date">`) — nécessaire dès
@@ -69,6 +135,14 @@ interface DatePickerProps {
    * de l'outil" — évite de pouvoir naviguer/sélectionner une date
    * antérieure au démarrage réel du tenant dans Apidays). */
   moisMin?: string;
+  /** Jours déjà occupés par l'utilisateur, par demi-journée — carte ISO ->
+   * `JourTypeInfo` (11/09/2026, demande explicite de Vincent) — peint le
+   * jour dans la grille en deux demi-cercles colorés par la couleur du
+   * type occupant chaque demi-journée (même rendu que le détail "voir",
+   * `DetailPeriodeConges`), pour visualiser d'un coup d'œil ce qui est déjà
+   * posé même si le jour reste par ailleurs grisé/désactivé. Opt-in, ignoré
+   * par défaut. */
+  joursTypes?: Record<string, JourTypeInfo>;
 }
 
 function isoVersDate(iso: string | undefined): Date | undefined {
@@ -108,6 +182,7 @@ export function DatePicker({
   moisInitial,
   moisMax,
   moisMin,
+  joursTypes,
 }: DatePickerProps) {
   const [ouvert, setOuvert] = useState(false);
   const [texte, setTexte] = useState(value ? formatAffichage(value) : "");
@@ -184,6 +259,8 @@ export function DatePicker({
     }
   }
 
+  const jourBouton = joursTypes ? construireJourBouton(joursTypes) : undefined;
+
   return (
     <div ref={conteneurRef} className="relative flex items-center gap-2">
       <input
@@ -227,6 +304,7 @@ export function DatePicker({
               disabled={disabled}
               modifiers={dateMarquee ? { marquee: [isoVersDate(dateMarquee)!] } : undefined}
               modifiersClassNames={{ marquee: "rdp-jour-marque" }}
+              components={jourBouton ? { DayButton: jourBouton } : undefined}
               style={
                 {
                   "--rdp-accent-color": accentColor,
