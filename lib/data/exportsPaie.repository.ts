@@ -264,12 +264,17 @@ export async function calculerJoursATransmettreMaintenant(
 export async function fetchExportPaie(periode: {
   debut: string;
   fin: string;
-}): Promise<{ id: string; genereLe: string; prisEnCompte: boolean } | null> {
+}): Promise<{
+  id: string;
+  genereLe: string;
+  prisEnCompte: boolean;
+  prisEnCompteLe: string | null;
+} | null> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("exports_paie")
-    .select("id, genere_le, pris_en_compte")
+    .select("id, genere_le, pris_en_compte, pris_en_compte_le")
     .eq("periode_debut", periode.debut)
     .eq("periode_fin", periode.fin)
     .maybeSingle();
@@ -279,7 +284,12 @@ export async function fetchExportPaie(periode: {
   }
 
   return data
-    ? { id: data.id, genereLe: data.genere_le, prisEnCompte: data.pris_en_compte }
+    ? {
+        id: data.id,
+        genereLe: data.genere_le,
+        prisEnCompte: data.pris_en_compte,
+        prisEnCompteLe: data.pris_en_compte_le,
+      }
     : null;
 }
 

@@ -617,6 +617,7 @@ export function VerifierFichesPaiePage2({
     try {
       await validerExportPaie(exportId);
       onValide();
+      rafraichirDonnees();
     } finally {
       setEnCoursValidation(false);
     }
@@ -689,9 +690,14 @@ export function VerifierFichesPaiePage2({
 
   // Rafraîchit "Solde {mois}"/"Mouvement" après un ajustement manuel
   // (27/08/2026) — l'ajustement modifie le solde réel calculé, pas juste la
-  // liste des événements de la popin.
+  // liste des événements de la popin. Rafraîchit aussi `collaborateurs`
+  // (11/09/2026, "il faut un rafraîchissement" — après "Valider", les badges
+  // "Pris en compte" affichés ici même restaient sur l'ancien état tant que
+  // la page n'était pas rechargée : `handleValider` ne rafraîchissait que
+  // l'export côté parent, jamais cette liste).
   function rafraichirDonnees() {
     fetchComparaisonSoldes(periode, exportId).then(setComparaisons);
+    if (exportId) fetchCheckFichesPaie(exportId).then(setCollaborateurs);
   }
 
   const comparaisonSelection = selectionMouvement

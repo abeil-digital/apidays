@@ -226,6 +226,16 @@ export function VerifierFichesPaiePage3({
     try {
       await validerExportPaie(exportId);
       onValide();
+      // Rafraîchit `comparaisons`/`collaborateurs` (11/09/2026, "il faut un
+      // rafraîchissement" — même correctif que `VerifierFichesPaiePage2`) :
+      // `onValide()` ne rafraîchit que l'export côté parent, pas les badges
+      // "Pris en compte" affichés ici, restés sur l'ancien état sinon.
+      const [comps, collabs] = await Promise.all([
+        fetchComparaisonSoldes(periode, exportId),
+        fetchCheckFichesPaie(exportId),
+      ]);
+      setComparaisons(comps);
+      setCollaborateurs(collabs);
     } finally {
       setEnCoursValidation(false);
     }

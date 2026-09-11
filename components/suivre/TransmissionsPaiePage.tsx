@@ -915,6 +915,7 @@ export function TransmissionsPaiePage({
     id: string;
     genereLe: string;
     prisEnCompte: boolean;
+    prisEnCompteLe: string | null;
   } | null>(null);
 
   useEffect(() => {
@@ -982,6 +983,19 @@ export function TransmissionsPaiePage({
           Transmis le {formatDateHeureAction(exportPaie.genereLe)}
         </div>
       )}
+
+      {/* Bandeau "Validé le" (11/09/2026, demande explicite de Vincent) — sur
+          "Vérifier les fiches de paie", une fois l'export pris en compte :
+          même principe que "Transmis le" côté "Quels congés transmettre",
+          pour que le statut de validation reste visible sans avoir à
+          rouvrir le détail de chaque collaborateur. */}
+      {(onglet === "verifier2" || onglet === "verifier3") &&
+        exportPaie?.prisEnCompte &&
+        exportPaie.prisEnCompteLe && (
+          <div className="bg-status-success-bg text-status-success-fg rounded-control mx-1 px-4 py-2.5 text-sm font-semibold">
+            Validé le {formatDateHeureAction(exportPaie.prisEnCompteLe)}
+          </div>
+        )}
 
       {onglet === "transmettre" && (
         <QuelsCongesTransmettre
