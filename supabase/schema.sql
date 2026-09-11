@@ -566,6 +566,33 @@ create table soldes_periode (
 create unique index soldes_periode_utilisateur_periode_unique
   on soldes_periode (utilisateur_id, periode_debut);
 
+-- Gel de l'acquisition mensuelle RTT/CPA (11/09/2026) — un mois devient
+-- figé quand l'export paie qui le couvre est validé ("pris en compte",
+-- `exports_paie.pris_en_compte`) : la fiche de paie confirmée devient le fait
+-- qui fige l'acquisition du mois, au même titre qu'elle fige déjà la
+-- consommation. Corrige un bug réel trouvé en testant acme : sans ce gel, un
+-- changement du taux d'acquisition aujourd'hui réécrivait rétroactivement le
+-- transfert CPA d'une période déjà close (le capital d'ouverture lui-même
+-- était protégé par `soldes_periode`, mais pas l'accrual RTT/CPA qui le
+-- nourrit). Une ligne par utilisateur/type/mois — `is_anticipation` distingue
+-- RTT (toujours `false`) de CPA (`true`, partage le type CP). Écrite par
+-- `geleAcquisitionsPourExport` (`lib/data/soldes.repository.ts`), appelée
+-- depuis `validerExportPaie`.
+create table acquisitions_gelees (
+  id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
+  utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
+  type_absence_id uuid not null references types_absences(id),
+  is_anticipation boolean not null default false,
+  mois date not null,
+  jours numeric not null,
+  figee_le timestamptz not null default now(),
+  figee_par uuid references utilisateurs(id)
+);
+
+create unique index acquisitions_gelees_utilisateur_type_mois_unique
+  on acquisitions_gelees (utilisateur_id, type_absence_id, is_anticipation, mois);
+
 -- Transmission paie (24/08/2026) — un enregistrement par clic sur
 -- "Transmettre" (Suivre > Clôture paie). Une seule transmission par
 -- entreprise et par période (`exports_paie_periode_unique`) : évite un
@@ -664,6 +691,7 @@ alter table ajustements_solde enable row level security;
 alter table historique_utilisateur enable row level security;
 alter table soldes_initiaux enable row level security;
 alter table soldes_periode enable row level security;
+alter table acquisitions_gelees enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table parametrage_notifications enable row level security;
 alter table regles_anciennete enable row level security;
@@ -1182,6 +1210,29 @@ create policy "soldes_periode: admin gère tout"
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
+-- POLICIES — acquisitions_gelees (gel de l'acquisition mensuelle RTT/CPA)
+-- ------------------------------------------------------------
+create policy "acquisitions_gelees: lecture manager, admin ou soi-même"
+  on acquisitions_gelees for select
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id())
+  );
+
+-- Écriture réservée à manager/admin (déclenchée depuis `validerExportPaie`,
+-- déjà réservé à ces rôles côté `exports_paie`) — pas de gel paresseux ici,
+-- contrairement à `soldes_periode` : seule une validation d'export explicite
+-- fige l'acquisition d'un mois.
+create policy "acquisitions_gelees: manager et admin figent"
+  on acquisitions_gelees for insert
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
+
+create policy "acquisitions_gelees: admin gère tout"
+  on acquisitions_gelees for all
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+
+-- ------------------------------------------------------------
 -- POLICIES — exports_paie / export_paie_lignes (Suivre > Clôture paie)
 -- ------------------------------------------------------------
 create policy "exports_paie: manager et admin lisent tout"
@@ -1273,6 +1324,7 @@ grant select, insert, update, delete on
   historique_utilisateur,
   soldes_initiaux,
   soldes_periode,
+  acquisitions_gelees,
   exports_paie,
   export_paie_lignes,
   faqs,

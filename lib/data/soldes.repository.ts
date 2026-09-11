@@ -192,25 +192,188 @@ function resolverTauxActiviteEffectif(
  * la multiplication plate `nbMois * tauxAcquisitionMensuel * prorata` pour ne
  * pas recalculer rétroactivement un mois déjà acquis à l'ancien taux.
  * `moisLimite` : voir `resolverTauxActiviteEffectif`. */
-function accrualMensuelSomme(
+/** Table de gel de l'acquisition mensuelle RTT/CPA, clé "AAAA-MM" (voir
+ * `acquisitions_gelees`, table gelée à la validation d'un export paie). */
+type AcquisitionsGelees = Map<string, number>;
+
+async function fetchAcquisitionsGelees(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  typeAbsenceId: string,
+  isAnticipation: boolean,
+  cleDebut: string,
+  cleFin: string,
+): Promise<AcquisitionsGelees> {
+  const carte: AcquisitionsGelees = new Map();
+  if (cleDebut > cleFin) return carte;
+  const { data } = await supabase
+    .from("acquisitions_gelees")
+    .select("mois, jours")
+    .eq("utilisateur_id", utilisateurId)
+    .eq("type_absence_id", typeAbsenceId)
+    .eq("is_anticipation", isAnticipation)
+    .gte("mois", `${cleDebut}-01`)
+    .lte("mois", `${cleFin}-01`);
+  for (const row of data ?? []) {
+    carte.set(row.mois.slice(0, 7), Number(row.jours));
+  }
+  return carte;
+}
+
+/** Montant d'acquisition d'UN mois — gelé (export paie validé, voir
+ * `geleAcquisitionsPourExport`) s'il en existe un, sinon calculé au taux
+ * ACTUEL comme avant (11/09/2026, remplace l'ancien `accrualMensuelSomme`
+ * "à taux toujours actuel" — voir le commentaire de `acquisitions_gelees`
+ * dans schema.sql pour le bug que ça corrige). */
+function montantAcquisitionMois(
+  gelees: AcquisitionsGelees,
+  tauxAcquisitionMensuel: number,
+  historique: EntreeTauxActivite[],
+  tauxActuel: number,
+  cle: string,
+  moisLimite: string | null,
+): number {
+  const gele = gelees.get(cle);
+  if (gele !== undefined) return gele;
+  return (
+    tauxAcquisitionMensuel * (resolverTauxActiviteEffectif(historique, tauxActuel, cle, moisLimite) / 100)
+  );
+}
+
+/** Même somme que l'ancien `accrualMensuelSomme`, mais un mois déjà figé
+ * renvoie son montant gelé au lieu d'être recalculé au taux d'acquisition
+ * ACTUEL — remplace tous les usages de `accrualMensuelSomme` (11/09/2026). */
+async function accrualMensuelSommeAvecGel(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  typeAbsenceId: string,
+  isAnticipation: boolean,
   tauxAcquisitionMensuel: number,
   historique: EntreeTauxActivite[],
   tauxActuel: number,
   periodeDebut: Date,
   nbMois: number,
   moisLimite: string | null,
-): number {
-  let total = 0;
+): Promise<number> {
+  if (nbMois <= 0) return 0;
+  const cles: string[] = [];
   for (let i = 0; i < nbMois; i++) {
     const dateMois = new Date(
       Date.UTC(periodeDebut.getUTCFullYear(), periodeDebut.getUTCMonth() + i, 1),
     );
-    const cle = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
-    total +=
-      tauxAcquisitionMensuel *
-      (resolverTauxActiviteEffectif(historique, tauxActuel, cle, moisLimite) / 100);
+    cles.push(`${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`);
   }
-  return total;
+  const gelees = await fetchAcquisitionsGelees(
+    supabase,
+    utilisateurId,
+    typeAbsenceId,
+    isAnticipation,
+    cles[0],
+    cles[cles.length - 1],
+  );
+  return cles.reduce(
+    (total, cle) =>
+      total +
+      montantAcquisitionMois(gelees, tauxAcquisitionMensuel, historique, tauxActuel, cle, moisLimite),
+    0,
+  );
+}
+
+/**
+ * Gèle l'acquisition mensuelle RTT/CPA de tous les collaborateurs actifs de
+ * l'entreprise, sur les mois calendaires couverts par [periodeDebut,
+ * periodeFin] (11/09/2026, "chaque export paie validé = un point de gel" —
+ * demande explicite de Vincent). Appelée depuis `validerExportPaie` : la
+ * fiche de paie confirmée devient le fait qui fige l'acquisition du mois, au
+ * même titre qu'elle fige déjà la consommation (`exports_paie.pris_en_compte`).
+ * Idempotent (`upsert` avec `ignoreDuplicates`) : revalider un export déjà
+ * pris en compte ne réécrit rien.
+ */
+export async function geleAcquisitionsPourExport(
+  supabase: SupabaseClient,
+  entrepriseId: string,
+  periodeDebut: string,
+  periodeFin: string,
+  auteurId: string,
+): Promise<void> {
+  const [reglesAcquisition, { data: utilisateurs, error }] = await Promise.all([
+    fetchReglesAcquisition(),
+    supabase
+      .from("utilisateurs")
+      .select("id, taux_activite, date_fin_contrat")
+      .eq("entreprise_id", entrepriseId)
+      .eq("statut", "actif"),
+  ]);
+  if (error) throw new Error("Impossible de figer l'acquisition du mois.");
+
+  const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const typeRttId = regleRTT ? await getTypeAbsenceId(supabase, "RTT") : null;
+  const typeCpId = regleCP ? await getTypeAbsenceId(supabase, "CP") : null;
+  if ((!regleRTT || !typeRttId) && (!regleCP || !typeCpId)) return;
+
+  // Mois calendaires entièrement contenus dans [periodeDebut, periodeFin].
+  const cles: string[] = [];
+  {
+    let curseur = new Date(`${periodeDebut}T00:00:00Z`);
+    curseur = new Date(Date.UTC(curseur.getUTCFullYear(), curseur.getUTCMonth(), 1));
+    const fin = new Date(`${periodeFin}T00:00:00Z`);
+    while (curseur <= fin) {
+      cles.push(`${curseur.getUTCFullYear()}-${String(curseur.getUTCMonth() + 1).padStart(2, "0")}`);
+      curseur = new Date(Date.UTC(curseur.getUTCFullYear(), curseur.getUTCMonth() + 1, 1));
+    }
+  }
+  if (cles.length === 0) return;
+
+  const lignes: {
+    entreprise_id: string;
+    utilisateur_id: string;
+    type_absence_id: string;
+    is_anticipation: boolean;
+    mois: string;
+    jours: number;
+    figee_par: string;
+  }[] = [];
+
+  for (const u of utilisateurs ?? []) {
+    const historiqueTaux = await fetchHistoriqueTauxActivite(u.id);
+    const tauxActuel = Number(u.taux_activite ?? 100);
+    const moisLimite: string | null = u.date_fin_contrat ? u.date_fin_contrat.slice(0, 7) : null;
+
+    for (const cle of cles) {
+      if (moisLimite && cle > moisLimite) continue;
+      const tauxEffectif = resolverTauxActiviteEffectif(historiqueTaux, tauxActuel, cle, moisLimite);
+      if (regleRTT && typeRttId) {
+        lignes.push({
+          entreprise_id: entrepriseId,
+          utilisateur_id: u.id,
+          type_absence_id: typeRttId,
+          is_anticipation: false,
+          mois: `${cle}-01`,
+          jours: regleRTT.tauxAcquisitionMensuel * (tauxEffectif / 100),
+          figee_par: auteurId,
+        });
+      }
+      if (regleCP && typeCpId) {
+        lignes.push({
+          entreprise_id: entrepriseId,
+          utilisateur_id: u.id,
+          type_absence_id: typeCpId,
+          is_anticipation: true,
+          mois: `${cle}-01`,
+          jours: regleCP.tauxAcquisitionMensuel * (tauxEffectif / 100),
+          figee_par: auteurId,
+        });
+      }
+    }
+  }
+
+  if (lignes.length === 0) return;
+  const { error: erreurUpsert } = await supabase.from("acquisitions_gelees").upsert(lignes, {
+    onConflict: "utilisateur_id,type_absence_id,is_anticipation,mois",
+    ignoreDuplicates: true,
+  });
+  if (erreurUpsert) throw new Error("Impossible de figer l'acquisition du mois.");
 }
 
 /**
@@ -366,16 +529,21 @@ async function resolverCapitalOuvertureCp(
     "cpa",
   );
   const moisEcoulesCpaPrecedent = moisEntiersEcoules(debutCpaPrecedent, periodePrecedente.fin);
+  const typeCpIdPourGel = await getTypeAbsenceId(supabase, "CP");
   const accrualCpaComplet =
     baseCpaPrecedent +
-    accrualMensuelSomme(
+    (await accrualMensuelSommeAvecGel(
+      supabase,
+      utilisateurId,
+      typeCpIdPourGel,
+      true,
       ctx.regleCP.tauxAcquisitionMensuel,
       ctx.historiqueTaux,
       ctx.tauxActuel,
       debutCpaPrecedent,
       moisEcoulesCpaPrecedent,
       ctx.moisLimite,
-    );
+    ));
   // `is_anticipation` reste un bucket stable (11/09/2026, annule le
   // comportement du 10/09 — voir CONTEXTE.md) : un CPA consommé reste
   // décompté du solde CPA jusqu'à ce transfert, pas avant. Fenêtre bornée à
@@ -887,16 +1055,21 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       "cpa",
     );
     const moisEcoulesCpa = moisEntiersEcoules(debutCpa, aujourdhui);
+    const typeCpIdPourGel = await getTypeAbsenceId(supabase, "CP");
     const accrualCpa =
       baseCpa +
-      accrualMensuelSomme(
+      (await accrualMensuelSommeAvecGel(
+        supabase,
+        id,
+        typeCpIdPourGel,
+        true,
         regleCP.tauxAcquisitionMensuel,
         historiqueTaux,
         tauxActuel,
         debutCpa,
         moisEcoulesCpa,
         moisLimite,
-      );
+      ));
     // `is_anticipation = true` reste un bucket stable (11/09/2026, annule le
     // comportement du 10/09) — un CPA consommé reste décompté du solde CPA
     // jusqu'à la vraie bascule, jamais reclassé en CP avant, QUELLE QUE SOIT
@@ -969,16 +1142,21 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       "rtt",
     );
     const moisEcoules = moisEntiersEcoules(debutRtt, aujourdhui);
+    const typeRttIdPourGel = await getTypeAbsenceId(supabase, "RTT");
     const accrual =
       baseRtt +
-      accrualMensuelSomme(
+      (await accrualMensuelSommeAvecGel(
+        supabase,
+        id,
+        typeRttIdPourGel,
+        false,
         regleRTT.tauxAcquisitionMensuel,
         historiqueTaux,
         tauxActuel,
         debutRtt,
         moisEcoules,
         moisLimite,
-      );
+      ));
     const periodeConsoRtt = periodeConsommationAccrual(periodeRtt, soldeInitial);
     const consomme = await sommeJours(
       supabase,
@@ -1073,16 +1251,21 @@ export async function fetchSoldeAnticipe(
       "rtt",
     );
     const moisEcoules = moisEntiersEcoules(debutRtt, reference);
+    const typeRttIdPourGel = await getTypeAbsenceId(supabase, "RTT");
     const accrual =
       baseRtt +
-      accrualMensuelSomme(
+      (await accrualMensuelSommeAvecGel(
+        supabase,
+        id,
+        typeRttIdPourGel,
+        false,
         regleRTT.tauxAcquisitionMensuel,
         historiqueTaux,
         tauxActuel,
         debutRtt,
         moisEcoules,
         moisLimite,
-      );
+      ));
     const periodeConsoRtt = periodeConsommationAccrual(periodeRtt, soldeInitial);
     const consomme = await sommeJours(
       supabase,
@@ -1113,16 +1296,21 @@ export async function fetchSoldeAnticipe(
     "cpa",
   );
   const moisEcoulesCpa = moisEntiersEcoules(debutCpa, reference);
+  const typeCpIdPourGel = await getTypeAbsenceId(supabase, "CP");
   const accrualCpa =
     baseCpa +
-    accrualMensuelSomme(
+    (await accrualMensuelSommeAvecGel(
+      supabase,
+      id,
+      typeCpIdPourGel,
+      true,
       regleCP.tauxAcquisitionMensuel,
       historiqueTaux,
       tauxActuel,
       debutCpa,
       moisEcoulesCpa,
       moisLimite,
-    );
+    ));
   const consommeCpa = await sommeJours(
     supabase,
     id,
@@ -1602,23 +1790,42 @@ export async function fetchHistoriqueRtt(
     auteurNom?: string;
   }
 
+  // Un mois déjà figé (export paie validé, voir `acquisitions_gelees`)
+  // affiche son montant gelé plutôt que recalculé au taux ACTUEL — même
+  // principe que `accrualMensuelSommeAvecGel` (11/09/2026).
+  const clesRtt = Array.from({ length: moisEcoules }, (_, i) => {
+    const d = new Date(Date.UTC(debutRtt.getUTCFullYear(), debutRtt.getUTCMonth() + i, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const acquisitionsGeleesRtt =
+    clesRtt.length > 0
+      ? await fetchAcquisitionsGelees(
+          supabase,
+          utilisateurId,
+          typeAbsenceId,
+          false,
+          clesRtt[0],
+          clesRtt[clesRtt.length - 1],
+        )
+      : new Map<string, number>();
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
     const dateMois = new Date(
       Date.UTC(debutRtt.getUTCFullYear(), debutRtt.getUTCMonth() + i, debutRtt.getUTCDate()),
     );
-    const cleMois = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
-    const tauxEffectif = resolverTauxActiviteEffectif(
-      historiqueTaux,
-      tauxActuel,
-      cleMois,
-      moisLimite,
-    );
+    const cleMois = clesRtt[i];
     return {
       id: `acquisition-${dateIso(dateMois)}`,
       type: "acquisition",
       date: dateIso(dateMois),
       libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
-      jours: regleRTT.tauxAcquisitionMensuel * (tauxEffectif / 100),
+      jours: montantAcquisitionMois(
+        acquisitionsGeleesRtt,
+        regleRTT.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        cleMois,
+        moisLimite,
+      ),
     };
   });
 
@@ -1901,23 +2108,42 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     return `${prefixe} : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`;
   }
 
+  // Un mois déjà figé (export paie validé, voir `acquisitions_gelees`)
+  // affiche son montant gelé plutôt que recalculé au taux ACTUEL — même
+  // principe que `accrualMensuelSommeAvecGel` (11/09/2026).
+  const clesCpa = Array.from({ length: moisEcoules }, (_, i) => {
+    const d = new Date(Date.UTC(debutCpa.getUTCFullYear(), debutCpa.getUTCMonth() + i, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const acquisitionsGeleesCpa =
+    clesCpa.length > 0
+      ? await fetchAcquisitionsGelees(
+          supabase,
+          utilisateurId,
+          typeAbsenceId,
+          true,
+          clesCpa[0],
+          clesCpa[clesCpa.length - 1],
+        )
+      : new Map<string, number>();
   const accrualsBruts: MouvementBrut[] = Array.from({ length: moisEcoules }, (_, i) => {
     const dateMois = new Date(
       Date.UTC(debutCpa.getUTCFullYear(), debutCpa.getUTCMonth() + i, debutCpa.getUTCDate()),
     );
-    const cleMois = `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`;
-    const tauxEffectif = resolverTauxActiviteEffectif(
-      historiqueTaux,
-      tauxActuel,
-      cleMois,
-      moisLimite,
-    );
+    const cleMois = clesCpa[i];
     return {
       id: `acquisition-${dateIso(dateMois)}`,
       type: "acquisition",
       date: dateIso(dateMois),
       libelle: `Acquisition ${formatMoisAnnee(dateMois)}`,
-      jours: regleCP.tauxAcquisitionMensuel * (tauxEffectif / 100),
+      jours: montantAcquisitionMois(
+        acquisitionsGeleesCpa,
+        regleCP.tauxAcquisitionMensuel,
+        historiqueTaux,
+        tauxActuel,
+        cleMois,
+        moisLimite,
+      ),
     };
   });
 

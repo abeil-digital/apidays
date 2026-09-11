@@ -15,7 +15,7 @@ import {
   SELECT_DEMANDE_EQUIPE,
   type DemandeEquipeRow,
 } from "@/lib/data/demandes.repository";
-import { fetchSoldes } from "@/lib/data/soldes.repository";
+import { fetchSoldes, geleAcquisitionsPourExport } from "@/lib/data/soldes.repository";
 import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
 
@@ -289,23 +289,39 @@ export async function fetchExportPaie(periode: {
  * `exports_paie.pris_en_compte` à `true` pour tout l'export (une seule
  * action à l'échelle de la période entière, pas ligne par ligne) — devient
  * la vraie définition du "solde réel" (`soldes.repository.ts`).
+ *
+ * Fige aussi l'acquisition RTT/CPA des mois couverts par cette période
+ * (11/09/2026, "chaque export paie validé = un point de gel" — demande
+ * explicite de Vincent, voir `acquisitions_gelees` dans schema.sql) : la
+ * fiche de paie confirmée devient le fait qui fige l'acquisition du mois, au
+ * même titre qu'elle fige déjà la consommation juste au-dessus.
  */
 export async function validerExportPaie(exportId: string): Promise<void> {
   const supabase = createClient();
   const auteurId = await getUtilisateurId(supabase);
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("exports_paie")
     .update({
       pris_en_compte: true,
       pris_en_compte_le: new Date().toISOString(),
       pris_en_compte_par: auteurId,
     })
-    .eq("id", exportId);
+    .eq("id", exportId)
+    .select("entreprise_id, periode_debut, periode_fin")
+    .single();
 
-  if (error) {
+  if (error || !data) {
     throw new Error("Impossible de valider cet export.");
   }
+
+  await geleAcquisitionsPourExport(
+    supabase,
+    data.entreprise_id,
+    data.periode_debut,
+    data.periode_fin,
+    auteurId,
+  );
 }
 
 /**
