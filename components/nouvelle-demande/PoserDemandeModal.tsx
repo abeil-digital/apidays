@@ -138,10 +138,14 @@ function dateVersIsoLocal(date: Date): string {
  *
  * "Solde à la date de la demande" (`fetchSoldeAnticipe`) — uniquement pour
  * RTT et Congés anticipés (CP a un capital connu d'avance, la notion
- * n'a pas de sens pour lui) : projette l'accrual jusqu'à la date de début
- * choisie plutôt que jusqu'à aujourd'hui, pour refléter les jours qui auront
- * été acquis d'ici la demande. "Après la demande" se base sur cette valeur
- * anticipée pour RTT/CPA, sur le solde actuel sinon.
+ * n'a pas de sens pour lui) : projette l'accrual jusqu'à la FIN de la
+ * période choisie (`finPourCalcul`, 11/09/2026 — pas le début, corrigé
+ * suite à un cas réel : une demande à cheval sur deux mois, ex. 30/10 →
+ * 02/11, doit refléter l'accrual acquis d'ici le dernier jour pris, sinon
+ * le mois entamé par la fin de la période est ignoré) plutôt que jusqu'à
+ * aujourd'hui, pour refléter les jours qui auront été acquis d'ici là.
+ * "Après la demande" se base sur cette valeur anticipée pour RTT/CPA, sur
+ * le solde actuel sinon.
  */
 export function PoserDemandeModal({
   onClose,
@@ -374,9 +378,16 @@ export function PoserDemandeModal({
   const afficherAnticipe = optionKey === "RTT" || optionKey === "CP_ANTICIPE";
   const typeAnticipe: "RTT" | "CPA" | null =
     optionKey === "RTT" ? "RTT" : optionKey === "CP_ANTICIPE" ? "CPA" : null;
+  // Référence = fin de la demande, pas le début (11/09/2026, demande
+  // explicite de Vincent — une demande RTT/CPA à cheval sur deux mois, ex.
+  // 30/10 → 02/11, doit refléter l'accrual acquis d'ici le DERNIER jour
+  // pris, pas seulement celui du premier — sinon "Solde à la date de la
+  // demande" ignore le mois entamé par la fin de la période). `finPourCalcul`
+  // retombe déjà sur `debut` tant que "Au" n'est pas encore choisi/invalide
+  // (voir plus haut), donc rien à changer côté cas "Au" vide.
   const { solde: soldeAnticipe, loading: loadingAnticipe } = useSoldeAnticipe(
     typeAnticipe,
-    afficherAnticipe && debut ? debut : null,
+    afficherAnticipe && debut ? finPourCalcul : null,
   );
 
   const soldeActuel = soldes
