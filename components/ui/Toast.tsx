@@ -39,8 +39,13 @@ export function Toast({
     return () => clearTimeout(timer);
   }, [onClose, duree]);
 
+  // Orange "alerte" (11/09/2026, demande explicite de Vincent, "plus
+  // visible") — remplace le mint d'origine, jugé trop discret pour un
+  // bandeau de confirmation pleine largeur.
   const couleurs =
-    tone === "error" ? "bg-status-danger-bg text-status-danger-fg" : "bg-mint-tint text-mint";
+    tone === "error"
+      ? "bg-status-danger-bg text-status-danger-fg"
+      : "bg-status-warning-bg text-status-warning-fg";
 
   return (
     <div
