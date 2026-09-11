@@ -90,6 +90,8 @@ function mapDemandeDepuisDb(row: DemandeRow): Demande {
     nbDemiJournees: Number(row.nb_demi_journees),
     datePose: row.created_at.slice(0, 10),
     dateDecision: row.date_decision ? row.date_decision.slice(0, 10) : null,
+    datePoseTri: row.created_at,
+    dateDecisionTri: row.date_decision,
     statut: STATUT_DEPUIS_DB[row.statut] ?? "en attente",
     note: row.commentaire_salarie ?? "",
     commentaireManager: row.commentaire_decision ?? "",

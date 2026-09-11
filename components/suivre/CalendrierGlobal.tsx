@@ -509,7 +509,15 @@ export function CalendrierGlobal() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-[10px] xl:grid-cols-[max-content_16rem]">
+      {/* `minmax(0,797px)` plutôt que `max-content` (11/09/2026, bug signalé
+      — "les calendriers se compressent, c'est laid" avec seulement 3 mois
+      affichés) : les mini-calendriers ci-dessous ont des largeurs en
+      POURCENTAGE (`lg:w-[calc((100%-20px)/3)]`), qui n'ont pas de référence
+      stable pour se résoudre à l'intérieur d'une colonne `max-content` —
+      même gabarit "contenu + colonne latérale 16rem" que
+      `TransmissionsPaiePage.tsx`/`VerifierFichesPaiePage2.tsx`
+      (`minmax(0,900px)_16rem`), qui n'ont pas ce problème. */}
+      <div className="grid grid-cols-1 items-start gap-[10px] xl:grid-cols-[minmax(0,797px)_16rem]">
         <div className="min-w-0">
           {anneesNonParametrees.length > 0 && (
             <p className="mb-4 text-sm font-normal">

@@ -949,6 +949,29 @@ create policy "decisions_demande: manager et admin créent"
   on decisions_demande for insert
   with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 
+-- Trou RLS trouvé le 11/09/2026 en testant "Annuler cette demande" en
+-- self-service (salarié retirant sa propre demande, DetailCongePanel.onRetirer) :
+-- seuls manager/admin pouvaient écrire dans decisions_demande, alors que
+-- `deciderDemande` (demandes.repository.ts) l'appelle aussi pour un retrait
+-- salarié. L'update de `demandes_conges` passait (policy "salarié modifie
+-- une demande en attente"), mais l'insert du journal échouait silencieusement
+-- (best-effort, voir le commentaire de `deciderDemande`) — la ligne
+-- "Retirée"/"Vous avez annulé" n'apparaissait jamais dans le feed. Restreint
+-- au strict nécessaire : uniquement une annulation (`statut = 'annulee'`),
+-- de SA PROPRE demande, décidée par lui-même.
+create policy "decisions_demande: salarié retire sa propre demande"
+  on decisions_demande for insert
+  with check (
+    entreprise_id = my_entreprise_id()
+    and statut = 'annulee'
+    and decide_par = my_utilisateur_id()
+    and exists (
+      select 1 from demandes_conges d
+      where d.id = decisions_demande.demande_id
+      and d.utilisateur_id = my_utilisateur_id()
+    )
+  );
+
 create policy "decisions_demande: admin gère tout"
   on decisions_demande for all
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id())

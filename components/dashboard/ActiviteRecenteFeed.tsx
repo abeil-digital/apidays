@@ -4,9 +4,10 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { Newspaper, X } from "lucide-react";
 import type { Demande, StatutDemande } from "@/lib/types";
-import { formatDateAction, formatJours } from "@/lib/format";
+import { formatDateAction, formatDateHeureAction, formatJours } from "@/lib/format";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 
 const NB_LIGNES = 6;
 
@@ -115,14 +116,14 @@ function comptePhrase(jours: number): string {
 
 /** Un événement "posé" (toujours) + un événement "décision" (si tranchée) par
  * demande — même logique de regroupement chronologique qu'un fil d'activité. */
-function evenementsDeDemande(demande: Demande): EvenementFeed[] {
+function evenementsDeDemande(demande: Demande, utilisateurCourantId: string | null): EvenementFeed[] {
   const jours = demande.nbDemiJournees / 2;
   const code = codeBadgeDemande(demande);
   const evenements: EvenementFeed[] = [
     {
       id: `${demande.id}-pose`,
       demandeId: demande.id,
-      date: demande.datePose,
+      date: demande.datePoseTri,
       code,
       texte: (
         <>
@@ -140,23 +141,33 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
     demande.dateDecision &&
     (demande.statut === "validé" || demande.statut === "refusé" || demande.statut === "annulé")
   ) {
+    const parMoi =
+      utilisateurCourantId != null && demande.validateur?.id === utilisateurCourantId;
     const prenom = demande.validateur?.prenom ?? "Le manager";
     const possessif =
       jours === 1 || jours === 0.5
         ? `votre ${nomJournees(jours)}`
         : `vos ${formatJours(jours)} ${nomJournees(jours)}`;
-    // "annulé" ici = régularisation d'un congé déjà validé (retiré par
-    // Delphine après coup, ex. "congé finalement non pris") — `annulerDemande`
-    // (retrait par le salarié lui-même d'une demande encore en attente) n'a
-    // aucun appelant dans l'UI, donc ce cas ne se produit pas en pratique.
+    // "annulé" = régularisation d'un congé déjà validé (par Delphine après
+    // coup, ex. "congé finalement non pris") OU retrait par le salarié
+    // lui-même d'une demande encore en attente/déjà validée ("Annuler cette
+    // demande", `DetailCongePanel.onRetirer` — a bien un appelant dans l'UI
+    // depuis le 28/08/2026, contrairement à ce que disait ce commentaire).
     const verbe =
       demande.statut === "validé" ? "validé" : demande.statut === "refusé" ? "refusé" : "annulé";
     evenements.push({
       id: `${demande.id}-decision`,
       demandeId: demande.id,
-      date: demande.dateDecision,
+      date: demande.dateDecisionTri ?? demande.dateDecision,
       code,
-      texte: (
+      texte: parMoi ? (
+        <>
+          Vous avez{" "}
+          <Stabilo tone={STABILO_PAR_STATUT[demande.statut] ?? "warning"}>{verbe}</Stabilo>{" "}
+          {possessif} de <SemiBold>{code}</SemiBold>{" "}
+          <SemiBold>{periodePhrase(demande, "du")}</SemiBold>
+        </>
+      ) : (
         <>
           {prenom} a{" "}
           <Stabilo tone={STABILO_PAR_STATUT[demande.statut] ?? "warning"}>{verbe}</Stabilo>{" "}
@@ -172,12 +183,13 @@ function evenementsDeDemande(demande: Demande): EvenementFeed[] {
   return evenements;
 }
 
-/** Tri antéchronologique (plus récent en premier) — `date` n'a qu'une
- * granularité jour (`YYYY-MM-DD`), donc "posé" et "décidé" le même jour sont
- * à égalité sur ce seul critère ; un tri stable garderait alors "posé" en
- * premier (ordre d'insertion de `evenementsDeDemande`), alors qu'une décision
- * arrive forcément après la pose dans le temps réel — départage explicite
- * pour que "décidé" passe toujours devant "posé" à date égale. */
+/** Tri antéchronologique (plus récent en premier) — `date` porte désormais
+ * l'horodatage complet (`datePoseTri`/`dateDecisionTri`, 11/09/2026, jamais
+ * affiché, uniquement pour ce tri), donc deux événements du même jour se
+ * départagent déjà correctement dans l'immense majorité des cas. Le
+ * départage explicite "décidé" avant "posé" reste en filet de sécurité pour
+ * les rares demandes dont `created_at`/`date_decision` seraient identiques à
+ * la seconde près (import en masse, ex.). */
 function comparerEvenements(a: EvenementFeed, b: EvenementFeed): number {
   const parDate = b.date.localeCompare(a.date);
   if (parDate !== 0) return parDate;
@@ -202,7 +214,13 @@ function ListeEvenements({ evenements }: { evenements: EvenementFeed[] }) {
               className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(e.code)}`}
             />
             <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <span className="text-ink-500 text-[10px]">Le {formatDateAction(e.date)}</span>
+              {/* `formatDateHeureAction` (11/09/2026, demande explicite —
+              associer heure/minute à la date du feed), pas `formatDateAction`
+              : `e.date` porte maintenant l'horodatage complet
+              (`datePoseTri`/`dateDecisionTri`), que `formatDateAction`
+              casserait en lui ajoutant un second "T00:00:00" (elle suppose
+              une date seule, "YYYY-MM-DD"). */}
+              <span className="text-ink-500 text-[10px]">Le {formatDateHeureAction(e.date)}</span>
               <span
                 className={`text-ink-900 text-xs leading-snug ${e.nonVu ? "font-semibold" : ""}`}
               >
@@ -239,6 +257,7 @@ export function ActiviteRecenteFeed({
   tiroirOuvert: boolean;
   onFermerTiroir: () => void;
 }) {
+  const { utilisateur } = useUtilisateur();
   // Les "posé" de demandes encore en attente et les décisions pas encore vues
   // sont garantis présents (voir `EvenementFeed.enAttente`/`nonVu`) — sinon
   // le compteur de la phrase "Mes demandes" peut annoncer plus de nouveautés
@@ -248,7 +267,9 @@ export function ActiviteRecenteFeed({
   // face à des événements plus récents déjà vus). Réservés en premier
   // (attente, puis non-vu), le reste comblé par les événements les plus
   // récents, avant de re-trier chronologiquement l'ensemble pour l'affichage.
-  const tries = demandes.flatMap(evenementsDeDemande).sort(comparerEvenements);
+  const tries = demandes
+    .flatMap((d) => evenementsDeDemande(d, utilisateur?.id ?? null))
+    .sort(comparerEvenements);
   const enAttente = tries.filter((e) => e.enAttente).slice(0, NB_LIGNES);
   const nonVues = tries
     .filter((e) => !e.enAttente && e.nonVu)

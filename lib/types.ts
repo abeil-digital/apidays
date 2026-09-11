@@ -18,6 +18,14 @@ export interface Demande {
   nbDemiJournees: number; // peut valoir .5 en jours (ex. 3 demi-journées = 1.5 jour)
   datePose: string; // date ISO (YYYY-MM-DD) — date de soumission de la demande
   dateDecision: string | null; // date ISO (YYYY-MM-DD) — date de validation/refus, null si en attente
+  // Timestamps complets (11/09/2026) — mêmes événements que datePose/
+  // dateDecision, mais heure/minute/seconde conservées (jamais affichées,
+  // seulement pour trier précisément un journal quand plusieurs événements
+  // tombent le même jour, ex. `ActiviteRecenteFeed.tsx`) : `datePose`/
+  // `dateDecision` restent tronqués au jour pour tous leurs autres usages
+  // (affichage), pas de risque de régression ailleurs.
+  datePoseTri: string; // timestamptz ISO
+  dateDecisionTri: string | null; // timestamptz ISO
   statut: StatutDemande;
   note: string;
   commentaireManager: string;

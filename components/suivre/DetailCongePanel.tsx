@@ -146,6 +146,16 @@ const LIBELLE_DECISION: Record<StatutDemande, string> = {
   annulé: "Annulé",
 };
 
+// Forme "Vous avez {verbe}" (11/09/2026) — même libellés que
+// `LIBELLE_DECISION` ci-dessus, à la 2e personne plutôt qu'au participe
+// passé seul (qui a besoin de "par {nom}" pour se lire).
+const VERBE_DECISION: Record<StatutDemande, string> = {
+  "en attente": "décidé",
+  validé: "validé",
+  refusé: "refusé",
+  annulé: "annulé",
+};
+
 // Couleur du texte "Validé le"/"Refusé le" — reprend le tone de
 // `STATUT_CONFIG` (success/warning/danger) déjà utilisé par `StatusBadge`.
 const TEXTE_DECISION: Record<StatutDemande, string> = {
@@ -288,6 +298,15 @@ export function DetailCongePanel({
   function estRetraitParSoiMeme(auteurId: string | undefined): boolean {
     return demandeurId != null && auteurId === demandeurId;
   }
+  // Distinct de `estRetraitParSoiMeme` ci-dessus (qui compare à la
+  // DEMANDEUSE de la demande, pas à qui regarde) — celui-ci compare à
+  // l'utilisateur CONNECTÉ (11/09/2026, demande explicite : "Vous avez
+  // annulé" plutôt que "Nom a annulé" quand c'est l'utilisateur qui a
+  // effectué l'action lui-même, dans le feed). S'applique à toute entrée du
+  // feed (décision, transmission, pris en compte), pas seulement au retrait.
+  function estMoi(auteurId: string | undefined | null): boolean {
+    return utilisateurCourant != null && auteurId === utilisateurCourant.id;
+  }
   const retireeParSoiMeme =
     selection.statut === "annulé" &&
     selection.validateur != null &&
@@ -418,16 +437,22 @@ export function DetailCongePanel({
         decision.statut === "annulé" &&
         decision.decidePar != null &&
         estRetraitParSoiMeme(decision.decidePar.id);
+      const decisionMoi = estMoi(decision.decidePar?.id);
+      const verbe = decisionRetireeParSoiMeme ? "retiré" : VERBE_DECISION[decision.statut];
       entreesFeed.push({
         key: `decision-${decision.id}`,
         date: decision.decideLe,
         node: (
           <>
             <span className={`font-semibold ${TEXTE_DECISION[decision.statut]}`}>
-              {decisionRetireeParSoiMeme ? "Retirée" : LIBELLE_DECISION[decision.statut]} le{" "}
-              {formatJjMmAa(decision.decideLe.slice(0, 10))}
+              {decisionMoi
+                ? `Vous avez ${verbe}`
+                : decisionRetireeParSoiMeme
+                  ? "Retirée"
+                  : LIBELLE_DECISION[decision.statut]}{" "}
+              le {formatJjMmAa(decision.decideLe.slice(0, 10))}
             </span>
-            {decision.decidePar && (
+            {!decisionMoi && decision.decidePar && (
               <span className="text-ink-500"> par {decision.decidePar.prenom}</span>
             )}
           </>

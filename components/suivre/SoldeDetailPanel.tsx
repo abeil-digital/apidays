@@ -274,9 +274,19 @@ export function SoldeDetailPanel({
   const libelleDepart = code === "CP" ? "Solde N-1" : "Solde initial";
   const detailOuvert =
     chargementDetail || demandeSelectionnee !== null || ajustementSelectionne !== null;
+  // `refetch()` après succès (11/09/2026, bug signalé — la ligne annulée
+  // restait affichée dans la liste des événements et "Solde actuel" ne se
+  // mettait pas à jour) : contrairement à `soumettreAjustement` (juste
+  // au-dessus), qui rafraîchit déjà `useHistoriqueSolde` après coup, ce
+  // retrait ne le faisait pas — `DetailCongePanel.executer` ne rafraîchit
+  // que SON PROPRE historique de décisions (`rafraichirHistorique`, interne),
+  // pas la liste d'événements de ce panneau-ci.
   const onRetirerDemande =
     onRetirer && demandeSelectionnee
-      ? (commentaire: string) => onRetirer(demandeSelectionnee.id, commentaire)
+      ? async (commentaire: string) => {
+          await onRetirer(demandeSelectionnee.id, commentaire);
+          refetch();
+        }
       : undefined;
 
   async function ouvrirDetail(id: string) {

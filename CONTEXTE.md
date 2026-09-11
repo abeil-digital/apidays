@@ -6090,6 +6090,56 @@ tenant est malgré tout bien créé (`ok: true` + `avertissement`, pas un échec
 de Vincent : tester le vrai envoi d'invitation sur le déploiement Vercel plutôt qu'en local, et
 supprimer ce tenant de test créé en local.
 
+## Test réel du tenant "acme" — corrections trouvées en testant (11/09/2026)
+
+Suite du test de bout en bout sur "acme" (dépôt de congés, transmission paie, annulation) : plusieurs
+correctifs réels trouvés en cours de route.
+
+- **"Annuler cette demande" disponible aussi depuis "Suivre mon solde"** (`DashboardPage.tsx`) —
+  manquait dans ce popin, décision d'origine du 28/08 étant de ne pas dupliquer avec `/historique` ;
+  revue à la demande explicite de Vincent (vue collaborateur, accepte la duplication).
+- **Bug RLS réel : un salarié annulant sa propre demande ne pouvait pas écrire dans
+  `decisions_demande`** — seuls manager/admin avaient une policy INSERT. Le retrait lui-même
+  fonctionnait (`demandes_conges.statut` mis à jour, policy existante), mais le journal détaillé
+  (`DetailCongePanel`) n'affichait jamais "Vous avez annulé"/"Retirée" pour ce cas, faute de ligne
+  journal — échec silencieux (best-effort, voir `deciderDemande`). Nouvelle policy, restreinte au
+  strict nécessaire (`statut = 'annulee'`, sur sa propre demande, décidée par soi-même) :
+  ```sql
+  create policy "decisions_demande: salarié retire sa propre demande"
+    on decisions_demande for insert
+    with check (
+      entreprise_id = my_entreprise_id()
+      and statut = 'annulee'
+      and decide_par = my_utilisateur_id()
+      and exists (
+        select 1 from demandes_conges d
+        where d.id = decisions_demande.demande_id
+        and d.utilisateur_id = my_utilisateur_id()
+      )
+    );
+  ```
+  Cas resté non exercé jusqu'ici : le commentaire d'origine de `ActiviteRecenteFeed.tsx` affirmait
+  encore "le retrait par le salarié lui-même n'a aucun appelant dans l'UI, ce cas ne se produit pas
+  en pratique" — plus vrai depuis le 28/08 (`DetailCongePanel.onRetirer`), corrigé.
+- **"Vous avez X" plutôt que "X par Nom"** quand l'auteur d'une action (décision, transmission, pris
+  en compte) est l'utilisateur qui regarde — `DetailCongePanel.tsx` (feed d'un congé) et
+  `ActiviteRecenteFeed.tsx` ("Activité récente" d'Accueil, cas signalé : "lambda a annulé votre
+  journée de RTT" alors que c'était lambda lui-même qui venait d'annuler).
+- **`SoldeDetailPanel.tsx` ne se rafraîchissait pas après une annulation** — `onRetirer` appelait
+  bien le retrait, mais rien ne redéclenchait `useHistoriqueSolde`'s `refetch()` ensuite (contrairement
+  à `soumettreAjustement`, juste au-dessus, qui le fait déjà) : la ligne annulée restait affichée,
+  "Solde actuel" ne se mettait pas à jour tant que le popin n'était pas rouvert.
+- **Précision de tri du journal** — `Demande` porte maintenant `datePoseTri`/`dateDecisionTri`
+  (timestamptz complet) en plus de `datePose`/`dateDecision` (toujours tronqués au jour, inchangés
+  partout ailleurs) : `ActiviteRecenteFeed.tsx` trie dessus pour départager plusieurs événements du
+  même jour, et affiche désormais l'heure/minute ("Le 11/09/2026 à 14:32", `formatDateHeureAction`)
+  plutôt que la date seule.
+- **Calendrier consolidé compressé avec seulement 3 mois affichés** (`CalendrierGlobal.tsx`) — la
+  grille parente utilisait `xl:grid-cols-[max-content_16rem]`, alors que les mini-calendriers ont des
+  largeurs en pourcentage (`lg:w-[calc((100%-20px)/3)]`) : un pourcentage n'a pas de référence stable
+  à l'intérieur d'une colonne `max-content`. Corrigé en `minmax(0,797px)_16rem`, même gabarit que
+  `TransmissionsPaiePage.tsx`/`VerifierFichesPaiePage2.tsx` ailleurs dans l'app.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
