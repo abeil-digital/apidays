@@ -392,6 +392,10 @@ export interface LigneExportPaie {
   genereParNom: string; // prénom de qui a déclenché "Transmettre" pour cet export
   periodeDebut: string; // date ISO — période de l'export auquel cette ligne appartient
   periodeFin: string;
+  // "Pris en compte" (11/09/2026) — null tant que l'export n'a pas été
+  // validé depuis "Vérifier les fiches de paie" (exports_paie.pris_en_compte).
+  prisEnCompteLe: string | null; // timestamptz ISO
+  prisEnComptePar: string | null; // prénom de qui a cliqué "Valider"
 }
 
 // Une demande à transmettre (onglet "Quels congés transmettre") — `Demande`

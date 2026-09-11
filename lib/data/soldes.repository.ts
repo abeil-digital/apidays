@@ -29,11 +29,16 @@ import { fetchHistoriqueUtilisateur, fetchSoldeInitial } from "@/lib/data/utilis
  * — voir CONTEXTE.md "Refonte du modèle solde théorique/réel") :
  *
  * - **`valeur` ("solde réel")** = capital − ce qui a été **effectivement
- *   transmis en paie** (`export_paie_lignes`, voir `sommeTransmis`), pas le
- *   statut `validee` des demandes. C'est le référentiel de Delphine pour
- *   "Vérifier les fiches de paie" : ce nombre doit correspondre à ce qui est
- *   écrit sur la fiche de paie du comptable. Il retarde naturellement sur la
- *   validation tant qu'un export n'a pas été généré.
+ *   transmis en paie ET confirmé "pris en compte"** (`export_paie_lignes`
+ *   d'un export dont `exports_paie.pris_en_compte = true`, voir
+ *   `sommeTransmis`), pas le statut `validee` des demandes. C'est le
+ *   référentiel de Delphine pour "Vérifier les fiches de paie" : ce nombre
+ *   doit correspondre à ce qui est écrit sur la fiche de paie du comptable.
+ *   Il retarde naturellement sur la validation tant qu'un export n'a pas été
+ *   généré, PUIS tant que cet export n'a pas été confirmé "pris en compte"
+ *   (11/09/2026 — avant cette date, une simple transmission suffisait ;
+ *   resserré pour que le solde réel ne bouge qu'une fois la fiche de paie
+ *   reçue effectivement vérifiée, pas dès l'envoi).
  * - **`valeurApresAttente` ("solde théorique")** = capital − tout ce qui est
  *   validé OU en attente sur la période (même traitement pour les deux,
  *   via `sommeJours`). Répond à "combien il me reste à poser" — c'est le
@@ -476,13 +481,17 @@ async function sommeTransmis(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le)",
+      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le, pris_en_compte)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
     .gte("demandes_conges.date_debut", dateIso(periode.debut))
     .lte("demandes_conges.date_debut", dateIso(periode.fin))
-    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`);
+    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
+    // "Pris en compte" (11/09/2026) — un congé transmis mais pas encore
+    // confirmé conforme à la fiche de paie ne se déduit pas (encore) du
+    // solde réel, voir la doc en tête de fichier.
+    .eq("exports_paie.pris_en_compte", true);
 
   if (isAnticipation !== null) {
     query = query.eq("demandes_conges.is_anticipation", isAnticipation);
@@ -510,7 +519,8 @@ interface LigneTransmise {
  * dates de la demande portée — base des mouvements "réel" de
  * `fetchHistoriqueCp`/`fetchHistoriqueRtt` (27/08/2026, refonte du modèle :
  * le réel est ancré sur la transmission effective, pas sur le statut
- * `validee`). Même filtre sur `exports_paie.genere_le` que `sommeTransmis`.
+ * `validee`). Même filtre sur `exports_paie.genere_le`/`pris_en_compte` que
+ * `sommeTransmis`.
  */
 async function fetchLignesTransmises(
   supabase: SupabaseClient,
@@ -523,13 +533,14 @@ async function fetchLignesTransmises(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation, conge_impose_id), exports_paie!inner(genere_le)",
+      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation, conge_impose_id), exports_paie!inner(genere_le, pris_en_compte)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
     .gte("demandes_conges.date_debut", dateIso(periode.debut))
     .lte("demandes_conges.date_debut", dateIso(periode.fin))
-    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`);
+    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
+    .eq("exports_paie.pris_en_compte", true);
 
   if (isAnticipation !== null) {
     query = query.eq("demandes_conges.is_anticipation", isAnticipation);

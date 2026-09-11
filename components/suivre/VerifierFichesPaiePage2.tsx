@@ -5,6 +5,7 @@ import { Check, Plus, SquareSplitHorizontal } from "lucide-react";
 import {
   fetchCheckFichesPaie,
   fetchComparaisonSoldes,
+  validerExportPaie,
   type CheckFichePaieCollaborateur,
   type ComparaisonSoldeCollaborateur,
 } from "@/lib/data/exportsPaie.repository";
@@ -133,11 +134,13 @@ function CardSoldeCollaborateur({
   periode,
   selection,
   onSelect,
+  prisEnCompte,
 }: {
   c: ComparaisonSoldeCollaborateur;
   periode: { debut: string; fin: string };
   selection: SelectionMouvement | null;
   onSelect: (utilisateurId: string, code: TypeBadgeCode) => void;
+  prisEnCompte: boolean;
 }) {
   const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
   const libelleMoisEnCours = nomMois(periode.debut);
@@ -146,7 +149,7 @@ function CardSoldeCollaborateur({
     <div className="flex w-fit flex-col">
       <div className="text-ink-500 flex w-fit items-stretch text-xs font-semibold tracking-wide uppercase">
         <div className="w-[150px] shrink-0" />
-        <div className="grid flex-1 grid-cols-[4.5rem_75px_75px_75px_90px]">
+        <div className="grid flex-1 grid-cols-[4.5rem_75px_75px_75px_112px]">
           <span className="px-4 py-2" />
           <span className="px-2 py-2 text-center">{libelleMoisPrecedent}</span>
           <span className="px-2 py-2 text-center">{libelleMoisEnCours}</span>
@@ -173,7 +176,7 @@ function CardSoldeCollaborateur({
                 key={code}
                 data-mouvement-row={`${c.utilisateur.id}:${code}`}
                 onClick={() => onSelect(c.utilisateur.id, code)}
-                className={`border-ink-300/60 grid w-full grid-cols-[4.5rem_75px_75px_75px_90px] items-center border-b text-left transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
+                className={`border-ink-300/60 grid w-full grid-cols-[4.5rem_75px_75px_75px_112px] items-center border-b text-left transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
               >
                 <div className={`px-4 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
                   {code}
@@ -198,10 +201,18 @@ function CardSoldeCollaborateur({
                   </span>
                 </div>
                 <div className="px-2 py-2.5 text-center">
-                  <span className="text-status-success-fg inline-flex items-center gap-1 text-sm font-semibold">
-                    <Check size={14} />
-                    ok
-                  </span>
+                  {/* Reflète exports_paie.pris_en_compte (11/09/2026) —
+                  auparavant du JSX en dur ("✓ ok" sur toutes les lignes,
+                  aucune donnée derrière), le bouton "Valider" plus bas
+                  n'ayant jamais eu d'action réelle avant aujourd'hui. */}
+                  {prisEnCompte ? (
+                    <span className="text-status-success-fg inline-flex items-center gap-1 text-sm font-semibold">
+                      <Check size={14} />
+                      Pris en compte
+                    </span>
+                  ) : (
+                    <span className="text-ink-500 text-sm font-semibold">Transmis</span>
+                  )}
                 </div>
               </button>
             );
@@ -581,13 +592,35 @@ function PanelJoursMouvement({
  */
 export function VerifierFichesPaiePage2({
   exportId,
+  prisEnCompte,
+  onValide,
   periode,
 }: {
   exportId: string | null;
+  /** "Pris en compte" (11/09/2026) — posé une fois la fiche de paie reçue
+   * confirmée conforme, via le bouton "Valider" ci-dessous. Devient la
+   * vraie définition du "solde réel" (`soldes.repository.ts`). */
+  prisEnCompte: boolean;
+  /** Rafraîchit l'export côté parent (`TransmissionsPaiePage`) une fois
+   * validé — pour que `prisEnCompte` reflète le nouvel état sans recharger
+   * la page. */
+  onValide: () => void;
   periode: { debut: string; fin: string };
 }) {
   const [collaborateurs, setCollaborateurs] = useState<CheckFichePaieCollaborateur[]>([]);
   const [comparaisons, setComparaisons] = useState<ComparaisonSoldeCollaborateur[]>([]);
+  const [enCoursValidation, setEnCoursValidation] = useState(false);
+
+  async function handleValider() {
+    if (!exportId) return;
+    setEnCoursValidation(true);
+    try {
+      await validerExportPaie(exportId);
+      onValide();
+    } finally {
+      setEnCoursValidation(false);
+    }
+  }
   // `loadingComparaisons` (27/08/2026, "chargement progressif") — distingue
   // "pas encore chargé" de "vraiment aucun collaborateur actif" : sans ça,
   // `comparaisons` démarre à `[]` et affiche un flash "Aucun collaborateur
@@ -704,6 +737,7 @@ export function VerifierFichesPaiePage2({
                         : { utilisateurId, code },
                     )
                   }
+                  prisEnCompte={prisEnCompte}
                 />
               ))}
             </div>
@@ -727,18 +761,26 @@ export function VerifierFichesPaiePage2({
       {/* Bandeau sticky global + CTA "Valider" (27/08/2026, demande
           explicite) — même convention que le bandeau sticky bas de
           `TransmissionsPaiePage`/`CongesPaiePage` (card blanche, ombre vers
-          le haut, bouton plein à droite). Action réelle pas encore tranchée
-          (discussion en pause avec Vincent : "on valide par défaut... on
-          signifie une erreur") — bouton câblé à vide pour l'instant, pure
-          conception d'interface. */}
+          le haut, bouton plein à droite). Action câblée le 11/09/2026 (la
+          discussion "on valide par défaut... on signifie une erreur" reste
+          en pause pour le cas d'écart — voir CONTEXTE.md) : passe
+          `exports_paie.pris_en_compte` à `true` pour tout l'export, devient
+          la vraie définition du "solde réel". Désactivé une fois déjà
+          validé (pas de re-clic sans effet), et tant qu'aucun export
+          n'existe pour cette période. */}
       <div className="bg-surface-card border-ink-300/60 sticky bottom-0 z-10 flex items-center justify-between gap-4 rounded-xl border-t px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
         <span className="text-ink-500 text-sm">
-          {comparaisons.length} collaborateur{comparaisons.length > 1 ? "s" : ""} vérifié
-          {comparaisons.length > 1 ? "s" : ""}
+          {prisEnCompte
+            ? "Pris en compte"
+            : `${comparaisons.length} collaborateur${comparaisons.length > 1 ? "s" : ""} vérifié${comparaisons.length > 1 ? "s" : ""}`}
         </span>
-        <Button className="rounded-full px-5 py-2.5 text-sm">
+        <Button
+          className="rounded-full px-5 py-2.5 text-sm"
+          onClick={handleValider}
+          disabled={!exportId || prisEnCompte || enCoursValidation}
+        >
           <Check size={16} />
-          Valider
+          {enCoursValidation ? "Validation…" : "Valider"}
         </Button>
       </div>
     </div>

@@ -264,12 +264,12 @@ export async function calculerJoursATransmettreMaintenant(
 export async function fetchExportPaie(periode: {
   debut: string;
   fin: string;
-}): Promise<{ id: string; genereLe: string } | null> {
+}): Promise<{ id: string; genereLe: string; prisEnCompte: boolean } | null> {
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("exports_paie")
-    .select("id, genere_le")
+    .select("id, genere_le, pris_en_compte")
     .eq("periode_debut", periode.debut)
     .eq("periode_fin", periode.fin)
     .maybeSingle();
@@ -278,7 +278,34 @@ export async function fetchExportPaie(periode: {
     throw new Error("Impossible de vérifier si cette période a déjà été transmise.");
   }
 
-  return data ? { id: data.id, genereLe: data.genere_le } : null;
+  return data
+    ? { id: data.id, genereLe: data.genere_le, prisEnCompte: data.pris_en_compte }
+    : null;
+}
+
+/**
+ * "Valider" sur "Vérifier les fiches de paie" (11/09/2026) — bouton câblé à
+ * vide depuis le 27/08/2026 ("action réelle pas encore tranchée"). Passe
+ * `exports_paie.pris_en_compte` à `true` pour tout l'export (une seule
+ * action à l'échelle de la période entière, pas ligne par ligne) — devient
+ * la vraie définition du "solde réel" (`soldes.repository.ts`).
+ */
+export async function validerExportPaie(exportId: string): Promise<void> {
+  const supabase = createClient();
+  const auteurId = await getUtilisateurId(supabase);
+
+  const { error } = await supabase
+    .from("exports_paie")
+    .update({
+      pris_en_compte: true,
+      pris_en_compte_le: new Date().toISOString(),
+      pris_en_compte_par: auteurId,
+    })
+    .eq("id", exportId);
+
+  if (error) {
+    throw new Error("Impossible de valider cet export.");
+  }
 }
 
 /**
@@ -458,7 +485,12 @@ export async function fetchCheckFichesPaie(
 
   const { data: exportPaie, error: errorExport } = await supabase
     .from("exports_paie")
-    .select("genere_le, periode_debut, periode_fin, utilisateurs(prenom)")
+    .select(
+      // FK explicites (`!exports_paie_..._fkey`) — deux colonnes référencent
+      // `utilisateurs` (genere_par, pris_en_compte_par, 11/09/2026), un
+      // `utilisateurs(...)` non qualifié devient ambigu (PGRST201).
+      "genere_le, periode_debut, periode_fin, pris_en_compte, pris_en_compte_le, utilisateurs!exports_paie_genere_par_fkey(prenom), pris_en_compte_utilisateur:utilisateurs!exports_paie_pris_en_compte_par_fkey(prenom)",
+    )
     .eq("id", exportId)
     .single();
 
@@ -470,6 +502,11 @@ export async function fetchCheckFichesPaie(
     ? exportPaie.utilisateurs[0]
     : exportPaie.utilisateurs;
   const genereParNom = genereParUtilisateur?.prenom ?? "";
+  const prisEnCompteUtilisateur = Array.isArray(exportPaie.pris_en_compte_utilisateur)
+    ? exportPaie.pris_en_compte_utilisateur[0]
+    : exportPaie.pris_en_compte_utilisateur;
+  const prisEnComptePar = exportPaie.pris_en_compte ? (prisEnCompteUtilisateur?.prenom ?? "") : null;
+  const prisEnCompteLe = exportPaie.pris_en_compte ? exportPaie.pris_en_compte_le : null;
 
   const { data, error } = await supabase
     .from("export_paie_lignes")
@@ -497,6 +534,8 @@ export async function fetchCheckFichesPaie(
       genereParNom,
       periodeDebut: exportPaie.periode_debut,
       periodeFin: exportPaie.periode_fin,
+      prisEnCompteLe,
+      prisEnComptePar,
     };
 
     const existant = parCollaborateur.get(demande.demandeur.id);
@@ -521,7 +560,10 @@ interface ExportPaieAvecAuteur {
   genere_le: string;
   periode_debut: string;
   periode_fin: string;
+  pris_en_compte: boolean;
+  pris_en_compte_le: string | null;
   utilisateurs: { prenom: string } | { prenom: string }[] | null;
+  pris_en_compte_utilisateur: { prenom: string } | { prenom: string }[] | null;
 }
 
 interface LigneTransmissionRow {
@@ -546,7 +588,9 @@ export async function fetchLignesTransmissionParDemande(
   const { data, error } = await supabase
     .from("export_paie_lignes")
     .select(
-      "id, demande_id, jours_inclus, exports_paie(genere_le, periode_debut, periode_fin, utilisateurs(prenom))",
+      // FK explicites (voir `fetchCheckFichesPaie`) — deux colonnes
+      // référencent `utilisateurs` sur `exports_paie`.
+      "id, demande_id, jours_inclus, exports_paie(genere_le, periode_debut, periode_fin, pris_en_compte, pris_en_compte_le, utilisateurs!exports_paie_genere_par_fkey(prenom), pris_en_compte_utilisateur:utilisateurs!exports_paie_pris_en_compte_par_fkey(prenom))",
     )
     .in("demande_id", demandeIds);
 
@@ -561,6 +605,9 @@ export async function fetchLignesTransmissionParDemande(
     const genereParUtilisateur = Array.isArray(exportPaie.utilisateurs)
       ? exportPaie.utilisateurs[0]
       : exportPaie.utilisateurs;
+    const prisEnCompteUtilisateur = Array.isArray(exportPaie.pris_en_compte_utilisateur)
+      ? exportPaie.pris_en_compte_utilisateur[0]
+      : exportPaie.pris_en_compte_utilisateur;
     const ligne: LigneExportPaie = {
       id: row.id,
       demandeId: row.demande_id,
@@ -569,6 +616,8 @@ export async function fetchLignesTransmissionParDemande(
       genereParNom: genereParUtilisateur?.prenom ?? "",
       periodeDebut: exportPaie.periode_debut,
       periodeFin: exportPaie.periode_fin,
+      prisEnCompteLe: exportPaie.pris_en_compte ? exportPaie.pris_en_compte_le : null,
+      prisEnComptePar: exportPaie.pris_en_compte ? (prisEnCompteUtilisateur?.prenom ?? "") : null,
     };
     (parDemande[row.demande_id] ??= []).push(ligne);
   }

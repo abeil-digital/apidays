@@ -62,12 +62,35 @@ const CODE_ACTIF_20: Record<TypeBadgeCode, string> = {
   FERIE: "bg-ferie/20",
 };
 
-function BadgeTransmission({ lignes }: { lignes: LigneExportPaie[] }) {
+// "Pris en compte" une fois TOUTES les lignes confirmées (11/09/2026) — une
+// demande à cheval sur deux exports, l'un validé et l'autre pas encore,
+// reste "Transmis" tant que tout n'est pas confirmé.
+//
+// "À régulariser" (11/09/2026, demande explicite — un congé annulé APRÈS
+// avoir été transmis et pris en compte reste affiché "Pris en compte",
+// trompeur : la fiche de paie déjà émise ne reflète plus la réalité tant
+// que la ligne de correction négative n'est pas partie dans le PROCHAIN
+// export, voir `genererExportPaie`). Priment sur "Pris en compte"/"Transmis"
+// dès que la demande est annulée ET que son solde de transmission net
+// (somme signée de toutes ses lignes) n'est pas encore revenu à 0 — une fois
+// la correction effectivement transmise, `soldeNet` retombe à 0 et l'état
+// redevient neutre (plus rien à régulariser).
+function BadgeTransmission({ statut, lignes }: { statut: StatutDemande; lignes: LigneExportPaie[] }) {
   if (lignes.length === 0) return null;
+  const soldeNet = lignes.reduce((somme, l) => somme + l.joursInclus, 0);
+  if (statut === "annulé" && soldeNet > 0) {
+    return (
+      <Badge tone="danger">
+        <Check size={12} strokeWidth={2.5} />
+        <span>À régulariser</span>
+      </Badge>
+    );
+  }
+  const prisEnCompte = lignes.every((l) => l.prisEnCompteLe);
   return (
-    <Badge tone="warning">
+    <Badge tone={prisEnCompte ? "success" : "warning"}>
       <Check size={12} strokeWidth={2.5} />
-      <span>Transmis</span>
+      <span>{prisEnCompte ? "Pris en compte" : "Transmis"}</span>
     </Badge>
   );
 }
@@ -349,7 +372,10 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         </td>
         {lignesTransmissionParDemande && (
           <td className="w-px px-4 py-3 whitespace-nowrap">
-            <BadgeTransmission lignes={lignesTransmissionParDemande[demande.id] ?? []} />
+            <BadgeTransmission
+              statut={demande.statut}
+              lignes={lignesTransmissionParDemande[demande.id] ?? []}
+            />
           </td>
         )}
       </>

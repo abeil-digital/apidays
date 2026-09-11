@@ -550,7 +550,25 @@ create table exports_paie (
   periode_debut date not null,
   periode_fin date not null,
   genere_le timestamptz not null default now(),
-  genere_par uuid not null references utilisateurs(id)
+  genere_par uuid not null references utilisateurs(id),
+  -- "Pris en compte" (11/09/2026, demande explicite) — posé par l'admin
+  -- depuis "Vérifier les fiches de paie" une fois la fiche de paie reçue
+  -- confirmée conforme à ce qui a été transmis. Devient la vraie définition
+  -- du "solde réel" (voir soldes.repository.ts, sommeTransmis/
+  -- fetchLignesTransmises) : un congé transmis mais pas encore "pris en
+  -- compte" ne se déduit plus du solde réel, seulement une fois confirmé —
+  -- resserre le "référentiel vérifiable avec les fiches de paie" au-delà de
+  -- la simple transmission. Booléen simple, pas un statut à 3 états
+  -- (transmis/en_paye/écart) : ce même statut à 3 états a déjà été retiré le
+  -- 28/08/2026 faute d'usage réel — reste minimal jusqu'à ce que le cas
+  -- "écart" soit discuté avec Delphine.
+  pris_en_compte boolean not null default false,
+  -- Qui/quand a cliqué "Valider" (11/09/2026) — pour afficher "Pris en
+  -- compte en paie le ... par ..." dans le feed d'un congé
+  -- (DetailCongePanel.tsx), même principe que genere_le/genere_par.
+  -- Nullable : `null` tant que pris_en_compte est encore `false`.
+  pris_en_compte_le timestamptz,
+  pris_en_compte_par uuid references utilisateurs(id)
 );
 
 create unique index exports_paie_periode_unique on exports_paie (entreprise_id, periode_debut, periode_fin);

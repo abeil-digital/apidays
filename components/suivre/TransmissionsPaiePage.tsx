@@ -50,8 +50,9 @@ import { useEntreprise } from "@/hooks/useEntreprise";
 // qu'elle portait est remis à plat, pas juste caché. Seule
 // `VerifierFichesPaiePage2` reste, point de départ de la refonte.
 import { VerifierFichesPaiePage2 } from "@/components/suivre/VerifierFichesPaiePage2";
+import { VerifierFichesPaiePage3 } from "@/components/suivre/VerifierFichesPaiePage3";
 
-type Onglet = "transmettre" | "verifier2";
+type Onglet = "transmettre" | "verifier2" | "verifier3";
 
 // Codes de type suivis par le récap (25/08/2026) — mêmes 7 codes que le
 // sélecteur "Poser pour un collaborateur", CPA dérivé de CP + isAnticipation.
@@ -910,7 +911,11 @@ export function TransmissionsPaiePage({
   titre: string;
 }) {
   const [onglet, setOnglet] = useState<Onglet>("transmettre");
-  const [exportPaie, setExportPaie] = useState<{ id: string; genereLe: string } | null>(null);
+  const [exportPaie, setExportPaie] = useState<{
+    id: string;
+    genereLe: string;
+    prisEnCompte: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -929,6 +934,7 @@ export function TransmissionsPaiePage({
   const onglets: { id: Onglet; label: string }[] = [
     { id: "transmettre", label: "Quels congés transmettre" },
     { id: "verifier2", label: "Vérifier les fiches de paie 2" },
+    { id: "verifier3", label: "Vérifier les fiches de paie 3" },
   ];
 
   return (
@@ -985,7 +991,20 @@ export function TransmissionsPaiePage({
         />
       )}
       {onglet === "verifier2" && (
-        <VerifierFichesPaiePage2 exportId={exportPaie?.id ?? null} periode={periode} />
+        <VerifierFichesPaiePage2
+          exportId={exportPaie?.id ?? null}
+          prisEnCompte={exportPaie?.prisEnCompte ?? false}
+          onValide={rafraichirExport}
+          periode={periode}
+        />
+      )}
+      {onglet === "verifier3" && (
+        <VerifierFichesPaiePage3
+          exportId={exportPaie?.id ?? null}
+          prisEnCompte={exportPaie?.prisEnCompte ?? false}
+          onValide={rafraichirExport}
+          periode={periode}
+        />
       )}
     </div>
   );
