@@ -346,35 +346,50 @@ async function resolverCapitalOuvertureCp(
   );
   const report = ctx.regleCP.reportAutorise ? Math.max(0, capitalPrecedent - consommePrecedent) : 0;
 
-  // Transfert CPA — mêmes dates de référence que l'ancien `capitalBase`
-  // (numériquement inchangé), base solde_initial incluse si sa référence
-  // tombe dans la période précédente.
-  const cpaBaseSoldeInitial =
-    ctx.soldeInitial &&
-    ctx.soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
-    ctx.soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
-      ? ctx.soldeInitial.cpa
-      : 0;
+  // Transfert CPA (corrigé le 11/09/2026, invariant CP(bascule) =
+  // CP(veille) + CPA(veille) cassé par l'ancien calcul, voir CONTEXTE.md) —
+  // MÊME formule que la CPA affichée en direct (`resolverPointDepartAccrual`
+  // + `moisEntiersEcoules`, voir `fetchHistoriqueCpa`/`fetchSoldes`), mais
+  // évaluée au dernier jour de la période précédente plutôt qu'à aujourd'hui
+  // : le transfert doit être LITTÉRALEMENT ce que la CPA affichait la veille
+  // de la bascule, pas une reconstruction indépendante ("12 mois à partir du
+  // 1er jour de la NOUVELLE période" + base solde initial en plus) qui
+  // double-comptait dès qu'un solde initial était en jeu (ex. 34j calculés
+  // au lieu des 22j réellement affichés — écart de 14j entre CP(bascule) et
+  // CP(veille)+CPA(veille), trouvé en testant acme). `periodePrecedente` est
+  // garantie close ici (jamais la période en cours, cette branche n'est
+  // atteinte que pour une bascule déjà passée) — sûr d'ancrer l'accrual sur
+  // sa propre fin plutôt que sur `ctx.aujourdhui`.
+  const { debut: debutCpaPrecedent, base: baseCpaPrecedent } = resolverPointDepartAccrual(
+    periodePrecedente,
+    ctx.soldeInitial,
+    "cpa",
+  );
+  const moisEcoulesCpaPrecedent = moisEntiersEcoules(debutCpaPrecedent, periodePrecedente.fin);
   const accrualCpaComplet =
+    baseCpaPrecedent +
     accrualMensuelSomme(
       ctx.regleCP.tauxAcquisitionMensuel,
       ctx.historiqueTaux,
       ctx.tauxActuel,
-      periode.debut,
-      12,
+      debutCpaPrecedent,
+      moisEcoulesCpaPrecedent,
       ctx.moisLimite,
-    ) + cpaBaseSoldeInitial;
+    );
   // `is_anticipation` reste un bucket stable (11/09/2026, annule le
   // comportement du 10/09 — voir CONTEXTE.md) : un CPA consommé reste
-  // décompté du solde CPA jusqu'à ce transfert, pas avant.
+  // décompté du solde CPA jusqu'à ce transfert, pas avant. Fenêtre bornée à
+  // la période précédente (même principe que l'accrual ci-dessus) — un CPA
+  // daté dans la NOUVELLE période consomme par nature sur le PROCHAIN
+  // transfert, pas celui-ci.
   const consommeCpa = await sommeJours(
     supabase,
     utilisateurId,
     "CP",
     ["validee"],
     true,
-    periode,
-    ctx.aujourdhui,
+    { debut: debutCpaPrecedent, fin: periodePrecedente.fin },
+    periodePrecedente.fin,
   );
   const transfertCpa = Math.max(0, accrualCpaComplet - consommeCpa);
 
