@@ -6,6 +6,7 @@ import { ChevronRight, Send } from "lucide-react";
 import { libellePeriode, periodePaieParDefaut, periodesPrecedentes } from "@/lib/periodePaie";
 import { fetchExportsPaie } from "@/lib/data/exportsPaie.repository";
 import { useEntreprise } from "@/hooks/useEntreprise";
+import { getAujourdhui } from "@/lib/aujourdhui";
 
 const NB_ARCHIVES = 12;
 
@@ -65,7 +66,15 @@ export function ListeTransmissionsPaiePage() {
   // les archives avant le démarrage réel du tenant, voir `periodesPrecedentes`.
   // `null`/chargement en cours ⇒ pas de borne, comportement inchangé.
   const { dateDebutUtilisation, loading: loadingEntreprise } = useEntreprise();
-  const moisEnCours = periodePaieParDefaut();
+  // Date simulée (11/09/2026, demande explicite — tester les exports paie
+  // mois par mois jusqu'à la bascule de janvier) : jusqu'ici cet écran
+  // utilisait `new Date()` réelle, jamais la date simulée du bandeau de
+  // test — "mois en cours" restait figé sur le vrai mois du jour, et les
+  // mois "futurs" par rapport à cette vraie date n'apparaissaient jamais,
+  // même en simulant une date plus tardive. `getAujourdhui()` renvoie la
+  // vraie date en prod (`dateSimuleeActive()` désactivée au build), donc
+  // aucun changement de comportement hors dev local.
+  const moisEnCours = periodePaieParDefaut(getAujourdhui());
   const archives = periodesPrecedentes(
     NB_ARCHIVES,
     new Date(`${moisEnCours.debut}T00:00:00`),
