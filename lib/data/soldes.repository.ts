@@ -2047,9 +2047,26 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   };
 
   const [
+    lignesTransmises,
     { data: demandesRowsBrutes, error: erreurDemandes },
     { data: ajustementsRows, error: erreurAjustements },
   ] = await Promise.all([
+    // Réel = transmis ET pris en compte (11/09/2026, corrige un bug réel
+    // trouvé par Vincent sur acme : ce feed n'avait jamais eu de distinction
+    // réel/théorique — `mois` ci-dessous provenait de `demandesRows`, c'est-
+    // à-dire de TOUT ce qui est validé, transmis ou pas. Un CPA validé mais
+    // jamais transmis apparaissait donc à tort comme "passé en paie" dans le
+    // mode "Réel" de la popin "Suivre mon solde" — alors que "Suivre les
+    // soldes" (admin, `fetchSoldes`) affichait le bon chiffre, lui déjà
+    // branché sur `sommeTransmis`/`pris_en_compte`).
+    fetchLignesTransmises(
+      supabase,
+      utilisateurId,
+      typeAbsenceId,
+      true,
+      periodeConsoCpaSansPlafond,
+      aujourdhui,
+    ),
     supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
@@ -2147,15 +2164,23 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     };
   });
 
+  // Réel — construit sur `lignesTransmises` (transmis ET pris en compte),
+  // jamais sur les demandes simplement validées (voir commentaire sur
+  // `lignesTransmises` ci-dessus).
   const mouvementsBruts: MouvementBrut[] = [
     ...accrualsBruts,
-    ...(demandesRows ?? []).map((d): MouvementBrut => ({
-      id: d.id,
+    ...lignesTransmises.map((l): MouvementBrut => ({
+      id: l.id,
+      demandeId: l.demande_id,
       type: "demande",
-      date: d.date_debut,
-      libelle: libelleMouvementCpa(d),
-      jours: -(Number(d.nb_demi_journees) / 2),
-      congeImposeId: d.conge_impose_id,
+      date: l.date_debut,
+      libelle: libelleMouvementCpa({
+        date_debut: l.date_debut,
+        date_fin: l.date_fin,
+        conge_impose_id: l.conge_impose_id,
+      }),
+      jours: -l.jours_inclus,
+      congeImposeId: l.conge_impose_id,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
@@ -2190,7 +2215,39 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     };
   });
 
-  let cumulTheorique = cumul;
+  // Théorique — mêmes accruals, mais TOUTES les demandes validées (transmises
+  // ou pas), même principe que `fetchHistoriqueCp`/`mouvementsBrutsTheorique`.
+  const mouvementsBrutsTheorique: MouvementBrut[] = [
+    ...accrualsBruts,
+    ...(demandesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: libelleMouvementCpa(d),
+      jours: -(Number(d.nb_demi_journees) / 2),
+      congeImposeId: d.conge_impose_id,
+    })),
+    ...(ajustementsRows ?? []).map((a): MouvementBrut => {
+      const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
+      return {
+        id: a.id,
+        type: "ajustement",
+        date: a.created_at.slice(0, 10),
+        libelle: a.motif,
+        jours: Number(a.delta_jours),
+        motif: a.motif,
+        auteurNom: `${auteur?.prenom ?? ""} ${auteur?.nom ?? ""}`.trim(),
+      };
+    }),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  let cumulValidee = baseCpa;
+  const mouvementsTheorique: MouvementSolde[] = mouvementsBrutsTheorique.map((m) => {
+    cumulValidee += m.jours;
+    return { ...m, soldeApres: cumulValidee };
+  });
+
+  let cumulTheorique = cumulValidee;
   const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
     .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
     .map((d) => {
@@ -2215,6 +2272,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     mois: moisListe,
     soldeActuel: cumul,
     enAttente,
+    mouvementsTheorique,
     soldeTheorique: cumulTheorique,
   };
 }
