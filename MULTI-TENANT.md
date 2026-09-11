@@ -34,9 +34,19 @@ create table entreprises (
   logo_url text,               -- logo header (fond navy), null = fallback Abeil
   logo_url_fond_clair text,    -- logo pages /connexion (fond clair), null = fallback Abeil
   logo_url_signe text,         -- petit signe SideNav, null = fallback Abeil
+  date_debut_utilisation date, -- "epoch" du tenant (11/09/2026) — null = tenants créés avant ce champ
   created_at timestamptz not null default now()
 );
 ```
+
+`date_debut_utilisation` : "à partir de quand Apidays fait foi" pour ce tenant — sert de plafond
+pour éviter de reconstituer des données fictives sur une période antérieure au démarrage réel chez
+ce client (Transmissions paie, Calendrier — voir `lib/data/entreprise.repository.ts`/
+`hooks/useEntreprise.ts`, le premier point d'accès **client** à `entreprises`, jusque-là server-only
+via `fetchBrandingCourant`). N'affecte **jamais** l'ancienneté d'un collaborateur, qui reste basée
+uniquement sur sa propre `date_entree`/`anciennete_date_reference`. Câblage dans le moteur de calcul
+des soldes (`soldes.repository.ts`) volontairement différé à la refonte "capital de période" — voir
+CONTEXTE.md et Backlog.md.
 
 ### `entreprise_id` sur les tables métier
 
@@ -312,14 +322,18 @@ fonctionnalité de l'app.
   layout ci-dessus (bandeau "Administration — Apidays", pas de logo ni de couleurs de tenant).
 - `app/admin/page.tsx` : liste en lecture des tenants existants (nom, slug, date de création,
   nombre d'utilisateurs).
-- `app/admin/nouveau/page.tsx` + `app/admin/actions.ts` (`creerTenant`) : formulaire de création —
-  nom, slug, couleurs et logos optionnels (les 3 mêmes champs que `entreprises.logo_url*`),
-  prénom/nom/email du premier admin. Crée `entreprises`, puis `utilisateurs` (`role: admin`,
-  `date_entree` = aujourd'hui, `nature_contrat` laissé `null`, `taux_activite` garde son défaut DB),
-  invite le premier admin par e-mail (voir "E-mails d'invitation brandés par tenant" ci-dessous).
-  **Rollback best-effort** si la création de l'admin échoue après celle de l'entreprise (supprime
-  `utilisateurs` puis `entreprises`, dans cet ordre — contrainte FK) : évite un tenant orphelin sans
-  admin — un échec d'ENVOI de l'e-mail seul ne déclenche PAS ce rollback (voir plus bas).
+- `app/admin/nouveau/page.tsx` + `app/admin/actions.ts` (`creerTenant`) : formulaire de création, en
+  3 cards (Entreprise, Charte, Premier admin — 11/09/2026, conventions alignées sur Paramétrer >
+  Congés & RTT) — nom, slug et **date de début d'utilisation de l'outil** obligatoires ; couleurs et
+  logos optionnels (les 3 mêmes champs que `entreprises.logo_url*`) ; fiche complète du premier
+  admin optionnelle (date d'entrée, nature de contrat, taux d'activité, solde initial CP/RTT/CPA —
+  mêmes défauts qu'une création "Nouvel utilisateur" classique si laissés vides : aujourd'hui/CDI/
+  100 %/aucun solde initial). Crée `entreprises`, puis `utilisateurs` (`role: admin`), puis
+  `soldes_initiaux` si un solde initial a été saisi, invite le premier admin par e-mail (voir
+  "E-mails d'invitation brandés par tenant" ci-dessous). **Rollback best-effort** à chaque étape qui
+  échoue après la création de l'entreprise (supprime dans l'ordre inverse — contrainte FK) : évite un
+  tenant orphelin sans admin — un échec d'ENVOI de l'e-mail seul ne déclenche PAS ce rollback (voir
+  plus bas).
 - Pas d'édition d'un tenant existant depuis `/admin` aujourd'hui (repoussé, pas de besoin identifié
   avec un seul vrai client).
 - **Suppression** (`app/admin/actions.ts`, `supprimerTenant`) : ajoutée après le premier test réel
