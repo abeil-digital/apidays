@@ -6140,6 +6140,36 @@ correctifs réels trouvés en cours de route.
   à l'intérieur d'une colonne `max-content`. Corrigé en `minmax(0,797px)_16rem`, même gabarit que
   `TransmissionsPaiePage.tsx`/`VerifierFichesPaiePage2.tsx` ailleurs dans l'app.
 
+## Cadre de la refonte du moteur de soldes — audit + architecture cible (11/09/2026)
+
+Suite du fil ouvert le 10/09 ("on n'a pas la bonne méthode, on bricole") : Vincent a demandé de poser
+le cadre de la refonte plutôt que de continuer à patcher `soldes.repository.ts` au coup par coup.
+Déclencheur du jour : un CPA posé à cheval sur deux mois (30/10 → 02/11) sur "acme" apparaissait
+compté en CP au lieu de CPA, à cause du correctif du 10/09 ("CPA → CP dès que sa date tombe dans la
+période en cours") — qui n'a de sens que si une vraie bascule a lieu, pas dans une période longue
+(année civile) où rien ne bascule entre octobre et novembre.
+
+**Document complet** : plan Claude Code (audit détaillé des 4 formules divergentes — `fetchSoldes`,
+`fetchHistoriqueCp`, `fetchHistoriqueCpa`, `fetchSoldeAnticipe` — et de leur historique de correctifs
+qui se marchent dessus). Pas encore commité dans le repo (fichier de plan local) — à reprendre en
+session d'implémentation.
+
+**Décisions actées** :
+- Un CPA reste décompté du solde CPA jusqu'à la vraie bascule, jamais reclassé en CP avant — annule
+  le comportement du 10/09/2026.
+- Le bonus d'ancienneté est un jour de CP comme un autre (donné à la date anniversaire) : calculé et
+  ajouté **une seule fois**, au moment où le capital CP d'une période est déterminé — plus jamais
+  dans la formule d'accrual CPA (le hack "dernier jour de la période", ajouté le 10/09 pour faire
+  coïncider deux calculs séparés, disparaît). Reportable par nature, pas d'expiration à la bascule.
+- Architecture retenue : geler un résultat dès qu'un événement admin le confirme, ne plus jamais le
+  recalculer. Deux granularités : bascule de période (CP/CPA, ~1x/an, capital d'ouverture calculé une
+  fois et persisté) et validation mensuelle du réel (déjà le rôle de `exports_paie.pris_en_compte`,
+  livré aujourd'hui — rien de nouveau à construire côté mensuel, juste s'assurer que le calcul du
+  réel lit bien ce gel). Seule la période/le mois **en cours** reste calculé en direct.
+
+**Pas d'implémentation aujourd'hui** — décidé explicitement pour ne pas recoder sous pression. Voir
+Backlog, item "Refonte du moteur de calcul CP/CPA à la bascule de période".
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

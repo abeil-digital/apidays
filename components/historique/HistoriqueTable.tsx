@@ -16,7 +16,6 @@ import {
   LABEL_LONG,
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
-import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -384,11 +383,22 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm md:min-w-[760px]">
+      {/* `table-fixed` + largeurs explicites SUR TOUTES LES COLONNES
+      (11/09/2026, demande explicite — "Transmissions paie"/"Suivre les
+      demandes" empilent/affichent plusieurs instances de ce tableau, et
+      chacune calait ses largeurs de colonnes indépendamment selon SON PROPRE
+      contenu le plus large — colonnes désalignées entre tableaux). Première
+      tentative avec Collaborateur/Type sans largeur fixe s'est révélée
+      cassée (`table-fixed` sans largeur explicite sur TOUTES les colonnes de
+      la 1ère ligne dégénère — chevauchement Type/Collaborateur constaté à
+      l'écran, deux fois) : chaque colonne a maintenant une largeur en dur,
+      budget total proche de l'ancien `md:min-w-[760px]` pour ne pas
+      déclencher de scroll horizontal inutile sur un écran normal. */}
+      <table className="w-full table-fixed text-left text-sm md:min-w-[760px]">
         <thead>
           <tr className="border-slate/30 text-slate bg-mint-tint/50 border-b text-xs font-semibold tracking-wide">
             {props.avecCollaborateur && (
-              <th className="px-4 py-3">
+              <th className="w-[150px] px-4 py-3">
                 <button
                   type="button"
                   onClick={() => handleToggleTri("collaborateur")}
@@ -399,8 +409,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 </button>
               </th>
             )}
-            <th className="px-4 py-3">Type</th>
-            <th className="w-px px-4 py-3 whitespace-nowrap">
+            <th className="w-[70px] px-4 py-3">Type</th>
+            <th className="w-[140px] px-4 py-3 whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => handleToggleTri("dates")}
@@ -410,8 +420,10 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("dates")}
               </button>
             </th>
-            <th className="w-px px-4 py-3 whitespace-nowrap">{libelleColonneDuree ?? "Durée"}</th>
-            <th className="hidden py-3 pr-2 pl-4 md:table-cell">
+            <th className="w-[80px] px-4 py-3 whitespace-nowrap">
+              {libelleColonneDuree ?? "Durée"}
+            </th>
+            <th className="hidden w-[80px] py-3 pr-2 pl-4 md:table-cell">
               <button
                 type="button"
                 onClick={() => handleToggleTri("posele")}
@@ -421,8 +433,10 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("posele")}
               </button>
             </th>
-            {!compact && <th className="hidden py-3 pr-4 pl-2 md:table-cell">Validé le</th>}
-            <th className="w-px px-4 py-3 whitespace-nowrap">
+            {!compact && (
+              <th className="hidden w-[80px] py-3 pr-4 pl-2 md:table-cell">Validé le</th>
+            )}
+            <th className="w-[110px] px-4 py-3 whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => handleToggleTri("statut")}
@@ -433,7 +447,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
               </button>
             </th>
             {lignesTransmissionParDemande && (
-              <th className="w-px px-4 py-3 whitespace-nowrap">Paie</th>
+              <th className="w-[120px] px-4 py-3 whitespace-nowrap">Paie</th>
             )}
           </tr>
         </thead>
@@ -473,13 +487,8 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                           rowSpan={rowSpan}
                           className={`px-4 py-3 align-top transition-colors duration-150 ${classeCollaborateur}`}
                         >
-                          <span className="flex items-center gap-1.5">
-                            <Avatar
-                              initiales={`${demande.demandeur.prenom[0]}${demande.demandeur.nom[0]}`.toUpperCase()}
-                            />
-                            <span className="text-ink-900 font-semibold">
-                              {demande.demandeur.prenom} {demande.demandeur.nom}
-                            </span>
+                          <span className="text-ink-900 font-semibold">
+                            {demande.demandeur.prenom} {demande.demandeur.nom}
                           </span>
                         </td>
                       )}
