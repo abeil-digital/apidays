@@ -166,6 +166,7 @@ export function DashboardPage() {
     loading: loadingDemandes,
     refetch: refetchDemandes,
     marquerVue,
+    retirer,
   } = useDemandes();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
@@ -904,6 +905,17 @@ export function DashboardPage() {
               modeParDefaut="theorique"
               headerSimplifie
               avecDetailConge
+              // "Annuler cette demande" (11/09/2026, demande explicite de
+              // Vincent — accepte la duplication avec /historique, qui
+              // portait jusque-là seul cette action pour l'Accueil
+              // collaborateur, voir `SoldeDetailPanel.tsx`) : signature
+              // `(demandeId, commentaire)`, ce panneau ne connaît pas la
+              // demande ouverte à l'intérieur de `SoldeDetailPanel` (état
+              // interne), contrairement à `DetailCongePanel.onRetirer`.
+              onRetirer={async (demandeId, commentaire) => {
+                await retirer(demandeId, commentaire);
+                await Promise.all([refetchDemandes(), refetchSoldes()]);
+              }}
             />
           </div>
         </div>
