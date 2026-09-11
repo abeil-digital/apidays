@@ -523,7 +523,7 @@ export function SoldeDetailPanel({
                                 ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
                                 : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
                             }`
-                    }`}
+                    } ${m.annule ? "opacity-60" : ""}`}
                   >
                     {m.type === "acquisition" ? (
                       <Plus size={10} className="shrink-0 text-white" />
@@ -532,7 +532,9 @@ export function SoldeDetailPanel({
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
                       />
                     ) : null}
-                    {libelleEvenement(m)}
+                    <span className={m.annule ? "line-through" : undefined}>
+                      {libelleEvenement(m)}
+                    </span>
                   </span>
                 );
                 return [
@@ -572,9 +574,11 @@ export function SoldeDetailPanel({
                     </td>
                     <td
                       className={`px-4 py-3 text-center font-semibold ${
-                        m.jours < 0 || m.type === "acquisition"
-                          ? classeTexteLigne
-                          : "text-status-success-fg"
+                        m.annule
+                          ? "text-ink-500 line-through"
+                          : m.jours < 0 || m.type === "acquisition"
+                            ? classeTexteLigne
+                            : "text-status-success-fg"
                       }`}
                     >
                       {m.jours > 0 ? "+" : ""}

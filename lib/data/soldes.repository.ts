@@ -257,30 +257,151 @@ function resolverPointDepartAccrual(
   return { debut: periode.debut, base: 0, dateAffichage: dateIso(periode.debut) };
 }
 
+
+interface RegleAcquisitionMinimal {
+  tauxAcquisitionMensuel: number;
+  reportAutorise: boolean;
+  periodeDebutMois: number;
+  periodeDebutJour: number;
+}
+
 /**
- * Capital CP total effectif pour la période en cours (21/08/2026, solde
- * initial) — le CP est un capital figé, acquis en une fois pour toute la
- * période (1er juin au 31 mai par ex.), pas recalculé mois par mois (décision
- * Vincent, 21/08/2026). Si un solde initial existe et que la période
- * précédente s'est terminée avant ou à sa date de référence, la valeur CP
- * saisie **remplace entièrement** `capitalBase + reportAutomatique` — pas
- * uniquement le report : la fiche de paie donne un solde total à cette date,
- * pas un simple reliquat auquel il faudrait encore ajouter un nouveau capital
- * calculé par l'app (qui ferait double emploi avec l'historique réel déjà
- * incorporé dans la valeur saisie). Sinon (référence plus ancienne qu'une
- * période déjà entièrement suivie par l'app, ou pas de solde initial) :
- * calcul automatique inchangé.
+ * Capital d'ouverture CP d'une période — source de vérité UNIQUE (11/09/2026,
+ * refonte du moteur de calcul, cadre posé avec Vincent le même jour, voir
+ * CONTEXTE.md/Backlog.md). Remplace les deux calculs indépendants qui
+ * devaient jusque-là coïncider par construction (capital "direct" de la
+ * période en cours d'un côté, accrual CPA de la période précédente de
+ * l'autre, synchronisés à coups de hacks type "dernier jour de la
+ * période") : une seule formule, appelée aussi bien pour la période en
+ * cours que pour toute période antérieure.
+ *
+ * = solde_initial.cp si sa date de référence gouverne cette période
+ * sinon = report de la période précédente (récursif)
+ *      + transfert CPA (accrual complet de CETTE période, tel qu'accumulé
+ *        pendant la précédente — mêmes dates de référence que l'ancien
+ *        `capitalBase`, comportement numériquement inchangé — moins ce qui
+ *        en a déjà été consommé par anticipation)
+ *      + bonus d'ancienneté (évalué au début de CETTE période — un jour de
+ *        CP comme un autre, calculé UNE SEULE FOIS ici, jamais dans
+ *        l'accrual CPA affiché à l'utilisateur, voir plus bas)
+ *
+ * **Mémoïsation** (`soldes_periode`) : toute période dont la fin est déjà
+ * passée voit son résultat figé au premier calcul — plus jamais recalculé
+ * ensuite, y compris si les règles d'acquisition changent après coup (choix
+ * assumé : un changement de règle ne doit pas réécrire rétroactivement un
+ * capital déjà acquis). La période EN COURS (celle qui contient
+ * `ctx.aujourdhui`) n'est jamais figée : elle reste recalculée à chaque
+ * appel, comme avant.
+ *
+ * Récursif sur `periodePrecedente` — en pratique s'arrête presque toujours
+ * après 1 niveau (une période déjà gelée, ou `soldes_initiaux`).
  */
-function resolverCapitalCpTotal(
-  capitalBase: number,
-  periodePrecedente: Periode,
-  soldeInitial: SoldeInitial | null,
-  reportAutomatique: number,
-): number {
-  if (soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference) {
-    return soldeInitial.cp;
+async function resolverCapitalOuvertureCp(
+  supabase: SupabaseClient,
+  utilisateurId: string,
+  periode: Periode,
+  ctx: {
+    regleCP: RegleAcquisitionMinimal;
+    historiqueTaux: EntreeTauxActivite[];
+    tauxActuel: number;
+    moisLimite: string | null;
+    soldeInitial: SoldeInitial | null;
+    reglesAnciennete: RegleAnciennete[];
+    dateReferenceAnciennete: string;
+    aujourdhui: Date;
+  },
+): Promise<number> {
+  const periodePrecedente = decalerPeriode(periode, -1);
+
+  // `soldes_initiaux` gouverne cette période : remplace tout calcul (même
+  // règle que l'ancien `resolverCapitalCpTotal`).
+  if (ctx.soldeInitial && dateIso(periodePrecedente.fin) <= ctx.soldeInitial.dateReference) {
+    return ctx.soldeInitial.cp;
   }
-  return capitalBase + reportAutomatique;
+
+  // Déjà gelée ?
+  const { data: geleeRow } = await supabase
+    .from("soldes_periode")
+    .select("capital_ouverture")
+    .eq("utilisateur_id", utilisateurId)
+    .eq("periode_debut", dateIso(periode.debut))
+    .maybeSingle();
+  if (geleeRow) return Number(geleeRow.capital_ouverture);
+
+  // Report de la période précédente (récursif).
+  const capitalPrecedent = await resolverCapitalOuvertureCp(
+    supabase,
+    utilisateurId,
+    periodePrecedente,
+    ctx,
+  );
+  const consommePrecedent = await sommeJours(
+    supabase,
+    utilisateurId,
+    "CP",
+    ["validee"],
+    false,
+    periodePrecedente,
+    ctx.aujourdhui,
+  );
+  const report = ctx.regleCP.reportAutorise ? Math.max(0, capitalPrecedent - consommePrecedent) : 0;
+
+  // Transfert CPA — mêmes dates de référence que l'ancien `capitalBase`
+  // (numériquement inchangé), base solde_initial incluse si sa référence
+  // tombe dans la période précédente.
+  const cpaBaseSoldeInitial =
+    ctx.soldeInitial &&
+    ctx.soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
+    ctx.soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
+      ? ctx.soldeInitial.cpa
+      : 0;
+  const accrualCpaComplet =
+    accrualMensuelSomme(
+      ctx.regleCP.tauxAcquisitionMensuel,
+      ctx.historiqueTaux,
+      ctx.tauxActuel,
+      periode.debut,
+      12,
+      ctx.moisLimite,
+    ) + cpaBaseSoldeInitial;
+  // `is_anticipation` reste un bucket stable (11/09/2026, annule le
+  // comportement du 10/09 — voir CONTEXTE.md) : un CPA consommé reste
+  // décompté du solde CPA jusqu'à ce transfert, pas avant.
+  const consommeCpa = await sommeJours(
+    supabase,
+    utilisateurId,
+    "CP",
+    ["validee"],
+    true,
+    periode,
+    ctx.aujourdhui,
+  );
+  const transfertCpa = Math.max(0, accrualCpaComplet - consommeCpa);
+
+  const bonus = bonusAnciennete(
+    ctx.reglesAnciennete,
+    ansAnciennete(ctx.dateReferenceAnciennete, periode.debut),
+  );
+
+  const capitalOuverture = report + transfertCpa + bonus;
+
+  // Gel — uniquement si la période est déjà entièrement close (jamais la
+  // période en cours).
+  if (dateIso(periode.fin) < dateIso(ctx.aujourdhui)) {
+    const auteurId = await getUtilisateurIdCourant(supabase).catch(() => null);
+    await supabase.from("soldes_periode").upsert(
+      {
+        utilisateur_id: utilisateurId,
+        periode_debut: dateIso(periode.debut),
+        periode_fin: dateIso(periode.fin),
+        capital_ouverture: capitalOuverture,
+        figee_par: auteurId,
+      },
+      { onConflict: "utilisateur_id,periode_debut", ignoreDuplicates: true },
+    );
+  }
+
+  return capitalOuverture;
 }
 
 /**
@@ -657,10 +778,6 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
 
   const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
-  const bonus = bonusAnciennete(
-    reglesAnciennete,
-    ansAnciennete(dateReferenceAnciennete, aujourdhui),
-  );
 
   let cp: SoldeCategorie = {
     valeur: 0,
@@ -682,97 +799,26 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       regleCP.periodeDebutJour,
     );
     const periodePrecedente = decalerPeriode(periodeEnCours, -1);
-
-    // Base CPA de la période précédente (10/09/2026, correctif "solde
-    // initial CPA qui s'évapore à la bascule") — si un solde initial existe
-    // et que sa date de référence tombe dans la période PRÉCÉDENTE, sa base
-    // `cpa` a financé l'accrual CPA de cette période-là (voir
-    // `resolverPointDepartAccrual`, "cpa") — un capital qui, par
-    // construction, doit devenir exactement le capital CP de LA PÉRIODE QUI
-    // COMMENCE (même principe que "le CPA accumulé sur 12 mois pleins =
-    // le nouveau capital CP", confirmé par Vincent). Sans ce terme, cette
-    // base disparaissait silencieusement à la bascule : elle alimentait bien
-    // l'accrual CPA affiché jusqu'au 31 mai, mais n'avait aucun chemin vers
-    // le capital CP du 1er juin, qui se recalculait à neuf sans en tenir
-    // compte (confirmé par test réel — écart de 6j retrouvé entre les
-    // totaux CP+CPA juste avant/après la bascule, voir CONTEXTE.md).
-    const cpaBasePeriodePrecedente =
-      soldeInitial &&
-      soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
-      soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
-        ? soldeInitial.cpa
-        : 0;
-    const capitalBase =
-      accrualMensuelSomme(
-        regleCP.tauxAcquisitionMensuel,
-        historiqueTaux,
-        tauxActuel,
-        periodeEnCours.debut,
-        12,
-        moisLimite,
-      ) +
-      bonus +
-      cpaBasePeriodePrecedente;
-    // Capital de la période PRÉCÉDENTE (10/09/2026, correctif "bonus
-    // d'ancienneté compté deux fois", étendu au solde initial) — sert de
-    // plafond au report ci-dessous. Doit refléter le capital RÉELLEMENT en
-    // vigueur pendant la période précédente, pas une reformulation : si un
-    // solde initial gouvernait déjà cette période précédente (via
-    // `resolverCapitalCpTotal`, qui remplace alors tout calcul par
-    // `soldeInitial.cp`), le reprendre tel quel plutôt que de le
-    // recalculer par la formule générique — sinon le report s'appuyait sur
-    // un capital fictif au lieu du vrai (même famille de bug que le solde
-    // initial CPA ci-dessus : un nombre réellement en vigueur qu'une
-    // reformulation indépendante ignore). Sinon (pas de solde initial
-    // applicable à la période précédente), calcul automatique inchangé —
-    // bonus d'ancienneté évalué à la propre date de début de la période
-    // précédente, pas à "aujourd'hui" (le CP est un capital figé une fois
-    // pour toute la période, voir `resolverCapitalCpTotal`).
-    const bonusPeriodePrecedente = bonusAnciennete(
+    const ctxCapital = {
+      regleCP,
+      historiqueTaux,
+      tauxActuel,
+      moisLimite,
+      soldeInitial,
       reglesAnciennete,
-      ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
-    );
-    const capitalBasePeriodePrecedente =
-      soldeInitial &&
-      dateIso(decalerPeriode(periodePrecedente, -1).fin) <= soldeInitial.dateReference
-        ? soldeInitial.cp
-        : accrualMensuelSomme(
-            regleCP.tauxAcquisitionMensuel,
-            historiqueTaux,
-            tauxActuel,
-            periodePrecedente.debut,
-            12,
-            moisLimite,
-          ) + bonusPeriodePrecedente;
-    // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
-    // revu) — un CP et un CPA se déduisent tous les deux du MÊME capital dès
-    // que leur date tombe dans la période considérée : `is_anticipation` ne
-    // distingue qu'un moment de saisie (avant que sa propre période ne soit
-    // "en cours"), pas une enveloppe séparée à vie. Dès que la période d'un
-    // CPA devient la période en cours, sa consommation doit compter ici —
-    // exactement comme un CP normal — pour que le rapport comme la
-    // consommation en cours en tiennent compte sans mécanisme séparé (voir le
-    // commentaire du bloc CPA plus bas, qui exclut symétriquement ces mêmes
-    // demandes de son propre suivi une fois "graduées"). Remplace l'ancienne
-    // version qui ne soustrayait le CPA qu'à la bascule SUIVANTE (un an trop
-    // tard) via un paramètre dédié sur `resolverCapitalCpTotal`.
-    const consommePeriodePrecedente = await sommeJours(
+      dateReferenceAnciennete,
+      aujourdhui,
+    };
+
+    // Source de vérité unique (11/09/2026, refonte du moteur — voir
+    // `resolverCapitalOuvertureCp`) : report + transfert CPA + bonus
+    // d'ancienneté, calculés une seule fois et mémoïsés dès qu'une période
+    // est close.
+    const capitalCpTotal = await resolverCapitalOuvertureCp(
       supabase,
       id,
-      "CP",
-      ["validee"],
-      null,
-      periodePrecedente,
-      aujourdhui,
-    );
-    const reportAutomatique = regleCP.reportAutorise
-      ? Math.max(0, capitalBasePeriodePrecedente - consommePeriodePrecedente)
-      : 0;
-    const capitalCpTotal = resolverCapitalCpTotal(
-      capitalBase,
-      periodePrecedente,
-      soldeInitial,
-      reportAutomatique,
+      periodeEnCours,
+      ctxCapital,
     );
     const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
 
@@ -781,7 +827,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       id,
       "CP",
       ["validee"],
-      null,
+      false,
       periodeConsoCp,
       aujourdhui,
     );
@@ -790,7 +836,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       id,
       "CP",
       ["en_attente"],
-      null,
+      false,
       periodeConsoCp,
       aujourdhui,
     );
@@ -799,7 +845,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       supabase,
       id,
       "CP",
-      null,
+      false,
       periodeConsoCp,
       aujourdhui,
     );
@@ -813,40 +859,21 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       conditionAccent: formatDateCourte(periodeEnCours.fin),
     };
 
+    // CPA — préfiguration progressive et honnête de ce que la prochaine
+    // bascule transférera en capital CP (11/09/2026) : jamais de bonus
+    // d'ancienneté ici (calculé une seule fois, dans
+    // `resolverCapitalOuvertureCp`, au moment où le capital CP de la
+    // nouvelle période est déterminé — voir CONTEXTE.md/Backlog.md) et plus
+    // de hack "dernier jour = mois complet", devenu inutile : le transfert
+    // ne dépend plus de faire coïncider ce nombre avec un calcul séparé.
     const { debut: debutCpa, base: baseCpa } = resolverPointDepartAccrual(
       periodeEnCours,
       soldeInitial,
       "cpa",
     );
-    // Dernier jour de la période en cours (10/09/2026, correctif "l'égalité
-    // CP(bascule) = CP(veille) + CPA(veille) ne tenait pas") — les mois
-    // complets écoulés s'arrêtent normalement au dernier mois PLEINEMENT
-    // révolu (le mois en cours, même le 31 mai, ne compte pas tant qu'on n'a
-    // pas atteint le 1er juin). Résultat : la veille de la bascule, l'accrual
-    // CPA sous-estimait toujours d'un mois ce qu'il vaudrait le lendemain
-    // matin, pile au même instant — l'égalité demandée par Vincent ne
-    // pouvait donc jamais tenir exactement. Sur le tout dernier jour de la
-    // période, le mois en cours est traité comme complet (+1, plafonné à
-    // 12) : l'accrual CPA du 31 mai reflète déjà ce qu'il vaudra au 1er
-    // juin, à la seconde près.
-    const dernierJourPeriode = dateIso(aujourdhui) === dateIso(periodeEnCours.fin);
-    const moisEcoulesCpa = Math.min(
-      12,
-      moisEntiersEcoules(debutCpa, aujourdhui) + (dernierJourPeriode ? 1 : 0),
-    );
-    // `+ bonus` UNIQUEMENT le dernier jour (10/09/2026, même correctif —
-    // revu après retour de Vincent : "pourquoi Vincent a un CPA à 1 le
-    // 01/06 ?", à raison) — l'ajouter tous les jours faisait apparaître le
-    // bonus dès le tout premier jour d'un cycle CPA qui vient de démarrer
-    // (0 mois écoulés, rien de réel accumulé), ce qui n'a pas de sens : le
-    // bonus doit seulement anticiper CE QU'IL VAUDRA le lendemain matin, au
-    // moment précis de la bascule — pas apparaître pendant toute l'année
-    // qui suit. Même principe que `moisEcoulesCpa` juste au-dessus : les
-    // deux corrections ne s'activent QUE le dernier jour, l'accrual CPA
-    // reste honnête (progressif, sans bonus) tout le reste du temps.
+    const moisEcoulesCpa = moisEntiersEcoules(debutCpa, aujourdhui);
     const accrualCpa =
       baseCpa +
-      (dernierJourPeriode ? bonus : 0) +
       accrualMensuelSomme(
         regleCP.tauxAcquisitionMensuel,
         historiqueTaux,
@@ -855,22 +882,19 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         moisEcoulesCpa,
         moisLimite,
       );
-    // Consommation CPA comptée STRICTEMENT APRÈS la période en cours, sans
-    // plafond haut (10/09/2026, revu — voir CONTEXTE.md "CPA → CP à la
-    // bascule") : un CPI/une demande anticipée datée au-delà de la période en
-    // cours (ex. un CPI paramétré un an à l'avance) doit rester visible et
-    // décomptée dès sa validation (borne haute déplafonnée,
-    // `decalerPeriode`, 50 ans — en pratique "pas de plafond"). Borne BASSE
-    // repoussée d'un jour après la fin de la période en cours (avant :
-    // `periodeEnCours.debut`) — dès qu'une demande anticipée tombe DANS la
-    // période en cours, elle a "gradué" en CP normal (voir `consommeEnCours`
-    // dans le bloc CP plus haut, qui ne filtre plus `is_anticipation`) : la
-    // compter ICI AUSSI la doublerait. Voir aussi `fetchHistoriqueCpa`, même
-    // fenêtre.
-    const debutCpaFutur = new Date(periodeEnCours.fin.getTime());
-    debutCpaFutur.setUTCDate(debutCpaFutur.getUTCDate() + 1);
+    // `is_anticipation = true` reste un bucket stable (11/09/2026, annule le
+    // comportement du 10/09) — un CPA consommé reste décompté du solde CPA
+    // jusqu'à la vraie bascule, jamais reclassé en CP avant, QUELLE QUE SOIT
+    // SA DATE. Fenêtre alignée sur `debutCpa` (même point de départ que
+    // l'accrual juste au-dessus) plutôt que bornée après la fin de la
+    // période en cours (ancien `debutCpaFutur`, 10/09) : un CPA posé sur une
+    // date qui tombe dans la période en cours (ex. tenant à période
+    // civile) reste un CPA, ne doit pas sortir de cette fenêtre — bug
+    // remonté par Vincent le 11/09 ("et le CPA du 30/10-02/11 ?"), qui
+    // disparaissait purement et simplement du solde CPA une fois retiré à
+    // tort du solde CP.
     const periodeConsoCpaSansPlafond: Periode = {
-      debut: debutCpaFutur,
+      debut: debutCpa,
       fin: decalerPeriode(periodeEnCours, 50).fin,
     };
     const consommeCpa = await sommeJours(
@@ -900,8 +924,6 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       aujourdhui,
     );
     const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
-    // Pas de `Math.max(0, ...)` ici non plus (10/09/2026, même correctif que
-    // RTT juste au-dessus — voir son commentaire pour le détail du bug).
     const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
     const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
 
@@ -1146,10 +1168,6 @@ export async function fetchHistoriqueCp(
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
-  const bonus = bonusAnciennete(
-    reglesAnciennete,
-    ansAnciennete(dateReferenceAnciennete, aujourdhui),
-  );
 
   const periodeEnCours = periodeContenant(
     aujourdhui,
@@ -1157,66 +1175,26 @@ export async function fetchHistoriqueCp(
     regleCP.periodeDebutJour,
   );
   const periodePrecedente = decalerPeriode(periodeEnCours, -1);
-
-  // Base CPA de la période précédente (10/09/2026, correctif "solde initial
-  // CPA qui s'évapore à la bascule") — voir le commentaire détaillé dans
-  // `fetchSoldes`. Même calcul, indispensable pour que "Solde N-1" reste
-  // cohérent avec la carte Accueil.
-  const cpaBasePeriodePrecedente =
-    soldeInitial &&
-    soldeInitial.dateReference >= dateIso(periodePrecedente.debut) &&
-    soldeInitial.dateReference <= dateIso(periodePrecedente.fin)
-      ? soldeInitial.cpa
-      : 0;
-  const capitalBase =
-    accrualMensuelSomme(
-      regleCP.tauxAcquisitionMensuel,
-      historiqueTaux,
-      tauxActuel,
-      periodeEnCours.debut,
-      12,
-      moisLimite,
-    ) +
-    bonus +
-    cpaBasePeriodePrecedente;
-  // Capital de la période PRÉCÉDENTE (10/09/2026, correctif "bonus
-  // d'ancienneté compté deux fois", étendu au solde initial) — voir le
-  // commentaire détaillé dans `fetchSoldes`. Même calcul, indispensable pour
-  // que "Solde N-1" reste cohérent avec la carte Accueil.
-  const bonusPeriodePrecedente = bonusAnciennete(
+  const ctxCapital = {
+    regleCP,
+    historiqueTaux,
+    tauxActuel,
+    moisLimite,
+    soldeInitial,
     reglesAnciennete,
-    ansAnciennete(dateReferenceAnciennete, periodePrecedente.debut),
-  );
-  const capitalBasePeriodePrecedente =
-    soldeInitial && dateIso(decalerPeriode(periodePrecedente, -1).fin) <= soldeInitial.dateReference
-      ? soldeInitial.cp
-      : accrualMensuelSomme(
-          regleCP.tauxAcquisitionMensuel,
-          historiqueTaux,
-          tauxActuel,
-          periodePrecedente.debut,
-          12,
-          moisLimite,
-        ) + bonusPeriodePrecedente;
-  // `isAnticipation: null` (10/09/2026, correctif "CPA → CP à la bascule",
-  // revu) — voir le commentaire détaillé dans `fetchSoldes`.
-  const consommePeriodePrecedente = await sommeJours(
+    dateReferenceAnciennete,
+    aujourdhui,
+  };
+
+  // Source de vérité unique (11/09/2026, refonte du moteur — voir
+  // `resolverCapitalOuvertureCp` dans `fetchSoldes`) : même fonction, même
+  // résultat que la carte Accueil, plus de calcul dupliqué à maintenir en
+  // synchronisation manuelle.
+  const soldeDepart = await resolverCapitalOuvertureCp(
     supabase,
     utilisateurId,
-    "CP",
-    ["validee"],
-    null,
-    periodePrecedente,
-    aujourdhui,
-  );
-  const reportAutomatique = regleCP.reportAutorise
-    ? Math.max(0, capitalBasePeriodePrecedente - consommePeriodePrecedente)
-    : 0;
-  const soldeDepart = resolverCapitalCpTotal(
-    capitalBase,
-    periodePrecedente,
-    soldeInitial,
-    reportAutomatique,
+    periodeEnCours,
+    ctxCapital,
   );
   const soldeDepartDate =
     soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference
@@ -1235,7 +1213,7 @@ export async function fetchHistoriqueCp(
       supabase,
       utilisateurId,
       typeAbsenceId,
-      null,
+      false,
       { debut: periodeConsoCp.debut, fin: periodeEnCours.fin },
       aujourdhui,
     ),
@@ -1247,15 +1225,15 @@ export async function fetchHistoriqueCp(
       .eq("is_anticipation", false)
       .gte("created_at", periodeConsoCp.debut.toISOString())
       .lte("created_at", `${dateIso(periodeEnCours.fin)}T23:59:59.999Z`),
-    // `is_anticipation` non filtré (10/09/2026, correctif "CPA → CP à la
-    // bascule") — un CPA dont la date tombe dans la période en cours doit
-    // apparaître dans ce feed comme un CP normal (voir le commentaire dans
-    // `fetchSoldes`).
+    // `is_anticipation = false` (11/09/2026, annule le comportement du
+    // 10/09) — bucket stable, un CPA reste un CPA jusqu'à la vraie bascule,
+    // n'apparaît plus dans ce feed CP.
     supabase
       .from("demandes_conges")
       .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
       .eq("utilisateur_id", utilisateurId)
       .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
       .gte("date_debut", dateIso(periodeConsoCp.debut))
       .lte("date_debut", dateIso(periodeEnCours.fin)),
   ]);
@@ -1274,6 +1252,13 @@ export async function fetchHistoriqueCp(
   );
   const demandesValideesRows = (demandesRows ?? []).filter(
     (d) => statutsResolus.get(d.id) === "validee",
+  );
+  // Demandes annulées (11/09/2026, "où est passé mon CP annulé ?") — restent
+  // affichées dans le feed théorique, barrées (`annule: true`), plutôt que de
+  // disparaître sans laisser de trace : `jours` porte le montant qu'elles
+  // auraient valu, mais ne contribue jamais à `cumulValidee` (voir plus bas).
+  const demandesAnnuleesRows = (demandesRows ?? []).filter(
+    (d) => statutsResolus.get(d.id) === "annulee",
   );
 
   // Base du solde théorique (27/08/2026) — calculée séparément du "réel"
@@ -1301,6 +1286,7 @@ export async function fetchHistoriqueCp(
     motif?: string;
     auteurNom?: string;
     congeImposeId?: string | null;
+    annule?: boolean;
   }
 
   // "CPI" plutôt que "CP" pour une demande auto-générée par un congé imposé
@@ -1410,6 +1396,18 @@ export async function fetchHistoriqueCp(
       jours: -(Number(d.nb_demi_journees) / 2),
       congeImposeId: d.conge_impose_id,
     })),
+    // Demandes annulées (11/09/2026) — affichées barrées, `jours` porte le
+    // montant qu'elles auraient valu (pour l'affichage), mais n'entre jamais
+    // dans `cumulValidee` (voir la boucle plus bas, qui saute `m.annule`).
+    ...(demandesAnnuleesRows ?? []).map((d): MouvementBrut => ({
+      id: d.id,
+      type: "demande",
+      date: d.date_debut,
+      libelle: libelleMouvementCp(d),
+      jours: -(Number(d.nb_demi_journees) / 2),
+      congeImposeId: d.conge_impose_id,
+      annule: true,
+    })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
       return {
@@ -1426,7 +1424,9 @@ export async function fetchHistoriqueCp(
 
   let cumulValidee = soldeDepart;
   const mouvementsTheorique: MouvementSolde[] = mouvementsBrutsTheorique.map((m) => {
-    cumulValidee += m.jours;
+    // Une demande annulée reste affichée (barrée) mais ne retire plus rien du
+    // solde (11/09/2026) — voir commentaire sur `demandesAnnuleesRows`.
+    if (!m.annule) cumulValidee += m.jours;
     return { ...m, soldeApres: cumulValidee };
   });
 
@@ -1742,16 +1742,21 @@ export async function fetchHistoriqueRtt(
  * au clic sur le solde CPA) — même principe d'accrual mensuel que RTT (pas de
  * capital connu d'avance, `type: "acquisition"` un événement par mois entier
  * écoulé). L'acquisition reste bornée à la période CP **en cours**
- * (`periodeEnCours`, même horloge que `regleCP`) — mais la consommation
- * (`is_anticipation = true`) n'a PLUS de plafond haut depuis le 10/09/2026
- * (`periodeConsoCpaSansPlafond`, même fenêtre que `fetchSoldes`) : un CPA/CPI
- * daté au-delà de la période en cours (ex. paramétré un an à l'avance) reste
- * décompté et visible dès sa validation, plutôt que de rester invisible
- * jusqu'à ce que sa propre période devienne "en cours" (bug réel remonté par
- * Vincent). Historique de cette borne : bornée sur la période suivante à
- * l'origine, corrigée le 08/09/2026 pour la période en cours (la
- * consommation ignorait silencieusement toute demande CPA datée dans la
- * période en cours), puis déplafonnée le 10/09/2026. Les clés de mois du
+ * (`periodeEnCours`, même horloge que `regleCP`) — la consommation
+ * (`is_anticipation = true`) n'a ni plafond haut ni plancher bas
+ * (`periodeConsoCpaSansPlafond`, même fenêtre que `fetchSoldes`, alignée sur
+ * `debutCpa`) : un CPA/CPI reste décompté et visible dès sa validation quelle
+ * que soit sa date — avant, pendant ou après la période en cours — plutôt que
+ * de rester invisible tant que sa propre période n'est pas "en cours", ou (11/
+ * 09/2026) de disparaître purement et simplement parce que sa date tombe dans
+ * la période en cours (bugs réels remontés par Vincent). Historique de cette
+ * borne basse : bornée sur la période suivante à l'origine, corrigée le
+ * 08/09/2026 pour la période en cours (la consommation ignorait
+ * silencieusement toute demande CPA datée dans la période en cours),
+ * déplafonnée en haut le 10/09/2026 mais rebornée après la fin de la période
+ * en cours par erreur — un CPA daté DANS la période en cours redevenait
+ * invisible — corrigé le 11/09/2026 en l'alignant sur `debutCpa`, le même
+ * point de départ que l'accrual CPA lui-même. Les clés de mois du
  * feed sont dérivées des dates réelles des mouvements plutôt que d'un simple
  * parcours calendaire borné à aujourd'hui — un mouvement loin dans le futur
  * obtient donc naturellement sa propre clé de mois, sans changement
@@ -1763,7 +1768,6 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   const [
     { data: utilisateurRow, error: erreurUtilisateur },
     reglesAcquisition,
-    reglesAnciennete,
     historiqueTaux,
     soldeInitial,
   ] = await Promise.all([
@@ -1773,7 +1777,6 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .eq("id", utilisateurId)
       .single(),
     fetchReglesAcquisition(),
-    fetchReglesAnciennete(),
     fetchHistoriqueTauxActivite(utilisateurId),
     fetchSoldeInitial(utilisateurId),
   ]);
@@ -1788,16 +1791,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   }
 
   const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
-  const dateReferenceAnciennete: string =
-    utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
   const aujourdhui = new Date(`${dateIso(getAujourdhui())}T00:00:00Z`);
-  // Bonus d'ancienneté (10/09/2026, correctif "égalité CP(bascule) =
-  // CP(veille) + CPA(veille)") — voir le commentaire détaillé dans
-  // `fetchSoldes`.
-  const bonus = bonusAnciennete(
-    reglesAnciennete,
-    ansAnciennete(dateReferenceAnciennete, aujourdhui),
-  );
   const moisLimite: string | null = utilisateurRow.date_fin_contrat
     ? utilisateurRow.date_fin_contrat.slice(0, 7)
     : null;
@@ -1811,26 +1805,22 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     base: baseCpa,
     dateAffichage: soldeDepartDate,
   } = resolverPointDepartAccrual(periodeEnCours, soldeInitial, "cpa");
-  // Dernier jour de la période + bonus d'ancienneté (10/09/2026, correctif
-  // "égalité CP(bascule) = CP(veille) + CPA(veille)") — voir le commentaire
-  // détaillé dans `fetchSoldes`.
-  const dernierJourPeriode = dateIso(aujourdhui) === dateIso(periodeEnCours.fin);
-  const moisEcoules = Math.min(
-    12,
-    moisEntiersEcoules(debutCpa, aujourdhui) + (dernierJourPeriode ? 1 : 0),
-  );
+  // Accrual progressif honnête, jamais de bonus d'ancienneté ici (11/09/2026
+  // — un jour de CP comme un autre, calculé une seule fois dans
+  // `resolverCapitalOuvertureCp`, au moment où le capital CP de la nouvelle
+  // période est déterminé, voir CONTEXTE.md/Backlog.md). Plus de hack
+  // "dernier jour = mois complet" : ce feed n'a plus besoin de faire
+  // coïncider son total avec un calcul séparé.
+  const moisEcoules = moisEntiersEcoules(debutCpa, aujourdhui);
 
   const typeAbsenceId = await getTypeAbsenceId(supabase, "CP");
 
   // Même fenêtre que `fetchSoldes` (`periodeConsoCpaSansPlafond`, voir son
-  // commentaire) : sans plafond haut, mais bornée STRICTEMENT APRÈS la
-  // période en cours — une fois qu'une demande anticipée tombe dans la
-  // période en cours, elle a "gradué" en CP normal et apparaît dans ce feed
-  // via `fetchHistoriqueCp` à la place.
-  const debutCpaFutur = new Date(periodeEnCours.fin.getTime());
-  debutCpaFutur.setUTCDate(debutCpaFutur.getUTCDate() + 1);
+  // commentaire) : alignée sur `debutCpa`, pas bornée après la fin de la
+  // période en cours — un CPA reste un CPA quelle que soit sa date, il ne
+  // "gradue" plus en CP tant que la vraie bascule n'a pas eu lieu.
   const periodeConsoCpaSansPlafond: Periode = {
-    debut: debutCpaFutur,
+    debut: debutCpa,
     fin: decalerPeriode(periodeEnCours, 50).fin,
   };
 
@@ -1942,12 +1932,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
 
   const cles = [...new Set(mouvementsBruts.map((m) => m.date.slice(0, 7)))].sort();
 
-  // `+ bonus` UNIQUEMENT le dernier jour (10/09/2026, revu — voir le
-  // commentaire détaillé dans `fetchSoldes`) — plié dans le point de départ
-  // plutôt qu'un événement séparé, même convention que `baseCpa` (pas de
-  // ligne dédiée dans ce feed pour l'instant, voir Backlog "template de
-  // détail du Solde N-1").
-  let cumul = baseCpa + (dernierJourPeriode ? bonus : 0);
+  let cumul = baseCpa;
   const moisListe: MoisHistoriqueSolde[] = cles.map((cle) => {
     const mouvementsDuMois: MouvementSolde[] = mouvementsBruts
       .filter((m) => m.date.slice(0, 7) === cle)
@@ -1984,7 +1969,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
-    soldeDepart: baseCpa + (dernierJourPeriode ? bonus : 0),
+    soldeDepart: baseCpa,
     soldeDepartDate,
     mois: moisListe,
     soldeActuel: cumul,

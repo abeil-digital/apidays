@@ -106,6 +106,13 @@ export interface MouvementSolde {
   // l'UI (pill du suivi de solde) d'appliquer le code couleur CPI plutôt que
   // CP, en plus du préfixe déjà présent dans `libelle`.
   congeImposeId?: string | null;
+  // Demande annulée APRÈS avoir été comptée dans le solde théorique
+  // (11/09/2026, "où est passé mon CP annulé ?") — reste affichée (barrée),
+  // `jours` porte le montant qu'elle aurait valu, mais ne contribue plus à
+  // `soldeApres`/au cumul : une demande annulée ne doit plus rien retirer du
+  // solde, mais doit rester visible dans l'historique plutôt que disparaître
+  // sans laisser de trace.
+  annule?: boolean;
 }
 
 export interface MoisHistoriqueSolde {

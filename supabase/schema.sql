@@ -539,6 +539,33 @@ create table soldes_initiaux (
   created_at timestamptz not null default now()
 );
 
+-- Gel du capital d'ouverture CP d'une période (11/09/2026, refonte du
+-- moteur de calcul) — une fois une période CP entièrement passée, son
+-- capital d'ouverture (report + transfert CPA + bonus d'ancienneté, voir
+-- soldes.repository.ts) est calculé UNE FOIS et persisté ici, jamais
+-- recalculé ensuite : élimine la classe de bug "plusieurs formules
+-- indépendantes doivent retomber sur le même chiffre" qui a causé une
+-- cascade de correctifs ponctuels début septembre (voir CONTEXTE.md/
+-- Backlog.md). Seule la période EN COURS reste calculée en direct (jamais
+-- de ligne ici pour elle) — CP est un capital fixé dès le 1er jour d'une
+-- période, donc rien n'empêche de le figer dès que sa période prédécesseur
+-- est terminée. Upsert idempotent (ON CONFLICT DO NOTHING côté appli) :
+-- le calcul est déterministe à partir des mêmes règles, une éventuelle
+-- écriture concurrente produit la même valeur.
+create table soldes_periode (
+  id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
+  utilisateur_id uuid not null references utilisateurs(id) on delete cascade,
+  periode_debut date not null,
+  periode_fin date not null,
+  capital_ouverture numeric not null,
+  figee_le timestamptz not null default now(),
+  figee_par uuid references utilisateurs(id)
+);
+
+create unique index soldes_periode_utilisateur_periode_unique
+  on soldes_periode (utilisateur_id, periode_debut);
+
 -- Transmission paie (24/08/2026) — un enregistrement par clic sur
 -- "Transmettre" (Suivre > Clôture paie). Une seule transmission par
 -- entreprise et par période (`exports_paie_periode_unique`) : évite un
@@ -636,6 +663,7 @@ alter table regles_acquisition enable row level security;
 alter table ajustements_solde enable row level security;
 alter table historique_utilisateur enable row level security;
 alter table soldes_initiaux enable row level security;
+alter table soldes_periode enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table parametrage_notifications enable row level security;
 alter table regles_anciennete enable row level security;
@@ -1130,6 +1158,30 @@ create policy "soldes_initiaux: admin gère tout"
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
 -- ------------------------------------------------------------
+-- POLICIES — soldes_periode (gel du capital d'ouverture CP)
+-- ------------------------------------------------------------
+create policy "soldes_periode: lecture manager, admin ou soi-même"
+  on soldes_periode for select
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() in ('manager', 'admin') or utilisateur_id = my_utilisateur_id())
+  );
+
+-- Écriture ouverte à tout utilisateur authentifié (pas juste manager/admin) :
+-- le gel se déclenche paresseusement au premier calcul de solde rencontré
+-- (le sien ou celui d'un collaborateur consulté par un manager/admin),
+-- jamais une saisie manuelle — restreint aux seules périodes déjà closes
+-- (`periode_fin < aujourd'hui`), jamais la période en cours.
+create policy "soldes_periode: gel paresseux d'une période close"
+  on soldes_periode for insert
+  with check (entreprise_id = my_entreprise_id() and periode_fin < current_date);
+
+create policy "soldes_periode: admin gère tout"
+  on soldes_periode for all
+  using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+
+-- ------------------------------------------------------------
 -- POLICIES — exports_paie / export_paie_lignes (Suivre > Clôture paie)
 -- ------------------------------------------------------------
 create policy "exports_paie: manager et admin lisent tout"
@@ -1220,6 +1272,7 @@ grant select, insert, update, delete on
   ajustements_solde,
   historique_utilisateur,
   soldes_initiaux,
+  soldes_periode,
   exports_paie,
   export_paie_lignes,
   faqs,
