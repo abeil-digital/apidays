@@ -36,10 +36,15 @@ export function finDePeriode(debut: string): string {
 /** Les `n` périodes précédant celle en cours (la plus récente d'abord),
  * pour la liste d'archives de `/suivre/transmissions-paie` — chacune calculée en
  * décalant la date de référence d'`periodePaieParDefaut` d'un mois de plus à
- * chaque itération. */
+ * chaque itération. `borneBasse` (ISO, 11/09/2026, plafond "date de début
+ * d'utilisation de l'outil") tronque la liste plutôt que de continuer à
+ * générer des mois antérieurs au démarrage réel du tenant — `undefined`
+ * (tenant créé avant ce champ) ⇒ comportement inchangé, toujours `n`
+ * périodes. */
 export function periodesPrecedentes(
   n: number,
   reference: Date = new Date(),
+  borneBasse?: string,
 ): { debut: string; fin: string }[] {
   const courante = periodePaieParDefaut(reference);
   const periodes: { debut: string; fin: string }[] = [];
@@ -47,7 +52,9 @@ export function periodesPrecedentes(
 
   for (let i = 0; i < n; i++) {
     debutCourant = new Date(debutCourant.getFullYear(), debutCourant.getMonth() - 1, 1);
-    periodes.push({ debut: toIso(debutCourant), fin: finDePeriode(toIso(debutCourant)) });
+    const debut = toIso(debutCourant);
+    if (borneBasse && debut < borneBasse) break;
+    periodes.push({ debut, fin: finDePeriode(debut) });
   }
 
   return periodes;

@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/demandes.repository";
 import { fetchSoldes } from "@/lib/data/soldes.repository";
 import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
+import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
 
 /**
  * Repository "Transmissions paie" — transmission des congés vers la comptable
@@ -367,6 +368,16 @@ export async function genererExportPaie(periode: {
 }): Promise<{ exportId: string; nbLignes: number }> {
   const supabase = createClient();
   const utilisateurId = await getUtilisateurId(supabase);
+
+  // Garde-fou serveur, en plus de la borne `min` posée côté UI
+  // (`TransmissionsPaiePage.tsx`) — plafond "date de début d'utilisation de
+  // l'outil" (11/09/2026) : pas de transmission pour une période antérieure
+  // au démarrage réel du tenant. `null` (tenant créé avant ce champ) ⇒ pas
+  // de borne, comportement inchangé.
+  const { dateDebutUtilisation } = await fetchEntrepriseCourante();
+  if (dateDebutUtilisation && periode.debut < dateDebutUtilisation) {
+    throw new Error("Cette période est antérieure à la date de début d'utilisation de l'outil.");
+  }
 
   const { data: exportPaie, error: errorExport } = await supabase
     .from("exports_paie")

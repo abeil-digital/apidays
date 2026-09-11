@@ -36,6 +36,7 @@ import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
 import { TableauAjustements } from "@/components/suivre/TableauAjustements";
 import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
+import { useEntreprise } from "@/hooks/useEntreprise";
 // "Poser pour un collaborateur" mise en suspens (28/08/2026, "simplifier la
 // partie admin") — créait une demande déjà `validee` directement, plus
 // cohérent avec le pouvoir de validation qu'admin vient de perdre sur
@@ -359,6 +360,11 @@ function QuelsCongesTransmettre({
   const estTransmis = Boolean(exportPaie);
   const [debut, setDebut] = useState(periode.debut);
   const [fin, setFin] = useState(periode.fin);
+  // Plafond "date de début d'utilisation de l'outil" (11/09/2026) — les
+  // champs Du/Au ne doivent pas permettre de transmettre une période
+  // antérieure au démarrage réel du tenant. `null` (tenant créé avant ce
+  // champ) ⇒ pas de borne, comportement inchangé.
+  const { dateDebutUtilisation } = useEntreprise();
 
   // Contenu figé de l'export réel une fois transmis (28/08/2026, bug
   // signalé — "j'ai plus aucune donnée dans le tableau après la valid") :
@@ -611,6 +617,7 @@ function QuelsCongesTransmettre({
                   value={debut}
                   onChange={(e) => setDebut(e.target.value)}
                   disabled={estTransmis}
+                  min={dateDebutUtilisation ?? undefined}
                 />
                 <InputFiltrePill
                   type="date"
@@ -618,6 +625,7 @@ function QuelsCongesTransmettre({
                   value={fin}
                   onChange={(e) => setFin(e.target.value)}
                   disabled={estTransmis}
+                  min={dateDebutUtilisation ?? undefined}
                 />
               </div>
             </div>

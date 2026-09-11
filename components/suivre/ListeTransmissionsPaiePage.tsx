@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronRight, Send } from "lucide-react";
 import { libellePeriode, periodePaieParDefaut, periodesPrecedentes } from "@/lib/periodePaie";
 import { fetchExportsPaie } from "@/lib/data/exportsPaie.repository";
+import { useEntreprise } from "@/hooks/useEntreprise";
 
 const NB_ARCHIVES = 12;
 
@@ -60,13 +61,22 @@ function LignePeriode({
  * affichées, plutôt qu'un fetch par ligne.
  */
 export function ListeTransmissionsPaiePage() {
+  // Plafond "date de début d'utilisation de l'outil" (11/09/2026) — tronque
+  // les archives avant le démarrage réel du tenant, voir `periodesPrecedentes`.
+  // `null`/chargement en cours ⇒ pas de borne, comportement inchangé.
+  const { dateDebutUtilisation, loading: loadingEntreprise } = useEntreprise();
   const moisEnCours = periodePaieParDefaut();
-  const archives = periodesPrecedentes(NB_ARCHIVES, new Date(`${moisEnCours.debut}T00:00:00`));
+  const archives = periodesPrecedentes(
+    NB_ARCHIVES,
+    new Date(`${moisEnCours.debut}T00:00:00`),
+    dateDebutUtilisation ?? undefined,
+  );
   const [exportsParPeriode, setExportsParPeriode] = useState<
     Record<string, { id: string; genereLe: string }>
   >({});
 
   useEffect(() => {
+    if (loadingEntreprise) return;
     let cancelled = false;
     fetchExportsPaie([moisEnCours, ...archives]).then((data) => {
       if (!cancelled) setExportsParPeriode(data);
@@ -74,8 +84,8 @@ export function ListeTransmissionsPaiePage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- périodes dérivées de la date du jour, stables pour la durée de vie du composant
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- périodes dérivées de la date du jour + dateDebutUtilisation, stables une fois l'entreprise chargée
+  }, [loadingEntreprise]);
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">

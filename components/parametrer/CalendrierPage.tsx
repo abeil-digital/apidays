@@ -20,6 +20,7 @@ import { TypeBadge } from "@/components/demandes/TypeBadge";
 import { demiCouvertePeriode } from "@/components/demandes/DetailPeriodeConges";
 import { ModalPoserJourImpose, type Mode } from "@/components/parametrer/ModalPoserJourImpose";
 import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
+import { useEntreprise } from "@/hooks/useEntreprise";
 
 const LABEL_TAG_DEMI_JOURNEE: Record<DemiJournee, string> = {
   matin: "Matin",
@@ -1108,6 +1109,15 @@ function VueCalendrierGrille({
  */
 export function Calendrier2Page() {
   const anneeEnCours = getAujourdhui().getFullYear();
+  // Plafond "date de début d'utilisation de l'outil" (11/09/2026) — une
+  // année archivée avant le démarrage réel du tenant n'a pas de sens à
+  // afficher, même si elle a par ailleurs un `parametrage_periode` réel en
+  // base. `null` (tenant créé avant ce champ) ⇒ pas de borne, comportement
+  // inchangé (floor à 4 ans fixe).
+  const { dateDebutUtilisation } = useEntreprise();
+  const anneeMinArchive = dateDebutUtilisation
+    ? Math.max(anneeEnCours - 4, new Date(dateDebutUtilisation).getFullYear())
+    : anneeEnCours - 4;
   const [annee, setAnnee] = useState(anneeEnCours);
   const [anneesParametrage, setAnneesParametrage] = useState<
     { annee: number; valideLe: string | null }[]
@@ -1134,7 +1144,7 @@ export function Calendrier2Page() {
   const anneeMaxAffichable = Math.max(anneeEnCours + 1, derniereAnneePubliee + 1);
   const anneesArchivees = anneesParametrage
     .map((a) => a.annee)
-    .filter((a) => a >= anneeEnCours - 4 && a < anneeEnCours)
+    .filter((a) => a >= anneeMinArchive && a < anneeEnCours)
     .sort((a, b) => a - b);
   const anneesAVenir: number[] = [];
   for (let a = anneeEnCours + 1; a <= anneeMaxAffichable; a++) anneesAVenir.push(a);

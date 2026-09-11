@@ -5,10 +5,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/siteUrl";
 import { todayISO } from "@/lib/format";
 import { envoyerInvitation } from "@/lib/resend/invitation";
+import type { NatureContrat } from "@/lib/types";
 
 export interface CreerTenantInput {
   nom: string;
   slug: string;
+  /** "À partir de quand Apidays fait foi" pour ce tenant (11/09/2026,
+   * Backlog #73) — obligatoire à la création (pour les tenants existants,
+   * créés avant ce champ, `null` en base). Voir `supabase/schema.sql`. */
+  dateDebutUtilisation: string;
   couleurNavy?: string;
   couleurJaune?: string;
   logoUrl?: string;
@@ -17,6 +22,20 @@ export interface CreerTenantInput {
   prenomAdmin: string;
   nomAdmin: string;
   emailAdmin: string;
+  /** Fiche complète de l'admin, optionnelle (11/09/2026, demande explicite —
+   * éviter de devoir ressaisir la fiche après coup) : défauts inchangés
+   * (aujourd'hui/CDI/100%) si non fournis. Pas de date de référence
+   * ancienneté ici — retirée de la fiche "Nouvel utilisateur" classique
+   * depuis le 02/09/2026 ("pas un besoin Abeil actuellement"), même
+   * principe ici. */
+  dateEntreeAdmin?: string;
+  natureContratAdmin?: NatureContrat;
+  tauxActiviteAdmin?: number;
+  /** Solde initial (facultatif) de l'admin — même mécanisme que la fiche
+   * "Nouvel utilisateur" classique (`soldes_initiaux`, report de la
+   * dernière fiche de paie). Les 4 champs vont ensemble : `dateReference`
+   * vide ⇒ aucun solde initial créé, comportement inchangé. */
+  soldeInitialAdmin?: { dateReference: string; cp: number; rtt: number; cpa: number };
 }
 
 export interface CreerTenantState {
@@ -72,11 +91,12 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
 
   const nom = input.nom.trim();
   const slug = input.slug.trim().toLowerCase();
+  const dateDebutUtilisation = input.dateDebutUtilisation.trim();
   const prenomAdmin = input.prenomAdmin.trim();
   const nomAdmin = input.nomAdmin.trim();
   const emailAdmin = input.emailAdmin.trim();
 
-  if (!nom || !slug || !prenomAdmin || !nomAdmin || !emailAdmin) {
+  if (!nom || !slug || !dateDebutUtilisation || !prenomAdmin || !nomAdmin || !emailAdmin) {
     return { ok: false, erreur: "champs_manquants" };
   }
   if (!REGEX_SLUG.test(slug)) {
@@ -88,7 +108,11 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
 
   const admin = createAdminClient();
 
-  const entrepriseInsert: Record<string, string> = { nom, slug };
+  const entrepriseInsert: Record<string, string> = {
+    nom,
+    slug,
+    date_debut_utilisation: dateDebutUtilisation,
+  };
   if (input.couleurNavy) entrepriseInsert.couleur_navy = input.couleurNavy;
   if (input.couleurJaune) entrepriseInsert.couleur_yellow = input.couleurJaune;
   if (input.logoUrl) entrepriseInsert.logo_url = input.logoUrl;
@@ -136,11 +160,11 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
       nom: nomAdmin,
       email: emailAdmin,
       role: "admin",
-      date_entree: todayISO(),
+      date_entree: input.dateEntreeAdmin || todayISO(),
       // "Non précisé" à l'écran sinon (09/09/2026, remarque de Vincent en
-      // testant) — CDI est le défaut logique pour le premier admin d'une
-      // entreprise, pas de champ à ajouter au formulaire pour ça.
-      nature_contrat: "cdi",
+      // testant) — CDI reste le défaut si le champ n'est pas renseigné.
+      nature_contrat: input.natureContratAdmin || "cdi",
+      taux_activite: input.tauxActiviteAdmin ?? 100,
       statut: "actif",
     })
     .select("id")
@@ -153,6 +177,23 @@ export async function creerTenant(input: CreerTenantInput): Promise<CreerTenantS
       return { ok: false, erreur: "email_deja_utilise" };
     }
     return { ok: false, erreur: "creation_admin_echouee" };
+  }
+
+  if (input.soldeInitialAdmin) {
+    const { error: erreurSoldeInitial } = await admin.from("soldes_initiaux").insert({
+      entreprise_id: entreprise.id,
+      utilisateur_id: utilisateur.id,
+      date_reference: input.soldeInitialAdmin.dateReference,
+      cp: input.soldeInitialAdmin.cp,
+      rtt: input.soldeInitialAdmin.rtt,
+      cpa: input.soldeInitialAdmin.cpa,
+    });
+    if (erreurSoldeInitial) {
+      await admin.from("utilisateurs").delete().eq("id", utilisateur.id);
+      await supprimerLignesSingleton(admin, entreprise.id);
+      await admin.from("entreprises").delete().eq("id", entreprise.id);
+      return { ok: false, erreur: "creation_admin_echouee" };
+    }
   }
 
   const redirectTo = `${await getSiteUrl()}/connexion/confirmer/invite`;

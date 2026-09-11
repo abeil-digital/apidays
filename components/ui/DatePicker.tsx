@@ -63,6 +63,12 @@ interface DatePickerProps {
    * chaque jour au-delà était déjà grisé, seul l'utilisateur s'en rendait
    * compte en avançant). */
   moisMax?: string;
+  /** Mois ISO (aaaa-mm-jj, jour ignoré) en-deçà duquel la navigation est
+   * bloquée — opt-in, défaut inchangé (navigation libre). Miroir de
+   * `moisMax`/`endMonth` (11/09/2026, plafond "date de début d'utilisation
+   * de l'outil" — évite de pouvoir naviguer/sélectionner une date
+   * antérieure au démarrage réel du tenant dans Apidays). */
+  moisMin?: string;
 }
 
 function isoVersDate(iso: string | undefined): Date | undefined {
@@ -101,6 +107,7 @@ export function DatePicker({
   dateMarquee,
   moisInitial,
   moisMax,
+  moisMin,
 }: DatePickerProps) {
   const [ouvert, setOuvert] = useState(false);
   const [texte, setTexte] = useState(value ? formatAffichage(value) : "");
@@ -212,6 +219,7 @@ export function DatePicker({
               selected={isoVersDate(value)}
               defaultMonth={isoVersDate(moisInitial ?? value)}
               endMonth={isoVersDate(moisMax)}
+              startMonth={isoVersDate(moisMin)}
               onSelect={(date) => {
                 if (date) onChange(dateVersIso(date));
                 setOuvert(false);

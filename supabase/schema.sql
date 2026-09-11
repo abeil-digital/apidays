@@ -64,6 +64,19 @@ create table entreprises (
   logo_url text,
   logo_url_fond_clair text,
   logo_url_signe text,
+  -- Date de début d'utilisation de l'outil (11/09/2026, Backlog #73) —
+  -- "à partir de quand Apidays fait foi" pour ce tenant. Nullable : `null`
+  -- pour les tenants existants (Abeil...), créés avant ce champ, dont le
+  -- comportement doit rester inchangé (pas de plafond appliqué). Saisie
+  -- désormais obligatoire à la création d'un nouveau tenant
+  -- (`app/admin/nouveau`). N'affecte PAS le calcul de l'ancienneté d'un
+  -- collaborateur (`anciennete_date_reference`/`date_entree` restent la
+  -- seule source) — seulement, à terme, le calcul du report CP/CPA d'une
+  -- période antérieure à cette date sans solde initial saisi (voir Backlog,
+  -- "empêcher le calcul rétroactif avant le début d'utilisation de
+  -- l'outil" : décision prise, mise en œuvre dans le moteur de soldes
+  -- différée à la refonte "capital de période", pas encore câblée).
+  date_debut_utilisation date,
   created_at timestamptz not null default now()
 );
 

@@ -6010,6 +6010,86 @@ avec ses demandes et son journal de décisions. `test3` a désormais 0 CPI. Cons
 les montants CP/CPA de test (visible dans la section ci-dessus) : +5j de CP pour les deux
 collaborateurs (le CPI consommait 5j chacun), pas un effet du fix du jour.
 
+## Fiche admin étendue et "date de début d'utilisation de l'outil" (11/09/2026)
+
+Formulaire `/admin/nouveau` (`app/admin/nouveau/page.tsx`/`app/admin/actions.ts`) étendu à la
+demande de Vincent, pour éviter de devoir ressaisir des informations après coup à chaque nouveau
+tenant de test :
+
+- **Fiche complète du premier admin** (optionnelle) : date d'entrée, nature de contrat, taux
+  d'activité, solde initial (CP/RTT/CPA, `soldes_initiaux`) — mêmes défauts qu'avant si vides
+  (aujourd'hui/CDI/100 %/aucun solde initial). Pas de date de référence ancienneté : retirée de la
+  fiche "Nouvel utilisateur" classique depuis le 02/09/2026, même principe repris ici. Le champ
+  "Solde initial" est normalisé au 1er du mois (`type="month"` → `-01`), comme la fiche classique —
+  `date_reference` fait toujours référence à un début de mois dans le moteur de soldes, jamais un
+  jour arbitraire.
+- **"Date de début d'utilisation de l'outil"**, nouveau champ obligatoire au niveau du tenant
+  (`entreprises.date_debut_utilisation`, colonne nullable — `null` pour les tenants existants).
+  Répond au point resté ouvert du Backlog #73 ("test3" créé sans rien signaler à l'admin). Objectif
+  de Vincent : "éviter que Apidays calcule depuis Mathusalem des trucs" — empêcher qu'une période
+  CP/CPA/RTT entièrement antérieure au vrai démarrage chez ce client soit reconstituée à partir des
+  règles actuelles quand aucun solde initial n'a été saisi. **Explicitement découplé de
+  l'ancienneté** : `bonusAnciennete`/`ansAnciennete` continuent de se baser uniquement sur
+  `date_entree`/`anciennete_date_reference` du collaborateur, jamais sur cette date de tenant.
+  Décision prise sur le comportement voulu (avertir/bloquer plutôt que fabriquer un chiffre, y
+  compris un 0 par défaut) mais **pas encore implémentée dans le moteur** — toucherait aux 4
+  formules dupliquées (`fetchSoldes`/`fetchHistoriqueCp`/`fetchHistoriqueCpa`/`fetchSoldeAnticipe`),
+  volontairement différée à la refonte "capital de période" déjà actée (voir Backlog, priorité
+  Haute). Détail complet dans le Backlog, item "Définir le parcours de création/configuration d'un
+  nouveau tenant".
+
+**SQL à exécuter par Vincent** (pas de migration automatisée, pattern habituel — voir la section
+multi-tenant plus haut) :
+
+```sql
+alter table entreprises add column date_debut_utilisation date;
+```
+
+## "Date de début d'utilisation de l'outil" — portée élargie et Phase 1 (11/09/2026)
+
+Vincent a reformulé la portée du champ ajouté ci-dessus : ce n'est pas qu'une histoire de calcul de
+solde, c'est **l'epoch du tenant** — le point zéro à partir duquel Apidays fait foi pour ce client.
+Trois surfaces concernées : le calcul des soldes (déjà identifié), **Transmissions paie**
+(l'historique des exports ne devrait pas remonter avant cette date) et **Calendrier** (la
+navigation ne devrait pas non plus). Impact évalué en plan (`EnterPlanMode`, validé par Vincent) et
+scindé en deux phases, comme "capital de période".
+
+**Phase 1 implémentée aujourd'hui** (mécanique, aucun calcul de solde touché) :
+
+- `lib/data/entreprise.repository.ts` (nouveau) + `hooks/useEntreprise.ts` (nouveau) : premier
+  point d'accès **client** aux données `entreprises` (jusqu'ici, seul `fetchBrandingCourant`
+  existait, server-only, et son résultat n'atteint que `AppShell`/`HeaderBar`/`SideNav` — pas les
+  pages clientes profondes). Même pattern que `reglesConges.repository.ts`/`useReglesConges.ts`.
+- `components/ui/DatePicker.tsx` : nouvelle prop `moisMin` → `startMonth`, miroir exact de `moisMax`/
+  `endMonth` (ajoutée le 10/09 pour "Poser un congé").
+- `lib/periodePaie.ts` : `periodesPrecedentes` accepte une borne basse optionnelle, tronque la liste
+  d'archives générée plutôt que de continuer au-delà.
+- `components/suivre/ListeTransmissionsPaiePage.tsx`/`TransmissionsPaiePage.tsx` : archives et
+  champs Du/Au de "Quels congés transmettre" plafonnés à `date_debut_utilisation`.
+- `lib/data/exportsPaie.repository.ts` (`genererExportPaie`) : garde-fou **serveur** en plus de la
+  borne UI — rejette une transmission dont la période commence avant.
+- `components/parametrer/CalendrierPage.tsx` (`Calendrier2Page`) : le floor "années archivées",
+  jusqu'ici codé en dur à `anneeEnCours - 4`, est désormais borné aussi par
+  `date_debut_utilisation` si elle est plus récente.
+
+Partout, `date_debut_utilisation === null` (Abeil, tenants créés avant ce champ) ⇒ aucune borne
+appliquée, comportement strictement inchangé. Vérifié : `tsc`/`eslint`/`npm run build` propres.
+
+**Phase 2 (moteur de soldes) reste différée** — inchangé, voir section précédente et Backlog.
+
+## Test réel de création de tenant — "Acme" (11/09/2026)
+
+Premier vrai test du formulaire `/admin/nouveau` étendu aujourd'hui, en local. Un premier essai a
+échoué (`creation_entreprise_echouee`) : le `alter table` ci-dessus n'avait pas encore été exécuté
+par Vincent en base — l'insert sur `entreprises` échouait sur la colonne inconnue, sans rien créer
+(pas de résidu à nettoyer). Une fois la colonne ajoutée, la création a réussi, mais l'e-mail
+d'invitation a échoué — **attendu en local** : `.env.local` ne contient aucune clé Resend
+(`RESEND_API_KEY_INVITATIONS` absente), `envoyerEmail` (`lib/resend/notifications.ts`) retourne donc
+`{ ok: false }` dès le départ, sans lever d'exception (comportement documenté de ce module). Le
+tenant est malgré tout bien créé (`ok: true` + `avertissement`, pas un échec de création). Décision
+de Vincent : tester le vrai envoi d'invitation sur le déploiement Vercel plutôt qu'en local, et
+supprimer ce tenant de test créé en local.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
