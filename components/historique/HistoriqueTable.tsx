@@ -352,7 +352,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         </td>
         <td className="w-px px-4 py-3 whitespace-nowrap">{pillDates}</td>
         <td
-          className={`w-px px-4 py-3 font-semibold whitespace-nowrap ${TEXTE_STATUT[demande.statut]}`}
+          className={`w-px px-4 py-3 text-center font-semibold whitespace-nowrap ${TEXTE_STATUT[demande.statut]}`}
         >
           {renderDuree ? renderDuree(demande) : `${formatJours(jours)} j`}
         </td>
@@ -418,7 +418,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                 {iconeTri("dates")}
               </button>
             </th>
-            <th className="w-[80px] px-4 py-3 whitespace-nowrap">
+            <th className="w-[80px] px-4 py-3 text-center whitespace-nowrap">
               {libelleColonneDuree ?? "Durée"}
             </th>
             <th className="hidden w-[80px] py-3 pr-2 pl-4 md:table-cell">

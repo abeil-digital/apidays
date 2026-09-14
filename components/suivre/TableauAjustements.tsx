@@ -34,7 +34,7 @@ export function TableauAjustements({
         <tr className="border-slate/30 text-slate bg-mint-tint/50 border-b text-xs font-semibold tracking-wide">
           <th className="px-4 py-3">Collaborateur</th>
           <th className="px-4 py-3">Type</th>
-          <th className="px-4 py-3">Compteur</th>
+          <th className="px-4 py-3 text-center">Compteur</th>
           <th className="px-4 py-3">Date</th>
           <th className="px-4 py-3">Statut</th>
           <th className="px-4 py-3">Paie</th>
@@ -56,7 +56,10 @@ export function TableauAjustements({
                 <span className="text-ink-900 font-semibold">{LABEL_COURT[a.code]}</span>
               </span>
             </td>
-            <td className={`px-4 py-3 font-semibold ${classeTexteTypeBadge(a.code)}`} title={a.motif}>
+            <td
+              className={`px-4 py-3 text-center font-semibold ${classeTexteTypeBadge(a.code)}`}
+              title={a.motif}
+            >
               {a.deltaJours > 0 ? "+" : ""}
               {formatJours(a.deltaJours)} j
             </td>
