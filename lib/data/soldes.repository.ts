@@ -484,6 +484,7 @@ async function resolverCapitalOuvertureCp(
     reglesAnciennete: RegleAnciennete[];
     dateReferenceAnciennete: string;
     aujourdhui: Date;
+    dateEntree: string;
   },
 ): Promise<CapitalOuvertureCp> {
   const periodePrecedente = decalerPeriode(periode, -1);
@@ -495,6 +496,21 @@ async function resolverCapitalOuvertureCp(
   // opaque unique par l'appelant, voir `fetchHistoriqueCp`).
   if (ctx.soldeInitial && dateIso(periodePrecedente.fin) <= ctx.soldeInitial.dateReference) {
     return { total: ctx.soldeInitial.cp, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "solde_initial" };
+  }
+
+  // Plancher de récursion (14/09/2026, bug bloquant trouvé en testant le
+  // vrai tenant Abeil — "la home ne charge pas") : sans `soldes_initiaux` NI
+  // `soldes_periode` gelée sur TOUTE la remontée (cas réel d'un utilisateur
+  // historique jamais doté d'un solde initial saisi), la récursion vers
+  // `periodePrecedente` n'avait AUCUNE condition d'arrêt — elle remontait
+  // indéfiniment période par période, gelant la home sans jamais lever
+  // d'erreur ni de timeout visible. Avant sa date d'entrée, un collaborateur
+  // n'a par définition aucun CP acquis — plancher toujours disponible (pas
+  // besoin d'attendre la décision UI de `date_debut_utilisation`, voir
+  // Backlog "avertir/bloquer" — ce cas-ci n'a même pas besoin d'avertir, 0
+  // est la seule valeur correcte avant l'embauche).
+  if (dateIso(periodePrecedente.fin) < ctx.dateEntree) {
+    return { total: 0, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "calcul" };
   }
 
   // Déjà gelée ? Le détail report/transfert/bonus n'est pas conservé dans
@@ -1035,6 +1051,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       reglesAnciennete,
       dateReferenceAnciennete,
       aujourdhui,
+      dateEntree: utilisateurRow.date_entree,
     };
 
     // Source de vérité unique (11/09/2026, refonte du moteur — voir
@@ -1442,6 +1459,7 @@ export async function fetchHistoriqueCp(
     reglesAnciennete,
     dateReferenceAnciennete,
     aujourdhui,
+    dateEntree: utilisateurRow.date_entree,
   };
 
   // Source de vérité unique (11/09/2026, refonte du moteur — voir
