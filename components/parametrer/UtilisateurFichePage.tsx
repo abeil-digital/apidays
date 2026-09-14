@@ -1014,8 +1014,11 @@ interface FormulaireProps {
    * "Créer un profil" sur la page Utilisateurs) — remplace la navigation par
    * défaut vers la fiche du profil créé (`router.push`) par la fermeture de
    * la popin + rafraîchissement de la liste, `onCreated` reçoit le profil
-   * créé pour ça. `undefined` = comportement page inchangé. */
-  onCreated?: (utilisateur: UtilisateurAdmin) => void;
+   * créé pour ça. `undefined` = comportement page inchangé.
+   * `invitationEnvoyee` (14/09/2026) : reflète la case "Envoyer l'invitation
+   * par email" — l'appelant en a besoin pour ne pas afficher "a reçu un
+   * e-mail" quand ce n'est pas vrai. */
+  onCreated?: (utilisateur: UtilisateurAdmin, invitationEnvoyee: boolean) => void;
   definirFinContrat: (date: string) => Promise<void>;
   annulerFinContrat: () => Promise<void>;
   changerTauxActivite: (input: ChangerChampInput) => Promise<void>;
@@ -1179,7 +1182,7 @@ function Formulaire({
           }
         }
         if (onCreated) {
-          onCreated(resultat);
+          onCreated(resultat, envoyerInvitationEmail);
         } else {
           router.push(`/parametrer/utilisateurs/${resultat.id}`);
         }
@@ -2132,8 +2135,9 @@ interface NouveauUtilisateurModalProps {
   onClose: () => void;
   /** Appelé avec le profil créé — pas de navigation (04/09/2026, demande
    * explicite : "on peut le jouer en popin sur la page utilisateurs") : la
-   * page Utilisateurs referme la popin et recharge sa liste elle-même. */
-  onCreated: (utilisateur: UtilisateurAdmin) => void;
+   * page Utilisateurs referme la popin et recharge sa liste elle-même.
+   * `invitationEnvoyee` (14/09/2026) : voir doc sur `FormulaireProps.onCreated`. */
+  onCreated: (utilisateur: UtilisateurAdmin, invitationEnvoyee: boolean) => void;
 }
 
 /** Popin "Créer un profil" sur la page Utilisateurs (04/09/2026, demande

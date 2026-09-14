@@ -240,12 +240,14 @@ export function UtilisateursListPage() {
       {creationOuverte && (
         <NouveauUtilisateurModal
           onClose={() => setCreationOuverte(false)}
-          onCreated={(utilisateur) => {
+          onCreated={(utilisateur, invitationEnvoyee) => {
             setCreationOuverte(false);
             recharger();
             setToast(
               `Compte de ${utilisateur.nom} ${utilisateur.prenom} créé. ` +
-                `${utilisateur.prenom} a reçu un e-mail pour initialiser son compte.`,
+                (invitationEnvoyee
+                  ? `${utilisateur.prenom} a reçu un e-mail pour initialiser son compte.`
+                  : "Aucun e-mail envoyé — invitation à déclencher depuis sa fiche quand nécessaire."),
             );
           }}
         />
