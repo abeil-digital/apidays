@@ -260,16 +260,16 @@ export function VerifierFichesPaiePage3({
       ) : comparaisons.length === 0 ? (
         <div className="text-ink-500 py-20 text-center text-sm">Aucun collaborateur actif.</div>
       ) : (
-        // Même gabarit EXACT que "Suivre les demandes" (14/09/2026, demande
-        // explicite de Vincent — "exactement comme pour suivre les
-        // demandes") : `SuivreDemandesPage.tsx`, grille
-        // `xl:grid-cols-[minmax(0,900px)_16rem]` — la card (tableau) plafonne
-        // à 900px, le détail congé dans sa propre colonne de 16rem à droite
-        // à partir de `xl:`, `DetailCongePanel` sur son gabarit par défaut
-        // (`xl:w-64 xl:shrink-0 xl:sticky`, pas `pleineLargeur`) plutôt que
-        // dans une seule card partagée (premier essai écarté le même jour).
+        // Même grille que "Suivre les demandes" (`SuivreDemandesPage.tsx`,
+        // `xl:grid-cols-[minmax(0,900px)_16rem]`) pour que `DetailCongePanel`
+        // s'affiche dans sa propre colonne sticky à droite — mais SANS card
+        // de fond enveloppant la colonne de gauche (14/09/2026, "on se
+        // retrouve avec une card dans la card" : chaque `CardCollaborateurV3`
+        // porte déjà son propre `bg-surface-card`/`shadow-sm`, l'ajout d'une
+        // card englobante ne faisait que dupliquer ce fond) : une simple
+        // suite de cards collaborateur, pas une card unique qui les contient.
         <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5">
-          <div className="bg-surface-card flex w-full min-w-0 flex-col gap-8 p-4 shadow-sm">
+          <div className="flex w-full min-w-0 flex-col gap-5">
             {comparaisons.map((c) => (
               <CardCollaborateurV3
                 key={c.utilisateur.id}
