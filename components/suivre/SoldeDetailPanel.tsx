@@ -23,6 +23,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Textarea } from "@/components/ui/Textarea";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
+import { DetailSoldeDepartPanel } from "@/components/suivre/DetailSoldeDepartPanel";
 
 export type ModeSolde = "reel" | "theorique";
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
@@ -216,6 +217,11 @@ export function SoldeDetailPanel({
     motif: string;
     auteurNom: string;
   } | null>(null);
+  // Détail de "Solde N-1" (14/09/2026, "rendre tangible" la bascule) — même
+  // mécanique que `ajustementSelectionne` (donnée déjà en mémoire via
+  // `historique.decompositionDepart`, pas de fetch), simple bascule ouvert/
+  // fermé plutôt qu'un objet stocké à part.
+  const [departOuvert, setDepartOuvert] = useState(false);
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [sens, setSens] = useState<"ajouter" | "retirer">("ajouter");
   const [montant, setMontant] = useState("");
@@ -273,7 +279,10 @@ export function SoldeDetailPanel({
   const classeBordure = classeBordureTypeBadge(code);
   const libelleDepart = code === "CP" ? "Solde N-1" : "Solde initial";
   const detailOuvert =
-    chargementDetail || demandeSelectionnee !== null || ajustementSelectionne !== null;
+    chargementDetail ||
+    demandeSelectionnee !== null ||
+    ajustementSelectionne !== null ||
+    departOuvert;
   // `refetch()` après succès (11/09/2026, bug signalé — la ligne annulée
   // restait affichée dans la liste des événements et "Solde actuel" ne se
   // mettait pas à jour) : contrairement à `soumettreAjustement` (juste
@@ -298,6 +307,7 @@ export function SoldeDetailPanel({
     setIdSelectionne(id);
     setDemandeSelectionnee(null);
     setAjustementSelectionnee(null);
+    setDepartOuvert(false);
     setLignesTransmission([]);
     setChargementDetail(true);
     try {
@@ -323,6 +333,7 @@ export function SoldeDetailPanel({
     auteurNom?: string;
   }) {
     setDemandeSelectionnee(null);
+    setDepartOuvert(false);
     setChargementDetail(false);
     setIdSelectionne((prev) => (prev === m.id ? null : m.id));
     setAjustementSelectionnee((prev) =>
@@ -332,9 +343,18 @@ export function SoldeDetailPanel({
     );
   }
 
+  function ouvrirDetailDepart() {
+    setDemandeSelectionnee(null);
+    setAjustementSelectionnee(null);
+    setChargementDetail(false);
+    setIdSelectionne(null);
+    setDepartOuvert((v) => !v);
+  }
+
   function fermerDetail() {
     setDemandeSelectionnee(null);
     setAjustementSelectionnee(null);
+    setDepartOuvert(false);
     setIdSelectionne(null);
   }
 
@@ -450,26 +470,74 @@ export function SoldeDetailPanel({
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="px-4 py-3">
-                  {/* "Solde N-1"/"Solde initial" dissocié visuellement des
-                      pills de congé (20/08/2026, affordance pas évidente) :
-                      bords carrés, fond plein couleur du type, pas de
-                      bordure — contre le style contour arrondi des jours de
-                      congé eux-mêmes juste en dessous. Pas d'effet de survol
-                      (20/08/2026) : ce n'est pas une pill interactive, plutôt
-                      un badge d'information — le survol impliquerait à tort
-                      une affordance cliquable. */}
-                  <span
-                    className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white ${classeFondTypeBadge(code)}`}
-                  >
-                    {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
-                  </span>
-                </td>
-                <td className="text-ink-900 px-4 py-3 text-center font-semibold">
-                  {formatJours(historique.soldeDepart)} j
-                </td>
-              </tr>
+              {(() => {
+                // "Solde N-1"/"Solde initial" cliquable quand un détail existe
+                // (14/09/2026, "rendre tangible" la bascule — demande
+                // explicite de Vincent, revue après un premier essai en
+                // lignes éclatées directement ici, écarté : "je ne voyais pas
+                // ça comme ça" — reste UNE ligne opaque, mais cliquable,
+                // ouvre `DetailSoldeDepartPanel` sur le côté comme un
+                // ajustement) : bords carrés, fond plein couleur du type, pas
+                // de bordure — contre le style contour arrondi des jours de
+                // congé eux-mêmes juste en dessous. Sans détail (RTT/CPA, ou
+                // solde initial saisi à la main), reste un badge
+                // d'information pur, pas de survol/clic (affordance à tort
+                // sinon).
+                const decomposition = historique.decompositionDepart;
+                const cliquable = Boolean(decomposition && decomposition.length > 0);
+                const actif = departOuvert;
+                return (
+                  <>
+                    <tr
+                      style={
+                        actif
+                          ? {
+                              backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <td className="px-4 py-3">
+                        {cliquable ? (
+                          <button type="button" onClick={ouvrirDetailDepart}>
+                            <span
+                              className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white transition-[scale] duration-200 hover:scale-105 ${classeFondTypeBadge(code)}`}
+                            >
+                              {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
+                            </span>
+                          </button>
+                        ) : (
+                          <span
+                            className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white ${classeFondTypeBadge(code)}`}
+                          >
+                            {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-ink-900 px-4 py-3 text-center font-semibold">
+                        {formatJours(historique.soldeDepart)} j
+                      </td>
+                    </tr>
+                    {departOuvert && decomposition && (
+                      <tr key="depart-detail-mobile" className="sm:hidden">
+                        <td colSpan={2} className="bg-surface-app px-3 py-3">
+                          <div className="animate-detail-fade-in">
+                            <DetailSoldeDepartPanel
+                              code={code}
+                              nomComplet={nomComplet}
+                              date={historique.soldeDepartDate}
+                              total={historique.soldeDepart}
+                              decomposition={decomposition}
+                              onClose={fermerDetail}
+                              pleineLargeur
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                );
+              })()}
               {evenements.map((m) => {
                 const ajustementCliquable = avecAjustement && m.type === "ajustement";
                 // `m.demandeId` (27/08/2026) — en mode réel, `m.id` est l'id
@@ -837,7 +905,19 @@ export function SoldeDetailPanel({
             className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
           >
             <div className="w-64">
-              {ajustementSelectionne ? (
+              {departOuvert && historique?.decompositionDepart ? (
+                <div className="animate-detail-fade-in">
+                  <DetailSoldeDepartPanel
+                    code={code}
+                    nomComplet={nomComplet}
+                    date={historique.soldeDepartDate}
+                    total={historique.soldeDepart}
+                    decomposition={historique.decompositionDepart}
+                    onClose={fermerDetail}
+                    pleineLargeur
+                  />
+                </div>
+              ) : ajustementSelectionne ? (
                 <div className="animate-detail-fade-in">
                   <DetailAjustementPanel
                     ajustement={{
@@ -966,7 +1046,19 @@ export function SoldeDetailPanel({
           }`}
         >
           <div className="sm:w-[256px]">
-            {ajustementSelectionne ? (
+            {departOuvert && historique?.decompositionDepart ? (
+              <div className="animate-detail-fade-in">
+                <DetailSoldeDepartPanel
+                  code={code}
+                  nomComplet={nomComplet}
+                  date={historique.soldeDepartDate}
+                  total={historique.soldeDepart}
+                  decomposition={historique.decompositionDepart}
+                  onClose={fermerDetail}
+                  pleineLargeur
+                />
+              </div>
+            ) : ajustementSelectionne ? (
               <div className="animate-detail-fade-in">
                 <DetailAjustementPanel
                   ajustement={{

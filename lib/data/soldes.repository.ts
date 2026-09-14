@@ -459,6 +459,18 @@ interface RegleAcquisitionMinimal {
  * Récursif sur `periodePrecedente` — en pratique s'arrête presque toujours
  * après 1 niveau (une période déjà gelée, ou `soldes_initiaux`).
  */
+interface CapitalOuvertureCp {
+  total: number;
+  /** Report du CP non pris de la période précédente. */
+  report: number;
+  /** CPA de la période précédente transféré en capital CP. */
+  transfertCpa: number;
+  /** Bonus d'ancienneté de CETTE période (un jour de CP comme un autre). */
+  bonus: number;
+  /** "solde_initial"/"gelee" : chiffre opaque, pas de détail
+   * report/transfert/bonus à afficher (voir `fetchHistoriqueCp`). */
+  gouvernePar: "solde_initial" | "gelee" | "calcul";
+}
 async function resolverCapitalOuvertureCp(
   supabase: SupabaseClient,
   utilisateurId: string,
@@ -473,31 +485,46 @@ async function resolverCapitalOuvertureCp(
     dateReferenceAnciennete: string;
     aujourdhui: Date;
   },
-): Promise<number> {
+): Promise<CapitalOuvertureCp> {
   const periodePrecedente = decalerPeriode(periode, -1);
 
   // `soldes_initiaux` gouverne cette période : remplace tout calcul (même
-  // règle que l'ancien `resolverCapitalCpTotal`).
+  // règle que l'ancien `resolverCapitalCpTotal`) — un solde initial est un
+  // chiffre saisi à la main, pas de décomposition report/transfert/bonus
+  // possible (`gouvernePar: "solde_initial"`, affiché comme une ligne
+  // opaque unique par l'appelant, voir `fetchHistoriqueCp`).
   if (ctx.soldeInitial && dateIso(periodePrecedente.fin) <= ctx.soldeInitial.dateReference) {
-    return ctx.soldeInitial.cp;
+    return { total: ctx.soldeInitial.cp, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "solde_initial" };
   }
 
-  // Déjà gelée ?
+  // Déjà gelée ? Le détail report/transfert/bonus n'est pas conservé dans
+  // `soldes_periode` (seul le total l'est) — sans conséquence pour l'appelant
+  // qui affiche le détail (`fetchHistoriqueCp`) : cette branche n'est jamais
+  // atteinte pour LA période affichée elle-même (toujours la période en
+  // cours, jamais gelée par construction), uniquement pour un antécédent
+  // récursif dont seul `.total` sert (calcul du report de la période
+  // suivante).
   const { data: geleeRow } = await supabase
     .from("soldes_periode")
     .select("capital_ouverture")
     .eq("utilisateur_id", utilisateurId)
     .eq("periode_debut", dateIso(periode.debut))
     .maybeSingle();
-  if (geleeRow) return Number(geleeRow.capital_ouverture);
+  if (geleeRow) {
+    return {
+      total: Number(geleeRow.capital_ouverture),
+      report: 0,
+      transfertCpa: 0,
+      bonus: 0,
+      gouvernePar: "gelee",
+    };
+  }
 
-  // Report de la période précédente (récursif).
-  const capitalPrecedent = await resolverCapitalOuvertureCp(
-    supabase,
-    utilisateurId,
-    periodePrecedente,
-    ctx,
-  );
+  // Report de la période précédente (récursif) — seul `.total` importe ici,
+  // le détail de la période précédente n'a pas à être ré-exposé.
+  const capitalPrecedent = (
+    await resolverCapitalOuvertureCp(supabase, utilisateurId, periodePrecedente, ctx)
+  ).total;
   const consommePrecedent = await sommeJours(
     supabase,
     utilisateurId,
@@ -584,7 +611,7 @@ async function resolverCapitalOuvertureCp(
     );
   }
 
-  return capitalOuverture;
+  return { total: capitalOuverture, report, transfertCpa, bonus, gouvernePar: "calcul" };
 }
 
 /**
@@ -997,12 +1024,9 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     // `resolverCapitalOuvertureCp`) : report + transfert CPA + bonus
     // d'ancienneté, calculés une seule fois et mémoïsés dès qu'une période
     // est close.
-    const capitalCpTotal = await resolverCapitalOuvertureCp(
-      supabase,
-      id,
-      periodeEnCours,
-      ctxCapital,
-    );
+    const capitalCpTotal = (
+      await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital)
+    ).total;
     const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
 
     const consommeEnCours = await sommeJours(
@@ -1393,12 +1417,26 @@ export async function fetchHistoriqueCp(
   // `resolverCapitalOuvertureCp` dans `fetchSoldes`) : même fonction, même
   // résultat que la carte Accueil, plus de calcul dupliqué à maintenir en
   // synchronisation manuelle.
-  const soldeDepart = await resolverCapitalOuvertureCp(
+  const capitalOuverture = await resolverCapitalOuvertureCp(
     supabase,
     utilisateurId,
     periodeEnCours,
     ctxCapital,
   );
+  const soldeDepart = capitalOuverture.total;
+  // Décomposition "rendre tangible" (14/09/2026) — voir doc du champ sur
+  // `HistoriqueSolde`. Ordre demandé par Vincent : CPA N-1, ancienneté,
+  // report CP. `undefined` (pas `[]`) quand le capital vient d'un solde
+  // initial saisi à la main — l'UI distingue "pas de détail à afficher" de
+  // "détail vide" pour retomber sur la ligne opaque existante.
+  const decompositionDepart =
+    capitalOuverture.gouvernePar === "calcul"
+      ? [
+          { libelle: "Congés acquis N-1", jours: capitalOuverture.transfertCpa },
+          { libelle: "Jour(s) ancienneté", jours: capitalOuverture.bonus },
+          { libelle: "Report CP N-1", jours: capitalOuverture.report },
+        ].filter((c) => c.jours !== 0)
+      : undefined;
   const soldeDepartDate =
     soldeInitial && dateIso(periodePrecedente.fin) <= soldeInitial.dateReference
       ? soldeInitial.dateReference
@@ -1658,6 +1696,7 @@ export async function fetchHistoriqueCp(
     enAttente,
     soldeTheorique: cumulTheorique,
     mouvementsTheorique,
+    decompositionDepart,
   };
 }
 

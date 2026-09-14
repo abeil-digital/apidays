@@ -143,6 +143,15 @@ export interface HistoriqueSolde {
   // liste que celles déjà transmises. Optionnel : seuls CP/RTT (pas CPA,
   // hors scope) le renseignent ; à défaut l'UI retombe sur `mois`.
   mouvementsTheorique?: MouvementSolde[];
+  // Décomposition de "Solde N-1" (14/09/2026, "rendre tangible" la bascule —
+  // demande explicite de Vincent) : quand le capital d'ouverture de la
+  // période vient d'un vrai calcul de bascule (pas un solde initial saisi à
+  // la main, qui reste une ligne opaque unique), le détail report CP +
+  // transfert CPA + bonus d'ancienneté — dans cet ORDRE précis : Congés acquis N-1,
+  // jour(s) ancienneté, report CP non pris N-1. Composantes nulles omises.
+  // Optionnel : seul CP (`fetchHistoriqueCp`) le renseigne ; à défaut l'UI
+  // retombe sur la ligne "Solde N-1"/"Solde initial" unique existante.
+  decompositionDepart?: { libelle: string; jours: number }[];
 }
 
 export interface AjustementSoldeInput {

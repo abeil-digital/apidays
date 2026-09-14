@@ -6170,6 +6170,44 @@ session d'implémentation.
 **Pas d'implémentation aujourd'hui** — décidé explicitement pour ne pas recoder sous pression. Voir
 Backlog, item "Refonte du moteur de calcul CP/CPA à la bascule de période".
 
+## Refonte du moteur de calcul CP/CPA — implémentation, vérification, "rendre tangible" (11-14/09/2026)
+
+Suite du cadre posé le 11/09/2026 ci-dessus — implémenté le jour même, puis vérifié et complété les
+jours suivants.
+
+**Implémentation (11/09/2026)** : `resolverCapitalOuvertureCp` (`soldes.repository.ts`) devient la
+source unique du capital d'ouverture CP — remplace les calculs dupliqués de `fetchSoldes`/
+`fetchHistoriqueCp`. Deux tables de gel : `soldes_periode` (capital d'ouverture figé dès qu'une
+période CP est close, écriture paresseuse au premier calcul rencontré) et `acquisitions_gelees`
+(acquisition RTT/CPA figée mois par mois, à la validation de l'export paie qui couvre ce mois —
+protège un mois déjà confirmé en paie d'un changement ultérieur du taux d'acquisition, bug réel
+trouvé en testant : un changement de taux réécrivait rétroactivement le transfert CPA d'une période
+déjà close). Au passage : le CPA à cheval sur deux mois sans bascule (30/10→02/11) et la demande CP
+annulée après avoir compté dans le solde théorique (affichée barrée plutôt que disparue) sont
+également corrigés.
+
+**Vérification (11 et 14/09/2026)** : invariant `CP(bascule) = CP(veille) + CPA(veille) + bonus`
+vérifié en simulant la bascule sur **acme** (période civile, 11/09) ET **test3** (période juin-mai,
+14/09, avec un vrai bonus d'ancienneté à 5 ans en jeu : 50,38 = 22 + 27,38 + 1). `fetchHistoriqueCpa`
+n'avait par ailleurs jamais eu de vraie séparation réel/théorique dans son détail événement par
+événement (un CPA validé mais jamais transmis apparaissait à tort comme "passé en paie") — corrigé le
+même principe que `fetchHistoriqueCp` (réel = `lignesTransmises`/`pris_en_compte`).
+
+**"Rendre tangible" la bascule (14/09/2026, demande de Vincent — reprend l'item Backlog du
+29/08/2026)** : "Solde N-1" reste une seule ligne agrégée dans le feed de suivi de solde (`SoldeDetailPanel.tsx`),
+mais devient cliquable dès qu'un détail existe (capital calculé, pas un solde initial saisi à la
+main) — ouvre un panneau latéral (`DetailSoldeDepartPanel.tsx`, même gabarit que
+`DetailAjustementPanel`) qui décompose le chiffre en 3 lignes, dans cet ordre précis : **Congés
+acquis N-1** (transfert CPA), **Jour(s) ancienneté**, **Report CP N-1**. Premier essai (éclater la
+ligne du tableau elle-même en 3 lignes) écarté par Vincent ("je ne voyais pas ça comme ça") au profit
+de ce panneau au clic, qui reprend la charte déjà posée pour les régularisations.
+
+**Cas limite volontairement laissé de côté** : un CPA posé à cheval sur une bascule de période
+(ex. 31/12→08/01) donne un solde "à la date de la demande" incohérent (le CPA repart virtuellement à
+0 à la bascule). Un premier réflexe (plafonner le picker au même titre que le CP) a été codé puis
+retiré sur demande de Vincent ("pas logique, revient en arrière") — reste en Backlog comme sujet à
+étudier plutôt que patché.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
