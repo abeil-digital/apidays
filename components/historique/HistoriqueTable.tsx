@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Check } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { Demande, DemandeEquipe, LigneExportPaie, StatutDemande } from "@/lib/types";
 import {
   formatDateActionCourte,
@@ -80,7 +80,6 @@ function BadgeTransmission({ statut, lignes }: { statut: StatutDemande; lignes: 
   if (statut === "annulé" && soldeNet > 0) {
     return (
       <Badge tone="danger">
-        <Check size={12} strokeWidth={2.5} />
         <span>À régulariser</span>
       </Badge>
     );
@@ -88,7 +87,6 @@ function BadgeTransmission({ statut, lignes }: { statut: StatutDemande; lignes: 
   const prisEnCompte = lignes.every((l) => l.prisEnCompteLe);
   return (
     <Badge tone={prisEnCompte ? "success" : "warning"}>
-      <Check size={12} strokeWidth={2.5} />
       <span>{prisEnCompte ? "Pris en compte" : "Transmis"}</span>
     </Badge>
   );

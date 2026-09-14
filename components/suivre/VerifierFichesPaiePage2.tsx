@@ -207,7 +207,6 @@ function CardSoldeCollaborateur({
                   n'ayant jamais eu d'action réelle avant aujourd'hui. */}
                   {prisEnCompte ? (
                     <span className="text-status-success-fg inline-flex items-center gap-1 text-sm font-semibold">
-                      <Check size={14} />
                       Pris en compte
                     </span>
                   ) : (

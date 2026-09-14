@@ -34,7 +34,7 @@ export function TableauAjustements({
         <tr className="border-slate/30 text-slate bg-mint-tint/50 border-b text-xs font-semibold tracking-wide">
           <th className="px-4 py-3">Collaborateur</th>
           <th className="px-4 py-3">Type</th>
-          <th className="px-4 py-3">À transmettre</th>
+          <th className="px-4 py-3">Compteur</th>
           <th className="px-4 py-3">Date</th>
           <th className="px-4 py-3">Statut</th>
           <th className="px-4 py-3">Paie</th>

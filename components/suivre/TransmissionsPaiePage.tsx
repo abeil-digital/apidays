@@ -659,7 +659,7 @@ function QuelsCongesTransmettre({
                 }
                 emptyText="Rien à transmettre sur cette période."
                 triParDefaut="collaborateur"
-                libelleColonneDuree="À transmettre"
+                libelleColonneDuree="Compteur"
                 lignesTransmissionParDemande={lignesTransmissionParId}
               />
             )}
@@ -697,7 +697,7 @@ function QuelsCongesTransmettre({
                   }
                   emptyText="Aucun congé en repêchage."
                   triParDefaut="collaborateur"
-                  libelleColonneDuree="À transmettre"
+                  libelleColonneDuree="Compteur"
                   lignesTransmissionParDemande={lignesTransmissionParId}
                 />
               )}
@@ -734,7 +734,7 @@ function QuelsCongesTransmettre({
                   }
                   emptyText="Aucune correction à transmettre."
                   triParDefaut="collaborateur"
-                  libelleColonneDuree="À transmettre"
+                  libelleColonneDuree="Compteur"
                   lignesTransmissionParDemande={lignesTransmissionParId}
                 />
               )}
