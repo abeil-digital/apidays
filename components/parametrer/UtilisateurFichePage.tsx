@@ -1091,6 +1091,13 @@ function Formulaire({
   // affichée seulement quand "Nature du contrat" = CDD. Écrite directement
   // dans `date_fin_contrat` à la création (voir `creerUtilisateurAdmin`).
   const [dateSortieCdd, setDateSortieCdd] = useState("");
+  // Envoi de l'invitation par email (14/09/2026, demande explicite de
+  // Vincent) — coché par défaut (comportement inchangé), décochable pour un
+  // compte de test créé sans notifier personne. Le profil se crée quand
+  // même normalement dans tous les cas ; "Renvoyer l'invitation" (fiche
+  // utilisateur, une fois le profil créé) reste disponible pour l'envoyer
+  // plus tard si besoin.
+  const [envoyerInvitationEmail, setEnvoyerInvitationEmail] = useState(true);
 
   const modeEdition = Boolean(id);
 
@@ -1161,13 +1168,15 @@ function Formulaire({
           soldeInitialInput,
           champs.natureContrat === "cdd" && dateSortieCdd ? dateSortieCdd : undefined,
         );
-        const invite = await inviterUtilisateur(resultat.id, resultat.email, resultat.prenom);
-        if (!invite.ok) {
-          setErreur(
-            "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
-              "Vous pourrez la renvoyer depuis la fiche du collaborateur.",
-          );
-          return;
+        if (envoyerInvitationEmail) {
+          const invite = await inviterUtilisateur(resultat.id, resultat.email, resultat.prenom);
+          if (!invite.ok) {
+            setErreur(
+              "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
+                "Vous pourrez la renvoyer depuis la fiche du collaborateur.",
+            );
+            return;
+          }
         }
         if (onCreated) {
           onCreated(resultat);
@@ -1862,6 +1871,25 @@ function Formulaire({
                   </div>
                 </div>
               </div>
+            )}
+
+            {!modeEdition && (
+              /* Envoi de l'invitation par email (14/09/2026, demande
+              explicite de Vincent) — coché par défaut, décochable pour créer
+              un compte de test sans notifier personne. Le profil se crée
+              normalement dans les deux cas ; "Renvoyer l'invitation" (fiche
+              utilisateur) reste disponible pour l'envoyer plus tard. */
+              <label className="bg-surface-card border-ink-300/60 flex cursor-pointer items-center gap-2.5 border p-5">
+                <input
+                  type="checkbox"
+                  checked={envoyerInvitationEmail}
+                  onChange={(e) => setEnvoyerInvitationEmail(e.target.checked)}
+                  className="border-slate h-4 w-4 accent-brand-primary"
+                />
+                <span className="text-ink-900 text-sm font-bold">
+                  Envoyer l&apos;invitation par email
+                </span>
+              </label>
             )}
 
             {/* Bouton "Enregistrer"/erreur retirés en édition (04/09/2026,
