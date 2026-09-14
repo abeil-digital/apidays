@@ -1084,6 +1084,7 @@ function VueCalendrierGrille({
           onClose={fermerModaleCreation}
           modeInitial={modaleCreation}
           dateInitiale={dateInitialeCreation}
+          cpiActif={cibleJoursCpi > 0}
         />
       )}
     </div>

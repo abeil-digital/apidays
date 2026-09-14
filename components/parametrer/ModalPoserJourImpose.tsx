@@ -76,6 +76,16 @@ interface ModalPoserJourImposeProps {
    * calendrier. Reste modifiable, sans effet sur les appelants qui ne le
    * passent pas (ouverture "vierge" via le "+" des cartes de légende). */
   dateInitiale?: string;
+  /** CPI paramétré pour ce tenant (14/09/2026, bug remonté par Vincent —
+   * Delphine a réussi à créer un CPI sur acme alors que l'objectif "CP
+   * Imposés" de Paramétrer > Congés & RTT est à 0) : la carte légende CPI
+   * était déjà masquée dans ce cas (`CalendrierPage.tsx`,
+   * `cibleJoursCpi > 0`), mais le sélecteur "Type" DE CETTE popin restait
+   * ouvert sur les deux modes quelle que soit la façon dont elle avait été
+   * ouverte — un CPI restait accessible en repassant par le sélecteur depuis
+   * le mode DJI. `cpiActif = false` retire l'option CPI du sélecteur (et le
+   * désactive s'il ne reste plus qu'un seul mode possible). */
+  cpiActif: boolean;
 }
 
 /**
@@ -104,8 +114,14 @@ export function ModalPoserJourImpose({
   onClose,
   modeInitial = "CPI",
   dateInitiale,
+  cpiActif,
 }: ModalPoserJourImposeProps) {
-  const [mode, setMode] = useState<Mode>(modeInitial);
+  const modesDisponibles = (Object.keys(LABEL_MODE) as Mode[]).filter(
+    (m) => m !== "CPI" || cpiActif,
+  );
+  const [mode, setMode] = useState<Mode>(
+    modeInitial === "CPI" && !cpiActif ? "DJI" : modeInitial,
+  );
   const [debut, setDebut] = useState(dateInitiale ?? "");
   const [fin, setFin] = useState("");
   const [demiDebut, setDemiDebut] = useState<DemiJournee>(() =>
@@ -361,13 +377,14 @@ export function ModalPoserJourImpose({
             <SelectPille
               value={mode}
               onChange={(e) => handleModeChange(e.target.value as Mode)}
+              disabled={modesDisponibles.length <= 1}
               className={`py-2 pr-8 pl-4 text-sm font-semibold ${TEXTE_MODE_IMPORTANT[mode]}`}
               borderClassName={classeBordureTypeBadge(code)}
               chevronClassName={classeTexteTypeBadge(code)}
               hoverClassName={HOVER_TEINTE_MODE[mode]}
               sansAnneauFocus
             >
-              {(Object.keys(LABEL_MODE) as Mode[]).map((m) => (
+              {modesDisponibles.map((m) => (
                 <option key={m} value={m}>
                   {LABEL_MODE[m]}
                 </option>
