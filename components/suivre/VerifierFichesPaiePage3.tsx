@@ -13,7 +13,6 @@ import { formatJours } from "@/lib/format";
 import type { Demande, DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
-import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Check } from "lucide-react";
 import { classeTexteTypeBadge, LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
@@ -143,9 +142,13 @@ function CardCollaborateurV3({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 px-1">
-        <Avatar initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()} />
+    // Card englobant tout le collaborateur (14/09/2026, demande explicite de
+    // Vincent) — même charte que les autres cards de cet écran (`bg-surface-
+    // card` + `shadow-sm`, coins carrés) : nom + les 3 tableaux CP/RTT/CPA
+    // dans un seul bloc visuel plutôt que des sections flottant librement
+    // sur le fond de page.
+    <div className="bg-surface-card flex flex-col gap-3 p-4 shadow-sm">
+      <div className="flex items-center gap-2">
         <span className="text-ink-900 text-base font-semibold">
           {c.utilisateur.prenom} {c.utilisateur.nom}
         </span>
