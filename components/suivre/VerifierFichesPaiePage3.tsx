@@ -129,44 +129,77 @@ function CardCollaborateurV3({
   lignes,
   selectedId,
   onDateClick,
+  onCloseDetail,
 }: {
   c: ComparaisonSoldeCollaborateur;
   periode: { debut: string; fin: string };
   lignes: { ligne: LigneExportPaie; demande: DemandeEquipe }[];
   selectedId: string | null;
   onDateClick: (id: string) => void;
+  onCloseDetail: () => void;
 }) {
   const lignesParDemande: Record<string, LigneExportPaie[]> = {};
   for (const { ligne, demande } of lignes) {
     (lignesParDemande[demande.id] ??= []).push(ligne);
   }
 
+  // Le congé sélectionné appartient-il à CE collaborateur ? (14/09/2026,
+  // demande explicite de Vincent — "la card détail doit être englobée dans
+  // la card collaborateur") : `DetailCongePanel` ne s'affiche plus dans une
+  // colonne à part au niveau de la page, mais À L'INTÉRIEUR de la card du
+  // collaborateur concerné, aucune autre card n'affiche rien.
+  const selection = lignes.find(({ demande }) => demande.id === selectedId)?.demande ?? null;
+  const lignesTransmissionSelection = lignes
+    .filter(({ demande }) => demande.id === selectedId)
+    .map(({ ligne }) => ligne);
+
   return (
     // Card englobant tout le collaborateur (14/09/2026, demande explicite de
     // Vincent) — même charte que les autres cards de cet écran (`bg-surface-
     // card` + `shadow-sm`, coins carrés) : nom + les 3 tableaux CP/RTT/CPA
     // dans un seul bloc visuel plutôt que des sections flottant librement
-    // sur le fond de page.
-    <div className="bg-surface-card flex flex-col gap-3 p-4 shadow-sm">
-      <div className="flex items-center gap-2">
-        <span className="text-ink-900 text-base font-semibold">
-          {c.utilisateur.prenom} {c.utilisateur.nom}
-        </span>
+    // sur le fond de page. Grille interne (`xl:grid-cols-[1fr_16rem]`, même
+    // principe que "Suivre les demandes") quand le détail d'un congé DE CE
+    // collaborateur est ouvert, pour l'afficher à droite sans sortir de
+    // cette card.
+    <div className="bg-surface-card p-4 shadow-sm">
+      <div
+        className={
+          selection
+            ? "grid grid-cols-1 items-start gap-5 xl:grid-cols-[1fr_16rem] xl:gap-x-4"
+            : undefined
+        }
+      >
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-ink-900 text-base font-semibold">
+              {c.utilisateur.prenom} {c.utilisateur.nom}
+            </span>
+          </div>
+          {TYPES_SOLDE.map((code) => (
+            <SectionType
+              key={code}
+              code={code}
+              categorie={categorieSolde(c, code)}
+              periode={periode}
+              demandes={lignes
+                .filter(({ demande }) => typeBadgeDeDemande(demande) === code)
+                .map(({ demande }) => demande)}
+              lignesParDemande={lignesParDemande}
+              selectedId={selectedId}
+              onDateClick={onDateClick}
+            />
+          ))}
+        </div>
+        {selection && (
+          <DetailCongePanel
+            key={selection.id}
+            selection={selection}
+            onClose={onCloseDetail}
+            lignesTransmission={lignesTransmissionSelection}
+          />
+        )}
       </div>
-      {TYPES_SOLDE.map((code) => (
-        <SectionType
-          key={code}
-          code={code}
-          categorie={categorieSolde(c, code)}
-          periode={periode}
-          demandes={lignes
-            .filter(({ demande }) => typeBadgeDeDemande(demande) === code)
-            .map(({ demande }) => demande)}
-          lignesParDemande={lignesParDemande}
-          selectedId={selectedId}
-          onDateClick={onDateClick}
-        />
-      ))}
     </div>
   );
 }
@@ -248,10 +281,6 @@ export function VerifierFichesPaiePage3({
 
   const toutesLesLignes = collaborateurs.flatMap((c) => c.lignes);
   const toutesLesDemandes = toutesLesLignes.map(({ demande }) => demande);
-  const selection = toutesLesDemandes.find((d) => d.id === selectionId) ?? null;
-  const lignesTransmissionSelection = toutesLesLignes
-    .filter(({ demande }) => demande.id === selectionId)
-    .map(({ ligne }) => ligne);
 
   return (
     <div className="flex flex-col gap-6">
@@ -260,35 +289,22 @@ export function VerifierFichesPaiePage3({
       ) : comparaisons.length === 0 ? (
         <div className="text-ink-500 py-20 text-center text-sm">Aucun collaborateur actif.</div>
       ) : (
-        // Même grille que "Suivre les demandes" (`SuivreDemandesPage.tsx`,
-        // `xl:grid-cols-[minmax(0,900px)_16rem]`) pour que `DetailCongePanel`
-        // s'affiche dans sa propre colonne sticky à droite — mais SANS card
-        // de fond enveloppant la colonne de gauche (14/09/2026, "on se
-        // retrouve avec une card dans la card" : chaque `CardCollaborateurV3`
-        // porte déjà son propre `bg-surface-card`/`shadow-sm`, l'ajout d'une
-        // card englobante ne faisait que dupliquer ce fond) : une simple
-        // suite de cards collaborateur, pas une card unique qui les contient.
-        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5">
-          <div className="flex w-full min-w-0 flex-col gap-5">
-            {comparaisons.map((c) => (
-              <CardCollaborateurV3
-                key={c.utilisateur.id}
-                c={c}
-                periode={periode}
-                lignes={lignesParUtilisateur.get(c.utilisateur.id) ?? []}
-                selectedId={selectionId}
-                onDateClick={setSelectionId}
-              />
-            ))}
-          </div>
-          {selection && (
-            <DetailCongePanel
-              key={selection.id}
-              selection={selection}
-              onClose={() => setSelectionId(null)}
-              lignesTransmission={lignesTransmissionSelection}
+        // Suite de cards collaborateur (14/09/2026) — chacune gère désormais
+        // elle-même l'affichage du détail congé EN SON SEIN quand la
+        // sélection lui appartient (voir `CardCollaborateurV3`), plus de
+        // grille/colonne de détail au niveau de la page.
+        <div className="flex w-full min-w-0 flex-col gap-5">
+          {comparaisons.map((c) => (
+            <CardCollaborateurV3
+              key={c.utilisateur.id}
+              c={c}
+              periode={periode}
+              lignes={lignesParUtilisateur.get(c.utilisateur.id) ?? []}
+              selectedId={selectionId}
+              onDateClick={setSelectionId}
+              onCloseDetail={() => setSelectionId(null)}
             />
-          )}
+          ))}
         </div>
       )}
 
