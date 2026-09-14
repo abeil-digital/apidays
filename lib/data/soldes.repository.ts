@@ -798,6 +798,20 @@ async function sommeJours(
  * période du 01/08 au 31/08, doit compter dès le 26/08, pas seulement à
  * partir du 31/08 — sinon le réel affiché "aujourd'hui" ignore des
  * transmissions pourtant déjà faites).
+ *
+ * **+ `exports_paie.periode_debut` (14/09/2026, 2e bug trouvé en testant
+ * "Vérifier les fiches de paie 3"/"2" — un congé de novembre comptait déjà
+ * dans le solde réel de septembre)** : rien n'empêche de générer/valider
+ * l'export d'une période future en avance (cas de test de Vincent : exports
+ * d'octobre et novembre générés le même jour que celui de septembre) — dans
+ * ce cas `genere_le` seul ne suffit plus à exclure ces lignes d'un solde
+ * "réel à une date passée". Un congé ne peut pas être compté dans le réel
+ * avant que SA PROPRE période de paie ait au moins commencé, quelle que soit
+ * la date de génération de son export — d'où l'ajout de `periode_debut <=
+ * dateReference`, qui laisse le comportement du 27/08 intact (l'export
+ * compte dès sa génération, y compris en cours de sa propre période) tout en
+ * bloquant la contamination par un export de période future généré en
+ * avance.
  */
 async function sommeTransmis(
   supabase: SupabaseClient,
@@ -812,13 +826,14 @@ async function sommeTransmis(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le, pris_en_compte)",
+      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le, periode_debut, pris_en_compte)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
     .gte("demandes_conges.date_debut", dateIso(periode.debut))
     .lte("demandes_conges.date_debut", dateIso(periode.fin))
     .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
+    .lte("exports_paie.periode_debut", dateIso(dateReference))
     // "Pris en compte" (11/09/2026) — un congé transmis mais pas encore
     // confirmé conforme à la fiche de paie ne se déduit pas (encore) du
     // solde réel, voir la doc en tête de fichier.
@@ -850,8 +865,9 @@ interface LigneTransmise {
  * dates de la demande portée — base des mouvements "réel" de
  * `fetchHistoriqueCp`/`fetchHistoriqueRtt` (27/08/2026, refonte du modèle :
  * le réel est ancré sur la transmission effective, pas sur le statut
- * `validee`). Même filtre sur `exports_paie.genere_le`/`pris_en_compte` que
- * `sommeTransmis`.
+ * `validee`). Même filtre `exports_paie.genere_le`/`periode_debut`/
+ * `pris_en_compte` que `sommeTransmis` — voir sa doc pour le détail des 2 bugs
+ * corrigés.
  */
 async function fetchLignesTransmises(
   supabase: SupabaseClient,
@@ -864,13 +880,14 @@ async function fetchLignesTransmises(
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation, conge_impose_id), exports_paie!inner(genere_le, pris_en_compte)",
+      "id, demande_id, jours_inclus, demandes_conges!inner(date_debut, date_fin, utilisateur_id, type_absence_id, is_anticipation, conge_impose_id), exports_paie!inner(genere_le, periode_debut, pris_en_compte)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
     .gte("demandes_conges.date_debut", dateIso(periode.debut))
     .lte("demandes_conges.date_debut", dateIso(periode.fin))
     .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
+    .lte("exports_paie.periode_debut", dateIso(dateReference))
     .eq("exports_paie.pris_en_compte", true);
 
   if (isAnticipation !== null) {

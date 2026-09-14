@@ -616,7 +616,11 @@ export function VerifierFichesPaiePage2({
     try {
       await validerExportPaie(exportId);
       onValide();
-      rafraichirDonnees();
+      // `true` en dur (14/09/2026, même correctif que Page3) : l'export
+      // vient d'être validé juste au-dessus, avant que la prop
+      // `prisEnCompte` (contrôlée par le parent) ait eu le temps de se
+      // rafraîchir.
+      rafraichirDonnees(true);
     } finally {
       setEnCoursValidation(false);
     }
@@ -665,7 +669,7 @@ export function VerifierFichesPaiePage2({
 
   useEffect(() => {
     let cancelled = false;
-    fetchComparaisonSoldes(periode, exportId).then((data) => {
+    fetchComparaisonSoldes(periode, exportId, prisEnCompte).then((data) => {
       if (!cancelled) {
         setComparaisons(data);
         setLoadingComparaisons(false);
@@ -674,7 +678,7 @@ export function VerifierFichesPaiePage2({
     return () => {
       cancelled = true;
     };
-  }, [periode, exportId]);
+  }, [periode, exportId, prisEnCompte]);
 
   useEffect(() => {
     let cancelled = false;
@@ -694,8 +698,10 @@ export function VerifierFichesPaiePage2({
   // "Pris en compte" affichés ici même restaient sur l'ancien état tant que
   // la page n'était pas rechargée : `handleValider` ne rafraîchissait que
   // l'export côté parent, jamais cette liste).
-  function rafraichirDonnees() {
-    fetchComparaisonSoldes(periode, exportId).then(setComparaisons);
+  function rafraichirDonnees(prisEnCompteOverride?: boolean) {
+    fetchComparaisonSoldes(periode, exportId, prisEnCompteOverride ?? prisEnCompte).then(
+      setComparaisons,
+    );
     if (exportId) fetchCheckFichesPaie(exportId).then(setCollaborateurs);
   }
 

@@ -98,6 +98,14 @@ function SectionType({
 }) {
   const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
   const libelleMoisEnCours = nomMois(periode.debut);
+  // "Solde" = écart réellement observé entre les 2 pills (14/09/2026, bug
+  // remonté par Vincent sur RTT/CPA — "les chiffres sont incohérents au
+  // niveau du solde") : `categorie.mouvement` ne reflète QUE l'effet de cet
+  // export, alors que RTT/CPA (accrual progressif) grandissent aussi
+  // naturellement d'un mois sur l'autre indépendamment de tout export — un
+  // "Solde 0j" à côté de deux pills qui diffèrent était trompeur. On affiche
+  // donc l'écart réel plutôt que le seul mouvement de l'export.
+  const ecart = categorie.moisEnCours - categorie.moisPrecedent;
 
   // Le congé sélectionné appartient-il à CE TYPE (14/09/2026, demande
   // explicite de Vincent — une card par type de congé désormais, plus par
@@ -110,67 +118,83 @@ function SectionType({
     // Card par type de congé (14/09/2026, demande explicite de Vincent —
     // "on sort le nom du collaborateur des cards... on crée des cards par
     // type de congés", après un premier essai en une seule card par
-    // collaborateur) — même charte que les autres cards de cet écran
-    // (`bg-surface-card` + `shadow-sm`, coins carrés). Grille interne
-    // (`xl:grid-cols-[1fr_16rem]`, même principe que "Suivre les demandes")
-    // quand le détail d'un congé DE CE TYPE est ouvert, pour l'afficher à
-    // droite sans sortir de cette card.
-    <div className="bg-surface-card p-4 shadow-sm">
-      <div
-        className={
-          selection
-            ? "grid grid-cols-1 items-start gap-5 xl:grid-cols-[1fr_16rem] xl:gap-x-4"
-            : undefined
-        }
-      >
-        <div className="flex min-w-0 flex-col gap-2">
-          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
-            <span className={`text-sm font-bold ${classeTexteTypeBadge(code)}`}>
-              {LABEL_LONG[code]}
-            </span>
+    // collaborateur). Le nom du type est sorti de la card et placé au-dessus
+    // (14/09/2026, "on sort Congé Payé de la card") ; les pills restent
+    // dans la card mais calées à gauche, alignées sur le tableau (même
+    // conteneur flex-col, sans inset supplémentaire — même point de départ
+    // horizontal que le tableau juste en-dessous).
+    <div className="flex flex-col gap-2">
+      <span className={`px-1 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+        {LABEL_LONG[code]}
+      </span>
+      {/* Card — même charte que les autres cards de cet écran
+          (`bg-surface-card` + `shadow-sm`, coins carrés). Grille interne
+          (`xl:grid-cols-[1fr_16rem]`, même principe que "Suivre les demandes")
+          TOUJOURS appliquée, même sans détail ouvert (14/09/2026, "la largeur
+          du tableau est contrainte pour ne pas changer" — la 2e colonne reste
+          réservée à 16rem que son contenu soit présent ou non, la 1ère
+          (`1fr`, le tableau) garde donc une largeur constante plutôt que de
+          s'élargir quand aucun détail n'est affiché). */}
+      <div className="bg-surface-card p-4 shadow-sm">
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[1fr_16rem] xl:gap-x-4">
+          <div className="flex min-w-0 flex-col gap-2">
             {/* 2 pills mois précédent/mois en cours + flèche entre les deux,
                 balance en +/-j (ou 0) à la suite (14/09/2026, demande
                 explicite de Vincent) — même charte que la pill de dates de
                 `HistoriqueTable` (rounded-full, bordure/texte couleur du
-                type). */}
+                type). Intitulés des mois sortis des pills (14/09/2026,
+                "on sort les intitulés des mois en dehors des pills") : la
+                pill ne porte plus que la valeur, le nom du mois est un
+                libellé texte juste avant. */}
             <span className="inline-flex w-fit items-center gap-1.5">
+              <span className="text-ink-500 text-xs font-bold whitespace-nowrap uppercase">
+                {libelleMoisPrecedent}
+              </span>
               <span
                 className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
               >
-                {libelleMoisPrecedent} : {formatJours(categorie.moisPrecedent)}j
+                {formatJours(categorie.moisPrecedent)}j
               </span>
-              <ArrowRight size={12} className={classeTexteTypeBadge(code)} />
+              <ArrowRight size={24} className={classeTexteTypeBadge(code)} />
+              <span className="text-ink-500 text-xs font-bold whitespace-nowrap uppercase">
+                {libelleMoisEnCours}
+              </span>
               <span
                 className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
               >
-                {libelleMoisEnCours} : {formatJours(categorie.moisEnCours)}j
+                {formatJours(categorie.moisEnCours)}j
               </span>
-              <span
-                className={`text-xs font-bold whitespace-nowrap ${categorie.mouvement === 0 ? "text-ink-500" : classeTexteTypeBadge(code)}`}
-              >
-                {formatMouvement(categorie.mouvement)}j
+              <span className="ml-4 inline-flex items-center gap-1.5">
+                <span className="text-ink-500 text-xs font-bold whitespace-nowrap uppercase">
+                  Solde
+                </span>
+                <span
+                  className={`text-xs font-bold whitespace-nowrap ${ecart === 0 ? "text-ink-500" : classeTexteTypeBadge(code)}`}
+                >
+                  {formatMouvement(ecart)}j
+                </span>
               </span>
             </span>
+            <div className="bg-surface-app overflow-hidden">
+              <HistoriqueTable
+                demandes={demandes}
+                compact
+                onDateClick={onDateClick}
+                selectedId={selectedId}
+                lignesTransmissionParDemande={lignesParDemande}
+                emptyText={`Aucun congé ${code} sur cette période.`}
+              />
+            </div>
           </div>
-          <div className="bg-surface-app overflow-hidden">
-            <HistoriqueTable
-              demandes={demandes}
-              compact
-              onDateClick={onDateClick}
-              selectedId={selectedId}
-              lignesTransmissionParDemande={lignesParDemande}
-              emptyText={`Aucun congé ${code} sur cette période.`}
+          {selection && (
+            <DetailCongePanel
+              key={selection.id}
+              selection={selection}
+              onClose={onCloseDetail}
+              lignesTransmission={lignesTransmissionSelection}
             />
-          </div>
+          )}
         </div>
-        {selection && (
-          <DetailCongePanel
-            key={selection.id}
-            selection={selection}
-            onClose={onCloseDetail}
-            lignesTransmission={lignesTransmissionSelection}
-          />
-        )}
       </div>
     </div>
   );
@@ -265,7 +289,7 @@ export function VerifierFichesPaiePage3({
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetchComparaisonSoldes(periode, exportId),
+      fetchComparaisonSoldes(periode, exportId, prisEnCompte),
       exportId ? fetchCheckFichesPaie(exportId) : Promise.resolve([]),
     ]).then(([comps, collabs]) => {
       if (cancelled) return;
@@ -276,7 +300,7 @@ export function VerifierFichesPaiePage3({
     return () => {
       cancelled = true;
     };
-  }, [periode, exportId]);
+  }, [periode, exportId, prisEnCompte]);
 
   async function handleValider() {
     if (!exportId) return;
@@ -288,8 +312,13 @@ export function VerifierFichesPaiePage3({
       // rafraîchissement" — même correctif que `VerifierFichesPaiePage2`) :
       // `onValide()` ne rafraîchit que l'export côté parent, pas les badges
       // "Pris en compte" affichés ici, restés sur l'ancien état sinon.
+      // `prisEnCompte: true` en dur (14/09/2026) : `validerExportPaie` vient
+      // de réussir juste au-dessus, l'export EST validé à cet instant, même
+      // si la prop `prisEnCompte` (contrôlée par le parent) n'a pas encore
+      // eu le temps de se rafraîchir — sinon `moisEnCours` ajoutait encore
+      // le mouvement de cet export à un solde réel qui le contient déjà.
       const [comps, collabs] = await Promise.all([
-        fetchComparaisonSoldes(periode, exportId),
+        fetchComparaisonSoldes(periode, exportId, true),
         fetchCheckFichesPaie(exportId),
       ]);
       setComparaisons(comps);

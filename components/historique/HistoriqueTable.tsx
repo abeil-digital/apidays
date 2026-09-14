@@ -118,9 +118,10 @@ interface HistoriqueTablePropsCommunes {
    * initial, l'en-tête reste cliquable ensuite comme d'habitude. Absent =
    * pas de tri par défaut, comportement inchangé ailleurs. */
   triParDefaut?: ColonneTriable;
-  /** Libellé de l'en-tête de la colonne Durée — par défaut "Durée". "Quels
-   * congés transmettre" (25/08/2026) la renomme "Transmis", plus parlant une
-   * fois la colonne au format X/Y. */
+  /** Libellé de l'en-tête de la colonne Durée — par défaut "Compteur"
+   * (14/09/2026, aligné sur le renommage de la colonne équivalente ailleurs
+   * dans l'app). "Quels congés transmettre" (25/08/2026) la renomme
+   * "Transmis", plus parlant une fois la colonne au format X/Y. */
   libelleColonneDuree?: string;
   /** Libellé court du Type (`LABEL_COURT`, ex. "CP") plutôt que le libellé
    * complet (`LABEL_LONG`, ex. "Congés Payés") — 29/08/2026, indépendant de
@@ -419,7 +420,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
               </button>
             </th>
             <th className="w-[80px] px-4 py-3 text-center whitespace-nowrap">
-              {libelleColonneDuree ?? "Durée"}
+              {libelleColonneDuree ?? "Compteur"}
             </th>
             <th className="hidden w-[80px] py-3 pr-2 pl-4 md:table-cell">
               <button

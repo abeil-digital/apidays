@@ -783,19 +783,29 @@ async function fetchMouvementsExport(
  * compte."
  *
  * **Mise à jour du sens (27/08/2026, refonte du modèle solde théorique/réel,
- * voir CONTEXTE.md)** : `moisPrecedent`/`moisEnCours` viennent de
- * `fetchSoldes(...).valeur`, qui est désormais lui-même ancré sur ce qui a
- * été transmis en paie (`export_paie_lignes`) — ce sont donc DIRECTEMENT les
- * nombres que Delphine doit comparer à la fiche de paie papier du comptable,
- * pas un solde recalculé en direct qu'il faudrait ensuite réconcilier.
- * `mouvement` (`fetchMouvementsExport`) reste calculé mais n'est plus un
- * contrôle indépendant censé "recouper" les deux soldes (par construction,
- * une fois `valeur` ancré transmission, `moisEnCours - moisPrecedent` égale
- * déjà `mouvement` pour un export unique sur la période) — c'est désormais
- * une colonne de détail/lisibilité : "ce qui a précisément été transmis dans
- * CET export" (utile par ex. pour repérer une ligne de correction au sein du
- * total). Le vrai contrôle de cohérence à faire par Delphine est direct :
- * `moisEnCours` correspond-il à ce qui est écrit sur la fiche de paie ?
+ * voir CONTEXTE.md)** : `moisPrecedent` vient de `fetchSoldes(...).valeur`,
+ * ancré sur ce qui a été transmis en paie ET validé (`pris_en_compte`) — le
+ * réel confirmé à la fin du mois précédent.
+ *
+ * **`moisEnCours` = aperçu post-export, pas le réel actuel (14/09/2026,
+ * bug remonté par Vincent — "même nombre entre nov et déc avec -4j")** :
+ * tant que CET export n'est pas encore validé, `fetchSoldes(...).valeur` du
+ * mois en cours ne bouge pas encore (il ne reflète que ce qui est déjà
+ * `pris_en_compte`), alors que `mouvement` (`fetchMouvementsExport`) lit les
+ * lignes de cet export sans filtrer sur `pris_en_compte` — deux définitions
+ * différentes qui ne se recoupent pas naturellement avant validation. On
+ * calcule donc explicitement `moisEnCours = fetchSoldes(...).valeur +
+ * mouvement` : ce que sera le solde réel une fois cet export validé, seule
+ * lecture qui a un sens pour un écran de vérification PRÉ-validation.
+ *
+ * **`exportPrisEnCompte` (14/09/2026, 2e bug remonté par Vincent — écart
+ * incohérent avec les congés listés une fois l'export DÉJÀ validé, ex.
+ * lambda CP -3,5j pour un seul congé de 2j "à régulariser")** : une fois cet
+ * export validé, `fetchSoldes(...).valeur` du mois en cours l'inclut DÉJÀ
+ * (il est `pris_en_compte`) — ajouter `mouvement` par-dessus le comptait une
+ * seconde fois. `moisEnCours` n'ajoute donc `mouvement` que si l'export
+ * n'est pas encore pris en compte ; une fois validé, `fetchSoldes(...).valeur`
+ * seul est déjà le nombre à jour, aucun aperçu à construire.
  *
  * Tous les collaborateurs ACTIFS sont inclus, pas seulement ceux qui ont des
  * lignes transmises sur cet export — "le 0 mouvement est important" (Vincent) :
@@ -805,6 +815,7 @@ async function fetchMouvementsExport(
 export async function fetchComparaisonSoldes(
   periode: { debut: string; fin: string },
   exportId: string | null,
+  exportPrisEnCompte = false,
 ): Promise<ComparaisonSoldeCollaborateur[]> {
   const veilleDebut = new Date(`${periode.debut}T00:00:00Z`);
   veilleDebut.setUTCDate(veilleDebut.getUTCDate() - 1);
@@ -826,22 +837,35 @@ export async function fetchComparaisonSoldes(
         fetchSoldes(u.id, finMoisEnCours),
       ]);
       const mouvements = mouvementsParUtilisateur[u.id] ?? { cp: 0, rtt: 0, cpa: 0 };
+      // `mouvement` de l'export : 0 une fois cet export déjà pris en compte
+      // (`fetchSoldes(...).valeur` l'inclut déjà, voir doc ci-dessus) — reste
+      // affiché tel quel côté détail ("effet de CET export"), seul
+      // `moisEnCours` change de formule selon l'état de validation.
+      const ajoutApercu = exportPrisEnCompte
+        ? { cp: 0, rtt: 0, cpa: 0 }
+        : mouvements;
 
+      // `moisEnCours` est un aperçu post-export (14/09/2026, "oui option 1") :
+      // tant que cet export n'est pas encore validé (`pris_en_compte`),
+      // `soldesEnCours` (ancré sur le réel confirmé) ne bouge pas encore —
+      // on ajoute donc le mouvement de CET export pour montrer à Delphine ce
+      // que sera le solde une fois qu'elle aura cliqué "Valider", plutôt que
+      // le réel actuel encore inchangé.
       return {
         utilisateur: { id: u.id, prenom: u.prenom, nom: u.nom },
         cp: {
           moisPrecedent: soldesPrecedent.cp.valeur,
-          moisEnCours: soldesEnCours.cp.valeur,
+          moisEnCours: soldesEnCours.cp.valeur + ajoutApercu.cp,
           mouvement: mouvements.cp,
         },
         rtt: {
           moisPrecedent: soldesPrecedent.rtt.valeur,
-          moisEnCours: soldesEnCours.rtt.valeur,
+          moisEnCours: soldesEnCours.rtt.valeur + ajoutApercu.rtt,
           mouvement: mouvements.rtt,
         },
         cpa: {
           moisPrecedent: soldesPrecedent.cpa.valeur,
-          moisEnCours: soldesEnCours.cpa.valeur,
+          moisEnCours: soldesEnCours.cpa.valeur + ajoutApercu.cpa,
           mouvement: mouvements.cpa,
         },
       };
