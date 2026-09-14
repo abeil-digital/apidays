@@ -16,6 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
 import { fetchHistoriqueUtilisateur, fetchSoldeInitial } from "@/lib/data/utilisateurs.repository";
+import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
 
 /**
  * Repository des soldes de congés/RTT — calculé à la volée à partir de
@@ -471,6 +472,20 @@ interface CapitalOuvertureCp {
    * report/transfert/bonus à afficher (voir `fetchHistoriqueCp`). */
   gouvernePar: "solde_initial" | "gelee" | "calcul";
 }
+/** Levée par `resolverCapitalOuvertureCp` quand une période nécessaire au
+ * calcul du report précède `entreprises.date_debut_utilisation`, sans solde
+ * initial pour la couvrir (14/09/2026) — attrapée par les appelants
+ * (`fetchSoldes`/`fetchHistoriqueCp`) pour afficher un message explicite
+ * plutôt qu'un chiffre reconstruit sur un historique de consommation qui
+ * n'existe pas en base. */
+class SoldeIndeterminableError extends Error {
+  constructor() {
+    super(
+      "Solde CP non déterminable : période antérieure au début d'utilisation de l'outil, sans solde initial saisi.",
+    );
+  }
+}
+
 async function resolverCapitalOuvertureCp(
   supabase: SupabaseClient,
   utilisateurId: string,
@@ -485,6 +500,7 @@ async function resolverCapitalOuvertureCp(
     dateReferenceAnciennete: string;
     aujourdhui: Date;
     dateEntree: string;
+    dateDebutUtilisation: string | null;
   },
 ): Promise<CapitalOuvertureCp> {
   const periodePrecedente = decalerPeriode(periode, -1);
@@ -511,6 +527,19 @@ async function resolverCapitalOuvertureCp(
   // est la seule valeur correcte avant l'embauche).
   if (dateIso(periodePrecedente.fin) < ctx.dateEntree) {
     return { total: 0, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "calcul" };
+  }
+
+  // `date_debut_utilisation` (14/09/2026, branchement demandé par Vincent —
+  // décision déjà actée le 11/09/2026, voir Backlog) : le collaborateur
+  // était déjà en poste (passé le plancher `dateEntree` ci-dessus), mais
+  // cette période précède le vrai démarrage d'Apidays pour ce tenant — sans
+  // solde initial saisi, aucune donnée fiable de consommation n'existe pour
+  // elle (congés pris avant migration, jamais ressaisis). Continuer à
+  // recalculer inventerait un report (cas vécu : 194,5j reconstruits sur 6
+  // ans d'historique manquant) — on bloque explicitement au lieu de
+  // retomber sur 0 (un 0 serait tout aussi fictif qu'un report inventé).
+  if (ctx.dateDebutUtilisation && dateIso(periodePrecedente.fin) < ctx.dateDebutUtilisation) {
+    throw new SoldeIndeterminableError();
   }
 
   // Déjà gelée ? Le détail report/transfert/bonus n'est pas conservé dans
@@ -995,6 +1024,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     reglesAnciennete,
     historiqueTaux,
     soldeInitial,
+    { dateDebutUtilisation },
   ] = await Promise.all([
     supabase
       .from("utilisateurs")
@@ -1005,6 +1035,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     fetchReglesAnciennete(),
     fetchHistoriqueTauxActivite(id),
     fetchSoldeInitial(id),
+    fetchEntrepriseCourante(),
   ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
@@ -1052,53 +1083,67 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       dateReferenceAnciennete,
       aujourdhui,
       dateEntree: utilisateurRow.date_entree,
+      dateDebutUtilisation,
     };
 
     // Source de vérité unique (11/09/2026, refonte du moteur — voir
     // `resolverCapitalOuvertureCp`) : report + transfert CPA + bonus
     // d'ancienneté, calculés une seule fois et mémoïsés dès qu'une période
-    // est close.
-    const capitalCpTotal = (
-      await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital)
-    ).total;
-    const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
+    // est close. `try/catch` (14/09/2026) : `SoldeIndeterminableError`
+    // (période antérieure à `date_debut_utilisation`, sans solde initial)
+    // ne doit bloquer QUE le CP — la CPA, calculée juste en dessous,
+    // n'en dépend pas et doit rester affichée normalement.
+    try {
+      const capitalCpTotal = (
+        await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital)
+      ).total;
+      const periodeConsoCp = periodeConsommationCp(periodeEnCours, periodePrecedente, soldeInitial);
 
-    const consommeEnCours = await sommeJours(
-      supabase,
-      id,
-      "CP",
-      ["validee"],
-      false,
-      periodeConsoCp,
-      aujourdhui,
-    );
-    const enAttenteEnCours = await sommeJours(
-      supabase,
-      id,
-      "CP",
-      ["en_attente"],
-      false,
-      periodeConsoCp,
-      aujourdhui,
-    );
-    const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp, false);
-    const transmisEnCours = await sommeTransmis(
-      supabase,
-      id,
-      "CP",
-      false,
-      periodeConsoCp,
-      aujourdhui,
-    );
-    const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
-    const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
+      const consommeEnCours = await sommeJours(
+        supabase,
+        id,
+        "CP",
+        ["validee"],
+        false,
+        periodeConsoCp,
+        aujourdhui,
+      );
+      const enAttenteEnCours = await sommeJours(
+        supabase,
+        id,
+        "CP",
+        ["en_attente"],
+        false,
+        periodeConsoCp,
+        aujourdhui,
+      );
+      const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp, false);
+      const transmisEnCours = await sommeTransmis(
+        supabase,
+        id,
+        "CP",
+        false,
+        periodeConsoCp,
+        aujourdhui,
+      );
+      const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
+      const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
 
-    cp = {
-      valeur: soldeCpTransmis,
-      valeurApresAttente: soldeCpValidee - enAttenteEnCours,
-      conditionPrefixe: "À poser avant le",
-      conditionAccent: formatDateCourte(periodeEnCours.fin),
-    };
+      cp = {
+        valeur: soldeCpTransmis,
+        valeurApresAttente: soldeCpValidee - enAttenteEnCours,
+        conditionPrefixe: "À poser avant le",
+        conditionAccent: formatDateCourte(periodeEnCours.fin),
+      };
+    } catch (erreur) {
+      if (!(erreur instanceof SoldeIndeterminableError)) throw erreur;
+      cp = {
+        valeur: 0,
+        valeurApresAttente: 0,
+        conditionPrefixe: "Solde non déterminable",
+        conditionAccent: "saisir un solde initial",
+      };
+    }
 
     // CPA — préfiguration progressive et honnête de ce que la prochaine
     // bascule transférera en capital CP (11/09/2026) : jamais de bonus
@@ -1415,6 +1460,7 @@ export async function fetchHistoriqueCp(
     reglesAnciennete,
     historiqueTaux,
     soldeInitial,
+    { dateDebutUtilisation },
   ] = await Promise.all([
     supabase
       .from("utilisateurs")
@@ -1425,6 +1471,7 @@ export async function fetchHistoriqueCp(
     fetchReglesAnciennete(),
     fetchHistoriqueTauxActivite(utilisateurId),
     fetchSoldeInitial(utilisateurId),
+    fetchEntrepriseCourante(),
   ]);
 
   if (erreurUtilisateur || !utilisateurRow) {
@@ -1460,12 +1507,17 @@ export async function fetchHistoriqueCp(
     dateReferenceAnciennete,
     aujourdhui,
     dateEntree: utilisateurRow.date_entree,
+    dateDebutUtilisation,
   };
 
   // Source de vérité unique (11/09/2026, refonte du moteur — voir
   // `resolverCapitalOuvertureCp` dans `fetchSoldes`) : même fonction, même
   // résultat que la carte Accueil, plus de calcul dupliqué à maintenir en
-  // synchronisation manuelle.
+  // synchronisation manuelle. `SoldeIndeterminableError` (14/09/2026,
+  // `date_debut_utilisation` sans solde initial) remonte telle quelle ici —
+  // pas de CPA à préserver dans ce feed CP-only (contrairement à
+  // `fetchSoldes`), le générique "Impossible de charger l'historique du
+  // solde." de `useHistoriqueSolde` suffit à bloquer proprement l'affichage.
   const capitalOuverture = await resolverCapitalOuvertureCp(
     supabase,
     utilisateurId,
