@@ -14,8 +14,13 @@ import type { Demande, DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { HistoriqueTable } from "@/components/historique/HistoriqueTable";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { Button } from "@/components/ui/Button";
-import { Check } from "lucide-react";
-import { classeTexteTypeBadge, LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { ArrowRight, Check } from "lucide-react";
+import {
+  classeBordureTypeBadge,
+  classeTexteTypeBadge,
+  LABEL_LONG,
+  type TypeBadgeCode,
+} from "@/components/demandes/TypeBadge";
 
 const TYPES_SOLDE: TypeBadgeCode[] = ["CP", "RTT", "CPA"];
 
@@ -94,19 +99,33 @@ function SectionType({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
         <span className={`text-sm font-bold ${classeTexteTypeBadge(code)}`}>
           {LABEL_LONG[code]}
         </span>
-        <span className="text-ink-500 text-xs">
-          Solde {libelleMoisPrecedent} : <b className="text-ink-900">{formatJours(categorie.moisPrecedent)} j</b>
-          {" · "}
-          Solde {libelleMoisEnCours} : <b className="text-ink-900">{formatJours(categorie.moisEnCours)} j</b>
-          {" · "}
-          Différence :{" "}
-          <b className={categorie.mouvement === 0 ? "text-ink-900" : classeTexteTypeBadge(code)}>
-            {formatMouvement(categorie.mouvement)} j
-          </b>
+        {/* 2 pills mois précédent/mois en cours + flèche entre les deux,
+            balance en +/-j (ou 0) à la suite (14/09/2026, demande explicite
+            de Vincent — précisée après un premier essai en une seule pill
+            combinée, remplace la ligne "Solde X · Solde Y · Différence") —
+            même charte que la pill de dates de `HistoriqueTable`
+            (rounded-full, bordure/texte couleur du type). */}
+        <span className="inline-flex w-fit items-center gap-1.5">
+          <span
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
+          >
+            {libelleMoisPrecedent} : {formatJours(categorie.moisPrecedent)}j
+          </span>
+          <ArrowRight size={12} className={classeTexteTypeBadge(code)} />
+          <span
+            className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
+          >
+            {libelleMoisEnCours} : {formatJours(categorie.moisEnCours)}j
+          </span>
+          <span
+            className={`text-xs font-bold whitespace-nowrap ${categorie.mouvement === 0 ? "text-ink-500" : classeTexteTypeBadge(code)}`}
+          >
+            {formatMouvement(categorie.mouvement)}j
+          </span>
         </span>
       </div>
       <div className="bg-surface-card overflow-hidden shadow-sm">
