@@ -6208,6 +6208,20 @@ de ce panneau au clic, qui reprend la charte déjà posée pour les régularisat
 retiré sur demande de Vincent ("pas logique, revient en arrière") — reste en Backlog comme sujet à
 étudier plutôt que patché.
 
+## SoldeCard CPA — libellé "À poser à partir du" (14/09/2026)
+
+Signalé par Vincent sur "Suivre les soldes" : la card CPA affichait "À poser avant le
+{fin de période}", copié tel quel du libellé CP/RTT — trompeur pour le CPA, qui n'a pas de date
+limite (reste décompté du solde CPA jusqu'à la vraie bascule, quelle que soit sa date, voir la
+refonte du moteur ci-dessus). Le design system (`DesignSystemPage.tsx`) documentait déjà le bon
+libellé ("À poser à partir de") sans jamais l'avoir branché sur le vrai composant.
+
+Corrigé en 3 passes successives (Vincent a précisé la date exacte au fur et à mesure) :
+"À poser à partir du" + **1er jour de la PROCHAINE période de référence** (même jour/mois que le
+début de la période en cours, un an plus tard — ex. 01/06/2026 → 01/06/2027 sur une période
+juin-mai) : la date où ce CPA deviendra du CP, pas une date à partir de laquelle il serait possible
+de le poser (déjà possible immédiatement). `fetchSoldes`, bloc CPA de `soldes.repository.ts`.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
