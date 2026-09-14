@@ -85,6 +85,7 @@ function SectionType({
   lignesParDemande,
   selectedId,
   onDateClick,
+  onCloseDetail,
 }: {
   code: TypeBadgeCode;
   categorie: SoldeComparaisonCategorie;
@@ -93,50 +94,83 @@ function SectionType({
   lignesParDemande: Record<string, LigneExportPaie[]>;
   selectedId: string | null;
   onDateClick: (id: string) => void;
+  onCloseDetail: () => void;
 }) {
   const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
   const libelleMoisEnCours = nomMois(periode.debut);
 
+  // Le congé sélectionné appartient-il à CE TYPE (14/09/2026, demande
+  // explicite de Vincent — une card par type de congé désormais, plus par
+  // collaborateur) : `demandes` est déjà filtré sur ce type par l'appelant,
+  // donc cette recherche scope naturellement le détail au bon type.
+  const selection = demandes.find((d) => d.id === selectedId) ?? null;
+  const lignesTransmissionSelection = selectedId ? (lignesParDemande[selectedId] ?? []) : [];
+
   return (
-    <div className="flex flex-col gap-2">
-      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
-        <span className={`text-sm font-bold ${classeTexteTypeBadge(code)}`}>
-          {LABEL_LONG[code]}
-        </span>
-        {/* 2 pills mois précédent/mois en cours + flèche entre les deux,
-            balance en +/-j (ou 0) à la suite (14/09/2026, demande explicite
-            de Vincent — précisée après un premier essai en une seule pill
-            combinée, remplace la ligne "Solde X · Solde Y · Différence") —
-            même charte que la pill de dates de `HistoriqueTable`
-            (rounded-full, bordure/texte couleur du type). */}
-        <span className="inline-flex w-fit items-center gap-1.5">
-          <span
-            className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
-          >
-            {libelleMoisPrecedent} : {formatJours(categorie.moisPrecedent)}j
-          </span>
-          <ArrowRight size={12} className={classeTexteTypeBadge(code)} />
-          <span
-            className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
-          >
-            {libelleMoisEnCours} : {formatJours(categorie.moisEnCours)}j
-          </span>
-          <span
-            className={`text-xs font-bold whitespace-nowrap ${categorie.mouvement === 0 ? "text-ink-500" : classeTexteTypeBadge(code)}`}
-          >
-            {formatMouvement(categorie.mouvement)}j
-          </span>
-        </span>
-      </div>
-      <div className="bg-surface-card overflow-hidden shadow-sm">
-        <HistoriqueTable
-          demandes={demandes}
-          compact
-          onDateClick={onDateClick}
-          selectedId={selectedId}
-          lignesTransmissionParDemande={lignesParDemande}
-          emptyText={`Aucun congé ${code} sur cette période.`}
-        />
+    // Card par type de congé (14/09/2026, demande explicite de Vincent —
+    // "on sort le nom du collaborateur des cards... on crée des cards par
+    // type de congés", après un premier essai en une seule card par
+    // collaborateur) — même charte que les autres cards de cet écran
+    // (`bg-surface-card` + `shadow-sm`, coins carrés). Grille interne
+    // (`xl:grid-cols-[1fr_16rem]`, même principe que "Suivre les demandes")
+    // quand le détail d'un congé DE CE TYPE est ouvert, pour l'afficher à
+    // droite sans sortir de cette card.
+    <div className="bg-surface-card p-4 shadow-sm">
+      <div
+        className={
+          selection
+            ? "grid grid-cols-1 items-start gap-5 xl:grid-cols-[1fr_16rem] xl:gap-x-4"
+            : undefined
+        }
+      >
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1">
+            <span className={`text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+              {LABEL_LONG[code]}
+            </span>
+            {/* 2 pills mois précédent/mois en cours + flèche entre les deux,
+                balance en +/-j (ou 0) à la suite (14/09/2026, demande
+                explicite de Vincent) — même charte que la pill de dates de
+                `HistoriqueTable` (rounded-full, bordure/texte couleur du
+                type). */}
+            <span className="inline-flex w-fit items-center gap-1.5">
+              <span
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
+              >
+                {libelleMoisPrecedent} : {formatJours(categorie.moisPrecedent)}j
+              </span>
+              <ArrowRight size={12} className={classeTexteTypeBadge(code)} />
+              <span
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap ${classeBordureTypeBadge(code)} bg-surface-app text-ink-900`}
+              >
+                {libelleMoisEnCours} : {formatJours(categorie.moisEnCours)}j
+              </span>
+              <span
+                className={`text-xs font-bold whitespace-nowrap ${categorie.mouvement === 0 ? "text-ink-500" : classeTexteTypeBadge(code)}`}
+              >
+                {formatMouvement(categorie.mouvement)}j
+              </span>
+            </span>
+          </div>
+          <div className="bg-surface-app overflow-hidden">
+            <HistoriqueTable
+              demandes={demandes}
+              compact
+              onDateClick={onDateClick}
+              selectedId={selectedId}
+              lignesTransmissionParDemande={lignesParDemande}
+              emptyText={`Aucun congé ${code} sur cette période.`}
+            />
+          </div>
+        </div>
+        {selection && (
+          <DetailCongePanel
+            key={selection.id}
+            selection={selection}
+            onClose={onCloseDetail}
+            lignesTransmission={lignesTransmissionSelection}
+          />
+        )}
       </div>
     </div>
   );
@@ -162,62 +196,31 @@ function CardCollaborateurV3({
     (lignesParDemande[demande.id] ??= []).push(ligne);
   }
 
-  // Le congé sélectionné appartient-il à CE collaborateur ? (14/09/2026,
-  // demande explicite de Vincent — "la card détail doit être englobée dans
-  // la card collaborateur") : `DetailCongePanel` ne s'affiche plus dans une
-  // colonne à part au niveau de la page, mais À L'INTÉRIEUR de la card du
-  // collaborateur concerné, aucune autre card n'affiche rien.
-  const selection = lignes.find(({ demande }) => demande.id === selectedId)?.demande ?? null;
-  const lignesTransmissionSelection = lignes
-    .filter(({ demande }) => demande.id === selectedId)
-    .map(({ ligne }) => ligne);
-
   return (
-    // Card englobant tout le collaborateur (14/09/2026, demande explicite de
-    // Vincent) — même charte que les autres cards de cet écran (`bg-surface-
-    // card` + `shadow-sm`, coins carrés) : nom + les 3 tableaux CP/RTT/CPA
-    // dans un seul bloc visuel plutôt que des sections flottant librement
-    // sur le fond de page. Grille interne (`xl:grid-cols-[1fr_16rem]`, même
-    // principe que "Suivre les demandes") quand le détail d'un congé DE CE
-    // collaborateur est ouvert, pour l'afficher à droite sans sortir de
-    // cette card.
-    <div className="bg-surface-card p-4 shadow-sm">
-      <div
-        className={
-          selection
-            ? "grid grid-cols-1 items-start gap-5 xl:grid-cols-[1fr_16rem] xl:gap-x-4"
-            : undefined
-        }
-      >
-        <div className="flex min-w-0 flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-ink-900 text-base font-semibold">
-              {c.utilisateur.prenom} {c.utilisateur.nom}
-            </span>
-          </div>
-          {TYPES_SOLDE.map((code) => (
-            <SectionType
-              key={code}
-              code={code}
-              categorie={categorieSolde(c, code)}
-              periode={periode}
-              demandes={lignes
-                .filter(({ demande }) => typeBadgeDeDemande(demande) === code)
-                .map(({ demande }) => demande)}
-              lignesParDemande={lignesParDemande}
-              selectedId={selectedId}
-              onDateClick={onDateClick}
-            />
-          ))}
-        </div>
-        {selection && (
-          <DetailCongePanel
-            key={selection.id}
-            selection={selection}
-            onClose={onCloseDetail}
-            lignesTransmission={lignesTransmissionSelection}
+    // Plus de card englobante (14/09/2026, demande explicite de Vincent) —
+    // le nom du collaborateur s'affiche directement sur le fond de page,
+    // chaque type de congé (CP/RTT/CPA) a sa propre card en dessous (voir
+    // `SectionType`).
+    <div className="flex flex-col gap-3">
+      <span className="text-ink-900 px-1 text-base font-semibold">
+        {c.utilisateur.prenom} {c.utilisateur.nom}
+      </span>
+      <div className="flex flex-col gap-5">
+        {TYPES_SOLDE.map((code) => (
+          <SectionType
+            key={code}
+            code={code}
+            categorie={categorieSolde(c, code)}
+            periode={periode}
+            demandes={lignes
+              .filter(({ demande }) => typeBadgeDeDemande(demande) === code)
+              .map(({ demande }) => demande)}
+            lignesParDemande={lignesParDemande}
+            selectedId={selectedId}
+            onDateClick={onDateClick}
+            onCloseDetail={onCloseDetail}
           />
-        )}
+        ))}
       </div>
     </div>
   );
