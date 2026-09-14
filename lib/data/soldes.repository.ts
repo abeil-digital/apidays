@@ -1139,17 +1139,25 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
     const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
 
-    // "À poser à partir du" (14/09/2026, correction signalée par Vincent) —
-    // le CPA n'a pas de date limite comme le CP/RTT (il reste décompté du
-    // solde CPA jusqu'à la vraie bascule, quelle que soit sa date, voir
-    // CONTEXTE.md), mais une date de départ : le 1er jour de la période de
-    // référence en cours, déjà le point de départ de son propre accrual
-    // (`debutCpa`, même logique que `resolverPointDepartAccrual`).
+    // "À poser à partir du" (14/09/2026, correction signalée par Vincent,
+    // "année +1") — le CPA n'a pas de date limite comme le CP/RTT (il reste
+    // décompté du solde CPA jusqu'à la vraie bascule, quelle que soit sa
+    // date, voir CONTEXTE.md) : la date affichée est celle où ce CPA
+    // deviendra du CP (1er jour de la PROCHAINE période de référence, même
+    // jour/mois que le début de la période en cours, un an plus tard) — pas
+    // une date à partir de laquelle poser un CPA serait possible.
+    const debutProchainePeriode = new Date(
+      Date.UTC(
+        periodeEnCours.debut.getUTCFullYear() + 1,
+        periodeEnCours.debut.getUTCMonth(),
+        periodeEnCours.debut.getUTCDate(),
+      ),
+    );
     cpa = {
       valeur: soldeCpaTransmis,
       valeurApresAttente: soldeCpaValidee - enAttenteCpa,
       conditionPrefixe: "À poser à partir du",
-      conditionAccent: formatDateCourte(periodeEnCours.debut),
+      conditionAccent: formatDateCourte(debutProchainePeriode),
     };
   }
 
