@@ -260,32 +260,33 @@ export function VerifierFichesPaiePage3({
       ) : comparaisons.length === 0 ? (
         <div className="text-ink-500 py-20 text-center text-sm">Aucun collaborateur actif.</div>
       ) : (
-        // Card englobante (14/09/2026, demande explicite de Vincent) — le
-        // tableau (une card par collaborateur) ET le détail congé déclenché
-        // au clic partagent maintenant une seule card, large comme la zone
-        // cœur de la page (même `max-w-[900px]` que "Quels congés
-        // transmettre", `TransmissionsPaiePage.tsx`) — le détail s'affiche
-        // EN DESSOUS de la liste plutôt qu'à côté (pas de colonne latérale
-        // ici), `pleineLargeur` pour qu'il remplisse cette largeur au lieu
-        // de son `xl:w-64` par défaut.
-        <div className="bg-surface-card flex max-w-[900px] flex-col gap-8 p-4 shadow-sm">
-          {comparaisons.map((c) => (
-            <CardCollaborateurV3
-              key={c.utilisateur.id}
-              c={c}
-              periode={periode}
-              lignes={lignesParUtilisateur.get(c.utilisateur.id) ?? []}
-              selectedId={selectionId}
-              onDateClick={setSelectionId}
-            />
-          ))}
+        // Même gabarit EXACT que "Suivre les demandes" (14/09/2026, demande
+        // explicite de Vincent — "exactement comme pour suivre les
+        // demandes") : `SuivreDemandesPage.tsx`, grille
+        // `xl:grid-cols-[minmax(0,900px)_16rem]` — la card (tableau) plafonne
+        // à 900px, le détail congé dans sa propre colonne de 16rem à droite
+        // à partir de `xl:`, `DetailCongePanel` sur son gabarit par défaut
+        // (`xl:w-64 xl:shrink-0 xl:sticky`, pas `pleineLargeur`) plutôt que
+        // dans une seule card partagée (premier essai écarté le même jour).
+        <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5">
+          <div className="bg-surface-card flex w-full min-w-0 flex-col gap-8 p-4 shadow-sm">
+            {comparaisons.map((c) => (
+              <CardCollaborateurV3
+                key={c.utilisateur.id}
+                c={c}
+                periode={periode}
+                lignes={lignesParUtilisateur.get(c.utilisateur.id) ?? []}
+                selectedId={selectionId}
+                onDateClick={setSelectionId}
+              />
+            ))}
+          </div>
           {selection && (
             <DetailCongePanel
               key={selection.id}
               selection={selection}
               onClose={() => setSelectionId(null)}
               lignesTransmission={lignesTransmissionSelection}
-              pleineLargeur
             />
           )}
         </div>
