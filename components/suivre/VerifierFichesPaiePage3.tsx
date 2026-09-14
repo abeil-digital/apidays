@@ -94,7 +94,7 @@ function SectionType({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
+      <div className="mb-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 px-1">
         <span className={`text-sm font-bold ${classeTexteTypeBadge(code)}`}>
           {LABEL_LONG[code]}
         </span>
