@@ -260,12 +260,15 @@ export function VerifierFichesPaiePage3({
       ) : comparaisons.length === 0 ? (
         <div className="text-ink-500 py-20 text-center text-sm">Aucun collaborateur actif.</div>
       ) : (
-        // Largeur calée sur "Quels congés transmettre" (11/09/2026, demande
-        // explicite) — même colonne `minmax(0,900px)` que
-        // `QuelsCongesTransmettre` (`TransmissionsPaiePage.tsx`), pas de
-        // panneau latéral ici (`DetailCongePanel` s'affiche en dessous, pas
-        // à côté), donc `max-w-[900px]` seul suffit.
-        <div className="flex max-w-[900px] flex-col gap-8">
+        // Card englobante (14/09/2026, demande explicite de Vincent) — le
+        // tableau (une card par collaborateur) ET le détail congé déclenché
+        // au clic partagent maintenant une seule card, large comme la zone
+        // cœur de la page (même `max-w-[900px]` que "Quels congés
+        // transmettre", `TransmissionsPaiePage.tsx`) — le détail s'affiche
+        // EN DESSOUS de la liste plutôt qu'à côté (pas de colonne latérale
+        // ici), `pleineLargeur` pour qu'il remplisse cette largeur au lieu
+        // de son `xl:w-64` par défaut.
+        <div className="bg-surface-card flex max-w-[900px] flex-col gap-8 p-4 shadow-sm">
           {comparaisons.map((c) => (
             <CardCollaborateurV3
               key={c.utilisateur.id}
@@ -276,16 +279,16 @@ export function VerifierFichesPaiePage3({
               onDateClick={setSelectionId}
             />
           ))}
+          {selection && (
+            <DetailCongePanel
+              key={selection.id}
+              selection={selection}
+              onClose={() => setSelectionId(null)}
+              lignesTransmission={lignesTransmissionSelection}
+              pleineLargeur
+            />
+          )}
         </div>
-      )}
-
-      {selection && (
-        <DetailCongePanel
-          key={selection.id}
-          selection={selection}
-          onClose={() => setSelectionId(null)}
-          lignesTransmission={lignesTransmissionSelection}
-        />
       )}
 
       <div className="bg-surface-card border-ink-300/60 sticky bottom-0 z-10 flex items-center justify-between gap-4 rounded-xl border-t px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
