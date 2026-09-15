@@ -358,15 +358,15 @@ export function DashboardPage() {
   // côté posé), teinte atténuée en plus pour "en attente" (`color-mix`,
   // équivalent de `classeFondAttenueTypeBadge` mais applicable à une couleur
   // CSS brute plutôt qu'à une classe Tailwind).
-  // Validé/en attente distingués par la couleur du CHIFFRE (14/09/2026,
-  // demande explicite de Vincent — "on joue sur la transparence, ce n'est
-  // pas efficace visuellement" : remplace l'ancien fond atténué/`color-mix`
-  // 50% par un fond TOUJOURS plein, seul le chiffre change de couleur.
-  // **Recentré le 15/09/2026** : seul le statut "en attente" se matérialise
-  // désormais (orange, `text-status-warning-fg`, même token que
-  // `StatusBadge` ailleurs) — un congé validé redevient un chiffre blanc
-  // standard (`undefined` ⇒ défaut `text-white` de `MiniCalendrier`), la
-  // distinction verte a été abandonnée.
+  // Validé/en attente distingués visuellement (14/09/2026, demande explicite
+  // de Vincent — "on joue sur la transparence, ce n'est pas efficace
+  // visuellement" : remplace l'ancien fond atténué/`color-mix` 50% par un
+  // fond TOUJOURS plein). **Recentré le 15/09/2026, 2 itérations le même
+  // jour** : essayé d'abord en couleur de chiffre (vert validé/orange en
+  // attente), rejugé "pas efficace" — recentré sur un contour orange autour
+  // de la pastille pour "en attente" seulement (`classeContour`, ring
+  // `text-status-warning-fg`, même token que `StatusBadge`), le chiffre
+  // redevenant blanc dans tous les cas, y compris validé.
   //
   // Chevauchement demande/férié/DJI (15/09/2026, cas concret de Vincent — un
   // CP posé du 9 au 13/11 avec un férié le 11 et une DJI l'après-midi du 13 :
@@ -394,8 +394,8 @@ export function DashboardPage() {
       const code = codeBadgeDemande(demande);
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
-      const classeTexteChiffre =
-        demande.statut === "en attente" ? "text-status-warning-fg" : undefined;
+      const classeContour =
+        demande.statut === "en attente" ? "ring-2 ring-inset ring-status-warning-fg" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -404,7 +404,7 @@ export function DashboardPage() {
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), classeTexteChiffre };
+        return { classeFond: classeFondTypeBadge(code), classeContour };
       }
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
@@ -413,12 +413,12 @@ export function DashboardPage() {
           partage: matinCouvert
             ? { gauche: couleurDemande, droite: "var(--color-dji)" }
             : { gauche: "var(--color-dji)", droite: couleurDemande },
-          classeTexteChiffre,
+          classeContour,
         };
       }
       return {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
-        classeTexteChiffre,
+        classeContour,
       };
     }
     return communDuJour(iso);

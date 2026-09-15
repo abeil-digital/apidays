@@ -88,16 +88,18 @@ export interface PastilleJour {
   /** Classe(s) Tailwind pour le fond plein (ex. "bg-cp"). Ignoré si `moitie`/`partage` est fourni. */
   classeFond?: string;
   /**
-   * Couleur du CHIFFRE du jour, en remplacement de `text-white` (14/09/2026,
-   * demande explicite de Vincent — "on joue sur la transparence, ce n'est
-   * pas efficace visuellement" : distinguer validé/en attente par la couleur
-   * du chiffre — vert/orange — plutôt qu'en atténuant le fond). S'applique
-   * aux variantes `classeFond` (fond plein), `moitie` (demi-journée) et
-   * `partage` (15/09/2026, étendu — un congé personnel scindé par une DJI
-   * garde son statut visuel) — pas à `plein`, propre à la heatmap "Calendrier
-   * des employés", hors scope de ces demandes. Défaut `text-white` si absent
-   * (comportement inchangé). */
-  classeTexteChiffre?: string;
+   * Contour de la pastille signalant un statut "en attente" (15/09/2026,
+   * demande explicite de Vincent — d'abord essayé en couleur de chiffre
+   * orange/vert le même jour, "on joue sur la transparence, ce n'est pas
+   * efficace visuellement", puis recentré sur un contour orange autour du
+   * jour concerné : le chiffre redevient blanc dans tous les cas). Classe(s)
+   * Tailwind pour un anneau (ex. "ring-2 ring-inset ring-status-warning-fg"),
+   * `undefined` = pas de contour (congé validé, ou tout jour sans statut).
+   * S'applique aux variantes `classeFond` (fond plein), `moitie` (demi-journée)
+   * et `partage` (congé personnel scindé par une DJI, garde son statut
+   * visuel) — pas à `plein`, propre à la heatmap "Calendrier des employés",
+   * hors scope de ces demandes. */
+  classeContour?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };
   /**
@@ -189,12 +191,12 @@ function memePastille(a: PastilleJour, b: PastilleJour): boolean {
 function apparenceKey(pastille: PastilleJour | null, iso: string): string | null {
   if (!pastille) return null;
   if (pastille.moitie || pastille.partage || pastille.plein) return `m:${iso}`;
-  // `classeTexteChiffre` fait partie de l'apparence (15/09/2026, bug signalé
-  // par Vincent — un `PeriodeSegment` fusionné ignorait la couleur du
-  // chiffre, toujours blanc) : deux jours de même fond mais de statut
-  // différent (validé/en attente) ne doivent jamais fusionner en une seule
-  // barre, qui ne pourrait porter qu'une seule couleur de chiffre.
-  return `f:${pastille.classeFond}:${pastille.classeTexteChiffre ?? ""}`;
+  // `classeContour` fait partie de l'apparence (15/09/2026, bug signalé par
+  // Vincent — un `PeriodeSegment` fusionné ignorait le contour) : deux jours
+  // de même fond mais de statut différent (validé/en attente) ne doivent
+  // jamais fusionner en une seule barre, qui ne pourrait porter qu'un seul
+  // contour.
+  return `f:${pastille.classeFond}:${pastille.classeContour ?? ""}`;
 }
 
 function JourPastille({
@@ -399,7 +401,7 @@ function JourPastille({
     const gradient = `linear-gradient(to right, ${gauche} 50%, ${droite} 50%)`;
     return (
       <span
-        className={`${base} ${pastille.classeTexteChiffre ?? "text-white"}`}
+        className={`${base} text-white ${pastille.classeContour ?? ""}`}
         style={{ background: gradient }}
         {...evenements}
       >
@@ -454,7 +456,7 @@ function JourPastille({
   if (!pastille.moitie) {
     return (
       <span
-        className={`${base} ${pastille.classeFond} ${pastille.classeTexteChiffre ?? "text-white"}`}
+        className={`${base} ${pastille.classeFond} text-white ${pastille.classeContour ?? ""}`}
         {...evenements}
       >
         {contenuJour("ring-white")}
@@ -471,7 +473,7 @@ function JourPastille({
 
   return (
     <span
-      className={`${base} ${pastille.classeTexteChiffre ?? "text-white"}`}
+      className={`${base} text-white ${pastille.classeContour ?? ""}`}
       style={{ background: gradient }}
       {...evenements}
     >
@@ -492,7 +494,7 @@ function PeriodeSegment({
   isos,
   isoPremierJour,
   classeFond,
-  classeTexteChiffre,
+  classeContour,
   isStart,
   isEnd,
   isHovered,
@@ -508,9 +510,9 @@ function PeriodeSegment({
   isos: string[];
   isoPremierJour: string;
   classeFond: string;
-  /** Voir `PastilleJour.classeTexteChiffre` (15/09/2026, bug corrigé — une
+  /** Voir `PastilleJour.classeContour` (15/09/2026, bug corrigé — une
    * barre fusionnée ignorait cette couleur, toujours `text-white`). */
-  classeTexteChiffre?: string;
+  classeContour?: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
@@ -540,7 +542,7 @@ function PeriodeSegment({
 
   return (
     <div
-      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold ${classeTexteChiffre ?? "text-white"} transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white ${classeContour ?? ""} transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
@@ -660,7 +662,7 @@ type ItemRendu =
       isos: string[];
       isoPremierJour: string;
       classeFond: string;
-      classeTexteChiffre?: string;
+      classeContour?: string;
       isStart: boolean;
       isEnd: boolean;
       groupeId: string;
@@ -732,7 +734,7 @@ function calculerItemsRendu(
         isos: semaines.slice(i, j).map((c) => c.iso as string),
         isoPremierJour: cellule.iso,
         classeFond: cellule.pastille.classeFond ?? "",
-        classeTexteChiffre: cellule.pastille.classeTexteChiffre,
+        classeContour: cellule.pastille.classeContour,
         isStart: isStarts[i],
         isEnd: isEnds[j - 1],
         groupeId: groupeIds[i] as string,
@@ -1012,7 +1014,7 @@ export function MiniCalendrier({
               isos={item.isos}
               isoPremierJour={item.isoPremierJour}
               classeFond={item.classeFond}
-              classeTexteChiffre={item.classeTexteChiffre}
+              classeContour={item.classeContour}
               isStart={item.isStart}
               isEnd={item.isEnd}
               isHovered={

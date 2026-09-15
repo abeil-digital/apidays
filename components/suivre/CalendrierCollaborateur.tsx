@@ -262,10 +262,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return null;
   }
 
-  // Priorité férié > demande > CPI > DJI, couleur du chiffre orange pour "en
-  // attente" seulement (validé = blanc, recentré le 15/09/2026), chevauchement
-  // demande/férié/DJI transparent — voir DashboardPage.tsx pour le détail
-  // complet de ce correctif (duplication assumée).
+  // Priorité férié > demande > CPI > DJI, contour orange pour "en attente"
+  // seulement (validé = chiffre blanc standard, recentré le 15/09/2026),
+  // chevauchement demande/férié/DJI transparent — voir DashboardPage.tsx
+  // pour le détail complet de ce correctif (duplication assumée).
   function tipoDuJour(iso: string): PastilleJour | null {
     const annee = Number(iso.slice(0, 4));
     const cal = calendrierPourAnnee(annee);
@@ -278,8 +278,8 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
       const code = codeBadgeDemande(demande);
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
-      const classeTexteChiffre =
-        demande.statut === "en attente" ? "text-status-warning-fg" : undefined;
+      const classeContour =
+        demande.statut === "en attente" ? "ring-2 ring-inset ring-status-warning-fg" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -288,7 +288,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), classeTexteChiffre };
+        return { classeFond: classeFondTypeBadge(code), classeContour };
       }
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
@@ -297,12 +297,12 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
           partage: matinCouvert
             ? { gauche: couleurDemande, droite: "var(--color-dji)" }
             : { gauche: "var(--color-dji)", droite: couleurDemande },
-          classeTexteChiffre,
+          classeContour,
         };
       }
       return {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
-        classeTexteChiffre,
+        classeContour,
       };
     }
     return communDuJour(iso);
