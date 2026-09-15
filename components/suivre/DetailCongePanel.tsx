@@ -319,13 +319,19 @@ export function DetailCongePanel({
   // simple mention plutôt qu'un lien d'action absent. Seul l'admin peut
   // passer outre (`peutAnnulerDejaTransmis`).
   const dejaTransmis = selection.statut === "validé" && (lignesTransmission ?? []).length > 0;
+  // Décision (Valider/Refuser) disponible — dans ce cas "en attente" est déjà
+  // couvert par Refuser, qui joue le même rôle qu'un retrait ; "Annuler cette
+  // demande" ne s'affiche donc pour "en attente" que pour un viewer SANS
+  // pouvoir de décision (15/09/2026, signalé par Vincent — le manager avait
+  // les deux liens en même temps sur une demande en attente, redondant).
+  const peutDecider = Boolean(onValider && onRefuser);
   // Congé imposé (CPI, 29/08/2026) — un collaborateur ne peut pas annuler
   // lui-même une demande générée par un CPI (RLS alignée, voir schema.sql),
   // seul l'admin peut la retirer en supprimant la période sur Paramétrer >
   // Calendrier (`supprimerCongeImpose`, qui annule alors ces demandes).
   const peutAnnulerCetteDemande =
     !selection.congeImposeId &&
-    (selection.statut === "en attente" ||
+    ((selection.statut === "en attente" && !peutDecider) ||
       peutAnnulerValide ||
       (dejaTransmis && peutAnnulerDejaTransmis));
   // Solde avant/après (17/08/2026 → 24/08/2026, ajout demandé) — uniquement
@@ -346,7 +352,6 @@ export function DetailCongePanel({
   const resumeConge = selection.demandeur
     ? `${selection.demandeur.prenom} ${selection.demandeur.nom} - ${periodeEtDuree}`
     : periodeEtDuree;
-  const peutDecider = Boolean(onValider && onRefuser);
   const peutVoirDetail = Boolean(joursFeries && congesImposes && djImposees && autresDemandes);
   const occupant = peutVoirDetail
     ? creerResolveurOccupant({
