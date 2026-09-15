@@ -410,20 +410,27 @@ function JourPastille({
     const { gauche, droite, classeContourGauche, classeContourDroite } = pastille.partage;
     // Deux moitiés en éléments séparés plutôt qu'un dégradé CSS (15/09/2026)
     // — nécessaire pour poser un contour "en attente" sur UN SEUL côté (voir
-    // `PastilleJour.partage`) : `overflow-hidden` sur le conteneur reprend
-    // l'arrondi de `forme` (pilule/cercle) et rogne les moitiés rectangulaires
-    // à sa forme, sans avoir à dupliquer l'arrondi sur chaque moitié.
+    // `PastilleJour.partage`). Chaque moitié reprend elle-même l'arrondi de
+    // son bord extérieur (`arrondiGauche`/`arrondiDroite`, même logique que
+    // `forme`) plutôt que de compter uniquement sur `overflow-hidden` pour
+    // rogner un rectangle droit : un contour (`ring`) posé sur un rectangle
+    // ensuite rogné par un parent arrondi laisse un liseré anguleux sur la
+    // courbe (bug constaté en vérifiant, "le contour à droite est pas net")
+    // — un enfant nativement arrondi donne un contour propre sur toute la
+    // courbe. `overflow-hidden` sur le conteneur reste en filet de sécurité.
+    const arrondiGauche = agrandi ? "" : isStart ? "rounded-l-full" : "";
+    const arrondiDroite = agrandi ? "" : isEnd ? "rounded-r-full" : "";
     return (
       <span
         className={`relative ${taille} ${forme} overflow-hidden text-white transition-[filter] duration-150 ${survol} ${curseur}`}
         {...evenements}
       >
         <span
-          className={`absolute inset-y-0 left-0 w-1/2 ${classeContourGauche ?? ""}`}
+          className={`absolute inset-y-0 left-0 w-1/2 ${arrondiGauche} ${classeContourGauche ?? ""}`}
           style={{ background: gauche }}
         />
         <span
-          className={`absolute inset-y-0 right-0 w-1/2 ${classeContourDroite ?? ""}`}
+          className={`absolute inset-y-0 right-0 w-1/2 ${arrondiDroite} ${classeContourDroite ?? ""}`}
           style={{ background: droite }}
         />
         <span className={`relative z-10 flex h-full w-full items-center justify-center ${texte} font-bold`}>
