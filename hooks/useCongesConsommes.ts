@@ -12,7 +12,7 @@ interface UseCongesConsommesResult {
   refetch: () => void;
 }
 
-/** Congés validés (CP/RTT/CSS) sur une période — consommé par `CongesPaiePage`
+/** Congés validés (types `TYPES_TRANSMISSIBLES_PAIE`) sur une période — consommé par `CongesPaiePage`
  * (onglet "Générer l'export" de `TransmissionsPaiePage`). `refetch` permet de
  * rafraîchir après une action locale (ex. valider/dévalider une demande)
  * sans dépendre d'un changement de `debut`/`fin`.

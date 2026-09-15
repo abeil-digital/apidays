@@ -19,6 +19,15 @@ import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
  * ne change pas, donc aucun hook ni composant n'est touché.
  */
 
+// Types transmissibles en paie (15/09/2026, bug signalé par Vincent — un CE
+// posé n'apparaissait jamais sur "Quels congés transmettre"/l'aperçu CSV,
+// contrairement à un CSS) : les 6 types de `demandes_conges` sont concernés,
+// y compris les 4 "sans solde" (CSS/CE/RECUP/EVT_FAM, introduits ensemble le
+// 04/08/2026) — l'absence de solde associé n'a jamais été un critère
+// d'exclusion de la paie, seul CSS avait été retenu à l'origine ici et dans
+// `exportsPaie.repository.ts`, sans raison documentée.
+export const TYPES_TRANSMISSIBLES_PAIE = ["CP", "RTT", "CSS", "CE", "RECUP", "EVT_FAM"] as const;
+
 interface DemandeRow {
   id: string;
   date_debut: string;
@@ -396,7 +405,7 @@ export async function fetchDemandesEquipe(): Promise<DemandeEquipe[]> {
 /**
  * Congés (validés, en attente, refusés, ou annulés depuis cette page —
  * régularisation) dont `date_debut` tombe dans la période donnée (Espace
- * Suivre > récap paie) — CP, RTT, CSS. Les "en attente" comptent dans le
+ * Suivre > récap paie) — types `TYPES_TRANSMISSIBLES_PAIE`. Les "en attente" comptent dans le
  * total (cas à la marge de régularisation), les "refusés" et les "annulés"
  * restent visibles/traçables dans le tableau mais sont exclus du total (voir
  * `grouperParCollaborateur` dans `CongesPaiePage`) — un refus n'a jamais été
@@ -428,7 +437,7 @@ export async function fetchCongesConsommesPeriode(
 
   return (data ?? [])
     .map((row) => mapDemandeEquipeDepuisDb(row as unknown as DemandeEquipeRow))
-    .filter((d) => d.type === "CP" || d.type === "RTT" || d.type === "CSS");
+    .filter((d) => (TYPES_TRANSMISSIBLES_PAIE as readonly string[]).includes(d.type));
 }
 
 async function deciderDemande(

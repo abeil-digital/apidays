@@ -801,8 +801,12 @@ function QuelsCongesTransmettre({
           25/08/2026) s'affichent en pastille colorée (`TypeBadge` variant
           "pill", même format que la colonne Solde de "Suivre les soldes")
           et restent visibles même à 0 — "le 0 est une donnée importante"
-          (Vincent). Les autres types (CSS/CE/RECUP/EVT_FAM) gardent le rendu
-          texte existant, masqués quand nuls (cas plus rares). Les corrections
+          (Vincent). Les autres types (CSS/CE/RECUP/EVT_FAM, 15/09/2026 —
+          Vincent a posé un CE et demandé la même pastille que CP/RTT/CPA/EVT
+          plutôt que le rendu texte d'origine du 25/08/2026) utilisent
+          désormais le même `TypeBadge` pill, seule différence conservée :
+          masqués quand nuls (cas plus rares, pas de "0 j" à afficher en
+          permanence pour un CE/RECUP qui n'arrive jamais). Les corrections
           (congés déjà passés en paye puis annulés) n'entrent plus dans ces
           totaux (25/08/2026, demande explicite) — une simple phrase dédiée
           ("X j de {type} à régulariser") apparaît sous les pastilles quand
@@ -818,10 +822,10 @@ function QuelsCongesTransmettre({
               </div>
             ))}
             {pillsAutres.map(([code, jours]) => (
-              <span key={code} className="flex items-center gap-1.5 text-sm">
-                <span className="text-ink-500">{LABEL_LONG[code]}</span>
-                <span className="text-ink-900 font-semibold">{formatJours(jours)} j</span>
-              </span>
+              <div key={code} className="flex flex-col items-center gap-1">
+                <span className="text-ink-500 text-[10px] font-semibold">{LABEL_COURT[code]}</span>
+                <TypeBadge code={code} variant="pill" label={`${formatJours(jours)} j`} />
+              </div>
             ))}
           </div>
           {correctionsARegulariser.length > 0 && (

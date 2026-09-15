@@ -13,6 +13,7 @@ import {
   getUtilisateurId,
   mapDemandeEquipeDepuisDb,
   SELECT_DEMANDE_EQUIPE,
+  TYPES_TRANSMISSIBLES_PAIE,
   type DemandeEquipeRow,
 } from "@/lib/data/demandes.repository";
 import { fetchSoldes, geleAcquisitionsPourExport } from "@/lib/data/soldes.repository";
@@ -27,6 +28,7 @@ import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
  * deux périodes de paie, voir `genererExportPaie`).
  */
 
+
 interface LigneExportPaieRow {
   jours_inclus: number;
 }
@@ -40,12 +42,12 @@ function soldeTransmission(row: DemandeAvecLignesRow): number {
 }
 
 /**
- * Demandes validées ou annulées (CP/RTT/CSS), avec leur solde de
- * transmission déjà calculé (`export_paie_lignes` embarqué) — brique
- * partagée par `fetchCongesATransmettre` (affichage) et `genererExportPaie`
- * (calcul des lignes à créer), aucun filtre de date : le principe même de
- * cet écran est de faire remonter aussi les congés d'une période antérieure
- * jamais transmis (voir discussion du 24/08/2026).
+ * Demandes validées ou annulées (types `TYPES_TRANSMISSIBLES_PAIE`), avec
+ * leur solde de transmission déjà calculé (`export_paie_lignes` embarqué) —
+ * brique partagée par `fetchCongesATransmettre` (affichage) et
+ * `genererExportPaie` (calcul des lignes à créer), aucun filtre de date : le
+ * principe même de cet écran est de faire remonter aussi les congés d'une
+ * période antérieure jamais transmis (voir discussion du 24/08/2026).
  */
 async function fetchDemandesAvecSoldeTransmission(
   supabase: SupabaseClient,
@@ -65,8 +67,8 @@ async function fetchDemandesAvecSoldeTransmission(
       demande: mapDemandeEquipeDepuisDb(row),
       soldeTransmission: soldeTransmission(row),
     }))
-    .filter(
-      ({ demande }) => demande.type === "CP" || demande.type === "RTT" || demande.type === "CSS",
+    .filter(({ demande }) =>
+      (TYPES_TRANSMISSIBLES_PAIE as readonly string[]).includes(demande.type),
     );
 }
 
@@ -96,7 +98,7 @@ async function fetchDemandesEnAttenteAvant(
 
   return ((data ?? []) as unknown as DemandeEquipeRow[])
     .map(mapDemandeEquipeDepuisDb)
-    .filter((d) => d.type === "CP" || d.type === "RTT" || d.type === "CSS");
+    .filter((d) => (TYPES_TRANSMISSIBLES_PAIE as readonly string[]).includes(d.type));
 }
 
 /**
