@@ -119,13 +119,24 @@ function trierParCollaborateurPuisType<T extends DemandeEquipe>(demandes: T[]): 
 // Câblée directement ici, sur les données déjà chargées par cet écran
 // (`moisEnCours`/`repechage`/`corrections`/`ajustementsFiltres`), sans
 // dupliquer un second fetch.
-type TypeConsomme = "CP" | "RTT" | "CPA" | "CSS";
+//
+// Étendu à CE/RECUP/EVT_FAM (15/09/2026, suite du fix `TYPES_TRANSMISSIBLES_PAIE`
+// ci-dessus) : ces types remontent désormais dans `moisEnCours`/`repechage`, donc
+// dans les `demandes` passées à `grouperParCollaborateur` — les en exclure ici
+// aurait fait planter `ligne.parType[bucket]` (clé absente de `ligneVide()`) dès
+// qu'un CE apparaissait, "le lien Exporter le CSV ne semble plus fonctionner"
+// (Vincent). Plus de raison de les traiter différemment du CSS pour l'export
+// non plus : mêmes types "sans solde", même parcours de transmission paie.
+type TypeConsomme = "CP" | "RTT" | "CPA" | "CSS" | "CE" | "RECUP" | "EVT_FAM";
 
 const LABEL_TYPE: Record<TypeConsomme, string> = {
   CP: "CP",
   RTT: "RTT",
   CPA: "Congés anticipés",
   CSS: "Congé sans solde",
+  CE: "Congé exceptionnel",
+  RECUP: "Récupération",
+  EVT_FAM: "Événement familial",
 };
 
 function libellePeriodeDemande(d: DemandeEquipe): string {
@@ -149,6 +160,9 @@ function ligneVide(): LigneCollab["parType"] {
     RTT: { jours: 0, dates: [] },
     CPA: { jours: 0, dates: [] },
     CSS: { jours: 0, dates: [] },
+    CE: { jours: 0, dates: [] },
+    RECUP: { jours: 0, dates: [] },
+    EVT_FAM: { jours: 0, dates: [] },
   };
 }
 
@@ -207,9 +221,9 @@ function nomMoisAnnee(iso: string): string {
   );
 }
 
-// CP/RTT/CSS/CPA puis le reste — même ordre que `ORDRE_TYPE_TRANSMISSION` à
-// l'écran, `TypeConsomme` (pas de CE/RECUP/EVT_FAM, hors périmètre du CSV).
-const ORDRE_TYPE_CSV: TypeConsomme[] = ["CP", "RTT", "CSS", "CPA"];
+// Même ordre que `ORDRE_TYPE_TRANSMISSION` à l'écran (15/09/2026, étendu à
+// CE/RECUP/EVT_FAM en même temps que `TypeConsomme` ci-dessus).
+const ORDRE_TYPE_CSV: TypeConsomme[] = ["CP", "RTT", "CSS", "CPA", "CE", "RECUP", "EVT_FAM"];
 
 /**
  * Un bloc par collaborateur (28/08/2026, demande explicite — "un bloc par
