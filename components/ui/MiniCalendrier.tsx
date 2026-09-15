@@ -88,6 +88,28 @@ export interface PastilleJour {
   /** Classe(s) Tailwind pour le fond plein (ex. "bg-cp"). Ignoré si `moitie`/`partage` est fourni. */
   classeFond?: string;
   /**
+   * Chiffre en encre foncée (`text-ink-900`) plutôt que blanc (15/09/2026,
+   * essai demandé par Vincent sur Accueil uniquement — "tente juste sur
+   * l'accueil") : calcul de contraste WCAG, la plupart des fonds pastel de
+   * la palette congés passent le seuil texte (4.5) en noir alors qu'ils
+   * échouaient en blanc (3.2 et moins), sans changer la moindre couleur de
+   * fond. `undefined`/`false` = blanc (défaut inchangé, toujours le bon
+   * choix sur un fond déjà sombre comme CPI/DJI). S'applique aux variantes
+   * `classeFond`/`moitie`/`partage` — `plein` a déjà son propre
+   * `texteSombre` (heatmap "Calendrier des employés", indépendant).
+   */
+  texteSombre?: boolean;
+  /**
+   * Couleur CSS pleine du chiffre (ex. "color-mix(in srgb, var(--color-cp)
+   * 35%, black)"), en override de `texteSombre` (15/09/2026, suite du même
+   * essai — "tente typo dans la teinte du congé mais très foncé" : plutôt
+   * qu'un noir neutre, une version très assombrie de la couleur du congé
+   * lui-même). `texteSombre` doit rester `true` en même temps (pilote
+   * encore l'anneau du jour "aujourd'hui", non concerné par cette teinte).
+   * `undefined` = pas d'override, `texteSombre` seul décide (noir neutre ou
+   * blanc). */
+  couleurTexte?: string;
+  /**
    * Contour de la pastille signalant un statut "en attente" (15/09/2026,
    * demande explicite de Vincent — d'abord essayé en couleur de chiffre
    * orange/vert le même jour, "on joue sur la transparence, ce n'est pas
@@ -215,7 +237,7 @@ function apparenceKey(pastille: PastilleJour | null, iso: string): string | null
   // de même fond mais de statut différent (validé/en attente) ne doivent
   // jamais fusionner en une seule barre, qui ne pourrait porter qu'un seul
   // contour.
-  return `f:${pastille.classeFond}:${pastille.couleurContour ?? ""}`;
+  return `f:${pastille.classeFond}:${pastille.couleurContour ?? ""}:${pastille.texteSombre ? "1" : "0"}:${pastille.couleurTexte ?? ""}`;
 }
 
 // Épaisseur du contour "en attente" — doit rester synchronisée avec les
@@ -548,14 +570,18 @@ function JourPastille({
     droite: isEnd,
   });
 
+  const classeTexte = pastille.texteSombre ? "text-ink-900" : "text-white";
+  const couleurAnneauAujourdhui = pastille.texteSombre ? "ring-ink-900" : "ring-white";
+  const styleTexte = pastille.couleurTexte ? { color: pastille.couleurTexte } : undefined;
+
   if (!pastille.moitie) {
     return (
       <span
-        className={`${base} ${pastille.classeFond} text-white`}
-        style={ombre}
+        className={`${base} ${pastille.classeFond} ${classeTexte}`}
+        style={{ ...ombre, ...styleTexte }}
         {...evenements}
       >
-        {contenuJour("ring-white")}
+        {contenuJour(couleurAnneauAujourdhui)}
       </span>
     );
   }
@@ -569,11 +595,11 @@ function JourPastille({
 
   return (
     <span
-      className={`${base} text-white`}
-      style={{ background: gradient, ...ombre }}
+      className={`${base} ${classeTexte}`}
+      style={{ background: gradient, ...ombre, ...styleTexte }}
       {...evenements}
     >
-      {contenuJour("ring-white")}
+      {contenuJour(couleurAnneauAujourdhui)}
     </span>
   );
 }
@@ -591,6 +617,8 @@ function PeriodeSegment({
   isoPremierJour,
   classeFond,
   couleurContour,
+  texteSombre,
+  couleurTexte,
   isStart,
   isEnd,
   isHovered,
@@ -610,6 +638,10 @@ function PeriodeSegment({
    * fusionnée ignorait cette couleur, toujours `text-white` ; contour
    * partiel isStart/isEnd, même logique que `JourPastille`). */
   couleurContour?: string;
+  /** Voir `PastilleJour.texteSombre`. */
+  texteSombre?: boolean;
+  /** Voir `PastilleJour.couleurTexte`. */
+  couleurTexte?: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
@@ -640,14 +672,17 @@ function PeriodeSegment({
   // continue vers un jour voisin de même statut (voir `ombreContour`).
   const ombre = ombreContour(couleurContour, { haut: true, bas: true, gauche: isStart, droite: isEnd });
 
+  const classeTexte = texteSombre ? "text-ink-900" : "text-white";
+
   return (
     <div
-      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold ${classeTexte} transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
         aspectRatio: agrandi ? `${jours.length} / 1` : undefined,
         ...ombre,
+        ...(couleurTexte ? { color: couleurTexte } : undefined),
       }}
       onMouseEnter={() => onSurvol(true)}
       onMouseLeave={() => onSurvol(false)}
@@ -668,7 +703,9 @@ function PeriodeSegment({
       >
         {jours.map((j, idx) => {
           const chiffre = estAujourdhui?.(isos[idx]) ? (
-            <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
+            <span
+              className={`flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-inset ${texteSombre ? "ring-ink-900" : "ring-white"}`}
+            >
               {j}
             </span>
           ) : (
@@ -764,6 +801,8 @@ type ItemRendu =
       isoPremierJour: string;
       classeFond: string;
       couleurContour?: string;
+      texteSombre?: boolean;
+      couleurTexte?: string;
       isStart: boolean;
       isEnd: boolean;
       groupeId: string;
@@ -836,6 +875,8 @@ function calculerItemsRendu(
         isoPremierJour: cellule.iso,
         classeFond: cellule.pastille.classeFond ?? "",
         couleurContour: cellule.pastille.couleurContour,
+        texteSombre: cellule.pastille.texteSombre,
+        couleurTexte: cellule.pastille.couleurTexte,
         isStart: isStarts[i],
         isEnd: isEnds[j - 1],
         groupeId: groupeIds[i] as string,
@@ -1116,6 +1157,8 @@ export function MiniCalendrier({
               isoPremierJour={item.isoPremierJour}
               classeFond={item.classeFond}
               couleurContour={item.couleurContour}
+              texteSombre={item.texteSombre}
+              couleurTexte={item.couleurTexte}
               isStart={item.isStart}
               isEnd={item.isEnd}
               isHovered={
