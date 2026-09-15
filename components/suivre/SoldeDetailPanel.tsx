@@ -122,6 +122,13 @@ interface SoldeDetailPanelProps {
   /** Autorise `onRetirer` même sur un congé déjà transmis en paie (28/08/2026,
    * admin uniquement) — transmis tel quel à `DetailCongePanel`. */
   peutAnnulerDejaTransmis?: boolean;
+  /** Valider/Refuser une demande "en attente" (15/09/2026, demande explicite
+   * de Vincent — "comme dans toute la partie suivre") : "Suivre les soldes"
+   * n'avait jamais que "Annuler cette demande", manager compris, contraire au
+   * principe manager = admin + droit de validation. Même signature que
+   * `onRetirer` (avec `demandeId` explicite). */
+  onValider?: (demandeId: string, commentaire: string) => Promise<void>;
+  onRefuser?: (demandeId: string, commentaire: string) => Promise<void>;
 }
 
 function formatJjMm(iso: string): string {
@@ -192,6 +199,8 @@ export function SoldeDetailPanel({
   style,
   onRetirer,
   peutAnnulerDejaTransmis = false,
+  onValider,
+  onRefuser,
 }: SoldeDetailPanelProps) {
   const { historique, loading, error, refetch } = useHistoriqueSolde(utilisateurId, code);
   const [mode, setMode] = useState<ModeSolde>(modeParDefaut);
@@ -297,6 +306,20 @@ export function SoldeDetailPanel({
           refetch();
         }
       : undefined;
+  const onValiderDemande =
+    onValider && demandeSelectionnee
+      ? async (commentaire: string) => {
+          await onValider(demandeSelectionnee.id, commentaire);
+          refetch();
+        }
+      : undefined;
+  const onRefuserDemande =
+    onRefuser && demandeSelectionnee
+      ? async (commentaire: string) => {
+          await onRefuser(demandeSelectionnee.id, commentaire);
+          refetch();
+        }
+      : undefined;
 
   async function ouvrirDetail(id: string) {
     // `setDemandeSelectionnee(null)` avant le fetch (20/08/2026) — sinon,
@@ -389,6 +412,8 @@ export function SoldeDetailPanel({
               <DetailCongePanel
                 selection={demandeSelectionnee}
                 onClose={fermerDetail}
+                onValider={onValiderDemande}
+                onRefuser={onRefuserDemande}
                 onRetirer={onRetirerDemande}
                 peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
                 lignesTransmission={lignesTransmission}
@@ -938,6 +963,8 @@ export function SoldeDetailPanel({
                     selection={demandeSelectionnee}
                     onClose={fermerDetail}
                     pleineLargeur
+                    onValider={onValiderDemande}
+                    onRefuser={onRefuserDemande}
                     onRetirer={onRetirerDemande}
                     peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
                     lignesTransmission={lignesTransmission}
@@ -1078,6 +1105,8 @@ export function SoldeDetailPanel({
                 <DetailCongePanel
                   selection={demandeSelectionnee}
                   onClose={fermerDetail}
+                  onValider={onValiderDemande}
+                  onRefuser={onRefuserDemande}
                   onRetirer={onRetirerDemande}
                   peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
                   lignesTransmission={lignesTransmission}

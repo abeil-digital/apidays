@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import type { Soldes, UtilisateurAdmin } from "@/lib/types";
 import { formatJours } from "@/lib/format";
-import { retirerDemande } from "@/lib/data/demandes.repository";
+import { refuserDemande, retirerDemande, validerDemande } from "@/lib/data/demandes.repository";
 import { fetchSoldes } from "@/lib/data/soldes.repository";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
@@ -193,15 +193,17 @@ function genererCsv(lignes: { nom: string; soldes: Soldes | undefined }[]): stri
 export function SuivreSoldesPage2() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
   const { utilisateur } = useUtilisateur();
-  // "Suivre les soldes 2" n'a jamais eu de bloc Décision/Régularisation
-  // séparé par rôle (popin en lecture + "Annuler cette demande" uniquement)
-  // — admin et manager y ont donc le même comportement (28/08/2026, "on cale
-  // le comportement admin" pour manager sur validé non transmis, rien à
-  // préserver de différent ici pour "en attente").
-  const peutAnnulerDepuisSoldes = utilisateur?.role === "admin" || utilisateur?.role === "manager";
-  // Annuler un congé déjà transmis en paie reste admin-only (28/08/2026),
-  // contrairement au cas non-transmis ci-dessus.
+  // Droits (15/09/2026, demande explicite de Vincent — "comme dans toute la
+  // partie suivre") : manager et admin peuvent tous les deux annuler une
+  // demande à tout moment, y compris déjà transmise en paie ; le manager
+  // garde en plus Valider/Refuser — même modèle que
+  // `SuivreDemandesPage.tsx`/`CalendrierCollaborateur.tsx`. "Suivre les
+  // soldes 2" n'avait jamais eu de bloc Décision jusqu'ici (popin en lecture
+  // + "Annuler cette demande" uniquement) — même reliquat que "Régulariser"
+  // ailleurs, corrigé dans la foulée.
   const estAdmin = utilisateur?.role === "admin";
+  const estManager = utilisateur?.role === "manager";
+  const peutAnnulerDepuisSoldes = estAdmin || estManager;
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [soldesParId, setSoldesParId] = useState<Record<string, Soldes>>({});
@@ -375,7 +377,23 @@ export function SuivreSoldesPage2() {
                       }
                     : undefined
                 }
-                peutAnnulerDejaTransmis={estAdmin}
+                peutAnnulerDejaTransmis={peutAnnulerDepuisSoldes}
+                onValider={
+                  estManager
+                    ? async (demandeId, commentaire) => {
+                        await validerDemande(demandeId, commentaire);
+                        await rafraichirSoldes();
+                      }
+                    : undefined
+                }
+                onRefuser={
+                  estManager
+                    ? async (demandeId, commentaire) => {
+                        await refuserDemande(demandeId, commentaire);
+                        await rafraichirSoldes();
+                      }
+                    : undefined
+                }
               />
             )}
           </div>
