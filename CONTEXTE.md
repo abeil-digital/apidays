@@ -6485,6 +6485,14 @@ repassé en revue. Leçon : un commentaire qui justifie une exclusion de type re
 du code au moment où il a été écrit, pas nécessairement après qu'un filtre en amont change — à
 revérifier explicitement quand on élargit un périmètre de types quelque part dans le pipeline.
 
+## Demi-journée DJI matin en fin de période — confirmé résolu (15/09/2026)
+
+Item Backlog ouvert depuis le 20/08/2026 ("probablement déjà traité, à confirmer par Vincent plus
+tard") : le verrouillage du sélecteur de demi-journée sur une DJI (18/08/2026, `djiSurDate`/
+`demiParDefautDebut`/`demiParDefautFin` dans `PoserDemandeModal.tsx`) couvrait-il bien le cas où la
+période d'une demande se termine sur une DJI matin ? Vincent confirme aujourd'hui que c'est le cas —
+aucun changement de code, juste la levée du doute qui restait en suspens depuis un mois.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
