@@ -93,7 +93,7 @@ export interface PastilleJour {
    * orange/vert le même jour, "on joue sur la transparence, ce n'est pas
    * efficace visuellement", puis recentré sur un contour orange autour du
    * jour concerné : le chiffre redevient blanc dans tous les cas). Classe(s)
-   * Tailwind pour un anneau (ex. "ring-2 ring-inset ring-status-warning-fg"),
+   * Tailwind pour un anneau (ex. "ring-1 ring-inset ring-status-warning-fg"),
    * `undefined` = pas de contour (congé validé, ou tout jour sans statut).
    * S'applique aux variantes `classeFond` (fond plein), `moitie` (demi-journée)
    * et `partage` (congé personnel scindé par une DJI, garde son statut
