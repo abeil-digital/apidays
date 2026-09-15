@@ -361,10 +361,12 @@ export function DashboardPage() {
   // Validé/en attente distingués par la couleur du CHIFFRE (14/09/2026,
   // demande explicite de Vincent — "on joue sur la transparence, ce n'est
   // pas efficace visuellement" : remplace l'ancien fond atténué/`color-mix`
-  // 50% par un fond TOUJOURS plein, seul le chiffre change de couleur —
-  // orange (`text-status-warning-fg`) en attente, vert
-  // (`text-status-success-fg`) validé. Mêmes tokens que `StatusBadge`
-  // ailleurs dans l'app, pas de nouvelle couleur inventée.
+  // 50% par un fond TOUJOURS plein, seul le chiffre change de couleur.
+  // **Recentré le 15/09/2026** : seul le statut "en attente" se matérialise
+  // désormais (orange, `text-status-warning-fg`, même token que
+  // `StatusBadge` ailleurs) — un congé validé redevient un chiffre blanc
+  // standard (`undefined` ⇒ défaut `text-white` de `MiniCalendrier`), la
+  // distinction verte a été abandonnée.
   //
   // Chevauchement demande/férié/DJI (15/09/2026, cas concret de Vincent — un
   // CP posé du 9 au 13/11 avec un férié le 11 et une DJI l'après-midi du 13 :
@@ -393,7 +395,7 @@ export function DashboardPage() {
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
       const classeTexteChiffre =
-        demande.statut === "en attente" ? "text-status-warning-fg" : "text-status-success-fg";
+        demande.statut === "en attente" ? "text-status-warning-fg" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)

@@ -262,9 +262,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return null;
   }
 
-  // Priorité férié > demande > CPI > DJI, couleur du chiffre orange/vert,
-  // chevauchement demande/férié/DJI transparent — voir DashboardPage.tsx pour
-  // le détail complet de ce correctif (duplication assumée).
+  // Priorité férié > demande > CPI > DJI, couleur du chiffre orange pour "en
+  // attente" seulement (validé = blanc, recentré le 15/09/2026), chevauchement
+  // demande/férié/DJI transparent — voir DashboardPage.tsx pour le détail
+  // complet de ce correctif (duplication assumée).
   function tipoDuJour(iso: string): PastilleJour | null {
     const annee = Number(iso.slice(0, 4));
     const cal = calendrierPourAnnee(annee);
@@ -278,7 +279,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
       const classeTexteChiffre =
-        demande.statut === "en attente" ? "text-status-warning-fg" : "text-status-success-fg";
+        demande.statut === "en attente" ? "text-status-warning-fg" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
