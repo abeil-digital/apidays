@@ -1,20 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Newspaper, PlusCircle } from "lucide-react";
+import { Newspaper, PlusCircle } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
-import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { SoldeCard } from "@/components/ui/SoldeCard";
-import {
-  classeFondAttenueTypeBadge,
-  classeFondTypeBadge,
-  type TypeBadgeCode,
-} from "@/components/demandes/TypeBadge";
+import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import {
   SnippetJourCalendrier,
   type JourCalendrierClique,
@@ -28,11 +23,11 @@ import { FaqCard } from "@/components/dashboard/FaqCard";
 import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
 import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
 import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
+import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
+import { DetailJourCommunPanel, type JourCommunClique } from "@/components/demandes/DetailJourCommunPanel";
 import type { Demande } from "@/lib/types";
 
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
-
-type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
 
 function isoDate(annee: number, moisIndex: number, jour: number): string {
   return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
@@ -44,53 +39,6 @@ function ajouterJoursIso(dateIso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "Juin 26" — mois abrégé + année sur 2 chiffres, pour le libellé de
- * l'onglet "Période de référence" (ex. "Juin 26 → Mai 27"). */
-function formatMoisAnneeCourt(dateIso: string): string {
-  const d = new Date(`${dateIso}T00:00:00Z`);
-  const texte = new Intl.DateTimeFormat("fr-FR", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  }).format(d);
-  return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
-}
-
-/** Sélecteur "Débute : {mois en cours} / {début de la période}" — pas un vrai
- * 3e comportement : pilote exactement le même booléen "vue complète"
- * qu'avant (mois en cours = aujourd'hui → fin de la fenêtre), juste un
- * select. Libellés personnalisés par appelant (20/08/2026, demande
- * explicite) — ex. "Août 26"/"Janv. 26" pour l'onglet année civile,
- * "Août 26"/"Juin 26" pour l'onglet période de référence CP — plutôt que
- * les génériques "Mois en cours"/"Début période" d'origine. Rendu en texte
- * souligné + chevron, volontairement discret (pas la pilule `SelectPille`
- * des popins DJI/CPI, trop visible ici). */
-function SelectAffichage({
-  actif,
-  onChange,
-  labelMoisEnCours,
-  labelDebut,
-}: {
-  actif: boolean;
-  onChange: (v: boolean) => void;
-  labelMoisEnCours: string;
-  labelDebut: string;
-}) {
-  return (
-    <div className="relative inline-flex w-fit items-center gap-1.5">
-      <span className="text-ink-500 text-xs">Débute :</span>
-      <select
-        value={actif ? "complete" : "mois_en_cours"}
-        onChange={(e) => onChange(e.target.value === "complete")}
-        className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-      >
-        <option value="mois_en_cours">{labelMoisEnCours}</option>
-        <option value="complete">{labelDebut}</option>
-      </select>
-      <ChevronDown size={11} className="text-ink-900 pointer-events-none absolute right-0" />
-    </div>
-  );
-}
 
 /** Tous les mois (année + index) couverts par une plage de dates ISO,
  * bornes incluses — remplace l'ancien rolling 12 mois par une plage dont la
@@ -119,6 +67,14 @@ function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
+// "Prochains jours off" masquée (14/09/2026, demande explicite de Vincent —
+// "je me demande si la vue liste est utile", "sans l'effacer on va rendre
+// invisible le mode liste pour que le calendrier prenne toute la largeur en
+// 4 colonnes") : le composant et son import restent en place, juste plus
+// rendus — repasser ce booléen à `true` restaure l'ancien layout 3 colonnes
+// + liste sans rien reconstruire.
+const AFFICHER_PROCHAINS_JOURS_OFF = false;
+
 // Nom de la variable CSS du token couleur du type — pour la variante `moitie`
 // d'une pastille demi-journée (`tipoDuJour`), qui prend une couleur CSS brute
 // plutôt qu'une classe Tailwind. Même procédé que `DetailCongePanel.tsx`/
@@ -142,14 +98,20 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
  * nom le 28/08/2026, après avoir porté le nom historique "Dashboard2Page"
  * — même logique que `Calendrier2Page`, déjà renommé le 18/08/2026).
  *
- * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier en
- * 3 onglets — Année en cours / Période de référence CP / Année suivante —
- * plutôt qu'un rolling 12 mois : chaque onglet affiche par défaut de
- * aujourd'hui jusqu'à la fin de sa fenêtre (bouton "vue complète" pour
- * revoir depuis le début, sauf "Année suivante" qui reste toujours pleine).
- * Ça évite de fusionner des jours de deux années civiles derrière un seul
- * chiffre dans la légende (le cas qui a motivé cette refonte : "22 jours
- * fériés" ne voulait rien dire, c'était 11+11 de deux années différentes).
+ * "Demandes en cours"/"Prochains congés" remplacés par une vue calendrier
+ * rolling 9 mois (12 à l'origine, réduit le même jour — "c'est suffisant",
+ * demande explicite de Vincent), à partir du mois en cours (14/09/2026,
+ * retour en arrière demandé par Vincent — "le sélecteur de calendrier est
+ * aussi compliqué en définitive" : remplace les 3 onglets Année en
+ * cours/Période de référence CP/Année suivante + leurs bascules "vue
+ * complète" du 10/09/2026, jugés trop compliqués à l'usage). Chaque
+ * compteur de la légende (`CompteurTypologies`) reste calculé sur CETTE
+ * SEULE fenêtre glissante — pas de retour
+ * au bug d'origine qui avait motivé les 3 onglets ("22 jours fériés" qui ne
+ * voulait rien dire, somme de deux années civiles complètes) : la fenêtre ne
+ * s'étend jamais sur plus de 2 années civiles (l'actuelle + la suivante), et
+ * chaque jour commun (`anneeVisiblePourCommuns`) n'est compté que s'il tombe
+ * dans la fenêtre.
  * Le calendrier affiche les demandes du collaborateur (validées en couleur
  * pleine, en attente en couleur atténuée) fusionnées avec les jours communs
  * (Fériés/CPI/DJI). Colonne latérale légende (CPI/DJI/Fériés + un type par
@@ -168,7 +130,6 @@ export function DashboardPage() {
     marquerVue,
     retirer,
   } = useDemandes();
-  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   const [soldeDetailOuvert, setSoldeDetailOuvert] = useState<CodeSoldeDetail | null>(null);
   const [tiroirActiviteOuvert, setTiroirActiviteOuvert] = useState(false);
   // Fondu du surlignage "n nouvelles décisions" à la fermeture du tiroir
@@ -182,24 +143,31 @@ export function DashboardPage() {
   const [snippet, setSnippet] = useState<{ jour: JourCalendrierClique; ancre: DOMRect } | null>(
     null,
   );
-  const [onglet, setOnglet] = useState<Onglet>("en_cours");
-  const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
-  const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
-
+  // Détail d'un congé personnel (CP/RTT/CPA) au clic sur le calendrier
+  // (14/09/2026, demande explicite de Vincent : "on va tenter un truc" —
+  // panneau `DetailCongePanel` à droite du calendrier plutôt que le popover
+  // `SnippetJourCalendrier`, qui reste réservé aux jours communs CPI/DJI/
+  // Férié, sans détail personnel à afficher). Sa présence pousse le
+  // calendrier à se recomposer (4 → 3 mois par ligne, voir plus bas).
+  const [demandeSelectionnee, setDemandeSelectionnee] = useState<Demande | null>(null);
+  // Card détail pour un jour "commun" (CI = CPI/DJI, Férié), en plus du
+  // popover `SnippetJourCalendrier` existant (14/09/2026, demande explicite
+  // de Vincent — "traiter en card congé détail les CI... et les FE aussi.
+  // Pour le moment tu ne remplaces pas les over") : même emplacement colonne
+  // 4 que `DetailCongePanel`, lecture seule (non modifiable par le
+  // collaborateur), le popover au survol/clic reste déclenché en parallèle.
+  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
+    null,
+  );
   // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
-  // de Vincent) — sans ça, le bandeau de date simulée locale ne pouvait pas
-  // tester la rotation des 3 onglets ci-dessous (`todayIso`/`debutPeriodeCp`
-  // suivaient déjà la date simulée via `todayISO()`, mais pas `anneeActuelle`,
-  // ce qui les désynchronisait dès qu'on simulait une date d'une autre année
-  // civile que la vraie date système).
+  // de Vincent) — pour que le bandeau de date simulée locale entraîne bien la
+  // fenêtre de 12 mois glissants ci-dessous.
   const anneeActuelle = getAujourdhui().getFullYear();
-  const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
-  // Jours "communs" (Fériés/CPI/DJI) — 3 années possibles selon l'onglet :
-  // la période de référence CP peut chevaucher l'année précédente si elle
-  // n'a pas encore démarré cette année (ex. période "juin → mai", vue avant
-  // le 1er juin).
-  const calendrierAnneePrecedente = useCalendrier(anneePrecedente);
+  // Jours "communs" (Fériés/CPI/DJI) — 2 années possibles : la fenêtre de 12
+  // mois glissants part toujours du mois en cours, donc ne touche jamais
+  // l'année précédente, seulement l'actuelle et potentiellement la suivante
+  // (ex. fenêtre Sept 26 → Août 27).
   const calendrierAnneeA = useCalendrier(anneeActuelle);
   const calendrierAnneeB = useCalendrier(anneeSuivante);
 
@@ -207,8 +175,6 @@ export function DashboardPage() {
     loadingUtilisateur ||
     loadingSoldes ||
     loadingDemandes ||
-    loadingRegles ||
-    calendrierAnneePrecedente.loading ||
     calendrierAnneeA.loading ||
     calendrierAnneeB.loading;
 
@@ -217,76 +183,22 @@ export function DashboardPage() {
   }
 
   const todayIso = todayISO();
-  const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
-  const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
-  // 1er jour du mois en cours (25/08/2026, bug signalé par Vincent) — la vue
-  // "mois en cours" ("Août 26") doit démarrer le 1er du mois, pas
-  // littéralement aujourd'hui : sinon un congé déjà posé plus tôt dans le
-  // mois (validé ou encore en attente) disparaissait de la légende/du
-  // calendrier alors que le libellé affiché ("Août 26") laisse croire que
-  // tout le mois est couvert.
+  // 1er jour du mois en cours (25/08/2026, bug signalé par Vincent) — la
+  // fenêtre doit démarrer le 1er du mois, pas littéralement aujourd'hui :
+  // sinon un congé déjà posé plus tôt dans le mois (validé ou encore en
+  // attente) disparaissait de la légende/du calendrier.
   const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
-
-  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
-  // Fenêtre de la période de référence CP contenant aujourd'hui — par
-  // exemple pour "1er juin → 31 mai", si on est en août la période va du
-  // 01/06 cette année au 31/05 l'an prochain ; si on est en mars, elle va du
-  // 01/06 l'an dernier au 31/05 cette année.
-  const debutPeriodeCp = regleCp
-    ? todayIso >= isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      ? isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      : isoDate(anneePrecedente, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-    : debutAnneeActuelle;
-  const finPeriodeCp = regleCp
-    ? ajouterJoursIso(
-        isoDate(
-          Number(debutPeriodeCp.slice(0, 4)) + 1,
-          regleCp.periodeDebutMois - 1,
-          regleCp.periodeDebutJour,
-        ),
-        -1,
-      )
-    : finAnneeActuelle;
-
-  // Rotation des 3 onglets (10/09/2026, demande explicite de Vincent) — avant
-  // le 1er juin de l'année en cours (la période CP en cours a démarré l'année
-  // PRÉCÉDENTE, "état avant bascule"), le 3e onglet ("annee_suivante") ne
-  // montre plus l'année civile suivante mais la PROCHAINE période de
-  // référence CP (Juin N → Mai N+1) — sinon rien ne permettait de voir sa
-  // propre prochaine période avant qu'elle ne devienne "en cours" le 1er
-  // juin. Une fois le 1er juin passé ("état après bascule"), ce 3e onglet
-  // reprend son comportement d'origine (année civile suivante, toujours
-  // pleine). Sans règle CP configurée, `debutPeriodeCp` vaut toujours
-  // `debutAnneeActuelle` (même année que `anneeActuelle`) : `etatAvantBascule`
-  // reste `false`, comportement inchangé.
-  const etatAvantBascule = Number(debutPeriodeCp.slice(0, 4)) < anneeActuelle;
-  const rangeTroisiemeOnglet =
-    regleCp && etatAvantBascule
-      ? {
-          debut: isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-          fin: ajouterJoursIso(
-            isoDate(anneeActuelle + 1, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-            -1,
-          ),
-        }
-      : { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) };
-
-  const ranges: Record<Onglet, { debut: string; fin: string }> = {
-    en_cours: {
-      debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
-      fin: finAnneeActuelle,
-    },
-    periode_cp: {
-      debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
-      fin: finPeriodeCp,
-    },
-    annee_suivante: rangeTroisiemeOnglet,
-  };
-  const rangeActive = ranges[onglet];
+  // Fenêtre de 9 mois glissants (14/09/2026, réduite de 12 à 9 — "c'est
+  // suffisant" demande explicite de Vincent) — du mois en cours inclus aux
+  // 8 mois suivants (ex. Sept 26 → Mai 27 inclus, 9 mois pile = 3 lignes de
+  // 3 mois dans la grille).
+  const moisIndexFin = (getAujourdhui().getMonth() + 8) % 12;
+  const anneeFinFenetre = anneeActuelle + Math.floor((getAujourdhui().getMonth() + 8) / 12);
+  const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
+  const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function calendrierPourAnnee(annee: number) {
-    if (annee === anneePrecedente) return calendrierAnneePrecedente;
     if (annee === anneeSuivante) return calendrierAnneeB;
     return calendrierAnneeA;
   }
@@ -313,23 +225,18 @@ export function DashboardPage() {
     return annees.filter((a) => !anneeVisiblePourCommuns(a));
   })();
 
-  // Listes fusionnées des 3 années potentiellement pertinentes, filtrées aux
-  // années effectivement visibles (même règle que les pastilles du
-  // calendrier, `anneeVisiblePourCommuns` — les fériés restent toujours
+  // Listes fusionnées des 2 années potentiellement pertinentes (14/09/2026 —
+  // fenêtre de 12 mois glissants, ne touche plus jamais l'année précédente),
+  // filtrées aux années effectivement visibles (même règle que les pastilles
+  // du calendrier, `anneeVisiblePourCommuns` — les fériés restent toujours
   // visibles) — alimente le compteur par typologie (`compterTypologies`) sur
   // la période active.
-  const joursFeriesToutesAnnees = [
-    ...calendrierAnneePrecedente.joursFeries,
-    ...calendrierAnneeA.joursFeries,
-    ...calendrierAnneeB.joursFeries,
-  ];
+  const joursFeriesToutesAnnees = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries];
   const congesImposesVisibles = [
-    ...calendrierAnneePrecedente.congesImposes,
     ...calendrierAnneeA.congesImposes,
     ...calendrierAnneeB.congesImposes,
   ].filter((c) => anneeVisiblePourCommuns(Number(c.debut.slice(0, 4))));
   const djImposeesVisibles = [
-    ...calendrierAnneePrecedente.djImposees,
     ...calendrierAnneeA.djImposees,
     ...calendrierAnneeB.djImposees,
   ].filter((d) => anneeVisiblePourCommuns(Number(d.date.slice(0, 4))));
@@ -411,27 +318,31 @@ export function DashboardPage() {
   // côté posé), teinte atténuée en plus pour "en attente" (`color-mix`,
   // équivalent de `classeFondAttenueTypeBadge` mais applicable à une couleur
   // CSS brute plutôt qu'à une classe Tailwind).
+  // Validé/en attente distingués par la couleur du CHIFFRE (14/09/2026,
+  // demande explicite de Vincent — "on joue sur la transparence, ce n'est
+  // pas efficace visuellement" : remplace l'ancien fond atténué/`color-mix`
+  // 50% par un fond TOUJOURS plein, seul le chiffre change de couleur —
+  // orange (`text-status-warning-fg`) en attente, vert
+  // (`text-status-success-fg`) validé. Mêmes tokens que `StatusBadge`
+  // ailleurs dans l'app, pas de nouvelle couleur inventée.
   function tipoDuJour(iso: string): PastilleJour | null {
     const demande = demandeDuJour(iso);
     if (demande) {
       const code = codeBadgeDemande(demande);
       const matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       const apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+      const classeTexteChiffre =
+        demande.statut === "en attente" ? "text-status-warning-fg" : "text-status-success-fg";
 
       if (matinCouvert && apresMidiCouvert) {
-        const classeFond =
-          demande.statut === "en attente"
-            ? classeFondAttenueTypeBadge(code)
-            : classeFondTypeBadge(code);
-        return { classeFond };
+        return { classeFond: classeFondTypeBadge(code), classeTexteChiffre };
       }
 
-      const couleurBase = `var(${VAR_COULEUR_TYPE[code]})`;
-      const couleur =
-        demande.statut === "en attente"
-          ? `color-mix(in srgb, ${couleurBase} 50%, white)`
-          : couleurBase;
-      return { moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" } };
+      const couleur = `var(${VAR_COULEUR_TYPE[code]})`;
+      return {
+        moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" },
+        classeTexteChiffre,
+      };
     }
     return communDuJour(iso);
   }
@@ -474,7 +385,23 @@ export function DashboardPage() {
 
   function handleJourClick(iso: string, ancre: DOMRect) {
     const jour = occupantDuJour(iso);
-    if (jour) setSnippet({ jour, ancre });
+    if (!jour) return;
+    // Un congé personnel (CP/RTT/CPA) ouvre le panneau détaillé à droite du
+    // calendrier — CPI/DJI/Férié ouvrent la card `DetailJourCommunPanel` dans
+    // cette même colonne 4 (14/09/2026, demande explicite de Vincent). Le
+    // popover `SnippetJourCalendrier` ne reste déclenché que pour un CPI
+    // (14/09/2026, 2e itération — une fois la card en place, Vincent a
+    // demandé de retirer le popover devenu redondant pour DJI/Férié ; gardé
+    // pour CPI, non retiré explicitement).
+    if (jour.kind === "demande") {
+      setSnippet(null);
+      setJourCommunSelectionne(null);
+      setDemandeSelectionnee(jour.demande);
+    } else {
+      setDemandeSelectionnee(null);
+      setJourCommunSelectionne(jour);
+      setSnippet(jour.kind === "cpi" ? { jour, ancre } : null);
+    }
   }
 
   // Clic sur un jour SANS congé (20/08/2026, demande explicite) — ouvre
@@ -531,73 +458,6 @@ export function DashboardPage() {
     }, DUREE_FONDU_MS);
   }
 
-  // Boutons d'onglet extraits en constantes JSX (10/09/2026) — l'ordre des 2
-  // premiers change selon `etatAvantBascule` (voir plus haut) tout en
-  // réutilisant EXACTEMENT le même markup/comportement, sans le dupliquer 2x.
-  const boutonEnCours = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("en_cours")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "en_cours"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {anneeActuelle}
-      </button>
-      {onglet === "en_cours" && (
-        <SelectAffichage
-          actif={vueCompleteEnCours}
-          onChange={setVueCompleteEnCours}
-          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-          labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
-        />
-      )}
-    </>
-  );
-  const boutonPeriodeCp = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("periode_cp")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "periode_cp"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-      </button>
-      {onglet === "periode_cp" && (
-        <SelectAffichage
-          actif={vueCompletePeriodeCp}
-          onChange={setVueCompletePeriodeCp}
-          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-          labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
-        />
-      )}
-    </>
-  );
-  // 3e onglet (10/09/2026) — jamais "en cours" (toujours une fenêtre future,
-  // avant ou après bascule), donc jamais de `SelectAffichage` : même
-  // comportement "toujours plein" que l'ancien "Année suivante" fixe.
-  const boutonTroisieme = (
-    <button
-      type="button"
-      onClick={() => setOnglet("annee_suivante")}
-      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-        onglet === "annee_suivante"
-          ? "bg-slate/90 hover:bg-slate text-white"
-          : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-      }`}
-    >
-      {etatAvantBascule
-        ? `${formatMoisAnneeCourt(rangeTroisiemeOnglet.debut)} → ${formatMoisAnneeCourt(rangeTroisiemeOnglet.fin)}`
-        : anneeSuivante}
-    </button>
-  );
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
@@ -716,40 +576,14 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* "Mon Calendrier" — titre + filtre onglets déplacés au-dessus des DEUX
-          colonnes (20/08/2026, demande explicite) : depuis que l'onglet actif
-          filtre aussi "Prochains jours off" (`debutPeriode`/`finPeriode`), le
-          filtre ne concerne plus seulement le calendrier — le caler à gauche
-          au-dessus des deux colonnes le rend visuellement plus clair. */}
-      <div className="animate-stagger-in" style={{ animationDelay: "280ms" }}>
-        <h2 className="text-ink-900 mb-[14px] px-1 text-base font-semibold">Mon Calendrier</h2>
-        {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
-            même ligne que les onglets de sélection de période, poussé à
-            droite (`justify-between`) : un total par typologie de "day off"
-            réellement présente sur la période active. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Ordre des 3 onglets (10/09/2026) — avant le 1er juin
-                (`etatAvantBascule`), la période CP en cours passe devant
-                l'année civile ("Juin N-1 → Mai N", "N", "Juin N → Mai N+1"),
-                miroir de l'ordre après le 1er juin ("N", "Juin N → Mai N+1",
-                "N+1") — voir le commentaire sur `etatAvantBascule` plus haut. */}
-            {etatAvantBascule ? (
-              <>
-                {boutonPeriodeCp}
-                {boutonEnCours}
-              </>
-            ) : (
-              <>
-                {boutonEnCours}
-                {boutonPeriodeCp}
-              </>
-            )}
-            {boutonTroisieme}
-          </div>
-
-          <CompteurTypologies typologies={typologies} />
-        </div>
+      {/* "Mon Calendrier" — plus de sélecteur d'onglet (14/09/2026, retiré
+          avec la fenêtre glissante — voir doc en tête de fichier). Le
+          compteur par typologie ne partage plus cette ligne (14/09/2026,
+          2e itération demandée par Vincent — d'abord calé sur 3 colonnes
+          pour ne plus déborder dans la 4ᵉ, puis carrément déplacé dedans,
+          empilé verticalement — voir `CompteurTypologies` plus bas). */}
+      <div className="animate-stagger-in px-1" style={{ animationDelay: "280ms" }}>
+        <h2 className="text-ink-900 text-base font-semibold">Mon Calendrier</h2>
       </div>
 
       {/* Colonne "Prochains jours off" (20/08/2026, remplace la colonne
@@ -764,10 +598,18 @@ export function DashboardPage() {
           (200px → 230px, `max-w-[706px]` sur la grille) — retour à `gap-3`/
           pas de marge pour laisser à la grille la place de grandir plutôt
           que de la lui reprendre. */}
-      <div
-        className="animate-stagger-in flex flex-col gap-3 md:flex-row"
-        style={{ animationDelay: "350ms" }}
-      >
+      {/* Plus de `animate-stagger-in` sur CE conteneur (14/09/2026, bug
+          trouvé en vérifiant le `sticky` du panneau détail congé) — son
+          animation `transform: translateY(...)` reste posée après coup
+          (`animation-fill-mode: both`, `to { transform: translateY(0) }` ≠
+          `none`), ce qui crée un référentiel de positionnement CSS pour tout
+          descendant `position: fixed`/`sticky` (même piège déjà documenté
+          pour `SnippetJourCalendrier`, côté `position: fixed`) — le panneau
+          `DetailCongePanel` (`xl:sticky`) restait confiné à l'intérieur de
+          CE conteneur au lieu de coller au viewport, et scrollait hors champ
+          avec lui. Perte du fondu d'entrée pour cette seule section,
+          délibéré : la correction du `sticky` prime. */}
+      <div className="flex flex-col gap-3 md:flex-row">
         {/* Hauteur plafonnée à 604px (20/08/2026, demande explicite) = 2
             lignes de cards mois (290px × 2 + 24px de gap) pour que le bas de
             cette card s'aligne sur le bas de 2 lignes de calendrier — le
@@ -781,9 +623,11 @@ export function DashboardPage() {
             stretch` sans hauteur fixe, puis nombre d'items adapté sans
             scroll) revenu en arrière sur demande explicite — retour à cette
             version. */}
-        <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
-          <ProchainsJoursOffCard debutPeriode={rangeActive.debut} finPeriode={rangeActive.fin} />
-        </div>
+        {AFFICHER_PROCHAINS_JOURS_OFF && (
+          <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
+            <ProchainsJoursOffCard debutPeriode={rangeActive.debut} finPeriode={rangeActive.fin} />
+          </div>
+        )}
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-6">
@@ -801,36 +645,89 @@ export function DashboardPage() {
               </p>
             )}
 
-            {/* Responsive (20/08/2026) — 1 carte/ligne sous `sm`, 2 entre `sm`
-                et `lg`, 3 à partir de `lg`. `flex flex-wrap` plutôt qu'un
-                `grid-cols-3` (20/08/2026, correction) : avec un `grid`, une
-                dernière ligne incomplète (ex. 5 mois → 3+2) réserve quand
-                même la 3ᵉ colonne vide, ce qui laissait une gouttière béante
-                à droite de "Décembre". En `flex-wrap`, les cartes de la
-                dernière ligne s'alignent simplement à gauche, sans colonne
-                fantôme. Largeurs par palier en dur sur `MiniCalendrier`
-                (`w-full` / `calc(50%-12px)` / `250px`) puisqu'il n'y a plus
-                de tracks de grille pour les calculer automatiquement. Gap
-                `gap-6` et padding interne `p-6` (via `paddingClassName`) —
-                demande explicite d'aération. `max-w-[798px]` = 3×250px +
-                2×24px de gap, pour figer 250px par card à `lg`. */}
-            <div className="flex max-w-[798px] flex-wrap gap-6">
-              {moisActifs.map(({ annee, moisIndex }) => (
-                <MiniCalendrier
-                  key={`${annee}-${moisIndex}`}
-                  annee={annee}
-                  moisIndex={moisIndex}
-                  tipoDuJour={tipoDuJour}
-                  estEnGroupe={estEnGroupe}
-                  onJourClick={handleJourClick}
-                  onJourVideClick={handleJourVideClick}
-                  estAujourdhui={(iso) => iso === todayIso}
-                  className="h-[290px] w-full sm:w-[calc(50%-12px)] lg:w-[calc((100%-48px)/3)]"
-                  texteJour="text-base"
-                  paddingClassName="p-6"
-                  classeTitreMois="text-ink-900 text-base"
-                />
-              ))}
+            {/* Panneau détail congé TOUJOURS au même endroit (14/09/2026,
+                "on va tenter un truc" puis "il faudrait que le détail congé
+                s'affiche toujours à la même place" — demande explicite de
+                Vincent) : grille de 4 colonnes ÉGALES en permanence (jamais
+                conditionnelle, contrairement au 1er essai qui faisait
+                recomposer le calendrier 4↔3 colonnes à l'ouverture) — 3
+                colonnes pour les mois, la 4ᵉ colonne réservée en dur au
+                panneau `DetailCongePanel`, vide tant qu'aucun congé
+                personnel (CP/RTT/CPA, `demandeSelectionnee`) n'est cliqué.
+                Vraie grille CSS (plus `flex-wrap`) : chaque mois a
+                maintenant une position de grille fixe, `w-full` suffit,
+                plus besoin de largeurs `calc()` à la main.
+
+                `xl:` plutôt que `lg:` (14/09/2026, 4e itération — "en
+                desktop tu affiches le détail en le calant en haut du
+                calendrier que tu consultes") : `DetailCongePanel` a déjà un
+                comportement `xl:sticky xl:top-4` intégré (défaut, tant que
+                `pleineLargeur` n'est pas passé) — il reste collé en haut du
+                viewport pendant le scroll, sans qu'aucun JS ne soit
+                nécessaire pour "ramener" le panneau à l'écran (un essai de
+                `scrollIntoView` au clic, rejeté par Vincent, a été retiré).
+                Caler CETTE grille sur le même palier `xl:` que ce
+                `sticky` intégré évite la zone morte entre `lg:` et `xl:` où
+                le panneau restait un bloc plein-largeur sans style sticky.
+
+                PAS de `items-start` (14/09/2026, 2e bug trouvé en
+                vérifiant le `sticky`) : un élément `sticky` ne peut coller
+                que dans les limites de la boîte de SON PROPRE parent — avec
+                `items-start`, la 4ᵉ colonne n'était haute que du contenu du
+                panneau (~300px), bien moins que les 3 lignes de mois
+                (~1200px) : le `sticky` cessait de fonctionner dès qu'on
+                scrollait au-delà de cette hauteur, la colonne entière étant
+                déjà sortie de l'écran. Étirement par défaut (`stretch`) :
+                la 4ᵉ colonne prend la hauteur complète de la grille, le
+                panneau reste "sticky-able" sur toute la hauteur du
+                calendrier consulté. */}
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
+                {moisActifs.map(({ annee, moisIndex }) => (
+                  <MiniCalendrier
+                    key={`${annee}-${moisIndex}`}
+                    annee={annee}
+                    moisIndex={moisIndex}
+                    tipoDuJour={tipoDuJour}
+                    estEnGroupe={estEnGroupe}
+                    onJourClick={handleJourClick}
+                    onJourVideClick={handleJourVideClick}
+                    estAujourdhui={(iso) => iso === todayIso}
+                    className="h-[290px] w-full"
+                    texteJour="text-base"
+                    paddingClassName="p-6"
+                    classeTitreMois="text-ink-900 text-base"
+                  />
+                ))}
+              </div>
+              {/* 4ᵉ colonne (14/09/2026, 3e itération — "le composant congé
+                  détail doit se positionner au-dessus de la légende") :
+                  panneau détail congé (quand un congé personnel est
+                  sélectionné) EN PREMIER, légende empilée verticalement
+                  (`vertical`, voir `CompteurTypologies`) EN DESSOUS — les
+                  deux dans la même colonne fixe, jamais celle des mois. */}
+              <div className="flex flex-col gap-4">
+                {demandeSelectionnee && (
+                  <DetailCongePanel
+                    key={demandeSelectionnee.id}
+                    selection={demandeSelectionnee}
+                    onClose={() => setDemandeSelectionnee(null)}
+                    onRetirer={(commentaire) => retirer(demandeSelectionnee.id, commentaire)}
+                    joursFeries={joursFeriesToutesAnnees}
+                    congesImposes={congesImposesVisibles}
+                    djImposees={djImposeesVisibles}
+                    autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                  />
+                )}
+                {jourCommunSelectionne && (
+                  <DetailJourCommunPanel
+                    jour={jourCommunSelectionne}
+                    joursFeries={joursFeriesToutesAnnees}
+                    onClose={() => setJourCommunSelectionne(null)}
+                  />
+                )}
+                <CompteurTypologies typologies={typologies} vertical />
+              </div>
             </div>
           </div>
         </div>

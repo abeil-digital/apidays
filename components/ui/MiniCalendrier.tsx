@@ -87,6 +87,16 @@ const JOURS_SEMAINE_COURT = ["L", "M", "M", "J", "V"];
 export interface PastilleJour {
   /** Classe(s) Tailwind pour le fond plein (ex. "bg-cp"). Ignoré si `moitie`/`partage` est fourni. */
   classeFond?: string;
+  /**
+   * Couleur du CHIFFRE du jour, en remplacement de `text-white` (14/09/2026,
+   * demande explicite de Vincent — "on joue sur la transparence, ce n'est
+   * pas efficace visuellement" : distinguer validé/en attente par la couleur
+   * du chiffre — vert/orange — plutôt qu'en atténuant le fond). S'applique
+   * aux variantes `classeFond` (fond plein) et `moitie` (demi-journée) — pas
+   * à `plein`/`partage`, propres à la heatmap "Calendrier des employés",
+   * hors scope de cette demande. Défaut `text-white` si absent (comportement
+   * inchangé). */
+  classeTexteChiffre?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };
   /**
@@ -396,7 +406,10 @@ function JourPastille({
 
   if (!pastille.moitie) {
     return (
-      <span className={`${base} ${pastille.classeFond} text-white`} {...evenements}>
+      <span
+        className={`${base} ${pastille.classeFond} ${pastille.classeTexteChiffre ?? "text-white"}`}
+        {...evenements}
+      >
         {contenuJour("ring-white")}
       </span>
     );
@@ -410,7 +423,11 @@ function JourPastille({
       : `linear-gradient(to right, ${clair} 50%, ${couleur} 50%)`;
 
   return (
-    <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
+    <span
+      className={`${base} ${pastille.classeTexteChiffre ?? "text-white"}`}
+      style={{ background: gradient }}
+      {...evenements}
+    >
       {contenuJour("ring-white")}
     </span>
   );

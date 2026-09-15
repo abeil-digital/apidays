@@ -6222,6 +6222,101 @@ début de la période en cours, un an plus tard — ex. 01/06/2026 → 01/06/202
 juin-mai) : la date où ce CPA deviendra du CP, pas une date à partir de laquelle il serait possible
 de le poser (déjà possible immédiatement). `fetchSoldes`, bloc CPA de `soldes.repository.ts`.
 
+## Création d'utilisateur : case à cocher pour sauter l'envoi de l'invitation (14/09/2026)
+
+Signalé par Vincent en préparant la tournée de démo sur acme : créer un compte pour Delphine sans
+déclencher immédiatement un vrai e-mail d'invitation ("je ne suis pas certain que cela soit pertinent
+si on créé des accès, pour tester"). Nouvelle checkbox "Envoyer l'invitation par email" sur
+`UtilisateurFichePage.tsx` (mode création uniquement), cochée par défaut (comportement inchangé si on
+ne touche à rien) — `envoyerInvitationEmail` (état local), `handleSubmit` n'appelle `inviterUtilisateur`
+que si elle est cochée.
+
+Bug trouvé en vérifiant en prod (création/suppression de plusieurs comptes de test réels) : le toast
+de succès disait systématiquement "... a reçu un e-mail" même quand la case était décochée —
+`onCreated` ne savait pas si l'invitation était partie. Corrigé en threadant
+`invitationEnvoyee: boolean` à travers le callback jusqu'à `UtilisateursListPage.tsx`, qui choisit le
+bon texte de toast en fonction ("Aucun e-mail envoyé — invitation à déclencher depuis sa fiche quand
+nécessaire." sinon).
+
+## Calendrier : CPI bloqué quand l'objectif de congés imposés est à 0 (14/09/2026)
+
+Bug réel trouvé par Vincent sur acme : Delphine avait réussi à paramétrer un congé payé imposé (CPI)
+alors que l'objectif de jours CPI était à 0 dans Paramétrer > Congés & RTT — le sélecteur de mode de
+`ModalPoserJourImpose` restait ouvert sur "CPI" même quand ce mode n'a plus de sens pour l'entreprise.
+Règle posée : si l'objectif CPI est à 0, impossible de paramétrer un congé imposé.
+
+`ModalPoserJourImpose.tsx` reçoit une nouvelle prop requise `cpiActif: boolean`
+(`CalendrierPage.tsx` la calcule via `cibleJoursCpi > 0`) — `modesDisponibles` filtre "CPI" hors de la
+liste si `!cpiActif`, le `<SelectPille>` se désactive automatiquement s'il ne reste qu'un seul mode
+(DJI), et le mode initial est reclampé sur "DJI" si "CPI" était sélectionné par défaut mais indisponible.
+
+## Accueil — refonte du calendrier "Mon Calendrier" (14-15/09/2026)
+
+Longue itération sur le calendrier de la home (`DashboardPage.tsx`), en plusieurs vagues successives
+le même jour, suite à une remarque de Vincent sur la complexité de l'écran ("je me demande si la vue
+calendrier du collaborateur est pas trop compliquée... la vue liste je me demande si elle est utile...
+le sélecteur de calendrier est aussi compliqué en définitive").
+
+**Vue liste et sélecteur d'onglets masqués** : `ProchainsJoursOffCard` (liste "Prochains jours off")
+et les 3 pills onglets (Année en cours/Période CP/année suivante, ajoutés le 10/09) retirés de
+l'affichage — code conservé, pas supprimé (`AFFICHER_PROCHAINS_JOURS_OFF = false`), pour ne rien
+reconstruire si besoin de revenir en arrière. Le calendrier prend toute la largeur, grille passée à
+4 mois par ligne.
+
+**Panneau détail congé au clic (`DetailCongePanel`), 3 itérations pour caler sa position** :
+1er essai — clic sur un congé personnel (CP/RTT/CPA) ouvre le panneau à droite, qui pousse le
+calendrier à recomposer 4→3 colonnes. 2e essai (Vincent : "il faudrait que le détail congé s'affiche
+toujours à la même place") — vraie grille CSS 4 colonnes fixes (3 pour les mois, 1 réservée en dur au
+panneau, vide sinon) plutôt qu'un `flex-wrap` recomposé au clic. La légende (`CompteurTypologies`,
+nouvelle prop `vertical`) suit le même sort : déplacée dans cette 4ᵉ colonne, empilée verticalement,
+puis réordonnée pour passer AU-DESSUS du panneau détail plutôt qu'en dessous (Vincent : "le composant
+congé détail doit se positionner au-dessus de la légende").
+
+**Fenêtre glissante réduite de 12 à 9 mois** (Vincent : "c'est suffisant") — `finFenetre9Mois` remplace
+`finFenetre12Mois`, du mois en cours inclus aux 8 suivants (3 lignes de 3 mois pile).
+
+**Panneau détail sticky — 2 bugs CSS réels trouvés en vérifiant par mesure DOM précise
+(`getBoundingClientRect()`/`getComputedStyle()`, pas au screenshot — jugé peu fiable à résolution
+réduite pour un positionnement au pixel près)** : un premier essai `scrollIntoView` au clic (pour
+ramener le panneau à l'écran sur un jour cliqué bas dans le calendrier) a été rejeté par Vincent ("non...
+en desktop tu affiches le détail en le calant en haut du calendrier que tu consultes") au profit d'un
+comportement passivement sticky, déjà prévu dans `DetailCongePanel` (`xl:sticky xl:top-4`) mais qui ne
+fonctionnait pas :
+1. La grille était calée sur le seuil `lg:` alors que le `sticky` de `DetailCongePanel` n'active qu'à
+   `xl:` (≥1280px) — zone morte entre 1024 et 1279px où le panneau restait un bloc plein largeur sans
+   style sticky. Seuil de la grille remonté à `xl:`, aligné.
+2. `animate-stagger-in` sur le conteneur ancêtre laissait un `transform: translateY(0)` posé après
+   l'animation (`animation-fill-mode: both`), ce qui crée un référentiel de positionnement CSS cassant
+   `sticky`/`fixed` pour tout descendant (même piège déjà rencontré et documenté pour
+   `SnippetJourCalendrier`, côté `position: fixed`) — retiré de ce conteneur précis.
+3. `items-start` sur la grille 4 colonnes gardait la 4ᵉ colonne aussi haute que son seul contenu
+   (~300px) au lieu de la hauteur complète de la grille (~1200px, 3 lignes de mois) — un élément
+   `sticky` ne peut coller que dans les limites de son propre parent, donc le `sticky` s'arrêtait de
+   fonctionner dès qu'on scrollait au-delà de ces ~300px. Retiré (défaut `stretch`), vérifié par mesure
+   DOM : le panneau reste bien collé à `top: 16px` même scrollé loin dans la page.
+
+**Distinction validé/en attente par la couleur du chiffre, essayée puis en partie annulée** : Vincent a
+d'abord demandé de remplacer l'ancien fond atténué ("on joue sur la transparence, ce n'est pas efficace
+visuellement") par un fond toujours plein + chiffre orange (`text-status-warning-fg`, en attente) ou
+vert (`text-status-success-fg`, validé) — nouvelle prop `classeTexteChiffre` sur `PastilleJour`
+(`MiniCalendrier.tsx`), appliquée aux demandes personnelles (`tipoDuJour`) ET, dans un premier temps,
+aux jours communs CPI/DJI (`communDuJour`). **Annulé le lendemain pour les CPI/DJI uniquement**
+("annule ça") — un CI n'a pas de vraie notion de validation, retour au chiffre blanc par défaut pour
+eux ; le mécanisme (`classeTexteChiffre`) reste en place et actif pour les demandes personnelles.
+
+**Card détail CI/FE (`DetailJourCommunPanel.tsx`, nouveau composant), en complément — pas en
+remplacement — du popover existant** : Vincent a demandé de traiter les CPI/DJI ("CI") et les Fériés
+("FE") avec une card détail dans la 4ᵉ colonne, comme les demandes personnelles, mais explicitement
+"pour le moment tu ne remplaces pas les over" — le popover `SnippetJourCalendrier` devait continuer à
+fonctionner en parallèle. Nouveau composant lecture seule (pas de section Décision/Annulation, mention
+"Non modifiable — paramétré par l'administrateur"), même gabarit bandeau+`TypeBadge` que
+`DetailSoldeDepartPanel`. Nouvel état `jourCommunSelectionne` dans `DashboardPage.tsx`,
+`handleJourClick` déclenche désormais les deux (card + popover) sur un CPI. **Affiné dans la foulée** :
+Vincent a constaté que la card rendait le popover redondant pour DJI et Férié (pas pour CPI) — le
+popover `SnippetJourCalendrier` ne se déclenche donc plus que pour un CPI
+(`setSnippet(jour.kind === "cpi" ? { jour, ancre } : null)`), retiré pour DJI/Férié qui n'affichent plus
+que la card.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
