@@ -6432,6 +6432,37 @@ chacun avec sa propre variante figée d'un modèle de droits plus ancien — un 
 audit global (`grep onRegulariser`/`peutAnnulerDejaTransmis` sur tout `components/suivre/`) avant de
 considérer le chantier terminé plutôt qu'une correction écran par écran au fil des retours de Vincent.
 
+## Bug : CE/RECUP/EVT_FAM jamais transmis en paie (15/09/2026)
+
+Signalé par Vincent : "j'ai posé un congé exceptionnel, il n'apparait pas dans les export paie (le
+Congé sans solde oui), c'est normal ?" — non, confirmé comme un vrai bug après investigation.
+
+**Cause** : `lib/data/exportsPaie.repository.ts` (`fetchDemandesAvecSoldeTransmission`,
+`fetchDemandesEnAttenteAvant`) et `lib/data/demandes.repository.ts` (`fetchCongesConsommesPeriode`)
+filtraient les demandes transmissibles en paie sur `type === "CP" || type === "RTT" || type ===
+"CSS"` — trois endroits, même filtre dupliqué, aucun des trois n'incluait CE (Congé exceptionnel),
+RECUP (Récupération) ni EVT_FAM (Événement familial). Vérifié par l'historique git avant de corriger
+(Vincent avait demandé d'investiguer plutôt que de corriger à l'aveugle) : les 4 types "sans solde"
+(CSS/CE/RECUP/EVT_FAM) ont été introduits ENSEMBLE le 04/08/2026 (`0e71ca1`, "types d'absence sans
+compteur de solde"), et `exportsPaie.repository.ts` n'a été créé que 20 jours plus tard (24/08/2026,
+`8e1c459`) — CE existait donc déjà au moment où ce filtre a été écrit. Aucun commit ni ligne de
+CONTEXTE.md n'explique pourquoi CSS a été retenu et pas les 3 autres, qui sont pourtant à égalité des
+types "sans solde associé" — tout indique un oubli plutôt qu'un choix métier assumé.
+
+**Correctif** : nouvelle constante partagée `TYPES_TRANSMISSIBLES_PAIE` (les 6 types transmissibles :
+CP/RTT/CSS/CE/RECUP/EVT_FAM), définie dans `demandes.repository.ts` (import par
+`exportsPaie.repository.ts`, pas l'inverse, pour éviter un cycle) et réutilisée aux 3 endroits qui
+dupliquaient jusque-là le même filtre à la main.
+
+**Effet de bord signalé par Vincent en vérifiant le fix** : une fois CE remonté dans "Quels congés
+transmettre", il tranchait dans le bandeau sticky récapitulatif avec un rendu visuel différent des
+types "officiels" — CP/RTT/CPA en pastille colorée (`TypeBadge` variant "pill", décision du
+25/08/2026), CSS/CE/RECUP/EVT_FAM en simple texte gris à côté. Vincent : "intégrer les CSS CE comme
+les CP / RTT /CPA/EVT" — les 4 types "autres" (`pillsAutres`) passent désormais au même rendu
+`TypeBadge` pill que les 3 "principaux" (`pillsPrincipales`), seule différence conservée : masqués
+quand nuls (pas de "0 j" permanent pour un CE/RECUP qui n'arrive jamais, contrairement à CP/RTT/CPA
+qui restent visibles même à 0 — "le 0 est une donnée importante").
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
