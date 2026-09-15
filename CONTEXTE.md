@@ -6463,6 +6463,28 @@ les CP / RTT /CPA/EVT" — les 4 types "autres" (`pillsAutres`) passent désorma
 quand nuls (pas de "0 j" permanent pour un CE/RECUP qui n'arrive jamais, contrairement à CP/RTT/CPA
 qui restent visibles même à 0 — "le 0 est une donnée importante").
 
+**Régression suite au fix — l'export CSV plantait dès qu'un CE/RECUP/EVT_FAM était présent** :
+"le lien exporter le CSV ne semble plus fonctionner". Cause : `TransmissionsPaiePage.tsx` avait son
+propre type local `TypeConsomme = "CP" | "RTT" | "CPA" | "CSS"` (4 valeurs, pas les 7), utilisé par
+`ligneVide()`/`grouperParCollaborateur()`/`genererCsv()` pour le CSV — avant le fix ci-dessus, CE
+n'atteignait jamais cette fonction (filtré en amont), donc l'écart entre `TypeConsomme` et les 7
+types réels restait invisible. Une fois CE remonté, `grouperParCollaborateur` faisait
+`ligne.parType["CE"].jours += ...` sur une clé que `ligneVide()` n'initialise pas → `TypeError`
+silencieuse côté client, le bouton "Exporter (CSV)" ne produisait plus rien. Corrigé en étendant
+`TypeConsomme`/`LABEL_TYPE`/`ligneVide()`/`ORDRE_TYPE_CSV` aux 4 types "sans solde" — vérifié en
+interceptant `URL.createObjectURL` pour lire le contenu du CSV généré plutôt que de compter sur le
+téléchargement (inerte dans le panneau de test) : le CE apparaît bien comme ligne du CSV.
+
+**Nuance sur l'audit "autres oublis similaires" lancé juste avant** (voir Backlog/point 75) : cet
+endroit précis (`TypeConsomme`/`ORDRE_TYPE_CSV`) avait été repéré par l'audit, qui l'a écarté comme
+"légitime" à cause d'un commentaire daté du 28/08/2026 expliquant explicitement l'exclusion de
+CE/RECUP/EVT_FAM ("hors périmètre du CSV"). Ce commentaire documentait une exclusion réellement
+délibérée à l'époque — mais elle a cessé d'être cohérente dès que le fix `TYPES_TRANSMISSIBLES_PAIE`
+a changé ce qui alimente cette fonction en amont, sans que le commentaire (ni le code) ne soit
+repassé en revue. Leçon : un commentaire qui justifie une exclusion de type reste correct pour l'état
+du code au moment où il a été écrit, pas nécessairement après qu'un filtre en amont change — à
+revérifier explicitement quand on élargit un périmètre de types quelque part dans le pipeline.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
