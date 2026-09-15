@@ -232,6 +232,9 @@ export function DetailCongePanel({
   );
   const [historiqueDecisions, setHistoriqueDecisions] = useState<DecisionHistorique[]>([]);
   const [retraitOuvert, setRetraitOuvert] = useState(false);
+  // Fondu de fermeture après un retrait réussi (15/09/2026, demande explicite
+  // de Vincent) — voir `executerRetrait` plus bas pour la séquence complète.
+  const [fermetureEnCours, setFermetureEnCours] = useState(false);
   const [repartitionMois, setRepartitionMois] = useState<{ mois: string; jours: number }[] | null>(
     null,
   );
@@ -379,6 +382,41 @@ export function DetailCongePanel({
       await rafraichirHistorique();
     } catch {
       setErreurAction(messageErreur);
+    } finally {
+      setEnCours(false);
+      onEnCoursChange?.(false);
+    }
+  }
+
+  // "Annuler cette demande" (15/09/2026, demande explicite de Vincent —
+  // "il faudrait une transition") : à la différence de `executer` ci-dessus
+  // (Refuser/Signaler comme non pris/Restaurer, qui laissent le panneau
+  // ouvert), un retrait réussi le referme, mais pas d'un coup — séquence en
+  // 3 temps pour que le résultat reste lisible avant de disparaître : le
+  // panneau reste affiché tel quel ~1,5s, la section "Annuler cette demande"
+  // se replie, puis tout le panneau s'estompe (`fermetureEnCours`, transition
+  // CSS sur le conteneur racine) avant l'appel à `onClose`.
+  const DUREE_MAINTIEN_RETRAIT_MS = 1500;
+  const DUREE_FONDU_RETRAIT_MS = 300;
+
+  async function executerRetrait() {
+    if (!onRetirer) return;
+    setEnCours(true);
+    onEnCoursChange?.(true);
+    setErreurAction(null);
+    try {
+      await onRetirer(commentaire.trim());
+      setCommentaire("");
+      await rafraichirHistorique();
+      window.setTimeout(() => {
+        setRetraitOuvert(false);
+        window.setTimeout(() => {
+          setFermetureEnCours(true);
+          window.setTimeout(onClose, DUREE_FONDU_RETRAIT_MS);
+        }, DUREE_FONDU_RETRAIT_MS);
+      }, DUREE_MAINTIEN_RETRAIT_MS);
+    } catch {
+      setErreurAction("Impossible de retirer cette demande.");
     } finally {
       setEnCours(false);
       onEnCoursChange?.(false);
@@ -535,7 +573,9 @@ export function DetailCongePanel({
 
   return (
     <div
-      className={`flex w-full flex-col gap-[3px] ${
+      className={`flex w-full flex-col gap-[3px] transition-opacity duration-300 ${
+        fermetureEnCours ? "opacity-0" : "opacity-100"
+      } ${
         masquerBandeau || masquerTypeBadgeBandeau || pleineLargeur
           ? ""
           : "xl:sticky xl:top-4 xl:w-64 xl:shrink-0"
@@ -872,11 +912,7 @@ export function DetailCongePanel({
                   variant={
                     selection.statut !== "validé" || commentaire.trim() ? "primary" : "secondary"
                   }
-                  onClick={() =>
-                    demanderConfirmation("retirer", () =>
-                      executer(onRetirer, "Impossible de retirer cette demande."),
-                    )
-                  }
+                  onClick={() => demanderConfirmation("retirer", executerRetrait)}
                   disabled={enCours || (selection.statut === "validé" && !commentaire.trim())}
                   className="w-full justify-center rounded-full px-4 py-2 text-xs"
                 >

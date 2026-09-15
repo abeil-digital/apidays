@@ -1,17 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
-import { useDemandes } from "@/hooks/useDemandes";
-import { useReglesConges } from "@/hooks/useReglesConges";
-import {
-  classeFondAttenueTypeBadge,
-  classeFondTypeBadge,
-  type TypeBadgeCode,
-} from "@/components/demandes/TypeBadge";
+import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
+import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
+import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import {
   SnippetJourCalendrier,
   type JourCalendrierClique,
@@ -19,10 +16,12 @@ import {
 import { CompteurTypologies } from "@/components/demandes/CompteurTypologies";
 import { compterTypologies } from "@/components/demandes/compterTypologies";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
-import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
-import type { Demande } from "@/lib/types";
-
-type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
+import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
+import {
+  DetailJourCommunPanel,
+  type JourCommunClique,
+} from "@/components/demandes/DetailJourCommunPanel";
+import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
 
 function isoDate(annee: number, moisIndex: number, jour: number): string {
   return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
@@ -34,49 +33,8 @@ function ajouterJoursIso(dateIso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "Juin 26" — mois abrégé + année sur 2 chiffres, pour le libellé de
- * l'onglet "Période de référence" (ex. "Juin 26 → Mai 27"). */
-function formatMoisAnneeCourt(dateIso: string): string {
-  const d = new Date(`${dateIso}T00:00:00Z`);
-  const texte = new Intl.DateTimeFormat("fr-FR", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  }).format(d);
-  return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
-}
-
-/** Sélecteur "Débute : {mois en cours} / {début de la période}" — même
- * composant que `DashboardPage`. */
-function SelectAffichage({
-  actif,
-  onChange,
-  labelMoisEnCours,
-  labelDebut,
-}: {
-  actif: boolean;
-  onChange: (v: boolean) => void;
-  labelMoisEnCours: string;
-  labelDebut: string;
-}) {
-  return (
-    <div className="relative inline-flex w-fit items-center gap-1.5">
-      <span className="text-ink-500 text-xs">Débute :</span>
-      <select
-        value={actif ? "complete" : "mois_en_cours"}
-        onChange={(e) => onChange(e.target.value === "complete")}
-        className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-      >
-        <option value="mois_en_cours">{labelMoisEnCours}</option>
-        <option value="complete">{labelDebut}</option>
-      </select>
-      <ChevronDown size={11} className="text-slate pointer-events-none absolute right-0" />
-    </div>
-  );
-}
-
 /** Tous les mois (année + index) couverts par une plage de dates ISO, bornes
- * incluses. */
+ * incluses — voir DashboardPage.tsx, même helper (duplication assumée). */
 function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex: number }[] {
   const mois: { annee: number; moisIndex: number }[] = [];
   let annee = Number(debutIso.slice(0, 4));
@@ -96,7 +54,7 @@ function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex
   return mois;
 }
 
-function codeBadgeDemande(demande: Demande): TypeBadgeCode {
+function codeBadgeDemande(demande: DemandeEquipe): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
 }
 
@@ -115,35 +73,97 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
   FERIE: "--color-ferie",
 };
 
+/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois" — même composant que
+ * `SelectCommence` de `DashboardPage.tsx` (duplication assumée). */
+function SelectCommence({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="relative inline-flex w-fit items-center gap-1.5">
+      <span className="text-ink-500 text-xs">Commence :</span>
+      <select
+        value={actif ? "il_y_a_3_mois" : "aujourdhui"}
+        onChange={(e) => onChange(e.target.value === "il_y_a_3_mois")}
+        className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
+      >
+        <option value="aujourdhui">Aujourd&apos;hui</option>
+        <option value="il_y_a_3_mois">Il y a 3 mois</option>
+      </select>
+      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
+    </div>
+  );
+}
+
 /**
  * Calendrier d'un collaborateur, pour `/suivre/calendrier` (24/08/2026,
- * manager/admin) — reprend le gabarit du calendrier "nouvelle version"
- * d'Accueil (`DashboardPage`, section "Mon Calendrier" : onglets Année en
- * cours/Période de référence CP/Année suivante, colonne "Prochains jours
- * off" + grille `MiniCalendrier` 3/ligne), PAS l'ancienne page dédiée
- * `/mon-calendrier` (`MonCalendrierPage.tsx`, gabarit différent — colonne
- * légende CPI/DJI/Fériés au lieu de "Prochains jours off").
+ * manager/admin — refondu le 15/09/2026 pour reprendre le gabarit "nouvelle
+ * version" d'Accueil (`DashboardPage.tsx`, section "Mon Calendrier") : fenêtre
+ * glissante de 9 mois + sélecteur "Commence : Aujourd'hui / Il y a 3 mois"
+ * (remplace les 3 anciens onglets Année en cours/Période de référence
+ * CP/Année suivante, jugés trop compliqués), 4ᵉ colonne fixe hébergeant le
+ * détail du jour cliqué (`DetailCongePanel` pour une demande personnelle,
+ * `DetailJourCommunPanel` en lecture seule pour un CPI/DJI/Férié) + la
+ * légende par typologie empilée verticalement, couleur du chiffre
+ * orange/vert plutôt que fond atténué, chevauchement demande/férié/DJI
+ * "transparent" (variante `partage`), routage du clic par demi-journée
+ * (`moitieCliquee`), jours passés atténués (`estPasse`). Voir Backlog.md
+ * "Calendrier simplifié", point 5.
  *
- * Différences volontaires avec `DashboardPage` : pas de bouton "+"/clic sur
- * un jour vide pour poser un congé (un manager ne pose pas de congé à la
- * place d'un collaborateur depuis cet écran, hors scope), pas de cartes
- * Soldes/FAQ/activité récente — uniquement le bloc calendrier, `utilisateurId`
- * pilote quelles demandes sont affichées (`useDemandes`/`ProchainsJoursOffCard`
- * acceptent tous deux ce prop depuis cette date).
+ * Différence volontaire avec `DashboardPage` : pas de bouton "+"/clic sur un
+ * jour vide (un manager ne pose pas de congé à la place d'un collaborateur
+ * depuis cet écran, hors scope) ; `estPasse` garde en revanche la même
+ * exception "jour déjà posé reste à pleine opacité".
+ *
+ * Droits de décision/annulation dans `DetailCongePanel` scopés au rôle du
+ * VIEWER, pas à `utilisateurId` (le collaborateur consulté) : principe
+ * tranché le 15/09/2026 par Vincent — "les droits des managers sont les
+ * mêmes que ceux des administrateurs avec juste un droit supplémentaire :
+ * la validation des congés". Concrètement, manager ET admin peuvent tous
+ * les deux annuler une demande à tout moment (y compris déjà transmise en
+ * paie, `peutAnnulerDejaTransmis`), le manager ayant en plus valider/
+ * refuser. Pas de `onRegulariser` ici (abandonné, même changement appliqué
+ * à `SuivreDemandesPage.tsx`).
  */
 export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: string }) {
-  const { demandes, loading: loadingDemandes } = useDemandes(utilisateurId);
-  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
+  const { utilisateur: viewer } = useUtilisateur();
+  const { demandes: demandesEquipe, valider, refuser, retirer } = useDemandesEquipe();
+  const estManager = viewer?.role === "manager";
+  const estAdmin = viewer?.role === "admin";
+  const demandes = demandesEquipe.filter((d) => d.demandeur.id === utilisateurId);
+
   const [snippet, setSnippet] = useState<{ jour: JourCalendrierClique; ancre: DOMRect } | null>(
     null,
   );
-  const [onglet, setOnglet] = useState<Onglet>("en_cours");
-  const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
-  const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
+  const [demandeSelectionnee, setDemandeSelectionnee] = useState<DemandeEquipe | null>(null);
+  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
+    null,
+  );
+  const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
+  // Statut de transmission paie par demande (15/09/2026, demande explicite de
+  // Vincent — "il faut le faire", même mécanisme que `SuivreDemandesPage.tsx`)
+  // : seules les demandes validées/annulées peuvent avoir des lignes
+  // `export_paie_lignes` (en attente/refusé n'en ont jamais). Nécessaire pour
+  // la nuance "Passé en paie" (`peutAnnulerDejaTransmis`), vraie pour manager
+  // et admin — les deux peuvent annuler une demande déjà transmise ici.
+  const [lignesTransmissionParDemande, setLignesTransmissionParDemande] = useState<
+    Record<string, LigneExportPaie[]>
+  >({});
 
-  // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
-  // de Vincent) — voir DashboardPage.tsx, même correctif : sans ça, le
-  // bandeau de date simulée ne pouvait pas tester la rotation des 3 onglets.
+  useEffect(() => {
+    let cancelled = false;
+    const ids = demandesEquipe
+      .filter(
+        (d) => d.demandeur.id === utilisateurId && (d.statut === "validé" || d.statut === "annulé"),
+      )
+      .map((d) => d.id);
+    fetchLignesTransmissionParDemande(ids)
+      .then((data) => {
+        if (!cancelled) setLignesTransmissionParDemande(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [utilisateurId, demandesEquipe]);
+
   const anneeActuelle = getAujourdhui().getFullYear();
   const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
@@ -152,66 +172,25 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   const calendrierAnneeB = useCalendrier(anneeSuivante);
 
   const loading =
-    loadingDemandes ||
-    loadingRegles ||
-    calendrierAnneePrecedente.loading ||
-    calendrierAnneeA.loading ||
-    calendrierAnneeB.loading;
+    calendrierAnneePrecedente.loading || calendrierAnneeA.loading || calendrierAnneeB.loading;
 
   if (loading) {
     return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
   }
 
   const todayIso = todayISO();
-  const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
-  const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
-  // Voir DashboardPage.tsx — même fix (25/08/2026) : la vue "mois en cours"
-  // doit démarrer le 1er du mois, pas littéralement aujourd'hui.
-  const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
-
-  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
-  const debutPeriodeCp = regleCp
-    ? todayIso >= isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      ? isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      : isoDate(anneePrecedente, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-    : debutAnneeActuelle;
-  const finPeriodeCp = regleCp
-    ? ajouterJoursIso(
-        isoDate(
-          Number(debutPeriodeCp.slice(0, 4)) + 1,
-          regleCp.periodeDebutMois - 1,
-          regleCp.periodeDebutJour,
-        ),
-        -1,
-      )
-    : finAnneeActuelle;
-
-  // Rotation des 3 onglets (10/09/2026) — voir le commentaire détaillé dans
-  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
-  const etatAvantBascule = Number(debutPeriodeCp.slice(0, 4)) < anneeActuelle;
-  const rangeTroisiemeOnglet =
-    regleCp && etatAvantBascule
-      ? {
-          debut: isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-          fin: ajouterJoursIso(
-            isoDate(anneeActuelle + 1, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-            -1,
-          ),
-        }
-      : { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) };
-
-  const ranges: Record<Onglet, { debut: string; fin: string }> = {
-    en_cours: {
-      debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
-      fin: finAnneeActuelle,
-    },
-    periode_cp: {
-      debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
-      fin: finPeriodeCp,
-    },
-    annee_suivante: rangeTroisiemeOnglet,
-  };
-  const rangeActive = ranges[onglet];
+  // Fenêtre glissante de 9 mois, décalable de 3 mois en arrière — voir
+  // DashboardPage.tsx pour le détail du calcul (duplication assumée).
+  const decalageMoisDebut = commenceIlYA3Mois ? -3 : 0;
+  const moisIndexDebutBrut = getAujourdhui().getMonth() + decalageMoisDebut;
+  const moisIndexDebut = ((moisIndexDebutBrut % 12) + 12) % 12;
+  const anneeDebutFenetre = anneeActuelle + Math.floor(moisIndexDebutBrut / 12);
+  const debutMoisActuel = isoDate(anneeDebutFenetre, moisIndexDebut, 1);
+  const moisIndexFinBrut = moisIndexDebutBrut + 8;
+  const moisIndexFin = ((moisIndexFinBrut % 12) + 12) % 12;
+  const anneeFinFenetre = anneeActuelle + Math.floor(moisIndexFinBrut / 12);
+  const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
+  const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function calendrierPourAnnee(annee: number) {
@@ -220,16 +199,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return calendrierAnneeA;
   }
 
-  // Plus d'exception "année en cours toujours visible" (10/09/2026, retirée
-  // à la demande explicite de Vincent, voir CONTEXTE.md).
   function anneeVisiblePourCommuns(annee: number): boolean {
     return Boolean(calendrierPourAnnee(annee).parametrage?.valideLe);
   }
 
-  // Message "calendrier(s) pas encore paramétré(s)" (10/09/2026, généralisé
-  // — voir même logique/commentaire dans DashboardPage.tsx) : couvre "En
-  // cours", "Période de référence" (jusqu'à 2 années à cheval) et "Année
-  // suivante", pas seulement cette dernière comme avant.
   const anneesNonParametrees = (() => {
     const anneeDebut = Number(rangeActive.debut.slice(0, 4));
     const anneeFin = Number(rangeActive.fin.slice(0, 4));
@@ -238,18 +211,12 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return annees.filter((a) => !anneeVisiblePourCommuns(a));
   })();
 
-  const joursFeriesToutesAnnees = [
-    ...calendrierAnneePrecedente.joursFeries,
-    ...calendrierAnneeA.joursFeries,
-    ...calendrierAnneeB.joursFeries,
-  ];
+  const joursFeriesToutesAnnees = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries];
   const congesImposesVisibles = [
-    ...calendrierAnneePrecedente.congesImposes,
     ...calendrierAnneeA.congesImposes,
     ...calendrierAnneeB.congesImposes,
   ].filter((c) => anneeVisiblePourCommuns(Number(c.debut.slice(0, 4))));
   const djImposeesVisibles = [
-    ...calendrierAnneePrecedente.djImposees,
     ...calendrierAnneeA.djImposees,
     ...calendrierAnneeB.djImposees,
   ].filter((d) => anneeVisiblePourCommuns(Number(d.date.slice(0, 4))));
@@ -262,9 +229,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     joursFeriesPourDuree: joursFeriesToutesAnnees,
   });
 
-  // `!d.congeImposeId` (10/09/2026, demande explicite) — voir même
-  // commentaire/correctif dans DashboardPage.tsx.
-  function demandeDuJour(iso: string): Demande | undefined {
+  function demandeDuJour(iso: string): DemandeEquipe | undefined {
     return demandes.find(
       (d) =>
         d.statut !== "refusé" &&
@@ -297,29 +262,47 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return null;
   }
 
-  // Demi-journée rendue comme telle, pas un fond plein — même fix que
-  // DashboardPage.tsx (25/08/2026, bug signalé par Vincent).
+  // Priorité férié > demande > CPI > DJI, couleur du chiffre orange/vert,
+  // chevauchement demande/férié/DJI transparent — voir DashboardPage.tsx pour
+  // le détail complet de ce correctif (duplication assumée).
   function tipoDuJour(iso: string): PastilleJour | null {
+    const annee = Number(iso.slice(0, 4));
+    const cal = calendrierPourAnnee(annee);
+    if (cal.joursFeries.some((f) => f.date === iso)) {
+      return { classeFond: classeFondTypeBadge("FERIE") };
+    }
+
     const demande = demandeDuJour(iso);
     if (demande) {
       const code = codeBadgeDemande(demande);
-      const matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
-      const apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+      let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
+      let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+      const classeTexteChiffre =
+        demande.statut === "en attente" ? "text-status-warning-fg" : "text-status-success-fg";
+
+      const dji = anneeVisiblePourCommuns(annee)
+        ? cal.djImposees.find((d) => d.date === iso)
+        : undefined;
+      if (dji?.demiJournee === "matin") matinCouvert = false;
+      if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        const classeFond =
-          demande.statut === "en attente"
-            ? classeFondAttenueTypeBadge(code)
-            : classeFondTypeBadge(code);
-        return { classeFond };
+        return { classeFond: classeFondTypeBadge(code), classeTexteChiffre };
       }
 
-      const couleurBase = `var(${VAR_COULEUR_TYPE[code]})`;
-      const couleur =
-        demande.statut === "en attente"
-          ? `color-mix(in srgb, ${couleurBase} 50%, white)`
-          : couleurBase;
-      return { moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" } };
+      const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
+      if (dji) {
+        return {
+          partage: matinCouvert
+            ? { gauche: couleurDemande, droite: "var(--color-dji)" }
+            : { gauche: "var(--color-dji)", droite: couleurDemande },
+          classeTexteChiffre,
+        };
+      }
+      return {
+        moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
+        classeTexteChiffre,
+      };
     }
     return communDuJour(iso);
   }
@@ -336,18 +319,26 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return Boolean(cpiA && cpiB && cpiA.id === cpiB.id);
   }
 
-  // Ce qui occupe un jour cliqué, dans l'ordre de priorité d'affichage —
-  // demande perso > férié > CPI > DJI, même priorité que `communDuJour`
-  // (24/08/2026 : les fériés ouvrent désormais aussi l'overlay, avec leur
-  // nom — `SnippetJourCalendrier`). Même gating que `communDuJour` pour
-  // CPI/DJI (`anneeVisiblePourCommuns`, les fériés y échappent).
-  function occupantDuJour(iso: string): JourCalendrierClique | null {
-    const demande = demandeDuJour(iso);
-    if (demande) return { kind: "demande", demande };
+  function occupantDuJour(
+    iso: string,
+    moitieCliquee?: "gauche" | "droite",
+  ): JourCalendrierClique | null {
     const annee = Number(iso.slice(0, 4));
     const cal = calendrierPourAnnee(annee);
     const ferie = cal.joursFeries.find((f) => f.date === iso);
     if (ferie) return { kind: "ferie", ferie };
+
+    const demande = demandeDuJour(iso);
+    if (demande) {
+      const dji =
+        moitieCliquee && anneeVisiblePourCommuns(annee)
+          ? cal.djImposees.find((d) => d.date === iso)
+          : undefined;
+      const demiClique = moitieCliquee === "gauche" ? "matin" : "apres_midi";
+      if (dji && dji.demiJournee === demiClique) return { kind: "dji", dji };
+      return { kind: "demande", demande };
+    }
+
     if (!anneeVisiblePourCommuns(annee)) return null;
     const cpi = cal.congesImposes.find((c) => iso >= c.debut && iso <= c.fin);
     if (cpi) return { kind: "cpi", cpi };
@@ -356,124 +347,43 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return null;
   }
 
-  function handleJourClick(iso: string, ancre: DOMRect) {
-    const jour = occupantDuJour(iso);
-    if (jour) setSnippet({ jour, ancre });
+  function handleJourClick(iso: string, ancre: DOMRect, moitieCliquee?: "gauche" | "droite") {
+    const jour = occupantDuJour(iso, moitieCliquee);
+    if (!jour) return;
+    if (jour.kind === "demande") {
+      setSnippet(null);
+      setJourCommunSelectionne(null);
+      setDemandeSelectionnee(jour.demande as DemandeEquipe);
+    } else {
+      setDemandeSelectionnee(null);
+      setJourCommunSelectionne(jour);
+      setSnippet(jour.kind === "cpi" ? { jour, ancre } : null);
+    }
   }
-
-  // Boutons d'onglet extraits en constantes JSX (10/09/2026) — voir
-  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
-  const boutonEnCours = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("en_cours")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "en_cours"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {anneeActuelle}
-      </button>
-      {onglet === "en_cours" && (
-        <SelectAffichage
-          actif={vueCompleteEnCours}
-          onChange={setVueCompleteEnCours}
-          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-          labelDebut={formatMoisAnneeCourt(debutAnneeActuelle)}
-        />
-      )}
-    </>
-  );
-  const boutonPeriodeCp = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("periode_cp")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "periode_cp"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-      </button>
-      {onglet === "periode_cp" && (
-        <SelectAffichage
-          actif={vueCompletePeriodeCp}
-          onChange={setVueCompletePeriodeCp}
-          labelMoisEnCours={formatMoisAnneeCourt(todayIso)}
-          labelDebut={formatMoisAnneeCourt(debutPeriodeCp)}
-        />
-      )}
-    </>
-  );
-  const boutonTroisieme = (
-    <button
-      type="button"
-      onClick={() => setOnglet("annee_suivante")}
-      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-        onglet === "annee_suivante"
-          ? "bg-slate/90 hover:bg-slate text-white"
-          : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-      }`}
-    >
-      {etatAvantBascule
-        ? `${formatMoisAnneeCourt(rangeTroisiemeOnglet.debut)} → ${formatMoisAnneeCourt(rangeTroisiemeOnglet.fin)}`
-        : anneeSuivante}
-    </button>
-  );
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        {/* Compteur par typologie (24/08/2026, demande explicite) — sur la
-            même ligne que les onglets de sélection de période, poussé à
-            droite (`justify-between`) : un total par typologie de "day off"
-            réellement présente sur la période active. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 px-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {etatAvantBascule ? (
-              <>
-                {boutonPeriodeCp}
-                {boutonEnCours}
-              </>
-            ) : (
-              <>
-                {boutonEnCours}
-                {boutonPeriodeCp}
-              </>
-            )}
-            {boutonTroisieme}
-          </div>
-
-          <CompteurTypologies typologies={typologies} />
-        </div>
+      <div className="flex flex-col gap-1 px-1">
+        <SelectCommence actif={commenceIlYA3Mois} onChange={setCommenceIlYA3Mois} />
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row">
-        <div className="p-2 md:h-[604px] md:w-72 md:shrink-0">
-          <ProchainsJoursOffCard
-            utilisateurId={utilisateurId}
-            debutPeriode={rangeActive.debut}
-            finPeriode={rangeActive.fin}
-          />
-        </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-6">
+          {anneesNonParametrees.length > 0 && (
+            <p className="text-sm font-normal">
+              <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
+                {anneesNonParametrees.length === 1
+                  ? `Le calendrier ${anneesNonParametrees[0]} n’est pas encore paramétré par l’administrateur.`
+                  : `Les calendriers ${anneesNonParametrees.join(" et ")} ne sont pas paramétrés par l’administrateur.`}
+              </span>
+            </p>
+          )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-6">
-            {anneesNonParametrees.length > 0 && (
-              <p className="text-sm font-normal">
-                <span className="text-ink-900 rounded-sm bg-yellow-200 px-1">
-                  {anneesNonParametrees.length === 1
-                    ? `Le calendrier ${anneesNonParametrees[0]} n’est pas encore paramétré par l’administrateur.`
-                    : `Les calendriers ${anneesNonParametrees.join(" et ")} ne sont pas paramétrés par l’administrateur.`}
-                </span>
-              </p>
-            )}
-
-            <div className="flex max-w-[798px] flex-wrap gap-6">
+          {/* Même gabarit 4 colonnes que DashboardPage.tsx (duplication
+              assumée) — voir son commentaire pour le détail du `xl:sticky`
+              et du bug `items-start`/`animate-stagger-in` déjà corrigé. */}
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
               {moisActifs.map(({ annee, moisIndex }) => (
                 <MiniCalendrier
                   key={`${annee}-${moisIndex}`}
@@ -483,11 +393,51 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
                   estEnGroupe={estEnGroupe}
                   onJourClick={handleJourClick}
                   estAujourdhui={(iso) => iso === todayIso}
-                  className="h-[290px] w-full sm:w-[calc(50%-12px)] lg:w-[calc((100%-48px)/3)]"
+                  // Même exception que DashboardPage.tsx — un jour déjà
+                  // posé garde son chiffre à pleine opacité, seuls les
+                  // jours vides passés s'atténuent.
+                  estPasse={(iso) => iso < todayIso && !demandeDuJour(iso)}
+                  className="h-[290px] w-full"
                   texteJour="text-base"
                   paddingClassName="p-6"
+                  classeTitreMois="text-ink-900 text-base"
                 />
               ))}
+            </div>
+            <div className="flex flex-col gap-4">
+              {demandeSelectionnee && (
+                <DetailCongePanel
+                  key={demandeSelectionnee.id}
+                  selection={demandeSelectionnee}
+                  onClose={() => setDemandeSelectionnee(null)}
+                  onValider={
+                    estManager ? (commentaire) => valider(demandeSelectionnee.id, commentaire) : undefined
+                  }
+                  onRefuser={
+                    estManager ? (commentaire) => refuser(demandeSelectionnee.id, commentaire) : undefined
+                  }
+                  onRetirer={
+                    estManager || estAdmin
+                      ? (commentaire) => retirer(demandeSelectionnee.id, commentaire)
+                      : undefined
+                  }
+                  peutAnnulerDejaTransmis={estManager || estAdmin}
+                  joursFeries={joursFeriesToutesAnnees}
+                  congesImposes={congesImposesVisibles}
+                  djImposees={djImposeesVisibles}
+                  autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                  lignesTransmission={lignesTransmissionParDemande[demandeSelectionnee.id]}
+                />
+              )}
+              {jourCommunSelectionne && (
+                <DetailJourCommunPanel
+                  jour={jourCommunSelectionne}
+                  onClose={() => setJourCommunSelectionne(null)}
+                />
+              )}
+              {!demandeSelectionnee && !jourCommunSelectionne && (
+                <CompteurTypologies typologies={typologies} vertical />
+              )}
             </div>
           </div>
         </div>

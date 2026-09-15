@@ -74,16 +74,19 @@ const PERIODE_PAR_PARAM: Record<string, PeriodeFiltre> = {
  * reste de `/suivre` (bloqué pour les salarié·es dans `proxy.ts`).
  */
 export function SuivreDemandesPage() {
-  const { demandes, valider, refuser, regulariser, remettreEnAttente, retirer } =
-    useDemandesEquipe();
+  const { demandes, valider, refuser, remettreEnAttente, retirer } = useDemandesEquipe();
   const [toast, setToast] = useState<{ id: string; message: string } | null>(null);
   const { reglesAcquisition } = useReglesConges();
   const searchParams = useSearchParams();
-  // Rôle admin (28/08/2026, "simplifier la partie admin") — perd le pouvoir
-  // de Valider/Refuser/Régulariser une demande sur cet écran, ne garde que
-  // "Annuler cette demande" (même mécanisme que côté collaborateur). Manager
-  // garde tout inchangé. Changement UI seulement — la policy RLS reste large
-  // pour admin (voir plan), donc `retirer` fonctionne déjà sans migration.
+  // Droits (15/09/2026, tranché par Vincent — "les droits des managers sont
+  // les mêmes que ceux des administrateurs avec juste un droit
+  // supplémentaire : la validation des congés") : manager ET admin peuvent
+  // tous les deux "Annuler cette demande" à tout moment, y compris déjà
+  // transmise en paie (`peutAnnulerDejaTransmis`) ; le manager garde en plus
+  // Valider/Refuser. Plus de "Régulariser" ici (abandonné avec
+  // `managerPeutAnnuler`). Changement UI seulement — la policy RLS reste
+  // large pour les deux rôles (voir plan), donc `retirer` fonctionne déjà
+  // sans migration.
   const { utilisateur } = useUtilisateur();
   const estManager = utilisateur?.role === "manager";
   const estAdmin = utilisateur?.role === "admin";
@@ -196,16 +199,6 @@ export function SuivreDemandesPage() {
   const ajustementSelectionne = regulSelectionne
     ? (ajustementsFiltres.find((a) => a.id === selectionId) ?? null)
     : null;
-  // Manager sur une demande validée non transmise (28/08/2026, "on cale le
-  // comportement admin") — remplace "Signaler comme non pris" par "Annuler
-  // cette demande" (même flow léger que côté collaborateur/admin) tant que
-  // rien n'a été transmis. Sur "en attente" ou une fois transmise, le manager
-  // garde son parcours existant (Décision / Régularisation) inchangé.
-  const managerPeutAnnuler =
-    estManager &&
-    selection?.statut === "validé" &&
-    (lignesTransmissionParDemande[selection.id] ?? []).length === 0;
-
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
       <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
@@ -343,17 +336,12 @@ export function SuivreDemandesPage() {
             onClose={() => setSelectionId(null)}
             onValider={estManager ? (commentaire) => valider(selection.id, commentaire) : undefined}
             onRefuser={estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined}
-            onRegulariser={
-              estManager && !managerPeutAnnuler
-                ? (commentaire) => regulariser(selection.id, commentaire)
-                : undefined
-            }
             onRetirer={
-              estAdmin || managerPeutAnnuler
+              estManager || estAdmin
                 ? (commentaire) => retirer(selection.id, commentaire)
                 : undefined
             }
-            peutAnnulerDejaTransmis={estAdmin}
+            peutAnnulerDejaTransmis={estManager || estAdmin}
             onValiderSucces={(id, message) => setToast({ id, message })}
             joursFeries={joursFeries}
             congesImposes={congesImposes}

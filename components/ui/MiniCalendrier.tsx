@@ -92,10 +92,11 @@ export interface PastilleJour {
    * demande explicite de Vincent — "on joue sur la transparence, ce n'est
    * pas efficace visuellement" : distinguer validé/en attente par la couleur
    * du chiffre — vert/orange — plutôt qu'en atténuant le fond). S'applique
-   * aux variantes `classeFond` (fond plein) et `moitie` (demi-journée) — pas
-   * à `plein`/`partage`, propres à la heatmap "Calendrier des employés",
-   * hors scope de cette demande. Défaut `text-white` si absent (comportement
-   * inchangé). */
+   * aux variantes `classeFond` (fond plein), `moitie` (demi-journée) et
+   * `partage` (15/09/2026, étendu — un congé personnel scindé par une DJI
+   * garde son statut visuel) — pas à `plein`, propre à la heatmap "Calendrier
+   * des employés", hors scope de ces demandes. Défaut `text-white` si absent
+   * (comportement inchangé). */
   classeTexteChiffre?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };
@@ -188,7 +189,12 @@ function memePastille(a: PastilleJour, b: PastilleJour): boolean {
 function apparenceKey(pastille: PastilleJour | null, iso: string): string | null {
   if (!pastille) return null;
   if (pastille.moitie || pastille.partage || pastille.plein) return `m:${iso}`;
-  return `f:${pastille.classeFond}`;
+  // `classeTexteChiffre` fait partie de l'apparence (15/09/2026, bug signalé
+  // par Vincent — un `PeriodeSegment` fusionné ignorait la couleur du
+  // chiffre, toujours blanc) : deux jours de même fond mais de statut
+  // différent (validé/en attente) ne doivent jamais fusionner en une seule
+  // barre, qui ne pourrait porter qu'une seule couleur de chiffre.
+  return `f:${pastille.classeFond}:${pastille.classeTexteChiffre ?? ""}`;
 }
 
 function JourPastille({
@@ -200,6 +206,7 @@ function JourPastille({
   isHovered,
   estSelectionne,
   estAujourdhui,
+  estPasse,
   agrandi,
   texteJour,
   onSurvol,
@@ -226,10 +233,13 @@ function JourPastille({
    */
   estSelectionne?: boolean;
   estAujourdhui: boolean;
+  /** Jour antérieur à aujourd'hui (15/09/2026, "matérialiser les jours
+   * passés") — atténue le chiffre seul, jamais le fond de la pastille. */
+  estPasse?: boolean;
   agrandi?: boolean;
   texteJour?: string;
   onSurvol: (survole: boolean) => void;
-  onJourClick?: (iso: string, ancre: DOMRect) => void;
+  onJourClick?: (iso: string, ancre: DOMRect, moitieCliquee?: "gauche" | "droite") => void;
   onJourSupprimerClick?: (iso: string, ancre: DOMRect) => void;
   /**
    * Clic sur un jour SANS congé (20/08/2026) — distinct d'`onJourClick`
@@ -258,7 +268,7 @@ function JourPastille({
   // carrée/pilule de la pastille de congé sous-jacente, qui n'est jamais
   // altérée par ce contour.
   function chiffreAujourdhui(couleurContour: string) {
-    return estAujourdhui ? (
+    const chiffre = estAujourdhui ? (
       <span
         className={`ring-2 ring-inset ${couleurContour} flex aspect-square h-[1.6em] items-center justify-center rounded-full`}
       >
@@ -267,6 +277,12 @@ function JourPastille({
     ) : (
       jour
     );
+    // Jour passé (15/09/2026, "Calendrier simplifié" — matérialiser les
+    // jours déjà passés sur le mois en cours, demande explicite de Vincent
+    // — "+50%" de transparence) : chiffre seul atténué, jamais le fond de
+    // la pastille (une demande déjà consommée reste identifiable par sa
+    // couleur).
+    return estPasse ? <span className="opacity-50">{chiffre}</span> : chiffre;
   }
 
   // Poubelle en sur-impression (21/08/2026) — crossfade avec le chiffre au
@@ -299,7 +315,7 @@ function JourPastille({
   if (!pastille) {
     return (
       <span
-        className={`text-ink-500 group flex ${hauteur} ${largeur} items-center justify-center ${agrandi ? "rounded-none" : "rounded-full"} ${texte} ${onJourVideClick ? "cursor-pointer" : ""}`}
+        className={`text-ink-500 group relative flex ${hauteur} ${largeur} items-center justify-center ${agrandi ? "rounded-none" : "rounded-full"} ${texte} ${onJourVideClick ? "cursor-pointer" : ""}`}
         onClick={
           onJourVideClick
             ? (e: MouseEvent<HTMLSpanElement>) =>
@@ -307,13 +323,26 @@ function JourPastille({
             : undefined
         }
       >
-        <span className={onJourVideClick ? "group-hover:hidden" : ""}>
+        <span
+          className={
+            onJourVideClick ? "transition-opacity duration-150 group-hover:opacity-0" : ""
+          }
+        >
           {chiffreAujourdhui("ring-ink-900")}
         </span>
+        {/* "+" qui "pope" au survol (15/09/2026, demande explicite de
+            Vincent — "il est peu visible", puis "une transition comme si le
+            plus grossissait au over de 14 à 28px") : taille rendue 28px
+            (32px en `agrandi`), `scale-50` au repos → `scale-100` au survol
+            pour que l'échelle de départ (50% de 28px = 14px) corresponde
+            littéralement au grossissement demandé, plutôt qu'un simple
+            `hidden`/`block` figé. Même principe de superposition en
+            `absolute` que la poubelle (`onJourSupprimerClick` ci-dessous)
+            pour ne pas décaler le chiffre pendant le crossfade. */}
         {onJourVideClick && (
           <Plus
-            className="text-mint hidden group-hover:block"
-            size={agrandi ? 18 : 14}
+            className="text-mint pointer-events-none absolute inset-0 m-auto scale-50 opacity-0 transition-[transform,opacity] duration-150 group-hover:scale-100 group-hover:opacity-100"
+            size={agrandi ? 32 : 28}
             strokeWidth={2.5}
           />
         )}
@@ -342,12 +371,26 @@ function JourPastille({
   const survol = isHovered ? "brightness-110" : "";
   const curseur = onJourClick ? "cursor-pointer" : "";
   const base = `group flex ${taille} items-center justify-center ${forme} ${texte} font-bold transition-[filter] duration-150 ${survol} ${curseur}`;
+  // Moitié cliquée (15/09/2026, demande explicite de Vincent — cas concret : un CP à
+  // cheval sur une DJI doit ouvrir le détail DJI si on clique sur SON créneau, le détail
+  // congé sinon) : uniquement calculée pour les variantes `moitie`/`partage`, à partir de
+  // la position du clic dans la case (gauche = matin, droite = après-midi, même
+  // convention que le dégradé). `undefined` pour toute autre variante — l'appelant
+  // l'ignore si sa logique ne distingue pas les deux moitiés.
   const evenements = {
     onMouseEnter: () => onSurvol(true),
     onMouseLeave: () => onSurvol(false),
     onClick: onJourClick
-      ? (e: MouseEvent<HTMLSpanElement>) =>
-          onJourClick(iso, e.currentTarget.getBoundingClientRect())
+      ? (e: MouseEvent<HTMLSpanElement>) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const moitieCliquee =
+            pastille.moitie || pastille.partage
+              ? e.clientX - rect.left < rect.width / 2
+                ? "gauche"
+                : "droite"
+              : undefined;
+          onJourClick(iso, rect, moitieCliquee);
+        }
       : undefined,
   };
 
@@ -355,7 +398,11 @@ function JourPastille({
     const { gauche, droite } = pastille.partage;
     const gradient = `linear-gradient(to right, ${gauche} 50%, ${droite} 50%)`;
     return (
-      <span className={`${base} text-white`} style={{ background: gradient }} {...evenements}>
+      <span
+        className={`${base} ${pastille.classeTexteChiffre ?? "text-white"}`}
+        style={{ background: gradient }}
+        {...evenements}
+      >
         {contenuJour("ring-white")}
       </span>
     );
@@ -445,10 +492,12 @@ function PeriodeSegment({
   isos,
   isoPremierJour,
   classeFond,
+  classeTexteChiffre,
   isStart,
   isEnd,
   isHovered,
   estAujourdhui,
+  estPasse,
   agrandi,
   texteJour,
   onSurvol,
@@ -459,10 +508,15 @@ function PeriodeSegment({
   isos: string[];
   isoPremierJour: string;
   classeFond: string;
+  /** Voir `PastilleJour.classeTexteChiffre` (15/09/2026, bug corrigé — une
+   * barre fusionnée ignorait cette couleur, toujours `text-white`). */
+  classeTexteChiffre?: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
   estAujourdhui?: (iso: string) => boolean;
+  /** Voir `JourPastille.estPasse` — appliqué par jour de la barre fusionnée. */
+  estPasse?: (iso: string) => boolean;
   agrandi?: boolean;
   texteJour?: string;
   onSurvol: (survole: boolean) => void;
@@ -486,7 +540,7 @@ function PeriodeSegment({
 
   return (
     <div
-      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold ${classeTexteChiffre ?? "text-white"} transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
@@ -509,19 +563,20 @@ function PeriodeSegment({
       <span
         className={`contents ${onJourSupprimerClick ? "transition-opacity duration-150 group-hover:opacity-0" : ""}`}
       >
-        {jours.map((j, idx) =>
-          estAujourdhui?.(isos[idx]) ? (
-            <span key={j} className="flex h-full items-center justify-center">
-              <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
-                {j}
-              </span>
-            </span>
-          ) : (
-            <span key={j} className="flex h-full items-center justify-center">
+        {jours.map((j, idx) => {
+          const chiffre = estAujourdhui?.(isos[idx]) ? (
+            <span className="flex aspect-square h-[1.6em] items-center justify-center rounded-full ring-2 ring-white ring-inset">
               {j}
             </span>
-          ),
-        )}
+          ) : (
+            j
+          );
+          return (
+            <span key={j} className="flex h-full items-center justify-center">
+              {estPasse?.(isos[idx]) ? <span className="opacity-50">{chiffre}</span> : chiffre}
+            </span>
+          );
+        })}
       </span>
       {onJourSupprimerClick && (
         <button
@@ -605,6 +660,7 @@ type ItemRendu =
       isos: string[];
       isoPremierJour: string;
       classeFond: string;
+      classeTexteChiffre?: string;
       isStart: boolean;
       isEnd: boolean;
       groupeId: string;
@@ -676,6 +732,7 @@ function calculerItemsRendu(
         isos: semaines.slice(i, j).map((c) => c.iso as string),
         isoPremierJour: cellule.iso,
         classeFond: cellule.pastille.classeFond ?? "",
+        classeTexteChiffre: cellule.pastille.classeTexteChiffre,
         isStart: isStarts[i],
         isEnd: isEnds[j - 1],
         groupeId: groupeIds[i] as string,
@@ -705,9 +762,13 @@ export interface MiniCalendrierProps {
    * Rend chaque jour porteur d'une pastille cliquable — pas de handler = pas
    * de curseur pointeur. `ancre` = position de l'élément cliqué
    * (`getBoundingClientRect()`), pour positionner un popover/snippet juste
-   * en dessous côté appelant.
+   * en dessous côté appelant. `moitieCliquee` (15/09/2026) : gauche/droite
+   * de la case au moment du clic, calculée uniquement pour les variantes
+   * `moitie`/`partage` (`undefined` sinon) — permet à l'appelant de
+   * distinguer le créneau réellement visé sur un jour scindé en deux
+   * couleurs (ex. matin CP / après-midi DJI).
    */
-  onJourClick?: (iso: string, ancre: DOMRect) => void;
+  onJourClick?: (iso: string, ancre: DOMRect, moitieCliquee?: "gauche" | "droite") => void;
   /**
    * Rend chaque jour SANS pastille cliquable (20/08/2026) — distinct
    * d'`onJourClick`. Au survol, le chiffre du jour est remplacé par un
@@ -763,6 +824,13 @@ export interface MiniCalendrierProps {
    */
   estAujourdhui?: (iso: string) => boolean;
   /**
+   * Atténue le chiffre (opacité 50%, jamais le fond de la pastille) d'un
+   * jour antérieur à aujourd'hui (15/09/2026, "Calendrier simplifié" —
+   * matérialiser les jours déjà passés, demande explicite de Vincent).
+   * Opt-in, sans effet sur les appelants qui ne le passent pas.
+   */
+  estPasse?: (iso: string) => boolean;
+  /**
    * Grossit +20% la typo des jours et la hauteur des lignes (16/08/2026,
    * card "Calendrier" d'Accueil2) — n'affecte pas la largeur des pastilles
    * ni l'en-tête du mois. Opt-in, sans effet sur le format par défaut.
@@ -815,6 +883,7 @@ export function MiniCalendrier({
   estMisEnAvant,
   sansCarte,
   estAujourdhui,
+  estPasse,
   agrandi,
   className,
   texteJour,
@@ -916,6 +985,7 @@ export function MiniCalendrier({
                   }
                   estSelectionne={estMisEnAvant?.(item.iso) ?? false}
                   estAujourdhui={estAujourdhui?.(item.iso) ?? false}
+                  estPasse={estPasse?.(item.iso) ?? false}
                   agrandi={agrandi}
                   texteJour={texteJour}
                   onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}
@@ -942,12 +1012,14 @@ export function MiniCalendrier({
               isos={item.isos}
               isoPremierJour={item.isoPremierJour}
               classeFond={item.classeFond}
+              classeTexteChiffre={item.classeTexteChiffre}
               isStart={item.isStart}
               isEnd={item.isEnd}
               isHovered={
                 item.groupeId === groupeSurvole || item.isos.some((iso) => estMisEnAvant?.(iso))
               }
               estAujourdhui={estAujourdhui}
+              estPasse={estPasse}
               agrandi={agrandi}
               texteJour={texteJour}
               onSurvol={(survole) => setGroupeSurvole(survole ? item.groupeId : null)}

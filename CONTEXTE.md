@@ -6317,6 +6317,72 @@ popover `SnippetJourCalendrier` ne se déclenche donc plus que pour un CPI
 (`setSnippet(jour.kind === "cpi" ? { jour, ancre } : null)`), retiré pour DJI/Férié qui n'affichent plus
 que la card.
 
+## Calendrier simplifié — finitions et propagation à `/suivre/calendrier` (15/09/2026)
+
+Suite de la refonte du calendrier de la veille (section précédente), tous les points restants du
+Backlog "Calendrier simplifié" traités le même jour.
+
+**Jours passés atténués** (`estPasse` sur `MiniCalendrier.tsx`) : chiffre à opacité 50% pour tout jour
+passé vide, SAUF un jour déjà posé (congé personnel) qui reste à pleine opacité — exception demandée
+par Vincent pour ne pas perdre en lisibilité l'historique récent d'un collaborateur.
+
+**Icône "+" au survol d'un jour vide — pop plus visible** : Vincent l'a trouvée peu visible ("je
+voudrais qu'il pope plus"), plusieurs tailles testées en direct (14 → 18 → 22 → 26 → 28px) avant la
+demande finale — une vraie transition d'échelle façon "grossit au survol" plutôt qu'un changement de
+taille brut : icône rendue à taille fixe (28px, 32px sur `MiniCalendrier` agrandi) et animée via
+`scale-50 opacity-0` → `group-hover:scale-100 group-hover:opacity-100` (`transition-[transform,opacity]`).
+
+**Navigation "Commence : Aujourd'hui / Il y a 3 mois"** (remplace les 3 anciens onglets Année en
+cours/Période CP/année suivante, jugés trop compliqués) — décale le début de la fenêtre glissante de 9
+mois de 3 mois en arrière sans changer sa largeur, `<select>` natif stylé en texte souligné vert
+(`text-mint`) + `ChevronDown`, dupliqué à l'identique entre `DashboardPage.tsx`
+(`SelectCommence`) et `CalendrierCollaborateur.tsx` (duplication assumée, même convention que le reste
+de ces deux écrans).
+
+**Bug couleur du chiffre sur une barre fusionnée multi-jours** (`MiniCalendrier.tsx`) — `apparenceKey`
+ne tenait pas compte de `classeTexteChiffre`, ce qui pouvait fusionner visuellement deux segments de
+couleurs de texte différentes (ex. jour validé vert collé à un jour en attente orange) en une seule
+barre sans rupture. `PeriodeSegment` prend désormais `classeTexteChiffre` en prop et l'`apparenceKey`
+en tient compte pour ne fusionner que des segments réellement identiques.
+
+**Légende `CompteurTypologies`** : le nombre de jours entre parenthèses (ex. "C. payés (6,5 j)")
+retiré (demande explicite de Vincent) — `jours` reste calculé dans `TypologieCompteur` mais n'est plus
+affiché, seuls la puce de couleur et le libellé restent.
+
+**Propagation vers `/suivre/calendrier`** (`CalendrierCollaborateur.tsx`, utilisé par managers/admins
+pour consulter — pas modifier — le calendrier d'un collaborateur) : entièrement refondu sur le même
+gabarit que `DashboardPage.tsx` (fenêtre 9 mois, 4ᵉ colonne `DetailCongePanel`/`DetailJourCommunPanel`,
+couleur du chiffre, chevauchement demande/férié/DJI, `moitieCliquee`, `estPasse`, `SelectCommence`),
+avec une différence volontaire : pas de bouton "+"/clic sur un jour vide, un manager/admin ne pose
+jamais de congé à la place d'un collaborateur depuis cet écran (hors scope, cf. clarification de
+Vincent ci-dessous). Nuance "déjà transmis en paie" (`lignesTransmissionParDemande`, même mécanisme que
+`SuivreDemandesPage.tsx`) branchée dans la foulée après l'avoir d'abord omise.
+
+**Droits manager/admin sur `DetailCongePanel` — modèle simplifié, tranché par Vincent** : "je pense
+qu'il faut partir du principe que aujourd'hui les droits des managers sont les mêmes que ceux des
+administrateurs avec juste un droit supplémentaire : la validation des congés". Remplace un modèle
+intermédiaire testé plus tôt le même jour (bouton "Régulariser" pour un manager sur une demande validée
+déjà transmise, façon `managerPeutAnnuler`) que Vincent a rejeté en le revoyant en vrai sur acme ("j'ai
+encore des regularisations... je pensais que ca n'existait plus"). Modèle final, appliqué à la fois
+sur `CalendrierCollaborateur.tsx` et `SuivreDemandesPage.tsx` (qui avait le même
+"reliquat") : manager ET admin peuvent tous les deux "Annuler cette demande" à tout moment, y compris
+déjà transmise en paie (`peutAnnulerDejaTransmis` toujours vrai pour les deux rôles) ; le manager garde
+en plus Valider/Refuser comme seul droit distinctif. `onRegulariser`/`managerPeutAnnuler` retirés des
+deux écrans.
+
+**"Annuler cette demande" — transition de fermeture du panneau** (`DetailCongePanel.tsx`), demandée par
+Vincent ("il faudrait une transition") : contrairement aux autres actions (Refuser/Signaler comme non
+pris/Restaurer) qui laissent le panneau ouvert, un retrait réussi le referme en 3 temps pour que le
+résultat reste lisible avant de disparaître — le panneau reste affiché ~1,5s (`DUREE_MAINTIEN_RETRAIT_MS`),
+la section "Annuler cette demande" se replie, puis tout le panneau s'estompe (`fermetureEnCours`,
+`transition-opacity duration-300`) avant l'appel à `onClose`.
+
+**Clarification du rôle de `/suivre/calendrier`, actée par Vincent pour cadrer ces changements** : "les
+administrateurs et les managers ont la possibilité de consulter les calendriers des collaborateurs, ils
+ne peuvent y ajouter des jours de congés pour un tiers. En revanche ils ont les droits d'annulation /
+validation d'un jour de congé en fonction de leur profil via le template détail jour congé, comme dans
+toute la partie suivre."
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

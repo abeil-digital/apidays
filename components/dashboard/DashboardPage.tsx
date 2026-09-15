@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Newspaper, PlusCircle } from "lucide-react";
+import { ChevronDown, Newspaper, PlusCircle } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
@@ -65,6 +65,28 @@ function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex
 
 function codeBadgeDemande(demande: Demande): TypeBadgeCode {
   return demande.type === "CP" && demande.isAnticipation ? "CPA" : demande.type;
+}
+
+/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois" (15/09/2026, demande
+ * explicite de Vincent) — même composant que `SelectAffichage` de
+ * `CalendrierCollaborateur.tsx` (`<select>` natif stylé en texte souligné +
+ * chevron, duplication assumée), adapté à un libellé fixe plutôt qu'un mois
+ * calculé. */
+function SelectCommence({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="relative inline-flex w-fit items-center gap-1.5">
+      <span className="text-ink-500 text-xs">Commence :</span>
+      <select
+        value={actif ? "il_y_a_3_mois" : "aujourdhui"}
+        onChange={(e) => onChange(e.target.value === "il_y_a_3_mois")}
+        className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
+      >
+        <option value="aujourdhui">Aujourd&apos;hui</option>
+        <option value="il_y_a_3_mois">Il y a 3 mois</option>
+      </select>
+      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
+    </div>
+  );
 }
 
 // "Prochains jours off" masquée (14/09/2026, demande explicite de Vincent —
@@ -159,15 +181,24 @@ export function DashboardPage() {
   const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
     null,
   );
+  // "Commence : Aujourd'hui / Il y a 3 mois" (15/09/2026, demande explicite
+  // de Vincent, point 3 du Backlog "Calendrier simplifié") — décale le DÉBUT
+  // de la fenêtre glissante de 3 mois en arrière, sans changer sa largeur (9
+  // mois). `SelectAffichage` (composant repris de `CalendrierCollaborateur.tsx`,
+  // duplication assumée) juste sous le titre "Mon Calendrier".
+  const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
   // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
   // de Vincent) — pour que le bandeau de date simulée locale entraîne bien la
   // fenêtre de 12 mois glissants ci-dessous.
   const anneeActuelle = getAujourdhui().getFullYear();
+  const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
-  // Jours "communs" (Fériés/CPI/DJI) — 2 années possibles : la fenêtre de 12
-  // mois glissants part toujours du mois en cours, donc ne touche jamais
-  // l'année précédente, seulement l'actuelle et potentiellement la suivante
-  // (ex. fenêtre Sept 26 → Août 27).
+  // Jours "communs" (Fériés/CPI/DJI) — 3 années possibles désormais
+  // (15/09/2026) : la fenêtre glissante peut désormais démarrer jusqu'à 3
+  // mois avant le mois en cours ("Il y a 3 mois" ci-dessus), donc franchir le
+  // 1er janvier si on est en janvier/février/mars — l'année précédente n'est
+  // plus jamais totalement hors champ comme avant ce point.
+  const calendrierAnneePrecedente = useCalendrier(anneePrecedente);
   const calendrierAnneeA = useCalendrier(anneeActuelle);
   const calendrierAnneeB = useCalendrier(anneeSuivante);
 
@@ -175,6 +206,7 @@ export function DashboardPage() {
     loadingUtilisateur ||
     loadingSoldes ||
     loadingDemandes ||
+    calendrierAnneePrecedente.loading ||
     calendrierAnneeA.loading ||
     calendrierAnneeB.loading;
 
@@ -187,18 +219,28 @@ export function DashboardPage() {
   // fenêtre doit démarrer le 1er du mois, pas littéralement aujourd'hui :
   // sinon un congé déjà posé plus tôt dans le mois (validé ou encore en
   // attente) disparaissait de la légende/du calendrier.
-  const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
-  // Fenêtre de 9 mois glissants (14/09/2026, réduite de 12 à 9 — "c'est
-  // suffisant" demande explicite de Vincent) — du mois en cours inclus aux
-  // 8 mois suivants (ex. Sept 26 → Mai 27 inclus, 9 mois pile = 3 lignes de
-  // 3 mois dans la grille).
-  const moisIndexFin = (getAujourdhui().getMonth() + 8) % 12;
-  const anneeFinFenetre = anneeActuelle + Math.floor((getAujourdhui().getMonth() + 8) / 12);
+  //
+  // Décalage de début (15/09/2026, "Commence : Aujourd'hui / Il y a 3 mois")
+  // — `moisIndexDebutBrut` peut être négatif (ex. mois en cours = janvier,
+  // décalage -3 → octobre de l'année PRÉCÉDENTE) ; le modulo est reconstruit
+  // à la main (`((x % 12) + 12) % 12`) plutôt qu'avec `%` seul, qui renvoie
+  // un résultat négatif en JS pour un dividende négatif. La largeur de la
+  // fenêtre (9 mois, réduite de 12 le 14/09/2026, "c'est suffisant") ne
+  // change jamais, seul son point de départ glisse.
+  const decalageMoisDebut = commenceIlYA3Mois ? -3 : 0;
+  const moisIndexDebutBrut = getAujourdhui().getMonth() + decalageMoisDebut;
+  const moisIndexDebut = ((moisIndexDebutBrut % 12) + 12) % 12;
+  const anneeDebutFenetre = anneeActuelle + Math.floor(moisIndexDebutBrut / 12);
+  const debutMoisActuel = isoDate(anneeDebutFenetre, moisIndexDebut, 1);
+  const moisIndexFinBrut = moisIndexDebutBrut + 8;
+  const moisIndexFin = ((moisIndexFinBrut % 12) + 12) % 12;
+  const anneeFinFenetre = anneeActuelle + Math.floor(moisIndexFinBrut / 12);
   const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
   const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function calendrierPourAnnee(annee: number) {
+    if (annee === anneePrecedente) return calendrierAnneePrecedente;
     if (annee === anneeSuivante) return calendrierAnneeB;
     return calendrierAnneeA;
   }
@@ -303,10 +345,8 @@ export function DashboardPage() {
     return null;
   }
 
-  // Priorité d'affichage : demande personnelle du collaborateur > férié > CPI
-  // > DJI. Un chevauchement demande/CPI-DJI reste un cas marginal (voir
-  // Backlog.md — scan de chevauchement dédié), la demande perso l'emporte
-  // visuellement ici plutôt que de le masquer.
+  // Priorité d'affichage : férié > demande personnelle du collaborateur > CPI
+  // > DJI (15/09/2026, férié remonté devant la demande — voir plus bas).
   //
   // Demi-journée d'une demande rendue comme telle (25/08/2026, bug signalé
   // par Vincent : "16/09 pour Delphine s'affiche comme une journée") — avant
@@ -325,22 +365,57 @@ export function DashboardPage() {
   // orange (`text-status-warning-fg`) en attente, vert
   // (`text-status-success-fg`) validé. Mêmes tokens que `StatusBadge`
   // ailleurs dans l'app, pas de nouvelle couleur inventée.
+  //
+  // Chevauchement demande/férié/DJI (15/09/2026, cas concret de Vincent — un
+  // CP posé du 9 au 13/11 avec un férié le 11 et une DJI l'après-midi du 13 :
+  // le calcul de jours exclut déjà correctement ces créneaux, 3,5j, mais le
+  // calendrier les masquait entièrement sous la couleur du CP) :
+  // - Un jour férié n'est jamais réellement consommé par une demande (déjà
+  //   hors du décompte) — il garde donc TOUJOURS sa couleur dédiée, même à
+  //   l'intérieur de la plage d'une demande.
+  // - Une DJI qui tombe sur un créneau par ailleurs "couvert" par la demande
+  //   (au milieu de la période, ou sur le créneau externe d'un jour de
+  //   borne) perce ce créneau — plus de fond atténué façon "toujours pris"
+  //   sur ce côté-là, couleur DJI pleine à la place (variante `partage`,
+  //   pas `moitie`). Un chevauchement demande/CPI reste en revanche un cas
+  //   marginal non traité ici (voir Backlog.md), la demande l'emporte comme
+  //   avant.
   function tipoDuJour(iso: string): PastilleJour | null {
+    const annee = Number(iso.slice(0, 4));
+    const cal = calendrierPourAnnee(annee);
+    if (cal.joursFeries.some((f) => f.date === iso)) {
+      return { classeFond: classeFondTypeBadge("FERIE") };
+    }
+
     const demande = demandeDuJour(iso);
     if (demande) {
       const code = codeBadgeDemande(demande);
-      const matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
-      const apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
+      let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
+      let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
       const classeTexteChiffre =
         demande.statut === "en attente" ? "text-status-warning-fg" : "text-status-success-fg";
+
+      const dji = anneeVisiblePourCommuns(annee)
+        ? cal.djImposees.find((d) => d.date === iso)
+        : undefined;
+      if (dji?.demiJournee === "matin") matinCouvert = false;
+      if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
         return { classeFond: classeFondTypeBadge(code), classeTexteChiffre };
       }
 
-      const couleur = `var(${VAR_COULEUR_TYPE[code]})`;
+      const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
+      if (dji) {
+        return {
+          partage: matinCouvert
+            ? { gauche: couleurDemande, droite: "var(--color-dji)" }
+            : { gauche: "var(--color-dji)", droite: couleurDemande },
+          classeTexteChiffre,
+        };
+      }
       return {
-        moitie: { couleur, cote: matinCouvert ? "gauche" : "droite" },
+        moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
         classeTexteChiffre,
       };
     }
@@ -362,19 +437,38 @@ export function DashboardPage() {
   }
 
   // Ce qui occupe un jour cliqué, dans l'ordre de priorité d'affichage —
-  // demande perso > férié > CPI > DJI, même priorité que `communDuJour`
+  // férié > demande perso > CPI > DJI, même priorité que `tipoDuJour`
   // (24/08/2026 : les fériés ouvrent désormais aussi l'overlay, avec leur
-  // nom — `SnippetJourCalendrier`). Même gating que `communDuJour` pour
-  // CPI/DJI (`anneeVisiblePourCommuns`, les fériés y échappent) : pas
-  // d'overlay pour une entrée qui n'est de toute façon pas affichée sur la
-  // pastille (année à venir non publiée).
-  function occupantDuJour(iso: string): JourCalendrierClique | null {
-    const demande = demandeDuJour(iso);
-    if (demande) return { kind: "demande", demande };
+  // nom — `SnippetJourCalendrier`. 15/09/2026 : remonté devant la demande,
+  // même raison que `tipoDuJour`). `moitieCliquee` (15/09/2026, gauche =
+  // matin/droite = après-midi, voir `MiniCalendrier.onJourClick`) — sur un
+  // jour couvert par une demande ET scindé par une DJI (rendu `partage`), le
+  // créneau cliqué décide entre le détail congé et le détail CI : cliquer
+  // sur LE créneau de la DJI ouvre son détail, l'autre créneau ouvre le
+  // détail congé, comme si la DJI perçait un vrai trou dans la demande.
+  // Même gating que `communDuJour` pour CPI/DJI (`anneeVisiblePourCommuns`,
+  // les fériés y échappent) : pas d'overlay pour une entrée qui n'est de
+  // toute façon pas affichée sur la pastille (année à venir non publiée).
+  function occupantDuJour(
+    iso: string,
+    moitieCliquee?: "gauche" | "droite",
+  ): JourCalendrierClique | null {
     const annee = Number(iso.slice(0, 4));
     const cal = calendrierPourAnnee(annee);
     const ferie = cal.joursFeries.find((f) => f.date === iso);
     if (ferie) return { kind: "ferie", ferie };
+
+    const demande = demandeDuJour(iso);
+    if (demande) {
+      const dji =
+        moitieCliquee && anneeVisiblePourCommuns(annee)
+          ? cal.djImposees.find((d) => d.date === iso)
+          : undefined;
+      const demiClique = moitieCliquee === "gauche" ? "matin" : "apres_midi";
+      if (dji && dji.demiJournee === demiClique) return { kind: "dji", dji };
+      return { kind: "demande", demande };
+    }
+
     if (!anneeVisiblePourCommuns(annee)) return null;
     const cpi = cal.congesImposes.find((c) => iso >= c.debut && iso <= c.fin);
     if (cpi) return { kind: "cpi", cpi };
@@ -383,8 +477,8 @@ export function DashboardPage() {
     return null;
   }
 
-  function handleJourClick(iso: string, ancre: DOMRect) {
-    const jour = occupantDuJour(iso);
+  function handleJourClick(iso: string, ancre: DOMRect, moitieCliquee?: "gauche" | "droite") {
+    const jour = occupantDuJour(iso, moitieCliquee);
     if (!jour) return;
     // Un congé personnel (CP/RTT/CPA) ouvre le panneau détaillé à droite du
     // calendrier — CPI/DJI/Férié ouvrent la card `DetailJourCommunPanel` dans
@@ -581,9 +675,15 @@ export function DashboardPage() {
           compteur par typologie ne partage plus cette ligne (14/09/2026,
           2e itération demandée par Vincent — d'abord calé sur 3 colonnes
           pour ne plus déborder dans la 4ᵉ, puis carrément déplacé dedans,
-          empilé verticalement — voir `CompteurTypologies` plus bas). */}
-      <div className="animate-stagger-in px-1" style={{ animationDelay: "280ms" }}>
+          empilé verticalement — voir `CompteurTypologies` plus bas).
+          `SelectCommence` (15/09/2026) juste en dessous — seul réglage de
+          navigation pour l'instant, voir Backlog "Calendrier simplifié". */}
+      <div
+        className="animate-stagger-in flex flex-col gap-1 px-1"
+        style={{ animationDelay: "280ms" }}
+      >
         <h2 className="text-ink-900 text-base font-semibold">Mon Calendrier</h2>
+        <SelectCommence actif={commenceIlYA3Mois} onChange={setCommenceIlYA3Mois} />
       </div>
 
       {/* Colonne "Prochains jours off" (20/08/2026, remplace la colonne
@@ -693,6 +793,10 @@ export function DashboardPage() {
                     onJourClick={handleJourClick}
                     onJourVideClick={handleJourVideClick}
                     estAujourdhui={(iso) => iso === todayIso}
+                    // Exception (15/09/2026, demande explicite de Vincent) —
+                    // un jour déjà posé (congé perso) garde son chiffre à
+                    // pleine opacité, seuls les jours vides passés s'atténuent.
+                    estPasse={(iso) => iso < todayIso && !demandeDuJour(iso)}
                     className="h-[290px] w-full"
                     texteJour="text-base"
                     paddingClassName="p-6"
@@ -722,11 +826,15 @@ export function DashboardPage() {
                 {jourCommunSelectionne && (
                   <DetailJourCommunPanel
                     jour={jourCommunSelectionne}
-                    joursFeries={joursFeriesToutesAnnees}
                     onClose={() => setJourCommunSelectionne(null)}
                   />
                 )}
-                <CompteurTypologies typologies={typologies} vertical />
+                {/* Légende masquée tant qu'un panneau détail est ouvert
+                    (15/09/2026, demande explicite de Vincent) — réapparaît
+                    dès que les deux panneaux sont fermés. */}
+                {!demandeSelectionnee && !jourCommunSelectionne && (
+                  <CompteurTypologies typologies={typologies} vertical />
+                )}
               </div>
             </div>
           </div>

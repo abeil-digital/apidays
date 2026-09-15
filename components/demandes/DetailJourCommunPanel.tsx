@@ -1,10 +1,9 @@
 "use client";
 
 import { X } from "lucide-react";
-import { formatDate, formatJours, formatPeriodeDemande } from "@/lib/format";
-import { dureeCongeImpose } from "@/lib/joursFeries";
-import type { CongeImpose, DjImposee, JourFerie } from "@/lib/types";
+import type { CongeImpose, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
 import { classeFondTypeBadge, TypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
 
 /** Jour "commun" cliqué — congé imposé (CPI, période), demi-journée imposée
  * (DJI) ou jour férié. Sous-ensemble de `JourCalendrierClique` (exclut
@@ -28,36 +27,42 @@ export type JourCommunClique =
  */
 export function DetailJourCommunPanel({
   jour,
-  joursFeries,
   onClose,
 }: {
   jour: JourCommunClique;
-  /** Nécessaire uniquement pour calculer la durée d'un CPI (jours ouvrés
-   * moins fériés) — ignoré pour "dji"/"ferie". */
-  joursFeries: JourFerie[];
   onClose: () => void;
 }) {
   let code: TypeBadgeCode;
   let label: string | undefined;
   let titre: string;
-  let periode: string;
-  let duree: string;
+  let debut: string;
+  let fin: string;
+  let demiDebut: DemiJournee;
+  let demiFin: DemiJournee;
   if (jour.kind === "cpi") {
     code = "CPI";
     titre = "Congé imposé";
-    periode = formatPeriodeDemande(jour.cpi.debut, jour.cpi.fin);
-    duree = `${formatJours(dureeCongeImpose(jour.cpi, joursFeries))} j`;
+    debut = jour.cpi.debut;
+    fin = jour.cpi.fin;
+    demiDebut = "matin";
+    demiFin = "apres_midi";
   } else if (jour.kind === "dji") {
     code = "CPI";
     label = "CI";
     titre = "Congé imposé";
-    periode = formatDate(jour.dji.date);
-    duree = jour.dji.demiJournee === "matin" ? "Matin" : "Après-midi";
+    debut = jour.dji.date;
+    fin = jour.dji.date;
+    demiDebut = jour.dji.demiJournee === "apres_midi" ? "apres_midi" : "matin";
+    demiFin = jour.dji.demiJournee === "matin" ? "matin" : "apres_midi";
   } else {
+    // Nom du férié en titre, pas de libellé générique (15/09/2026, 3e
+    // itération, demande explicite de Vincent).
     code = "FERIE";
-    titre = "Jour férié";
-    periode = formatDate(jour.ferie.date);
-    duree = jour.ferie.libelle;
+    titre = jour.ferie.libelle;
+    debut = jour.ferie.date;
+    fin = jour.ferie.date;
+    demiDebut = "matin";
+    demiFin = "apres_midi";
   }
 
   return (
@@ -68,10 +73,7 @@ export function DetailJourCommunPanel({
             <div className="rounded-full ring-2 ring-white">
               <TypeBadge code={code} label={label} />
             </div>
-            <div>
-              <div className="text-sm font-bold text-white">{titre}</div>
-              <div className="text-xs font-semibold text-white/80">{periode}</div>
-            </div>
+            <div className="text-sm font-bold text-white">{titre}</div>
           </div>
           <button
             type="button"
@@ -83,16 +85,12 @@ export function DetailJourCommunPanel({
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-3 px-4 pt-3">
-          <div className="text-ink-500 text-xs">{duree}</div>
-        </div>
-
-        {/* Pas de section Décision/Annulation (14/09/2026, "non modifiable
-            par le collaborateur") — juste un rappel explicite, même
-            registre que les mentions "Passé en paie..." de
-            `DetailCongePanel`. */}
-        <div className="border-ink-300/60 text-ink-500 mt-3 border-t px-4 pt-3 text-[11px]">
-          Non modifiable — paramétré par l&apos;administrateur.
+        {/* Date/jour au format des congés normaux (`PeriodeAvecPastilles`,
+            `JourBadge` 2 lettres) — 15/09/2026, demande explicite de Vincent.
+            Pas de badge durée ni de mention "Non modifiable" (retirés le
+            même jour, 2e itération). */}
+        <div className="px-4 pt-3">
+          <PeriodeAvecPastilles debut={debut} fin={fin} demiDebut={demiDebut} demiFin={demiFin} />
         </div>
       </div>
     </div>
