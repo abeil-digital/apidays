@@ -278,8 +278,8 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
       const code = codeBadgeDemande(demande);
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
-      const classeContour =
-        demande.statut === "en attente" ? "ring-2 ring-inset ring-status-warning-fg" : undefined;
+      const couleurContour =
+        demande.statut === "en attente" ? "var(--color-status-warning-fg)" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -288,7 +288,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), classeContour };
+        return { classeFond: classeFondTypeBadge(code), couleurContour };
       }
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
@@ -299,13 +299,13 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
         // laisserait croire à tort.
         return {
           partage: matinCouvert
-            ? { gauche: couleurDemande, droite: "var(--color-dji)", classeContourGauche: classeContour }
-            : { gauche: "var(--color-dji)", droite: couleurDemande, classeContourDroite: classeContour },
+            ? { gauche: couleurDemande, droite: "var(--color-dji)", couleurContourGauche: couleurContour }
+            : { gauche: "var(--color-dji)", droite: couleurDemande, couleurContourDroite: couleurContour },
         };
       }
       return {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
-        classeContour,
+        couleurContour,
       };
     }
     return communDuJour(iso);

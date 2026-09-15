@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useState, type CSSProperties, type MouseEvent } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 /**
@@ -92,15 +92,21 @@ export interface PastilleJour {
    * demande explicite de Vincent — d'abord essayé en couleur de chiffre
    * orange/vert le même jour, "on joue sur la transparence, ce n'est pas
    * efficace visuellement", puis recentré sur un contour orange autour du
-   * jour concerné : le chiffre redevient blanc dans tous les cas). Classe(s)
-   * Tailwind pour un anneau (ex. "ring-2 ring-inset ring-status-warning-fg"),
-   * `undefined` = pas de contour (congé validé, ou tout jour sans statut).
-   * S'applique aux variantes `classeFond` (fond plein) et `moitie`
-   * (demi-journée) — pas à `partage`, qui a son propre contour par côté
-   * (`classeContourGauche`/`classeContourDroite`, voir plus bas), ni à
-   * `plein`, propre à la heatmap "Calendrier des employés", hors scope de
-   * ces demandes. */
-  classeContour?: string;
+   * jour concerné : le chiffre redevient blanc dans tous les cas). Couleur
+   * CSS pleine (ex. "var(--color-status-warning-fg)"), pas une classe
+   * Tailwind `ring-*` — nécessaire pour composer un contour PARTIEL (voir
+   * `ombreContour`) sur les seuls bords qui touchent une vraie limite de
+   * période (`isStart`/`isEnd`), jamais sur un bord qui continue vers un
+   * jour voisin de même statut (bug corrigé le 15/09/2026 : une pilule
+   * fusionnée suivie d'une case `partage` de même demande laissait un
+   * double liseré à leur jointure — "il ne devrait pas y avoir de
+   * séparation orange entre le 22 et le demi 23"). `undefined` = pas de
+   * contour (congé validé, ou tout jour sans statut). S'applique aux
+   * variantes `classeFond` (fond plein) et `moitie` (demi-journée) — pas à
+   * `partage`, qui a son propre contour par côté (`couleurContourGauche`/
+   * `couleurContourDroite`, voir plus bas), ni à `plein`, propre à la
+   * heatmap "Calendrier des employés", hors scope de ces demandes. */
+  couleurContour?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };
   /**
@@ -108,16 +114,19 @@ export interface PastilleJour {
    * (ex. une DJI qui tombe sur un jour par ailleurs pris en congé imposé) —
    * chaque moitié dans sa couleur pleine, contrairement à `moitie` qui n'a
    * qu'une seule couleur (l'autre moitié étant sa version alpha 45%).
-   * `classeContourGauche`/`classeContourDroite` (15/09/2026, demande
+   * `couleurContourGauche`/`couleurContourDroite` (15/09/2026, demande
    * explicite de Vincent — "il faudrait que la demie partie du congé soit
    * cerclée de orange") : contour "en attente" posé uniquement sur le côté
-   * congé, jamais sur le côté DJI, qui n'a aucune notion de validation.
+   * congé, jamais sur le côté DJI, qui n'a aucune notion de validation. Le
+   * bord interne (celui qui sépare congé/DJI au sein du même jour) est
+   * toujours tracé ; seul le bord externe (celui qui touche le jour voisin)
+   * est soumis à `isStart`/`isEnd`, comme `couleurContour` ci-dessus.
    */
   partage?: {
     gauche: string;
     droite: string;
-    classeContourGauche?: string;
-    classeContourDroite?: string;
+    couleurContourGauche?: string;
+    couleurContourDroite?: string;
   };
   /**
    * Fond plein en couleur CSS calculée dynamiquement (28/08/2026, heatmap
@@ -201,12 +210,41 @@ function memePastille(a: PastilleJour, b: PastilleJour): boolean {
 function apparenceKey(pastille: PastilleJour | null, iso: string): string | null {
   if (!pastille) return null;
   if (pastille.moitie || pastille.partage || pastille.plein) return `m:${iso}`;
-  // `classeContour` fait partie de l'apparence (15/09/2026, bug signalé par
+  // `couleurContour` fait partie de l'apparence (15/09/2026, bug signalé par
   // Vincent — un `PeriodeSegment` fusionné ignorait le contour) : deux jours
   // de même fond mais de statut différent (validé/en attente) ne doivent
   // jamais fusionner en une seule barre, qui ne pourrait porter qu'un seul
   // contour.
-  return `f:${pastille.classeFond}:${pastille.classeContour ?? ""}`;
+  return `f:${pastille.classeFond}:${pastille.couleurContour ?? ""}`;
+}
+
+// Épaisseur du contour "en attente" — doit rester synchronisée avec les
+// valeurs utilisées ci-dessous (15/09/2026).
+const EPAISSEUR_CONTOUR = 2;
+
+/**
+ * Contour PARTIEL en box-shadow inset (15/09/2026, remplace un `ring`
+ * Tailwind uniforme) — un `box-shadow` inset respecte nativement le
+ * `border-radius` de son propre élément sur chaque bord actif, donc une
+ * pilule fusionnée ou une moitié de case `partage` peut porter un contour
+ * qui s'arrête net sur son bord interne (jointure avec un jour voisin de
+ * même statut) sans double liseré, tout en restant courbe sur ses bords
+ * réellement arrondis (`isStart`/`isEnd`). `undefined` si `couleur` est
+ * absente (pas de contour) ou si aucun bord n'est demandé.
+ */
+function ombreContour(
+  couleur: string | undefined,
+  cotes: { haut?: boolean; bas?: boolean; gauche?: boolean; droite?: boolean },
+): CSSProperties | undefined {
+  if (!couleur) return undefined;
+  const ep = EPAISSEUR_CONTOUR;
+  const ombres: string[] = [];
+  if (cotes.haut) ombres.push(`inset 0 ${ep}px 0 0 ${couleur}`);
+  if (cotes.bas) ombres.push(`inset 0 -${ep}px 0 0 ${couleur}`);
+  if (cotes.gauche) ombres.push(`inset ${ep}px 0 0 0 ${couleur}`);
+  if (cotes.droite) ombres.push(`inset -${ep}px 0 0 0 ${couleur}`);
+  if (ombres.length === 0) return undefined;
+  return { boxShadow: ombres.join(", ") };
 }
 
 function JourPastille({
@@ -407,31 +445,47 @@ function JourPastille({
   };
 
   if (pastille.partage) {
-    const { gauche, droite, classeContourGauche, classeContourDroite } = pastille.partage;
+    const { gauche, droite, couleurContourGauche, couleurContourDroite } = pastille.partage;
     // Deux moitiés en éléments séparés plutôt qu'un dégradé CSS (15/09/2026)
     // — nécessaire pour poser un contour "en attente" sur UN SEUL côté (voir
     // `PastilleJour.partage`). Chaque moitié reprend elle-même l'arrondi de
     // son bord extérieur (`arrondiGauche`/`arrondiDroite`, même logique que
     // `forme`) plutôt que de compter uniquement sur `overflow-hidden` pour
-    // rogner un rectangle droit : un contour (`ring`) posé sur un rectangle
-    // ensuite rogné par un parent arrondi laisse un liseré anguleux sur la
-    // courbe (bug constaté en vérifiant, "le contour à droite est pas net")
-    // — un enfant nativement arrondi donne un contour propre sur toute la
-    // courbe. `overflow-hidden` sur le conteneur reste en filet de sécurité.
+    // rogner un rectangle droit : un contour posé sur un rectangle ensuite
+    // rogné par un parent arrondi laisse un liseré anguleux sur la courbe
+    // (bug constaté en vérifiant, "le contour à droite est pas net") — un
+    // enfant nativement arrondi donne un contour propre sur toute la courbe.
+    // `overflow-hidden` sur le conteneur reste en filet de sécurité.
+    // Bord externe (celui qui touche le jour voisin) soumis à `isStart`/
+    // `isEnd`, comme `couleurContour` ; le bord interne (`droite` pour la
+    // moitié gauche, `gauche` pour la moitié droite) reste toujours tracé —
+    // c'est la vraie séparation congé/DJI au sein du même jour.
     const arrondiGauche = agrandi ? "" : isStart ? "rounded-l-full" : "";
     const arrondiDroite = agrandi ? "" : isEnd ? "rounded-r-full" : "";
+    const ombreGauche = ombreContour(couleurContourGauche, {
+      haut: true,
+      bas: true,
+      droite: true,
+      gauche: isStart,
+    });
+    const ombreDroite = ombreContour(couleurContourDroite, {
+      haut: true,
+      bas: true,
+      gauche: true,
+      droite: isEnd,
+    });
     return (
       <span
         className={`relative ${taille} ${forme} overflow-hidden text-white transition-[filter] duration-150 ${survol} ${curseur}`}
         {...evenements}
       >
         <span
-          className={`absolute inset-y-0 left-0 w-1/2 ${arrondiGauche} ${classeContourGauche ?? ""}`}
-          style={{ background: gauche }}
+          className={`absolute inset-y-0 left-0 w-1/2 ${arrondiGauche}`}
+          style={{ background: gauche, ...ombreGauche }}
         />
         <span
-          className={`absolute inset-y-0 right-0 w-1/2 ${arrondiDroite} ${classeContourDroite ?? ""}`}
-          style={{ background: droite }}
+          className={`absolute inset-y-0 right-0 w-1/2 ${arrondiDroite}`}
+          style={{ background: droite, ...ombreDroite }}
         />
         <span className={`relative z-10 flex h-full w-full items-center justify-center ${texte} font-bold`}>
           {contenuJour("ring-white")}
@@ -483,10 +537,22 @@ function JourPastille({
     );
   }
 
+  // Contour "en attente" en pointillé isStart/isEnd (15/09/2026) — voir
+  // `PastilleJour.couleurContour` : un bord qui touche un jour voisin de
+  // même statut (ex. cette case suit une pilule fusionnée déjà en attente)
+  // ne doit pas être tracé, sinon double liseré à la jointure.
+  const ombre = ombreContour(pastille.couleurContour, {
+    haut: true,
+    bas: true,
+    gauche: isStart,
+    droite: isEnd,
+  });
+
   if (!pastille.moitie) {
     return (
       <span
-        className={`${base} ${pastille.classeFond} text-white ${pastille.classeContour ?? ""}`}
+        className={`${base} ${pastille.classeFond} text-white`}
+        style={ombre}
         {...evenements}
       >
         {contenuJour("ring-white")}
@@ -503,8 +569,8 @@ function JourPastille({
 
   return (
     <span
-      className={`${base} text-white ${pastille.classeContour ?? ""}`}
-      style={{ background: gradient }}
+      className={`${base} text-white`}
+      style={{ background: gradient, ...ombre }}
       {...evenements}
     >
       {contenuJour("ring-white")}
@@ -524,7 +590,7 @@ function PeriodeSegment({
   isos,
   isoPremierJour,
   classeFond,
-  classeContour,
+  couleurContour,
   isStart,
   isEnd,
   isHovered,
@@ -540,9 +606,10 @@ function PeriodeSegment({
   isos: string[];
   isoPremierJour: string;
   classeFond: string;
-  /** Voir `PastilleJour.classeContour` (15/09/2026, bug corrigé — une
-   * barre fusionnée ignorait cette couleur, toujours `text-white`). */
-  classeContour?: string;
+  /** Voir `PastilleJour.couleurContour` (15/09/2026, bug corrigé — une barre
+   * fusionnée ignorait cette couleur, toujours `text-white` ; contour
+   * partiel isStart/isEnd, même logique que `JourPastille`). */
+  couleurContour?: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
@@ -569,14 +636,18 @@ function PeriodeSegment({
   // de la même grille, quel que soit N, sans dépendre du contenu des lignes
   // voisines.
   const texte = texteJour ?? (agrandi ? "text-sm" : "text-xs");
+  // Contour "en attente" partiel (15/09/2026) — jamais sur un bord qui
+  // continue vers un jour voisin de même statut (voir `ombreContour`).
+  const ombre = ombreContour(couleurContour, { haut: true, bas: true, gauche: isStart, droite: isEnd });
 
   return (
     <div
-      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white ${classeContour ?? ""} transition-[filter] duration-150 ${survol} ${curseur}`}
+      className={`group relative grid ${agrandi ? "" : "h-7"} items-center ${forme} ${classeFond} ${texte} font-bold text-white transition-[filter] duration-150 ${survol} ${curseur}`}
       style={{
         gridColumn: `span ${jours.length}`,
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
         aspectRatio: agrandi ? `${jours.length} / 1` : undefined,
+        ...ombre,
       }}
       onMouseEnter={() => onSurvol(true)}
       onMouseLeave={() => onSurvol(false)}
@@ -692,7 +763,7 @@ type ItemRendu =
       isos: string[];
       isoPremierJour: string;
       classeFond: string;
-      classeContour?: string;
+      couleurContour?: string;
       isStart: boolean;
       isEnd: boolean;
       groupeId: string;
@@ -764,7 +835,7 @@ function calculerItemsRendu(
         isos: semaines.slice(i, j).map((c) => c.iso as string),
         isoPremierJour: cellule.iso,
         classeFond: cellule.pastille.classeFond ?? "",
-        classeContour: cellule.pastille.classeContour,
+        couleurContour: cellule.pastille.couleurContour,
         isStart: isStarts[i],
         isEnd: isEnds[j - 1],
         groupeId: groupeIds[i] as string,
@@ -1044,7 +1115,7 @@ export function MiniCalendrier({
               isos={item.isos}
               isoPremierJour={item.isoPremierJour}
               classeFond={item.classeFond}
-              classeContour={item.classeContour}
+              couleurContour={item.couleurContour}
               isStart={item.isStart}
               isEnd={item.isEnd}
               isHovered={

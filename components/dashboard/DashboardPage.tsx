@@ -361,12 +361,16 @@ export function DashboardPage() {
   // Validé/en attente distingués visuellement (14/09/2026, demande explicite
   // de Vincent — "on joue sur la transparence, ce n'est pas efficace
   // visuellement" : remplace l'ancien fond atténué/`color-mix` 50% par un
-  // fond TOUJOURS plein). **Recentré le 15/09/2026, 2 itérations le même
-  // jour** : essayé d'abord en couleur de chiffre (vert validé/orange en
-  // attente), rejugé "pas efficace" — recentré sur un contour orange autour
-  // de la pastille pour "en attente" seulement (`classeContour`, ring
-  // `text-status-warning-fg`, même token que `StatusBadge`), le chiffre
-  // redevenant blanc dans tous les cas, y compris validé.
+  // fond TOUJOURS plein). **Recentré le 15/09/2026, plusieurs itérations le
+  // même jour** : essayé d'abord en couleur de chiffre (vert validé/orange
+  // en attente), rejugé "pas efficace" — recentré sur un contour orange
+  // autour de la pastille pour "en attente" seulement (`couleurContour`,
+  // `var(--color-status-warning-fg)`, même token que `StatusBadge`), le
+  // chiffre redevenant blanc dans tous les cas, y compris validé. Contour
+  // composé en `box-shadow` plutôt qu'en classe `ring-*` Tailwind
+  // (`ombreContour` dans `MiniCalendrier.tsx`) pour rester partiel sur les
+  // vraies limites de période (`isStart`/`isEnd`) et ne jamais doubler à la
+  // jointure entre deux éléments adjacents de même statut.
   //
   // Chevauchement demande/férié/DJI (15/09/2026, cas concret de Vincent — un
   // CP posé du 9 au 13/11 avec un férié le 11 et une DJI l'après-midi du 13 :
@@ -394,8 +398,8 @@ export function DashboardPage() {
       const code = codeBadgeDemande(demande);
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
-      const classeContour =
-        demande.statut === "en attente" ? "ring-2 ring-inset ring-status-warning-fg" : undefined;
+      const couleurContour =
+        demande.statut === "en attente" ? "var(--color-status-warning-fg)" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -404,7 +408,7 @@ export function DashboardPage() {
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), classeContour };
+        return { classeFond: classeFondTypeBadge(code), couleurContour };
       }
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
@@ -415,13 +419,13 @@ export function DashboardPage() {
         // laisserait croire à tort.
         return {
           partage: matinCouvert
-            ? { gauche: couleurDemande, droite: "var(--color-dji)", classeContourGauche: classeContour }
-            : { gauche: "var(--color-dji)", droite: couleurDemande, classeContourDroite: classeContour },
+            ? { gauche: couleurDemande, droite: "var(--color-dji)", couleurContourGauche: couleurContour }
+            : { gauche: "var(--color-dji)", droite: couleurDemande, couleurContourDroite: couleurContour },
         };
       }
       return {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
-        classeContour,
+        couleurContour,
       };
     }
     return communDuJour(iso);
