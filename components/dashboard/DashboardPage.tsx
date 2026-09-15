@@ -395,7 +395,7 @@ export function DashboardPage() {
       let matinCouvert = !(iso === demande.debut && demande.demiDebut === "apres_midi");
       let apresMidiCouvert = !(iso === demande.fin && demande.demiFin === "matin");
       const classeContour =
-        demande.statut === "en attente" ? "ring-1 ring-inset ring-status-warning-fg" : undefined;
+        demande.statut === "en attente" ? "ring-2 ring-inset ring-status-warning-fg" : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
