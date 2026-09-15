@@ -61,7 +61,7 @@
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
   --color-cp: #5b8def; /* bleu — CP */
   --color-rtt: #7fbf8f; /* vert — RTT */
-  --color-cpa: #518dc3; /* bleu — CPA, congés payés en acquisition (solde théorique) */
+  --color-cpa: #1c385e; /* bleu nuit — CPA, congés payés en acquisition (solde théorique) */
   /* CSS, CE, RECUP, EVT_FAM alignés sur une même couleur rose (15/09/2026,
      demande explicite de Vincent) */
   --color-css: #d98ca6; /* rose — congé sans solde */
