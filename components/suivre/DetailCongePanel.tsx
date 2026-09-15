@@ -44,12 +44,10 @@ interface DetailCongePanelProps {
   selection: Demande & Partial<Pick<DemandeEquipe, "demandeur" | "validateur">>;
   onClose: () => void;
   /** Actions de décision — absentes en lecture seule (collaborateur sur son
-   * propre historique) : les encarts Décision/Régularisation ne s'affichent
-   * alors pas du tout, seul le feed (Posé le/Validé le/Refusé le) reste
-   * visible. */
+   * propre historique) : l'encart Décision ne s'affiche alors pas du tout,
+   * seul le feed (Posé le/Validé le/Refusé le) reste visible. */
   onValider?: (commentaire: string) => Promise<void>;
   onRefuser?: (commentaire: string) => Promise<void>;
-  onRegulariser?: (commentaire: string) => Promise<void>;
   /** Retrait d'une demande "en attente" par le collaborateur lui-même
    * (28/08/2026, "Annuler cette demande" — `HistoriquePage`, wording unifié
    * entre le lien et le titre du panneau) — absent partout ailleurs, le lien
@@ -182,8 +180,8 @@ const VAR_COULEUR_TYPE: Record<string, string> = {
  * `CongesPaiePage.tsx` (Export paie) pour être réutilisé tel quel par
  * `SuivreDemandesPage.tsx` (Suivre les demandes), au clic sur la pill Dates —
  * même gabarit, mêmes actions, plutôt que dupliquer ~150 lignes une seconde
- * fois. État (commentaire, régularisation ouverte, en cours, erreur)
- * entièrement local : l'appelant doit remonter le composant via `key`
+ * fois. État (commentaire, retrait ouvert, en cours, erreur) entièrement
+ * local : l'appelant doit remonter le composant via `key`
  * (`key={selection.id}`) à chaque changement de sélection pour repartir
  * d'un état propre.
  *
@@ -194,10 +192,9 @@ const VAR_COULEUR_TYPE: Record<string, string> = {
  * l'appel et de fermer le panneau au succès.
  *
  * Branche par statut, identique à l'original :
- * - **validé/annulé** : lien "Régularisation" replié par défaut → Supprimer
- *   (validé → annulé) ou Restaurer (annulé → validé, réutilise `onValider`).
- * - **refusé** : lecture seule, aucune action (jamais accordé, la
- *   régularisation n'a pas de sens ici).
+ * - **validé** : lien "Annuler cette demande" replié par défaut (`onRetirer`),
+ *   éventuellement bloqué si déjà transmis en paie (`peutAnnulerDejaTransmis`).
+ * - **refusé** : lecture seule, aucune action (jamais accordé).
  * - **en attente** : commentaire + Refuser/Valider.
  */
 export function DetailCongePanel({
@@ -205,7 +202,6 @@ export function DetailCongePanel({
   onClose,
   onValider,
   onRefuser,
-  onRegulariser,
   onRetirer,
   peutAnnulerDejaTransmis = false,
   libelleRetirer = "Annuler cette demande",
@@ -223,7 +219,6 @@ export function DetailCongePanel({
   lignesTransmission,
 }: DetailCongePanelProps) {
   const [commentaire, setCommentaire] = useState("");
-  const [regularisationOuverte, setRegularisationOuverte] = useState(false);
   const [voirDetail, setVoirDetail] = useState(false);
   const [enCours, setEnCours] = useState(false);
   const [erreurAction, setErreurAction] = useState<string | null>(null);
@@ -273,12 +268,11 @@ export function DetailCongePanel({
   }, [selection.id]);
 
   // Rafraîchit le journal après une action qui laisse le panneau ouvert
-  // (Refuser/Signaler comme non pris/Retirer/Restaurer, via `executer`
-  // ci-dessous) — sans ça, la nouvelle ligne ("Refusé le"/"Retirée le"...)
-  // n'apparaissait qu'après fermeture/réouverture du panneau : l'effet
-  // ci-dessus ne se redéclenche pas puisque `selection.id` ne change pas
-  // (28/08/2026, signalé par Vincent en testant "Annuler cette demande" sur
-  // un congé validé — mais touchait déjà Refuser/Signaler comme non pris).
+  // (Refuser, via `executer` ci-dessous) — sans ça, la nouvelle ligne
+  // ("Refusé le"...) n'apparaissait qu'après fermeture/réouverture du
+  // panneau : l'effet ci-dessus ne se redéclenche pas puisque `selection.id`
+  // ne change pas (28/08/2026, signalé par Vincent en testant "Annuler cette
+  // demande" sur un congé validé — mais touchait déjà Refuser).
   async function rafraichirHistorique() {
     const data = await fetchHistoriqueDecisions(selection.id);
     setHistoriqueDecisions(data);
@@ -352,7 +346,7 @@ export function DetailCongePanel({
   const resumeConge = selection.demandeur
     ? `${selection.demandeur.prenom} ${selection.demandeur.nom} - ${periodeEtDuree}`
     : periodeEtDuree;
-  const peutDecider = Boolean(onValider && onRefuser && onRegulariser);
+  const peutDecider = Boolean(onValider && onRefuser);
   const peutVoirDetail = Boolean(joursFeries && congesImposes && djImposees && autresDemandes);
   const occupant = peutVoirDetail
     ? creerResolveurOccupant({
@@ -363,10 +357,9 @@ export function DetailCongePanel({
       })
     : null;
 
-  // Refuser/Signaler comme non pris/Restaurer laissent le panneau ouvert
-  // après succès (contrairement à Valider, qui ferme + bandeau — voir
-  // `executerValidation`) : l'utilisateur voit tout de suite le changement
-  // de statut dans le feed (ligne "Refusé le"/"Validé le" mise à jour) sans
+  // Refuser laisse le panneau ouvert après succès (contrairement à Valider,
+  // qui ferme + bandeau — voir `executerValidation`) : l'utilisateur voit
+  // tout de suite le changement de statut dans le feed ("Refusé le") sans
   // avoir à rouvrir le panneau.
   async function executer(
     action: ((commentaire: string) => Promise<void>) | undefined,
@@ -390,8 +383,8 @@ export function DetailCongePanel({
 
   // "Annuler cette demande" (15/09/2026, demande explicite de Vincent —
   // "il faudrait une transition") : à la différence de `executer` ci-dessus
-  // (Refuser/Signaler comme non pris/Restaurer, qui laissent le panneau
-  // ouvert), un retrait réussi le referme, mais pas d'un coup — séquence en
+  // (Refuser, qui laisse le panneau ouvert), un retrait réussi le referme,
+  // mais pas d'un coup — séquence en
   // 3 temps pour que le résultat reste lisible avant de disparaître : le
   // panneau reste affiché tel quel ~1,5s, la section "Annuler cette demande"
   // se replie, puis tout le panneau s'estompe (`fermetureEnCours`, transition
@@ -440,11 +433,10 @@ export function DetailCongePanel({
     }
   }
 
-  // Refuser/Régularisation demandent une confirmation avant d'agir
-  // (contrairement à Valider, qui agit tout de suite puis affiche un
-  // bandeau annulable — voir `executerValidation`) : ouvre la modale plutôt
-  // que d'appeler `executer` directement, celui-ci n'étant déclenché qu'au
-  // clic sur "Confirmer".
+  // Refuser demande une confirmation avant d'agir (contrairement à Valider,
+  // qui agit tout de suite puis affiche un bandeau annulable — voir
+  // `executerValidation`) : ouvre la modale plutôt que d'appeler `executer`
+  // directement, celui-ci n'étant déclenché qu'au clic sur "Confirmer".
   function demanderConfirmation(verbe: string, action: () => void) {
     setConfirmation({
       question: `Êtes-vous certain de ${verbe} ce congé :`,
@@ -721,78 +713,12 @@ export function DetailCongePanel({
 
         {
           // "refusé" est un état terminal ici — pas de bouton Refuser/Valider
-          // (elle n'est plus "en attente") ni de Régularisation (ce mécanisme
-          // corrige un congé qui avait été accordé, une demande refusée ne
-          // l'a jamais été). Le commentaire de refus (s'il existe) est déjà
-          // affiché juste au-dessus, rien d'autre à montrer ici. "en attente"
-          // a son propre encart Décision, "validé"/"annulé" leur propre
-          // encart Régularisation, juste en dessous.
+          // (elle n'est plus "en attente"). Le commentaire de refus (s'il
+          // existe) est déjà affiché juste au-dessus, rien d'autre à montrer
+          // ici. "en attente" a son propre encart Décision, juste en dessous.
           null
         }
       </div>
-
-      {peutDecider && selection.statut === "validé" && (
-        <>
-          <button
-            type="button"
-            onClick={() => setRegularisationOuverte((v) => !v)}
-            className="text-ink-500 flex w-fit items-center gap-1 px-4 py-1 text-xs font-semibold"
-          >
-            Régularisation
-            {regularisationOuverte ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-
-          {regularisationOuverte && (
-            <div
-              className="w-full shadow-sm"
-              style={{
-                backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[code]}) 5%, white)`,
-              }}
-            >
-              <div className={`px-4 pt-3 pb-1 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
-                Régularisation de congés
-              </div>
-              <div className="px-4 pt-1.5 pb-2">
-                <label
-                  htmlFor="commentaire-decision"
-                  className="text-ink-500 mb-1.5 block text-[11px] font-bold"
-                >
-                  Commentaire (obligatoire)
-                </label>
-                <Textarea
-                  id="commentaire-decision"
-                  value={commentaire}
-                  onChange={(e) => setCommentaire(e.target.value)}
-                  rows={2}
-                  placeholder="Ex. congé finalement non pris…"
-                  className="w-full rounded-md text-xs placeholder:text-xs"
-                />
-              </div>
-
-              {erreurAction && (
-                <div className="rounded-control bg-status-danger-bg text-status-danger-fg mx-4 mb-3 px-3 py-2.5 text-xs">
-                  {erreurAction}
-                </div>
-              )}
-
-              <div className="px-4 pb-4">
-                <Button
-                  variant={commentaire.trim() ? "primary" : "secondary"}
-                  onClick={() =>
-                    demanderConfirmation("signaler comme non pris", () =>
-                      executer(onRegulariser, "Impossible de signaler ce congé comme non pris."),
-                    )
-                  }
-                  disabled={enCours || !commentaire.trim()}
-                  className="w-full justify-center rounded-full px-4 py-2 text-xs"
-                >
-                  Signaler comme non pris
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
-      )}
 
       {peutDecider && selection.statut === "en attente" && (
         <div
