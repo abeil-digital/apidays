@@ -6493,6 +6493,44 @@ tard") : le verrouillage du sélecteur de demi-journée sur une DJI (18/08/2026,
 période d'une demande se termine sur une DJI matin ? Vincent confirme aujourd'hui que c'est le cas —
 aucun changement de code, juste la levée du doute qui restait en suspens depuis un mois.
 
+## Palette de couleurs des congés — longue session de tests, rien retenu (15/09/2026)
+
+Backlog "Tester et modifier la couleur des congés CP" — Vincent voulait "trouver une combinaison à
+la fois élégante et lisible". Session d'essais en direct sur `app/globals.css` (`--color-cp`/`-rtt`/
+`-cpa`/`-css`/`-ce`/`-cpi`/`-recup`/`-evtfam`/`-dji`/`-ferie`), chaque changement commité puis
+souvent reverté au tour suivant. **Aucune teinte n'a été retenue** — la palette a fini la session
+identique à son état de départ.
+
+**Constat objectif posé au calcul (contraste WCAG)** : avec le modèle actuel du calendrier (chiffre
+toujours blanc + contour orange `ring-status-warning-fg` pour "en attente", voir plus haut "Calendrier
+simplifié" et `MiniCalendrier.tsx`/`ombreContour`), **aucune teinte de la palette d'origine** ne
+passe le seuil de contraste texte (4.5:1) ni le seuil contour non-textuel (3:1) — pas même les
+couleurs déjà en prod avant cette session. Le meilleur cas (CPI/DJI `#496580`) plafonne à 6.1:1 en
+texte mais seulement 1.8:1 en contour. Le problème est structurel, pas un mauvais choix de teinte
+individuelle : un fond doit être À LA FOIS assez sombre pour porter du blanc ET assez éloigné en
+luminance de l'orange (`#c77700`, luminance ~0.25) pour qu'un contour de 2px s'y voie — les teintes
+pastel/moyennes utilisées dans l'app ne peuvent satisfaire aucune des deux contraintes.
+
+**Pistes essayées, toutes rejetées par Vincent** :
+- Turquoise CP (`#3ebcb3`) puis vert profond (`#315e59`) isolément — rejetés un par un.
+- Palette complète "jewel tones" sombre (calculée pour franchir les deux seuils WCAG, ex. CP
+  `#0b4f49`, CPI/DJI `#162a44`, RTT `#0a481f`...) — rejetée deux fois de suite ("moche et illisible",
+  "on différencie rien" : les teintes très sombres nécessaires pour le contraste finissent par se
+  ressembler entre elles, perdant la distinction de typologie qui est la seule fonction de cette
+  palette).
+- Interversion CP ↔ CPI/DJI — rejetée ("non même pas").
+- Alignement de plusieurs types sur une même teinte (CSS/CE/RECUP/EVT_FAM en rose `#d98ca6`, CPA en
+  bleu puis bleu nuit, DJI détaché de CPI en vert) — tenté puis abandonné en fin de session, retour à
+  la palette d'origine.
+
+**Non résolu** : reste à trouver une combinaison qui soit à la fois lisible, élégante et
+différenciable — la contrainte "chiffre blanc partout" (posée le 15/09/2026, voir "Calendrier
+simplifié" plus haut) rend l'exercice nettement plus dur qu'avec l'ancien modèle (chiffre coloré par
+statut), où le fond pouvait rester clair. Piste à explorer une prochaine fois : soit accepter des
+fonds plus sombres qu'aujourd'hui mais en travaillant la SATURATION plutôt que la LUMINOSITÉ pour
+garder les teintes distinctes entre elles (le piège de cette session), soit remettre en cause la
+contrainte elle-même (chiffre pas nécessairement blanc partout).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
