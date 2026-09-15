@@ -6383,6 +6383,55 @@ ne peuvent y ajouter des jours de congés pour un tiers. En revanche ils ont les
 validation d'un jour de congé en fonction de leur profil via le template détail jour congé, comme dans
 toute la partie suivre."
 
+## Régression droits manager (15/09/2026) — 3 correctifs après la refonte ci-dessus
+
+Trois bugs trouvés par Vincent en vérifiant en direct sur acme, tous causés par le retrait de
+`onRegulariser`/`managerPeutAnnuler` (section précédente) — documentés séparément du chantier
+d'origine car découverts et corrigés après coup, dans une deuxième passe.
+
+**1. Manager ne pouvait plus du tout valider/refuser une demande** (`DetailCongePanel.tsx`) — "putain
+ya une regression sur les droits.... le manager ne peut plus valider les congés". Cause : `peutDecider`
+valait `Boolean(onValider && onRefuser && onRegulariser)` — aucun appelant ne passant plus
+`onRegulariser` depuis son retrait, `peutDecider` restait désormais TOUJOURS `false`, masquant tout
+l'encart Décision (Valider/Refuser) pour le manager, sur tous les écrans. Corrigé en retirant
+`onRegulariser` entièrement de `DetailCongePanel.tsx` (prop, état `regularisationOuverte`, bouton
+"Signaler comme non pris") — devenu mort partout — et en ramenant `peutDecider` à
+`Boolean(onValider && onRefuser)`.
+
+**2. "Annuler cette demande" redondant avec Décision sur une demande "en attente"** : une fois (1)
+corrigé, le manager voyait à la fois l'encart Décision ET le lien "Annuler cette demande" sur une même
+demande en attente — capture d'écran à l'appui, Vincent : "Ce n'est pas ce qui est prévu". Cause :
+`onRetirer` est désormais accordé au manager sans condition de statut (modèle "manager = admin + droit
+de validation"), alors qu'avant cette refonte le manager n'avait `onRetirer` que sur une demande déjà
+validée (`managerPeutAnnuler` exigeait `statut === "validé"`) — la branche "en attente" de
+`peutAnnulerCetteDemande` était donc auparavant seulement empruntée par l'admin (qui n'a pas de
+Décision). Corrigé en conditionnant cette branche à `!peutDecider` :
+`(selection.statut === "en attente" && !peutDecider) || peutAnnulerValide || (dejaTransmis &&
+peutAnnulerDejaTransmis)` — un viewer qui a Décision (manager) n'a plus besoin d'un "Annuler" séparé
+sur du "en attente" (Refuser joue ce rôle), un viewer qui n'en a pas (admin) le garde.
+
+**3. "Suivre les soldes" n'avait jamais eu de bloc Décision** — Vincent, capture d'écran à l'appui (une
+demande CP d'Olivier lui-même, 9→19 nov., en attente, ouverte depuis "Suivre les soldes") : "olivier ne
+peut pas valider un congé non validé". Cause différente des deux précédentes : `SoldeDetailPanel.tsx`/
+`SuivreSoldesPage2.tsx` n'avaient jamais câblé `onValider`/`onRefuser` sur `DetailCongePanel` — seul
+`onRetirer` existait sur cet écran depuis toujours (choix d'origine documenté dans le code : "popin en
+lecture + Annuler cette demande uniquement"), un vrai troisième "reliquat" du même genre que
+`onRegulariser` dans `SuivreDemandesPage.tsx`, découvert seulement maintenant parce que Vincent a
+testé ce chemin précis. Corrigé en ajoutant `onValider`/`onRefuser` à `SoldeDetailPanel.tsx` (même
+signature `(demandeId, commentaire) => Promise<void>` que `onRetirer`, wrappés en interne avec
+`refetch()` après succès) et en les câblant manager-only dans `SuivreSoldesPage2.tsx`
+(`validerDemande`/`refuserDemande` du repository) ; `peutAnnulerDejaTransmis` aligné au passage sur
+`estAdmin || estManager` (il était encore admin-only, même incohérence que les deux autres écrans avant
+leur correctif).
+
+**Leçon retenue** : retirer une prop (`onRegulariser`) sans auditer tous les booléens dérivés qui la
+référencent (`peutDecider`) a cassé une fonctionnalité sans rapport visible avec le changement voulu —
+et le même modèle de droits ("manager = admin + validation") vivait dupliqué dans 3 écrans distincts
+(`SuivreDemandesPage.tsx`, `CalendrierCollaborateur.tsx`, `SuivreSoldesPage2.tsx`/`SoldeDetailPanel.tsx`),
+chacun avec sa propre variante figée d'un modèle de droits plus ancien — un point qui aurait mérité un
+audit global (`grep onRegulariser`/`peutAnnulerDejaTransmis` sur tout `components/suivre/`) avant de
+considérer le chantier terminé plutôt qu'une correction écran par écran au fil des retours de Vincent.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
