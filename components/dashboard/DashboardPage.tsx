@@ -406,13 +406,6 @@ export function DashboardPage() {
       // contraste WCAG en noir sur leurs fonds pastel actuels, sauf CPI (déjà
       // trop sombre pour du noir, reste en blanc, défaut de `texteSombre`).
       const texteSombre = code !== "CPI";
-      // Puis affiné (même jour) — "tente typo dans la teinte du congé mais
-      // très foncé" : plutôt qu'un noir neutre, une version très assombrie de
-      // la couleur du congé lui-même (`color-mix`, 35% de la teinte d'origine
-      // sur du noir).
-      const couleurTexte = texteSombre
-        ? `color-mix(in srgb, ${couleurDemande} 35%, black)`
-        : undefined;
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -421,7 +414,7 @@ export function DashboardPage() {
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), couleurContour, texteSombre, couleurTexte };
+        return { classeFond: classeFondTypeBadge(code), couleurContour, texteSombre };
       }
 
       if (dji) {
@@ -439,7 +432,6 @@ export function DashboardPage() {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
         couleurContour,
         texteSombre,
-        couleurTexte,
       };
     }
     return communDuJour(iso);

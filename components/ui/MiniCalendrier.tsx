@@ -100,16 +100,6 @@ export interface PastilleJour {
    */
   texteSombre?: boolean;
   /**
-   * Couleur CSS pleine du chiffre (ex. "color-mix(in srgb, var(--color-cp)
-   * 35%, black)"), en override de `texteSombre` (15/09/2026, suite du même
-   * essai — "tente typo dans la teinte du congé mais très foncé" : plutôt
-   * qu'un noir neutre, une version très assombrie de la couleur du congé
-   * lui-même). `texteSombre` doit rester `true` en même temps (pilote
-   * encore l'anneau du jour "aujourd'hui", non concerné par cette teinte).
-   * `undefined` = pas d'override, `texteSombre` seul décide (noir neutre ou
-   * blanc). */
-  couleurTexte?: string;
-  /**
    * Contour de la pastille signalant un statut "en attente" (15/09/2026,
    * demande explicite de Vincent — d'abord essayé en couleur de chiffre
    * orange/vert le même jour, "on joue sur la transparence, ce n'est pas
@@ -237,7 +227,7 @@ function apparenceKey(pastille: PastilleJour | null, iso: string): string | null
   // de même fond mais de statut différent (validé/en attente) ne doivent
   // jamais fusionner en une seule barre, qui ne pourrait porter qu'un seul
   // contour.
-  return `f:${pastille.classeFond}:${pastille.couleurContour ?? ""}:${pastille.texteSombre ? "1" : "0"}:${pastille.couleurTexte ?? ""}`;
+  return `f:${pastille.classeFond}:${pastille.couleurContour ?? ""}:${pastille.texteSombre ? "1" : "0"}`;
 }
 
 // Épaisseur du contour "en attente" — doit rester synchronisée avec les
@@ -572,13 +562,12 @@ function JourPastille({
 
   const classeTexte = pastille.texteSombre ? "text-ink-900" : "text-white";
   const couleurAnneauAujourdhui = pastille.texteSombre ? "ring-ink-900" : "ring-white";
-  const styleTexte = pastille.couleurTexte ? { color: pastille.couleurTexte } : undefined;
 
   if (!pastille.moitie) {
     return (
       <span
         className={`${base} ${pastille.classeFond} ${classeTexte}`}
-        style={{ ...ombre, ...styleTexte }}
+        style={ombre}
         {...evenements}
       >
         {contenuJour(couleurAnneauAujourdhui)}
@@ -596,7 +585,7 @@ function JourPastille({
   return (
     <span
       className={`${base} ${classeTexte}`}
-      style={{ background: gradient, ...ombre, ...styleTexte }}
+      style={{ background: gradient, ...ombre }}
       {...evenements}
     >
       {contenuJour(couleurAnneauAujourdhui)}
@@ -618,7 +607,6 @@ function PeriodeSegment({
   classeFond,
   couleurContour,
   texteSombre,
-  couleurTexte,
   isStart,
   isEnd,
   isHovered,
@@ -640,8 +628,6 @@ function PeriodeSegment({
   couleurContour?: string;
   /** Voir `PastilleJour.texteSombre`. */
   texteSombre?: boolean;
-  /** Voir `PastilleJour.couleurTexte`. */
-  couleurTexte?: string;
   isStart: boolean;
   isEnd: boolean;
   isHovered: boolean;
@@ -682,7 +668,6 @@ function PeriodeSegment({
         gridTemplateColumns: `repeat(${jours.length}, 1fr)`,
         aspectRatio: agrandi ? `${jours.length} / 1` : undefined,
         ...ombre,
-        ...(couleurTexte ? { color: couleurTexte } : undefined),
       }}
       onMouseEnter={() => onSurvol(true)}
       onMouseLeave={() => onSurvol(false)}
@@ -802,7 +787,6 @@ type ItemRendu =
       classeFond: string;
       couleurContour?: string;
       texteSombre?: boolean;
-      couleurTexte?: string;
       isStart: boolean;
       isEnd: boolean;
       groupeId: string;
@@ -876,7 +860,6 @@ function calculerItemsRendu(
         classeFond: cellule.pastille.classeFond ?? "",
         couleurContour: cellule.pastille.couleurContour,
         texteSombre: cellule.pastille.texteSombre,
-        couleurTexte: cellule.pastille.couleurTexte,
         isStart: isStarts[i],
         isEnd: isEnds[j - 1],
         groupeId: groupeIds[i] as string,
@@ -1158,7 +1141,6 @@ export function MiniCalendrier({
               classeFond={item.classeFond}
               couleurContour={item.couleurContour}
               texteSombre={item.texteSombre}
-              couleurTexte={item.couleurTexte}
               isStart={item.isStart}
               isEnd={item.isEnd}
               isHovered={
