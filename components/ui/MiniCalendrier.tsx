@@ -95,10 +95,11 @@ export interface PastilleJour {
    * jour concerné : le chiffre redevient blanc dans tous les cas). Classe(s)
    * Tailwind pour un anneau (ex. "ring-1 ring-inset ring-status-warning-fg"),
    * `undefined` = pas de contour (congé validé, ou tout jour sans statut).
-   * S'applique aux variantes `classeFond` (fond plein), `moitie` (demi-journée)
-   * et `partage` (congé personnel scindé par une DJI, garde son statut
-   * visuel) — pas à `plein`, propre à la heatmap "Calendrier des employés",
-   * hors scope de ces demandes. */
+   * S'applique aux variantes `classeFond` (fond plein) et `moitie`
+   * (demi-journée) — jamais à `partage` (congé personnel scindé par une DJI,
+   * 15/09/2026 : la moitié DJI de la case n'a aucune notion de validation,
+   * un contour sur la case entière serait trompeur) ni à `plein`, propre à
+   * la heatmap "Calendrier des employés", hors scope de ces demandes. */
   classeContour?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };

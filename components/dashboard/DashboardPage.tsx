@@ -409,11 +409,14 @@ export function DashboardPage() {
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
       if (dji) {
+        // Pas de contour "en attente" ici (15/09/2026, demande explicite de
+        // Vincent) — la moitié DJI de la case n'est jamais "en attente"
+        // (paramétrage admin, aucune notion de validation), un contour sur
+        // toute la case le laisserait croire à tort.
         return {
           partage: matinCouvert
             ? { gauche: couleurDemande, droite: "var(--color-dji)" }
             : { gauche: "var(--color-dji)", droite: couleurDemande },
-          classeContour,
         };
       }
       return {
