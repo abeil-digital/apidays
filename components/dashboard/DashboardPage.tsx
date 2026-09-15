@@ -409,14 +409,14 @@ export function DashboardPage() {
 
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
       if (dji) {
-        // Pas de contour "en attente" ici (15/09/2026, demande explicite de
-        // Vincent) — la moitié DJI de la case n'est jamais "en attente"
-        // (paramétrage admin, aucune notion de validation), un contour sur
-        // toute la case le laisserait croire à tort.
+        // Contour "en attente" posé uniquement côté congé, jamais côté DJI
+        // (15/09/2026, demande explicite de Vincent) — la moitié DJI n'a
+        // aucune notion de validation, un contour sur toute la case le
+        // laisserait croire à tort.
         return {
           partage: matinCouvert
-            ? { gauche: couleurDemande, droite: "var(--color-dji)" }
-            : { gauche: "var(--color-dji)", droite: couleurDemande },
+            ? { gauche: couleurDemande, droite: "var(--color-dji)", classeContourGauche: classeContour }
+            : { gauche: "var(--color-dji)", droite: couleurDemande, classeContourDroite: classeContour },
         };
       }
       return {

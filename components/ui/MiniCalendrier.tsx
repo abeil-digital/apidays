@@ -96,10 +96,10 @@ export interface PastilleJour {
    * Tailwind pour un anneau (ex. "ring-1 ring-inset ring-status-warning-fg"),
    * `undefined` = pas de contour (congé validé, ou tout jour sans statut).
    * S'applique aux variantes `classeFond` (fond plein) et `moitie`
-   * (demi-journée) — jamais à `partage` (congé personnel scindé par une DJI,
-   * 15/09/2026 : la moitié DJI de la case n'a aucune notion de validation,
-   * un contour sur la case entière serait trompeur) ni à `plein`, propre à
-   * la heatmap "Calendrier des employés", hors scope de ces demandes. */
+   * (demi-journée) — pas à `partage`, qui a son propre contour par côté
+   * (`classeContourGauche`/`classeContourDroite`, voir plus bas), ni à
+   * `plein`, propre à la heatmap "Calendrier des employés", hors scope de
+   * ces demandes. */
   classeContour?: string;
   /** Variante demi-journée : couleur CSS pleine (ex. "var(--color-dji)") + côté posé. */
   moitie?: { couleur: string; cote: "gauche" | "droite" };
@@ -108,8 +108,17 @@ export interface PastilleJour {
    * (ex. une DJI qui tombe sur un jour par ailleurs pris en congé imposé) —
    * chaque moitié dans sa couleur pleine, contrairement à `moitie` qui n'a
    * qu'une seule couleur (l'autre moitié étant sa version alpha 45%).
+   * `classeContourGauche`/`classeContourDroite` (15/09/2026, demande
+   * explicite de Vincent — "il faudrait que la demie partie du congé soit
+   * cerclée de orange") : contour "en attente" posé uniquement sur le côté
+   * congé, jamais sur le côté DJI, qui n'a aucune notion de validation.
    */
-  partage?: { gauche: string; droite: string };
+  partage?: {
+    gauche: string;
+    droite: string;
+    classeContourGauche?: string;
+    classeContourDroite?: string;
+  };
   /**
    * Fond plein en couleur CSS calculée dynamiquement (28/08/2026, heatmap
    * "Calendrier des employés") — équivalent de `classeFond` mais pour une
@@ -398,15 +407,28 @@ function JourPastille({
   };
 
   if (pastille.partage) {
-    const { gauche, droite } = pastille.partage;
-    const gradient = `linear-gradient(to right, ${gauche} 50%, ${droite} 50%)`;
+    const { gauche, droite, classeContourGauche, classeContourDroite } = pastille.partage;
+    // Deux moitiés en éléments séparés plutôt qu'un dégradé CSS (15/09/2026)
+    // — nécessaire pour poser un contour "en attente" sur UN SEUL côté (voir
+    // `PastilleJour.partage`) : `overflow-hidden` sur le conteneur reprend
+    // l'arrondi de `forme` (pilule/cercle) et rogne les moitiés rectangulaires
+    // à sa forme, sans avoir à dupliquer l'arrondi sur chaque moitié.
     return (
       <span
-        className={`${base} text-white ${pastille.classeContour ?? ""}`}
-        style={{ background: gradient }}
+        className={`relative ${taille} ${forme} overflow-hidden text-white transition-[filter] duration-150 ${survol} ${curseur}`}
         {...evenements}
       >
-        {contenuJour("ring-white")}
+        <span
+          className={`absolute inset-y-0 left-0 w-1/2 ${classeContourGauche ?? ""}`}
+          style={{ background: gauche }}
+        />
+        <span
+          className={`absolute inset-y-0 right-0 w-1/2 ${classeContourDroite ?? ""}`}
+          style={{ background: droite }}
+        />
+        <span className={`relative z-10 flex h-full w-full items-center justify-center ${texte} font-bold`}>
+          {contenuJour("ring-white")}
+        </span>
       </span>
     );
   }
