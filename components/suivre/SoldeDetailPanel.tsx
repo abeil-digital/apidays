@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, TriangleAlert, X } from "lucide-react";
 import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { formatJours } from "@/lib/format";
 import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
@@ -61,8 +61,18 @@ const HOVER_BG_CPI = "hover:bg-[color-mix(in_srgb,var(--color-cpi)_15%,white)]";
 
 function codeAffichageMouvement(
   code: CodeSoldeDetail,
-  m: { type: "demande" | "ajustement" | "acquisition"; congeImposeId?: string | null },
+  m: {
+    type: "demande" | "ajustement" | "acquisition";
+    congeImposeId?: string | null;
+    estCpDirect?: boolean;
+  },
 ): TypeBadgeCode {
+  // "CP" plutôt que "CPA" (16/09/2026, cadrage CP/CPA) — un CP "Parcours B"
+  // posé directement sur la période suivante, affiché exceptionnellement
+  // dans le feed CPA (voir `fetchHistoriqueCpa`) : la pill reprend la
+  // couleur CP, pas CPA, pour ne pas laisser croire que c'est un vrai CPA —
+  // voir aussi l'icône d'avertissement à côté, plus bas dans ce fichier.
+  if (code === "CPA" && m.type === "demande" && m.estCpDirect) return "CP";
   return (code === "CP" || code === "CPA") && m.type === "demande" && m.congeImposeId
     ? "CPI"
     : code;
@@ -478,14 +488,26 @@ export function SoldeDetailPanel({
       ) : !historique ? (
         <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
       ) : (
-        // Hauteur plafonnée + scroll interne (20/08/2026) — un historique
-        // avec beaucoup d'entrées ne doit pas faire grandir la popin à
-        // l'infini. En `vh` plutôt qu'un px fixe (20/08/2026, demande
-        // explicite) — proportionnel à la hauteur d'écran plutôt qu'une
-        // valeur figée, pour rester cohérent sur petit comme grand écran.
-        // En-tête de colonnes ET colonne "Solde" `sticky` (le reste du
-        // tableau défile dessous/derrière) pour toujours garder le nom des
-        // colonnes et le solde courant visibles pendant le scroll.
+        <>
+        {code === "CP" && historique.cpSurPeriodeSuivante && (
+          // Mention "Parcours B" (16/09/2026, demande explicite : "on ajoutera
+          // une mention dans l'historique CP") — le CP posé sur la période
+          // suivante ne baisse pas le solde CP affiché ici, il faut donc dire
+          // où il est visible (feed CPA, voir `fetchHistoriqueCpa`/
+          // `codeAffichageMouvement`).
+          <div className="bg-status-warning-bg text-status-warning-fg mx-4 mt-3 flex items-start gap-2 rounded-control px-3 py-2.5 text-sm">
+            <TriangleAlert size={16} className="mt-0.5 shrink-0" />
+            <span>Un congé CP sur la période suivante — comptabilisé dans le solde CPA.</span>
+          </div>
+        )}
+        {/* Hauteur plafonnée + scroll interne (20/08/2026) — un historique
+            avec beaucoup d'entrées ne doit pas faire grandir la popin à
+            l'infini. En `vh` plutôt qu'un px fixe (20/08/2026, demande
+            explicite) — proportionnel à la hauteur d'écran plutôt qu'une
+            valeur figée, pour rester cohérent sur petit comme grand écran.
+            En-tête de colonnes ET colonne "Solde" `sticky` (le reste du
+            tableau défile dessous/derrière) pour toujours garder le nom des
+            colonnes et le solde courant visibles pendant le scroll. */}
         <div className="max-h-[45vh] overflow-x-auto overflow-y-auto">
           <table className="w-full text-left text-sm">
             <thead>
@@ -594,10 +616,31 @@ export function SoldeDetailPanel({
                 // le reste du panneau (en-tête, "Solde N-1", etc.).
                 const codeAffichage = codeAffichageMouvement(code, m);
                 const estCpi = codeAffichage === "CPI";
-                const classeBordureLigne = estCpi ? classeBordureTypeBadge("CPI") : classeBordure;
-                const classeTexteLigne = estCpi ? classeTexteTypeBadge("CPI") : classeTexte;
-                const hoverBgLigne = estCpi ? HOVER_BG_CPI : HOVER_BG_CONGE[code];
-                const varCouleurLigne = estCpi ? VAR_COULEUR_CPI : VAR_COULEUR[code];
+                // "Parcours B" (16/09/2026) — un CP direct affiché
+                // exceptionnellement dans le feed CPA reprend la couleur CP
+                // (pas CPA) sur toute la ligne, même logique que CPI juste
+                // au-dessus.
+                const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
+                const classeBordureLigne = estCpi
+                  ? classeBordureTypeBadge("CPI")
+                  : estCpDirectLigne
+                    ? classeBordureTypeBadge("CP")
+                    : classeBordure;
+                const classeTexteLigne = estCpi
+                  ? classeTexteTypeBadge("CPI")
+                  : estCpDirectLigne
+                    ? classeTexteTypeBadge("CP")
+                    : classeTexte;
+                const hoverBgLigne = estCpi
+                  ? HOVER_BG_CPI
+                  : estCpDirectLigne
+                    ? HOVER_BG_CONGE.CP
+                    : HOVER_BG_CONGE[code];
+                const varCouleurLigne = estCpi
+                  ? VAR_COULEUR_CPI
+                  : estCpDirectLigne
+                    ? VAR_COULEUR.CP
+                    : VAR_COULEUR[code];
                 const pill = (
                   <span
                     className={`flex w-fit items-center gap-1 px-2.5 py-1 font-semibold ${
@@ -620,6 +663,14 @@ export function SoldeDetailPanel({
                   >
                     {m.type === "acquisition" ? (
                       <Plus size={10} className="shrink-0 text-white" />
+                    ) : estCpDirectLigne ? (
+                      // Icône d'avertissement (16/09/2026, demande explicite
+                      // de Vincent) — signale qu'il s'agit exceptionnellement
+                      // d'un CP (Parcours B) et non d'un vrai CPA.
+                      <TriangleAlert
+                        size={11}
+                        className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
+                      />
                     ) : !carre ? (
                       <span
                         className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
@@ -683,17 +734,47 @@ export function SoldeDetailPanel({
               })}
               {enAttente.map((m) => {
                 const active = avecDetailConge && idSelectionne === m.id;
+                // Même distinction CPI/CP direct que la liste validée
+                // ci-dessus — une demande "Parcours B" peut tout à fait être
+                // encore en attente de décision.
+                const codeAffichage = codeAffichageMouvement(code, m);
+                const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
+                const classeBordureLigne =
+                  codeAffichage === "CPI"
+                    ? classeBordureTypeBadge("CPI")
+                    : estCpDirectLigne
+                      ? classeBordureTypeBadge("CP")
+                      : classeBordure;
+                const hoverBgLigne =
+                  codeAffichage === "CPI"
+                    ? HOVER_BG_CPI
+                    : estCpDirectLigne
+                      ? HOVER_BG_CONGE.CP
+                      : HOVER_BG_CONGE[code];
+                const varCouleurLigne =
+                  codeAffichage === "CPI"
+                    ? VAR_COULEUR_CPI
+                    : estCpDirectLigne
+                      ? VAR_COULEUR.CP
+                      : VAR_COULEUR[code];
                 const pill = (
                   <span
                     className={`flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
                       active
-                        ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
-                        : `bg-surface-app text-ink-900 ${classeBordure} ${HOVER_BG_CONGE[code]}`
+                        ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
+                        : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
                     }`}
                   >
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-warning-fg"}`}
-                    />
+                    {estCpDirectLigne ? (
+                      <TriangleAlert
+                        size={11}
+                        className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
+                      />
+                    ) : (
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-warning-fg"}`}
+                      />
+                    )}
                     {libelleEvenement(m)}
                   </span>
                 );
@@ -703,7 +784,7 @@ export function SoldeDetailPanel({
                     style={
                       active
                         ? {
-                            backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`,
+                            backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
                           }
                         : undefined
                     }
@@ -727,6 +808,7 @@ export function SoldeDetailPanel({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {!loading && historique && (

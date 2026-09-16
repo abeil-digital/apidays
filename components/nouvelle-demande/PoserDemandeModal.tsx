@@ -8,6 +8,7 @@ import { estJourOuvre } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
+import { useCapitalPeriodeFuture } from "@/hooks/useCapitalPeriodeFuture";
 import { useSoldeAnticipe } from "@/hooks/useSoldeAnticipe";
 import { useSoldes } from "@/hooks/useSoldes";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
@@ -118,6 +119,15 @@ function dateVersIsoLocal(date: Date): string {
   return `${annee}-${mois}-${jour}`;
 }
 
+// Jour calendaire suivant (UTC, comme le reste des calculs de période de ce
+// fichier) — Parcours B (16/09/2026), utilisé pour démarrer la 2ᵉ demande
+// d'une scission au lendemain du dernier jour de la 1ʳᵉ période.
+function jourSuivantIso(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * "Nouvelle demande" — popin de dépôt d'une demande (18/08/2026), remplace
  * l'ancien formulaire plein écran (`NouvelleDemandeForm`, supprimé le même
@@ -175,12 +185,19 @@ export function PoserDemandeModal({
   const calActuel = useCalendrier(anneeActuelle);
   const calSuivant = useCalendrier(anneeActuelle + 1);
 
-  // Fin de la période de référence CP en cours (10/09/2026, demande explicite
-  // de Vincent) — un CP "normal" (pas anticipé) doit être posé AVANT cette
-  // date : au-delà, ce n'est plus le même capital (celui de la période
-  // suivante), donc structurellement un CPA, pas un CP. `periodeReferenceCp`
-  // retombe sur l'année civile si `regleCp` n'est pas encore chargé (défaut
-  // sûr, pas de crash pendant le chargement).
+  // Fin de la période de référence CP en cours — sert de référence pour
+  // détecter une date au-delà (Parcours B, 16/09/2026) ou un chevauchement.
+  // `periodeReferenceCp` retombe sur l'année civile si `regleCp` n'est pas
+  // encore chargé (défaut sûr, pas de crash pendant le chargement).
+  //
+  // Historique (10/09/2026 → révisé le 16/09/2026) : un CP au-delà de cette
+  // date était auparavant purement et simplement BLOQUÉ (`jourIndisponible`
+  // forçait à passer par "Congés anticipés"). Ce garde-fou est retiré —
+  // poser un CP directement sur la période suivante est maintenant autorisé
+  // ("Parcours B" du cadrage CP/CPA, voir CONTEXTE.md) : la solvabilité est
+  // alors vérifiée contre le capital (projeté) de LA PÉRIODE CIBLE, pas
+  // celle en cours. "Congés anticipés" (Parcours A) garde son comportement
+  // exact d'avant, inchangé.
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const finPeriodeCp = periodeReferenceCp(regleCp).fin;
 
@@ -268,7 +285,6 @@ export function PoserDemandeModal({
 
   function jourIndisponible(date: Date): boolean {
     const iso = dateVersIsoLocal(date);
-    if (optionKey === "CP" && iso > finPeriodeCp) return true;
     return !estJourOuvre(iso, joursFeries) || jourDejaOccupe(iso);
   }
 
@@ -378,7 +394,35 @@ export function PoserDemandeModal({
   // (ex. une demande CP existante masquée par la nouvelle demande CP en
   // cours — signalé juste après par Vincent, `occupant` distingue
   // explicitement les deux).
+  // Parcours B (16/09/2026, cadrage CP/CPA — voir CONTEXTE.md) : une date CP
+  // au-delà de la période en cours est désormais autorisée. `periodeCpDebut`/
+  // `periodeCpFin` donnent la période de référence CP contenant respectivement
+  // la date de début et la date de fin choisies — si elles diffèrent, la
+  // demande est à cheval sur deux périodes (`cpACheval`) ; si elles sont
+  // identiques mais différentes de la période en cours (`finPeriodeCp`), la
+  // demande porte entièrement sur une période future (`cpPeriodeFuture`).
+  // Les deux ne concernent que l'option "CP" — "Congés anticipés" (Parcours
+  // A) garde son fonctionnement propre, inchangé.
+  const periodeCpDebut = debut
+    ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`))
+    : null;
+  const periodeCpFin = finPourCalcul
+    ? periodeReferenceCp(regleCp, new Date(`${finPourCalcul}T00:00:00Z`))
+    : periodeCpDebut;
+  const cpACheval =
+    optionKey === "CP" &&
+    periodeCpDebut !== null &&
+    periodeCpFin !== null &&
+    periodeCpDebut.fin !== periodeCpFin.fin;
+  const cpPeriodeFuture =
+    optionKey === "CP" && !cpACheval && periodeCpFin !== null && periodeCpFin.fin !== finPeriodeCp;
+
   let joursDemandes: number | null = null;
+  // Répartition jour par jour de part et d'autre de la bascule — uniquement
+  // renseigné/utile si `cpACheval` (voir bloc "Solde" plus bas, deux lignes
+  // distinctes plutôt qu'un seul total).
+  let joursAvantBascule = 0;
+  let joursApresBascule = 0;
   if (debut) {
     let total = 0;
     const curseurJours = new Date(`${debut}T00:00:00Z`);
@@ -393,8 +437,13 @@ export function PoserDemandeModal({
         const okApresMidi =
           !occupant(iso, "apres_midi") &&
           demiCouvertePeriode(iso, "apres_midi", debut, finPourCalcul, demiDebut, demiFin);
+        const jourPortion = (okMatin ? 0.5 : 0) + (okApresMidi ? 0.5 : 0);
         if (okMatin) total += 0.5;
         if (okApresMidi) total += 0.5;
+        if (cpACheval && periodeCpDebut) {
+          if (iso <= periodeCpDebut.fin) joursAvantBascule += jourPortion;
+          else joursApresBascule += jourPortion;
+        }
       }
       curseurJours.setUTCDate(curseurJours.getUTCDate() + 1);
     }
@@ -416,6 +465,14 @@ export function PoserDemandeModal({
     afficherAnticipe && debut ? finPourCalcul : null,
   );
 
+  // Capital projeté de la période future — Parcours B. `finPourCalcul` tombe
+  // toujours dans la période "cible" recherchée, que la demande soit
+  // entièrement future (`cpPeriodeFuture`) ou à cheval (`cpACheval`, la
+  // partie après la bascule contient forcément `finPourCalcul`).
+  const { capital: capitalFuture, loading: loadingCapitalFuture } = useCapitalPeriodeFuture(
+    (cpPeriodeFuture || cpACheval) && debut ? finPourCalcul : null,
+  );
+
   const soldeActuel = soldes
     ? optionKey === "CP"
       ? soldes.cp.valeurApresAttente
@@ -426,10 +483,25 @@ export function PoserDemandeModal({
           : null
     : null;
 
-  const baseSoldeApres = afficherAnticipe ? soldeAnticipe : soldeActuel;
+  const baseSoldeApres = afficherAnticipe
+    ? soldeAnticipe
+    : cpPeriodeFuture
+      ? capitalFuture
+      : soldeActuel;
   const soldeApres =
     baseSoldeApres !== null && joursDemandes !== null ? baseSoldeApres - joursDemandes : null;
-  const soldeNegatif = soldeApres !== null && soldeApres < 0;
+
+  // Chevauchement : deux soldes "après" distincts (un par période), le
+  // bouton reste désactivé si l'un des deux est négatif.
+  const soldeApresAvantBascule =
+    soldeActuel !== null ? soldeActuel - joursAvantBascule : null;
+  const soldeApresApresBascule =
+    capitalFuture !== null ? capitalFuture - joursApresBascule : null;
+
+  const soldeNegatif = cpACheval
+    ? (soldeApresAvantBascule !== null && soldeApresAvantBascule < 0) ||
+      (soldeApresApresBascule !== null && soldeApresApresBascule < 0)
+    : soldeApres !== null && soldeApres < 0;
 
   async function handleSubmit() {
     if (!debut) {
@@ -451,15 +523,46 @@ export function PoserDemandeModal({
     setError("");
     setEnvoiEnCours(true);
     try {
-      await ajouterDemande({
-        type: option.type,
-        isAnticipation: option.isAnticipation,
-        debut,
-        fin: finPourCalcul,
-        demiDebut,
-        demiFin,
-        note,
-      });
+      if (cpACheval && periodeCpDebut) {
+        // Demande à cheval sur deux périodes CP (Parcours B, 16/09/2026) :
+        // scindée en deux demandes distinctes dès la pose, chacune un CP
+        // simple entièrement contenu dans sa propre période — pas de
+        // répartition au prorata côté moteur de calcul, voir CONTEXTE.md.
+        // Le jour de bascule (dernier jour de la période de `debut`) ferme
+        // la 1ʳᵉ demande l'après-midi, le lendemain ouvre la 2ᵉ le matin —
+        // c'est toujours une journée pleine (jamais la borne choisie par
+        // l'utilisateur), donc jamais de demi-journée à répartir ici.
+        const finPortion1 = periodeCpDebut.fin;
+        const debutPortion2 = jourSuivantIso(finPortion1);
+        await ajouterDemande({
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut,
+          fin: finPortion1,
+          demiDebut,
+          demiFin: "apres_midi",
+          note,
+        });
+        await ajouterDemande({
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut: debutPortion2,
+          fin: finPourCalcul,
+          demiDebut: "matin",
+          demiFin,
+          note,
+        });
+      } else {
+        await ajouterDemande({
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut,
+          fin: finPourCalcul,
+          demiDebut,
+          demiFin,
+          note,
+        });
+      }
       onSuccess?.();
       onClose();
     } catch {
@@ -572,7 +675,6 @@ export function PoserDemandeModal({
                   value={debut}
                   onChange={handleDebutChange}
                   disabled={jourIndisponible}
-                  moisMax={optionKey === "CP" ? finPeriodeCp : undefined}
                   className="border-b-0!"
                   iconClassName="text-ink-900"
                   accentColor={`var(${VAR_COULEUR_TYPE[option.code]})`}
@@ -634,7 +736,6 @@ export function PoserDemandeModal({
                   value={fin}
                   onChange={handleFinChange}
                   disabled={jourIndisponiblePourFin}
-                  moisMax={optionKey === "CP" ? finPeriodeCp : undefined}
                   className="border-b-0!"
                   iconClassName="text-ink-900"
                   accentColor={`var(${VAR_COULEUR_TYPE[option.code]})`}
@@ -703,9 +804,96 @@ export function PoserDemandeModal({
         </div>
 
         <div>
-          <h3 className="text-ink-900 px-1 text-sm font-semibold">Solde</h3>
+          <div className="flex items-center gap-2 px-1">
+            <h3 className="text-ink-900 text-sm font-semibold">Solde{cpACheval ? "s" : ""}</h3>
+            {(cpACheval || cpPeriodeFuture) && (
+              // Label "stabilo" (16/09/2026, demande explicite de Vincent,
+              // sur la même ligne que "Solde(s)") — même convention que les
+              // mises en avant existantes (ex. compteur de décisions non
+              // vues d'Accueil) : signale que cette demande touche la
+              // période CP suivante, avant même de lire le détail des
+              // tableaux ci-dessous.
+              <span className="text-ink-900 inline-block rounded-sm bg-yellow-200 px-1 text-xs font-semibold">
+                CP en période de référence +1
+              </span>
+            )}
+          </div>
 
-          {soldeActuel !== null ? (
+          {cpACheval ? (
+            // Demande à cheval sur deux périodes CP (Parcours B) : deux
+            // TABLEAUX distincts, un par période (chacun son propre
+            // sous-titre "Période en cours"/"Période +1") — jamais
+            // mélangés, la consommation de l'un ne fait jamais baisser
+            // l'affichage de l'autre (voir cadrage CP/CPA, CONTEXTE.md).
+            <div className="mt-4 flex flex-col gap-5">
+              <div>
+                <p className="text-ink-500 px-1 text-xs font-semibold">
+                  Période en cours{" "}
+                  <span className="font-bold">(-{formatJours(joursAvantBascule)} j)</span>
+                </p>
+                <div className="mt-1 overflow-hidden rounded-xl">
+                  <div className="bg-surface-app flex items-center justify-between px-4 py-3">
+                    <span className="text-ink-500 text-sm">Solde</span>
+                    {pillSolde(soldeActuel, false, true)}
+                  </div>
+                  <div
+                    className="border-ink-300/60 flex items-center justify-between border-t px-4 py-3"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[option.code]}) 12%, white)`,
+                    }}
+                  >
+                    <span className="text-ink-500 text-sm font-semibold">Après la demande</span>
+                    {pillSolde(soldeApresAvantBascule)}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="text-ink-500 px-1 text-xs font-semibold">
+                  Période +1{" "}
+                  <span className="font-bold">(-{formatJours(joursApresBascule)} j)</span>
+                </p>
+                <div className="mt-1 overflow-hidden rounded-xl">
+                  <div className="bg-surface-app flex items-center justify-between px-4 py-3">
+                    <span className="text-ink-500 text-sm">Solde estimatif</span>
+                    {pillSolde(capitalFuture, loadingCapitalFuture, true)}
+                  </div>
+                  <div
+                    className="border-ink-300/60 flex items-center justify-between border-t px-4 py-3"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[option.code]}) 12%, white)`,
+                    }}
+                  >
+                    <span className="text-ink-500 text-sm font-semibold">Après la demande</span>
+                    {pillSolde(soldeApresApresBascule)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : cpPeriodeFuture ? (
+            // Demande entièrement sur la période +1 (Parcours B, pas de
+            // chevauchement) : un seul tableau, pas de "Période en cours"
+            // du tout.
+            <div className="mt-4">
+              <p className="text-ink-500 px-1 text-xs font-semibold">
+                Période +1 <span className="font-bold">(-{formatJours(joursDemandes ?? 0)} j)</span>
+              </p>
+              <div className="mt-1 overflow-hidden rounded-xl">
+                <div className="bg-surface-app flex items-center justify-between px-4 py-3">
+                  <span className="text-ink-500 text-sm">Solde estimatif</span>
+                  {pillSolde(capitalFuture, loadingCapitalFuture, true)}
+                </div>
+                <div
+                  className="border-ink-300/60 flex items-center justify-between border-t px-4 py-3"
+                  style={{
+                    backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR_TYPE[option.code]}) 12%, white)`,
+                  }}
+                >
+                  <span className="text-ink-500 text-sm font-semibold">Après la demande</span>
+                  {pillSolde(soldeApres)}
+                </div>
+              </div>
+            </div>
+          ) : soldeActuel !== null ? (
             <div className="mt-1 overflow-hidden rounded-xl">
               <div className="bg-surface-app flex items-center justify-between px-4 py-3">
                 <span className="text-ink-500 text-sm">Actuel</span>

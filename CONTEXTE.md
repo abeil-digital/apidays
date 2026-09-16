@@ -6531,6 +6531,132 @@ fonds plus sombres qu'aujourd'hui mais en travaillant la SATURATION plutôt que 
 garder les teintes distinctes entre elles (le piège de cette session), soit remettre en cause la
 contrainte elle-même (chiffre pas nécessairement blanc partout).
 
+## CP/CPA — Parcours B : poser un CP directement sur la période suivante (16/09/2026)
+
+Répond à l'item Backlog "Dépôt d'un CPA à cheval sur deux périodes CP" (11/09/2026, voir
+Backlog.md) : poser un CPA "31/12/2026 → 08/01/2027" donnait un solde à la date de la demande de 0j
+puis -6j après, parce qu'un CPA est virtuellement remis à 0 à chaque bascule — un dépôt à cheval sur
+deux périodes n'a pas de sens dans ce mécanisme. Plafonner le picker "Au" (premier réflexe) a été
+rejeté par Vincent ("pas logique, revient en arrière") — la vraie solution est celle documentée ici.
+
+**Fausses pistes explorées et écartées avant d'arriver au cadrage final** (plusieurs allers-retours,
+voir aussi le plan de session s'il est encore accessible) :
+- Reclassement dynamique d'un CPA en CP dès que sa date de bascule est passée, même hors du parcours
+  "Congés anticipés" — écarté, ce n'est pas ce qui a été demandé.
+- "Option B" au sens large façon V2 ("poser directement en CP N+1, check solvabilité CP+CPA combiné,
+  le type ne bouge jamais") — confondu un temps avec la V2 "formulaire unique CP/CPA à répartition
+  automatique" (voir Backlog, écartée explicitement par Vincent le 16/09/2026 : "on va mettre ça dans
+  une V2, on s'embarque pas dans un tunnel d'usine à gaz"). Ce n'est PAS ce qui a été implémenté.
+- Suppression de la notion de CPA — jamais envisagée par Vincent, corrigé plusieurs fois en cours de
+  cadrage ("on ne supprime pas les CPA putain").
+
+### Le modèle retenu — deux parcours qui coexistent
+
+**Parcours A — "Congés anticipés" (bouton existant, comportement INCHANGÉ)** :
+- Cas 1, CPA posé pour une date dans la période en cours (faute de CP disponible) : reste décompté
+  du solde CPA jusqu'à la vraie bascule, devient CP automatiquement ensuite. Déjà correct dans le
+  code existant (`resolverCapitalOuvertureCp`, refonte du 11/09/2026) — rien à changer.
+- Cas 2, CPA posé explicitement pour une date dans la période suivante : reste CPA indéfiniment, pas
+  de reclassement automatique. Le "bug" perçu un temps (CPA jamais requalifié après sa propre
+  bascule) n'en est plus un dès lors que le Parcours B existe — ce chemin devient secondaire, cas
+  volontairement laissé tel quel.
+
+**Parcours B — nouveau, sous le bouton "Congés Payés" existant (pas de nouveau bouton)** :
+- Le garde-fou qui bloquait toute date au-delà de la période de référence en cours
+  (`PoserDemandeModal.tsx`/`PoserCongePourCollaborateurModal.tsx`) est retiré, uniquement pour
+  l'option "CP" — "Congés anticipés" garde son fonctionnement propre.
+- **Contrôle de solvabilité à la pose** : vérifié contre le capital de la PÉRIODE CIBLE elle-même
+  (projeté puisqu'elle n'a pas commencé), jamais contre le CP de la période en cours, jamais un
+  bucket CPA générique.
+- **Demande à cheval sur deux périodes** : scindée en DEUX demandes distinctes dès la soumission
+  (une par période), chacune un CP simple entièrement contenu dans sa période — pas de répartition
+  au prorata dans le moteur de consommation (`sommeJours` inchangé). Sur le calendrier, les deux
+  pastilles adjacentes de même couleur se fondent déjà visuellement (mécanisme de fusion existant de
+  `MiniCalendrier`).
+- Le CP créé pour la portion "période suivante" est un CP normal (`is_anticipation: false`) dès le
+  départ — jamais reclassé, puisque jamais mal typé.
+
+**Ce qui ne bouge pas** : le moteur de calcul existant pour tout ce qui touche le Parcours A
+(`resolverCapitalOuvertureCp`, `fetchHistoriqueCpa` pour la partie CPA "classique"), les ~17 endroits
+qui affichent/colorent une demande CP vs CPA, le schéma de base de données (aucune migration).
+
+### UI de la fenêtre de demande (`PoserDemandeModal.tsx`)
+
+Au-dessus des tableaux de solde, quand l'option "CP" et une date au-delà de la période en cours sont
+sélectionnées :
+- Label "stabilo" fond jaune "CP en période de référence +1", sur la même ligne que le titre
+  "Solde(s)".
+- Cas à cheval : deux tableaux distincts, chacun avec son propre sous-titre — "Période en cours
+  (**-Nj**)" (Solde / Après la demande) et "Période +1 (**-Nj**)" (Solde estimatif / Après la
+  demande) — le nombre de jours en gras dans le sous-titre.
+- Cas entièrement futur (pas de chevauchement) : un seul tableau, "Période +1 (-Nj)".
+- `joursAvantBascule`/`joursApresBascule` répartissent les jours demandés de part et d'autre de la
+  bascule pour alimenter ces deux totaux.
+
+### `fetchCapitalPeriodeFuture` — capital projeté de la période cible
+
+Nouvelle fonction (`lib/data/soldes.repository.ts`), alimentée par un nouveau hook
+`useCapitalPeriodeFuture.ts`. **Corrigée une première fois le 16/09/2026 en cours de session** —
+première version fausse : elle bornait l'accrual progressif sur la date de la demande elle-même
+(`dateReference`), donnant un "Solde estimatif" de 0j dès que la date posée tombait tôt dans la
+période cible (moins d'un mois entier écoulé depuis SON propre début). Vincent a corrigé : "on
+évalue ici les jours de CP qui seront disponibles à cette date : c'est à dire les CPA transférés au
+moment de la bascule + le reliquat de CP non consommés de la période précédente".
+
+Formule retenue — reprend EXACTEMENT celle de `resolverCapitalOuvertureCp` (report + transfert CPA +
+bonus d'ancienneté), mais évaluée à AUJOURD'HUI plutôt qu'à la fin de la période en cours (celle-ci
+n'est pas terminée, contrairement à l'invariant que `resolverCapitalOuvertureCp` suppose pour toute
+période qu'elle résout — impossible de l'appeler directement sur une période future) :
+- **Report** = `max(0, capital de la période en cours − consommé validé de la période en cours)`,
+  capital de la période en cours obtenu via `resolverCapitalOuvertureCp` (même fonction que pour
+  l'Accueil, pas de logique dupliquée pour cette partie).
+- **Transfert CPA** = même mécanique que le CPA affiché en direct (`fetchSoldeAnticipe("CPA",
+  aujourd'hui)`) — accrual progressif de la période en cours, ancré sur aujourd'hui, PAS l'accrual
+  complet de la période puisqu'elle n'est pas terminée.
+- **Bonus d'ancienneté** évalué au début de la période cible.
+- Le tout moins TOUS les CP déjà posés sur la période cible (`is_anticipation` true OU false — les
+  deux parcours puisent dans le même capital).
+
+### Affichage dans "Suivre mon solde" — réutilisation du feed CPA
+
+Décision de Vincent (après une proposition de panneau "Solde N+1" navigable, rejetée — "je pense que
+le trick ici est de passer le CP prévisionnel dans le compteur CPA. En gros on met la pill CP
+exceptionnellement dans CPA avec un picto attention à coté") : pas de nouvel écran, le CP "Parcours
+B" est injecté dans le feed CPA existant (`fetchHistoriqueCpa`) plutôt que d'exposer un solde par
+période navigable.
+
+- `fetchHistoriqueCpa` fusionne désormais deux requêtes — les vrais CPA (`is_anticipation=true`) et
+  les CP directs datés après la fin de la période en cours (`is_anticipation=false`) — marqués
+  `__cpDirect`/`estCpDirect` pour l'affichage.
+- Label affiché : **"CPN+1"** (pas "CP" ni "CPA", pour ne pas les confondre avec un vrai CP de la
+  période en cours ni un vrai CPA) — `libelleMouvementCpa`.
+- `SoldeDetailPanel.tsx` : icône `TriangleAlert` (convention warning déjà utilisée ailleurs dans
+  l'app) affichée à côté de la pill pour ces lignes, dans le tableau des mouvements validés ET dans
+  "en attente".
+- **Cohérence Accueil ↔ feed** (bug trouvé et corrigé le 16/09/2026, signalé par Vincent : "j'ai
+  l'impression que le solde CPA de la home n'a pas été mis à jour... décalage entre 20j et 19j") :
+  `fetchSoldes` (solde CPA affiché sur l'Accueil) ne décomptait que les vrais CPA, jamais les CP
+  "Parcours B" — désormais aligné, la même fenêtre de CP direct (`is_anticipation=false`, daté après
+  la fin de la période en cours) est soustraite du solde CPA de l'Accueil.
+- **Mention dans le feed CP normal** (`fetchHistoriqueCp`, champ `cpSurPeriodeSuivante`, booléen
+  calculé côté serveur) : bandeau `TriangleAlert` affiché en haut du feed CP quand un CP a été posé
+  sur la période suivante — texte final (après un premier essai plus long, raccourci par Vincent) :
+  **"Un congé CP sur la période suivante — comptabilisé dans le solde CPA."**
+
+### Fichiers modifiés (non commités à la fin de la session du 16/09/2026)
+
+`components/nouvelle-demande/PoserDemandeModal.tsx`,
+`components/suivre/PoserCongePourCollaborateurModal.tsx` (scission à cheval, sans le détail de
+prévisualisation), `lib/data/soldes.repository.ts` (`fetchCapitalPeriodeFuture`, extension de
+`fetchHistoriqueCpa`/`fetchHistoriqueCp`/`fetchSoldes`), `hooks/useCapitalPeriodeFuture.ts`
+(nouveau), `lib/types.ts` (`estCpDirect`, `cpSurPeriodeSuivante`), `components/suivre/
+SoldeDetailPanel.tsx` (label CPN+1, icône warning, mention dans le feed CP).
+
+**Reste à faire** : vérifier en conditions réelles la vraie bascule de période sur un CP "Parcours
+B" (Vincent teste en direct à la fin de cette session) — s'assurer qu'il est bien compté comme un CP
+normal de la nouvelle période, sans traitement spécial nécessaire puisqu'il n'a jamais été marqué
+`is_anticipation`. Committer une fois la bascule vérifiée.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

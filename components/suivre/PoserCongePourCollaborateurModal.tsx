@@ -7,9 +7,11 @@ import { formatJours } from "@/lib/format";
 import { estJourOuvre } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
+import { useReglesConges } from "@/hooks/useReglesConges";
 import { useSoldes } from "@/hooks/useSoldes";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { poserCongePourCollaborateur } from "@/lib/data/exportsPaie.repository";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { FieldLabel } from "@/components/ui/FieldLabel";
@@ -95,6 +97,15 @@ function dateVersIsoLocal(date: Date): string {
   return `${annee}-${mois}-${jour}`;
 }
 
+// Jour calendaire suivant (UTC) — Parcours B (16/09/2026), même helper que
+// `PoserDemandeModal.tsx`, utilisé pour démarrer la 2ᵉ demande d'une
+// scission au lendemain du dernier jour de la 1ʳᵉ période.
+function jourSuivantIso(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /**
  * "Poser pour un collaborateur" (Transmissions paie, 24/08/2026) — Delphine crée
  * une demande déjà validée au nom d'un collaborateur (oubli du salarié,
@@ -121,6 +132,8 @@ export function PoserCongePourCollaborateurModal({
   onSuccess?: () => void;
 }) {
   const { utilisateurs, loading: loadingUtilisateurs } = useUtilisateursAdmin();
+  const { reglesAcquisition } = useReglesConges();
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const [collaborateurId, setCollaborateurId] = useState("");
 
   const actifs = utilisateurs.filter((u) => u.statut === "actif");
@@ -257,6 +270,22 @@ export function PoserCongePourCollaborateurModal({
   }
 
   const finPourCalcul = fin && fin >= debut ? fin : debut;
+  // Parcours B (16/09/2026) — voir `PoserDemandeModal.tsx` pour le détail :
+  // une demande CP à cheval sur deux périodes de référence est scindée en
+  // deux demandes distinctes à la pose (pas de blocage de date ici, cette
+  // popin n'en a jamais eu, mais le même trou de répartition existe si on
+  // laisse une seule demande traverser la bascule).
+  const periodeCpDebut = debut
+    ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`))
+    : null;
+  const periodeCpFin = finPourCalcul
+    ? periodeReferenceCp(regleCp, new Date(`${finPourCalcul}T00:00:00Z`))
+    : periodeCpDebut;
+  const cpACheval =
+    optionKey === "CP" &&
+    periodeCpDebut !== null &&
+    periodeCpFin !== null &&
+    periodeCpDebut.fin !== periodeCpFin.fin;
   let joursDemandes: number | null = null;
   if (debut) {
     let total = 0;
@@ -305,16 +334,41 @@ export function PoserCongePourCollaborateurModal({
     setError("");
     setEnvoiEnCours(true);
     try {
-      await poserCongePourCollaborateur({
-        utilisateurId: collaborateurId,
-        type: option.type,
-        isAnticipation: option.isAnticipation,
-        debut,
-        fin: finPourCalcul,
-        demiDebut,
-        demiFin,
-        note,
-      });
+      if (cpACheval && periodeCpDebut) {
+        const finPortion1 = periodeCpDebut.fin;
+        const debutPortion2 = jourSuivantIso(finPortion1);
+        await poserCongePourCollaborateur({
+          utilisateurId: collaborateurId,
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut,
+          fin: finPortion1,
+          demiDebut,
+          demiFin: "apres_midi",
+          note,
+        });
+        await poserCongePourCollaborateur({
+          utilisateurId: collaborateurId,
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut: debutPortion2,
+          fin: finPourCalcul,
+          demiDebut: "matin",
+          demiFin,
+          note,
+        });
+      } else {
+        await poserCongePourCollaborateur({
+          utilisateurId: collaborateurId,
+          type: option.type,
+          isAnticipation: option.isAnticipation,
+          debut,
+          fin: finPourCalcul,
+          demiDebut,
+          demiFin,
+          note,
+        });
+      }
       onSuccess?.();
       onClose();
     } catch {

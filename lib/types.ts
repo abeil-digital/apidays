@@ -113,6 +113,15 @@ export interface MouvementSolde {
   // solde, mais doit rester visible dans l'historique plutôt que disparaître
   // sans laisser de trace.
   annule?: boolean;
+  // Un CP "Parcours B" (16/09/2026, cadrage CP/CPA — un CP posé directement
+  // sur la période suivante plutôt qu'en "Congés anticipés") apparaît
+  // exceptionnellement dans le feed CPA (`fetchHistoriqueCpa`) — c'est la
+  // seule période où son solde a un sens tant qu'elle n'est pas ouverte.
+  // Ce flag distingue cette ligne d'un vrai CPA (`is_anticipation=true`) :
+  // pill affichée en couleur/libellé "CP" plutôt que "CPA", avec une icône
+  // d'avertissement (voir `SoldeDetailPanel.tsx`). Jamais vrai pour un
+  // mouvement du feed CP (`fetchHistoriqueCp`), uniquement pour CPA.
+  estCpDirect?: boolean;
 }
 
 export interface MoisHistoriqueSolde {
@@ -152,6 +161,12 @@ export interface HistoriqueSolde {
   // Optionnel : seul CP (`fetchHistoriqueCp`) le renseigne ; à défaut l'UI
   // retombe sur la ligne "Solde N-1"/"Solde initial" unique existante.
   decompositionDepart?: { libelle: string; jours: number }[];
+  // Mention "vous avez aussi un CP posé sur la période suivante" (16/09/2026,
+  // cadrage CP/CPA) — vrai quand au moins une demande CP "Parcours B" existe
+  // sur la période N+1 ; pointe vers le feed CPA, où ces lignes apparaissent
+  // exceptionnellement. Optionnel : seul CP (`fetchHistoriqueCp`) le
+  // renseigne.
+  cpSurPeriodeSuivante?: boolean;
 }
 
 export interface AjustementSoldeInput {

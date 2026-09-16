@@ -1188,32 +1188,26 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       debut: debutCpa,
       fin: decalerPeriode(periodeEnCours, 50).fin,
     };
-    const consommeCpa = await sommeJours(
-      supabase,
-      id,
-      "CP",
-      ["validee"],
-      true,
-      periodeConsoCpaSansPlafond,
-      aujourdhui,
-    );
-    const enAttenteCpa = await sommeJours(
-      supabase,
-      id,
-      "CP",
-      ["en_attente"],
-      true,
-      periodeConsoCpaSansPlafond,
-      aujourdhui,
-    );
-    const transmisCpa = await sommeTransmis(
-      supabase,
-      id,
-      "CP",
-      true,
-      periodeConsoCpaSansPlafond,
-      aujourdhui,
-    );
+    // Fenêtre "Parcours B" (16/09/2026) — un CP direct posé sur la période
+    // suivante (`is_anticipation=false`, jamais avant `periodeEnCours.fin`,
+    // même filtre que `fetchHistoriqueCpa`) puise dans ce même capital CPA :
+    // décompté ici pour que le solde CPA affiché sur l'Accueil reste
+    // cohérent avec le total du feed "Suivre mon solde" CPA.
+    const debutCpDirectFuture = new Date(periodeEnCours.fin);
+    debutCpDirectFuture.setUTCDate(debutCpDirectFuture.getUTCDate() + 1);
+    const periodeCpDirectFuture: Periode = {
+      debut: debutCpDirectFuture,
+      fin: periodeConsoCpaSansPlafond.fin,
+    };
+    const consommeCpa =
+      (await sommeJours(supabase, id, "CP", ["validee"], true, periodeConsoCpaSansPlafond, aujourdhui)) +
+      (await sommeJours(supabase, id, "CP", ["validee"], false, periodeCpDirectFuture, aujourdhui));
+    const enAttenteCpa =
+      (await sommeJours(supabase, id, "CP", ["en_attente"], true, periodeConsoCpaSansPlafond, aujourdhui)) +
+      (await sommeJours(supabase, id, "CP", ["en_attente"], false, periodeCpDirectFuture, aujourdhui));
+    const transmisCpa =
+      (await sommeTransmis(supabase, id, "CP", true, periodeConsoCpaSansPlafond, aujourdhui)) +
+      (await sommeTransmis(supabase, id, "CP", false, periodeCpDirectFuture, aujourdhui));
     const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
     const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
     const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
@@ -1438,6 +1432,167 @@ export async function fetchSoldeAnticipe(
     reference,
   );
   return Math.max(0, accrualCpa - consommeCpa);
+}
+
+/**
+ * Capital projeté d'une période CP future — "Parcours B" (16/09/2026, poser
+ * un CP directement pour une date au-delà de la période de référence en
+ * cours, plutôt que de passer par "Congés anticipés"). `dateReference` ne
+ * sert qu'à repérer LA PÉRIODE ciblée (`periodeContenant`) — le calcul lui-
+ * même s'ancre sur aujourd'hui, pas sur la date de la demande (correctif du
+ * 16/09/2026 : la première version utilisait `dateReference` comme borne de
+ * l'accrual progressif, donnant un solde estimatif erroné — souvent 0 —
+ * dès qu'elle tombait tôt dans la période cible ; ce n'est pas ce qui a été
+ * demandé, voir CONTEXTE.md).
+ *
+ * Reprend EXACTEMENT la formule de `resolverCapitalOuvertureCp` (report +
+ * transfert CPA + bonus d'ancienneté) pour la période EN COURS → CIBLE,
+ * mais évaluée "aujourd'hui" plutôt qu'à la fin de la période en cours —
+ * cette dernière n'est pas encore terminée, contrairement à l'invariant que
+ * `resolverCapitalOuvertureCp` suppose pour toute période qu'elle résout
+ * (voir son commentaire "periodePrecedente est garantie close ici"), donc
+ * impossible de l'appeler directement sur la période cible : le "transfert
+ * CPA" y est ré-calculé ici avec la même mécanique que le CPA affiché en
+ * direct (`fetchSoldeAnticipe("CPA", aujourd'hui)`, accrual progressif borné
+ * à aujourd'hui) plutôt que l'accrual complet de la période.
+ *
+ * La consommation retranchée à la fin couvre TOUS les CP déjà posés sur la
+ * période cible — `is_anticipation` true (Congés anticipés, Parcours A) OU
+ * false (CP direct, Parcours B) — puisque les deux parcours puisent dans le
+ * même capital.
+ */
+export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<number> {
+  const supabase = createClient();
+  const id = await getUtilisateurIdCourant(supabase);
+
+  const [
+    { data: utilisateurRow, error: erreurUtilisateur },
+    reglesAcquisition,
+    reglesAnciennete,
+    historiqueTaux,
+    soldeInitial,
+    { dateDebutUtilisation },
+  ] = await Promise.all([
+    supabase
+      .from("utilisateurs")
+      .select("date_entree, anciennete_date_reference, taux_activite, date_fin_contrat")
+      .eq("id", id)
+      .single(),
+    fetchReglesAcquisition(),
+    fetchReglesAnciennete(),
+    fetchHistoriqueTauxActivite(id),
+    fetchSoldeInitial(id),
+    fetchEntrepriseCourante(),
+  ]);
+  if (erreurUtilisateur || !utilisateurRow) {
+    throw new Error("Impossible de charger le profil pour le calcul du solde anticipé.");
+  }
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
+  const dateReferenceAnciennete: string =
+    utilisateurRow.anciennete_date_reference ?? utilisateurRow.date_entree;
+  const moisLimite: string | null = utilisateurRow.date_fin_contrat
+    ? utilisateurRow.date_fin_contrat.slice(0, 7)
+    : null;
+  const aujourdhui = new Date(`${dateIso(getAujourdhui())}T00:00:00Z`);
+
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  if (!regleCP) return 0;
+
+  const periodeEnCours = periodeContenant(
+    aujourdhui,
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+  const periodeCible = periodeContenant(
+    new Date(`${dateReference}T00:00:00Z`),
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+
+  const ctxCapital = {
+    regleCP,
+    historiqueTaux,
+    tauxActuel,
+    moisLimite,
+    soldeInitial,
+    reglesAnciennete,
+    dateReferenceAnciennete,
+    aujourdhui,
+    dateEntree: utilisateurRow.date_entree,
+    dateDebutUtilisation,
+  };
+
+  // Report : reliquat de CP non consommé de la période en cours, tel qu'il
+  // se présente aujourd'hui (même formule que le "report" interne de
+  // `resolverCapitalOuvertureCp`, appliquée ici une période plus loin).
+  let capitalCourant = 0;
+  try {
+    capitalCourant = (
+      await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital)
+    ).total;
+  } catch (erreur) {
+    if (!(erreur instanceof SoldeIndeterminableError)) throw erreur;
+  }
+  const consommeCourant = await sommeJours(
+    supabase,
+    id,
+    "CP",
+    ["validee"],
+    false,
+    periodeEnCours,
+    aujourdhui,
+  );
+  const report = regleCP.reportAutorise ? Math.max(0, capitalCourant - consommeCourant) : 0;
+
+  // Transfert CPA : accrual progressif de la période en cours tel qu'acquis
+  // à date — même mécanique que `fetchSoldeAnticipe("CPA", aujourd'hui)`.
+  const { debut: debutCpa, base: baseCpa } = resolverPointDepartAccrual(
+    periodeEnCours,
+    soldeInitial,
+    "cpa",
+  );
+  const moisEcoulesCpa = moisEntiersEcoules(debutCpa, aujourdhui);
+  const typeCpIdPourGel = await getTypeAbsenceId(supabase, "CP");
+  const accrualCpa =
+    baseCpa +
+    (await accrualMensuelSommeAvecGel(
+      supabase,
+      id,
+      typeCpIdPourGel,
+      true,
+      regleCP.tauxAcquisitionMensuel,
+      historiqueTaux,
+      tauxActuel,
+      debutCpa,
+      moisEcoulesCpa,
+      moisLimite,
+    ));
+  const consommeCpa = await sommeJours(
+    supabase,
+    id,
+    "CP",
+    ["validee"],
+    true,
+    periodeEnCours,
+    aujourdhui,
+  );
+  const transfertCpa = Math.max(0, accrualCpa - consommeCpa);
+
+  const bonus = bonusAnciennete(reglesAnciennete, ansAnciennete(dateReferenceAnciennete, periodeCible.debut));
+
+  // `null` = pas de filtre `is_anticipation` (contrairement au calcul du
+  // transfert ci-dessus) : compte toute demande CP déjà posée sur la
+  // période cible, quel que soit le parcours par lequel elle est passée.
+  const consommeCible = await sommeJours(
+    supabase,
+    id,
+    "CP",
+    ["validee"],
+    null,
+    periodeCible,
+    aujourdhui,
+  );
+  return Math.max(0, report + transfertCpa + bonus - consommeCible);
 }
 
 /**
@@ -1787,6 +1942,22 @@ export async function fetchHistoriqueCp(
       };
     });
 
+  // Mention "CP posé sur la période suivante" (16/09/2026, cadrage CP/CPA) —
+  // simple test d'existence, pas de calcul : un CP "Parcours B" (validé ou en
+  // attente) daté au-delà de la période en cours pointe l'utilisateur vers
+  // le feed CPA, seul endroit où cette demande est réellement affichée (voir
+  // `fetchHistoriqueCpa`).
+  const { data: cpDirectSuivantRows } = await supabase
+    .from("demandes_conges")
+    .select("statut")
+    .eq("utilisateur_id", utilisateurId)
+    .eq("type_absence_id", typeAbsenceId)
+    .eq("is_anticipation", false)
+    .gt("date_debut", dateIso(periodeEnCours.fin));
+  const cpSurPeriodeSuivante = (cpDirectSuivantRows ?? []).some(
+    (d) => d.statut !== "refusé" && d.statut !== "annulé",
+  );
+
   return {
     periodeDebut: dateIso(periodeEnCours.debut),
     periodeFin: dateIso(periodeEnCours.fin),
@@ -1798,6 +1969,7 @@ export async function fetchHistoriqueCp(
     soldeTheorique: cumulTheorique,
     mouvementsTheorique,
     decompositionDepart,
+    cpSurPeriodeSuivante,
   };
 }
 
@@ -2189,6 +2361,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   const [
     lignesTransmises,
     { data: demandesRowsBrutes, error: erreurDemandes },
+    { data: demandesCpDirectBrutes, error: erreurCpDirect },
     { data: ajustementsRows, error: erreurAjustements },
   ] = await Promise.all([
     // Réel = transmis ET pris en compte (11/09/2026, corrige un bug réel
@@ -2215,6 +2388,20 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .eq("is_anticipation", true)
       .gte("date_debut", dateIso(periodeConsoCpaSansPlafond.debut))
       .lte("date_debut", dateIso(periodeConsoCpaSansPlafond.fin)),
+    // "Parcours B" (16/09/2026, cadrage CP/CPA) — un CP direct posé sur la
+    // période SUIVANTE (`is_anticipation=false`, jamais dans la période en
+    // cours : ça, c'est déjà le feed CP normal) apparaît exceptionnellement
+    // ici, seul endroit où son solde a un sens tant que sa période n'est pas
+    // ouverte. `estCpDirect` (voir plus bas) le distingue d'un vrai CPA à
+    // l'affichage (pill "CP" + icône d'avertissement, `SoldeDetailPanel.tsx`).
+    supabase
+      .from("demandes_conges")
+      .select("id, date_debut, date_fin, nb_demi_journees, statut, date_decision, conge_impose_id")
+      .eq("utilisateur_id", utilisateurId)
+      .eq("type_absence_id", typeAbsenceId)
+      .eq("is_anticipation", false)
+      .gt("date_debut", dateIso(periodeEnCours.fin))
+      .lte("date_debut", dateIso(periodeConsoCpaSansPlafond.fin)),
     supabase
       .from("ajustements_solde")
       .select("id, delta_jours, motif, created_at, auteur:utilisateurs!auteur_id(prenom, nom)")
@@ -2225,16 +2412,22 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       .lte("created_at", `${dateIso(aujourdhui)}T23:59:59.999Z`),
   ]);
 
-  if (erreurDemandes || erreurAjustements) {
+  if (erreurDemandes || erreurCpDirect || erreurAjustements) {
     throw new Error("Impossible de charger l'historique du solde.");
   }
 
+  // Fusion CPA + CP direct (Parcours B) — traités identiquement pour le
+  // calcul (statut résolu, tri par date), distingués seulement à l'affichage
+  // via `estCpDirect`.
+  const demandesRowsToutes = [
+    ...(demandesRowsBrutes ?? []),
+    ...(demandesCpDirectBrutes ?? []).map((d) => ({ ...d, __cpDirect: true as const })),
+  ];
+
   // Statut résolu à `aujourdhui` — voir `fetchHistoriqueCp`, même correctif.
-  const statutsResolus = await resoudreStatutsADate(supabase, demandesRowsBrutes ?? [], aujourdhui);
-  const demandesRows = (demandesRowsBrutes ?? []).filter(
-    (d) => statutsResolus.get(d.id) === "validee",
-  );
-  const enAttenteRows = (demandesRowsBrutes ?? []).filter(
+  const statutsResolus = await resoudreStatutsADate(supabase, demandesRowsToutes, aujourdhui);
+  const demandesRows = demandesRowsToutes.filter((d) => statutsResolus.get(d.id) === "validee");
+  const enAttenteRows = demandesRowsToutes.filter(
     (d) => statutsResolus.get(d.id) === "en_attente",
   );
 
@@ -2248,6 +2441,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
     motif?: string;
     auteurNom?: string;
     congeImposeId?: string | null;
+    estCpDirect?: boolean;
   }
 
   // "CPI" plutôt que "CPA" pour une consommation anticipée auto-générée par
@@ -2255,13 +2449,17 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   // CP) — désormais atteignable ici depuis que la fenêtre de consommation
   // CPA n'a plus de plafond haut (un CPI daté au-delà de la période en cours
   // devient une demande `is_anticipation = true`, voir
-  // `genererDemandesCongeImpose` dans `calendrier.repository.ts`).
+  // `genererDemandesCongeImpose` dans `calendrier.repository.ts`). "CP"
+  // plutôt que "CPA"/"CPI" (16/09/2026) pour un CP "Parcours B" posé
+  // directement sur la période suivante (`__cpDirect`) — jamais généré par
+  // un congé imposé, les deux préfixes ne se recoupent pas.
   function libelleMouvementCpa(d: {
     date_debut: string;
     date_fin: string;
     conge_impose_id?: string | null;
+    __cpDirect?: boolean;
   }): string {
-    const prefixe = d.conge_impose_id ? "CPI" : "CPA";
+    const prefixe = d.__cpDirect ? "CPN+1" : d.conge_impose_id ? "CPI" : "CPA";
     return `${prefixe} : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`;
   }
 
@@ -2366,6 +2564,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
       libelle: libelleMouvementCpa(d),
       jours: -(Number(d.nb_demi_journees) / 2),
       congeImposeId: d.conge_impose_id,
+      estCpDirect: (d as { __cpDirect?: boolean }).__cpDirect ?? false,
     })),
     ...(ajustementsRows ?? []).map((a): MouvementBrut => {
       const auteur = Array.isArray(a.auteur) ? a.auteur[0] : a.auteur;
@@ -2396,9 +2595,10 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
         id: d.id,
         type: "demande",
         date: d.date_debut,
-        libelle: `CPA : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`,
+        libelle: libelleMouvementCpa(d),
         jours: -(Number(d.nb_demi_journees) / 2),
         soldeApres: cumulTheorique,
+        estCpDirect: (d as { __cpDirect?: boolean }).__cpDirect ?? false,
       };
     });
 
