@@ -401,11 +401,13 @@ export function DashboardPage() {
       const couleurContour =
         demande.statut === "en attente" ? "var(--color-status-warning-fg)" : undefined;
       const couleurDemande = `var(${VAR_COULEUR_TYPE[code]})`;
-      // Chiffre en encre foncée (15/09/2026, essai demandé par Vincent — "tente
-      // juste sur l'accueil") : tous les types de demande passent le seuil de
-      // contraste WCAG en noir sur leurs fonds pastel actuels, sauf CPI (déjà
-      // trop sombre pour du noir, reste en blanc, défaut de `texteSombre`).
-      const texteSombre = code !== "CPI";
+      // Chiffre en blanc (16/09/2026, demande explicite de Vincent — "on va
+      // garder les couleurs actuelles (les originales), on va juste passer
+      // les typos des jours posés en blanc") : revient sur l'essai en encre
+      // foncée du 15/09/2026 (`texteSombre`), abandonné après la session du
+      // 16/09 sur les fonds pâles par type — `texteSombre` retiré, le blanc
+      // redevient le défaut (même comportement que `CalendrierCollaborateur.tsx`,
+      // qui n'a jamais eu cet essai).
 
       const dji = anneeVisiblePourCommuns(annee)
         ? cal.djImposees.find((d) => d.date === iso)
@@ -414,7 +416,7 @@ export function DashboardPage() {
       if (dji?.demiJournee === "apres_midi") apresMidiCouvert = false;
 
       if (matinCouvert && apresMidiCouvert) {
-        return { classeFond: classeFondTypeBadge(code), couleurContour, texteSombre };
+        return { classeFond: classeFondTypeBadge(code), couleurContour };
       }
 
       if (dji) {
@@ -431,7 +433,6 @@ export function DashboardPage() {
       return {
         moitie: { couleur: couleurDemande, cote: matinCouvert ? "gauche" : "droite" },
         couleurContour,
-        texteSombre,
       };
     }
     return communDuJour(iso);
