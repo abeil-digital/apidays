@@ -136,15 +136,34 @@ function CardSoldeCollaborateur({
   selection,
   onSelect,
   prisEnCompte,
+  autres,
 }: {
   c: ComparaisonSoldeCollaborateur;
   periode: { debut: string; fin: string };
   selection: SelectionMouvement | null;
   onSelect: (utilisateurId: string, code: TypeBadgeCode) => void;
   prisEnCompte: boolean;
+  // Congés "sans solde" transmis sur cet export (CSS/CE/RECUP/EVT_FAM,
+  // 17/09/2026, PTP Vincent) : d'abord affichés en pastilles sous le
+  // tableau, puis demande explicite de traiter ces lignes "identique à
+  // CP/RTT/CPA" — fusionnées dans le même tableau (`lignesTableau`
+  // ci-dessous), simplement absentes quand aucune n'est présente sur cet
+  // export (jamais de ligne à 0j, contrairement à CP/RTT/CPA qui restent
+  // visibles même à 0).
+  autres: { code: TypeBadgeCode; jours: number }[];
 }) {
   const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
   const libelleMoisEnCours = nomMois(periode.debut);
+
+  // Lignes CP/RTT/CPA + congés "sans solde" présents sur cet export
+  // (17/09/2026, PTP Vincent — "on va les traiter comme des lignes de
+  // tableau identique à CP/RTT/CPA") : même gabarit de ligne pour tous,
+  // `moisPrecedent` toujours à 0 pour les seconds (pas de capital reporté
+  // d'un mois sur l'autre pour un CE/RECUP/EVT_FAM/CSS).
+  const lignesTableau = [
+    ...TYPES_SOLDE.map((code) => ({ code, categorie: categorieSolde(c, code) })),
+    ...autres.map(({ code, jours }) => ({ code, categorie: { moisPrecedent: 0, moisEnCours: jours } })),
+  ];
 
   return (
     <div className="flex w-fit flex-col">
@@ -168,8 +187,7 @@ function CardSoldeCollaborateur({
           <span className="text-ink-900 text-base font-semibold">{c.utilisateur.nom}</span>
         </div>
         <div className="flex-1">
-          {TYPES_SOLDE.map((code) => {
-            const categorie = categorieSolde(c, code);
+          {lignesTableau.map(({ code, categorie }) => {
             const active = selection?.utilisateurId === c.utilisateur.id && selection.code === code;
             return (
               <button
@@ -302,21 +320,29 @@ function PanelJoursMouvement({
   } | null>(null);
   const libelleMoisPrecedent = `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
 
+  // `code` couvre désormais aussi CSS/CE/RECUP/EVT_FAM (17/09/2026, PTP
+  // Vincent — "on va les traiter comme des lignes de tableau identique à
+  // CP/RTT/CPA") : ces types n'ont ni acquisition ni ajustement possible
+  // (pas de notion de capital), `estTypeSolde` désactive les deux blocs
+  // ci-dessous pour eux plutôt que de laisser un résidu d'acquisition
+  // incohérent (le calcul par résidu suppose `mouvementTotal` = accrual −
+  // consommé, faux pour un type qui n'accrue jamais).
+  const estTypeSolde = (TYPES_SOLDE as readonly string[]).includes(code);
+
   const sommeJoursLignes = lignes.reduce((somme, { ligne }) => somme - ligne.joursInclus, 0);
-  const acquisition = Math.round((mouvementTotal - sommeJoursLignes) * 100) / 100;
+  const acquisition = estTypeSolde ? Math.round((mouvementTotal - sommeJoursLignes) * 100) / 100 : 0;
 
   // Ajustements manuels (27/08/2026, "Ajuster le solde") — chargés à part
   // (pas dans `lignes`, propres à `export_paie_lignes`) : refetchés au
   // montage et après chaque création, pour rester à jour sans dépendre du
   // refresh (souvent différé) des données parent.
-  // `code` est toujours CP/RTT/CPA ici (voir `TYPES_SOLDE`) — TypeBadgeCode
-  // couvre aussi CSS/CE/etc., hors du périmètre de l'ajustement manuel.
   const codeAjustement = code as "CP" | "RTT" | "CPA";
 
   const [ajustements, setAjustements] = useState<
     { id: string; deltaJours: number; motif: string; date: string; auteurNom: string }[]
   >([]);
   useEffect(() => {
+    if (!estTypeSolde) return;
     let cancelled = false;
     fetchAjustementsSolde(utilisateurId, codeAjustement, periode).then((data) => {
       if (!cancelled) setAjustements(data);
@@ -324,7 +350,7 @@ function PanelJoursMouvement({
     return () => {
       cancelled = true;
     };
-  }, [utilisateurId, codeAjustement, periode]);
+  }, [utilisateurId, codeAjustement, periode, estTypeSolde]);
 
   const [formulaireOuvert, setFormulaireOuvert] = useState(false);
   const [sens, setSens] = useState<"ajouter" | "retirer">("ajouter");
@@ -499,7 +525,7 @@ function PanelJoursMouvement({
           </tbody>
         </table>
         {aucunEvenement && <EmptyRow text="Aucun jour ni acquisition sur cette période." />}
-        {!formulaireOuvert ? (
+        {!estTypeSolde ? null : !formulaireOuvert ? (
           <button
             type="button"
             onClick={() => setFormulaireOuvert(true)}
@@ -731,10 +757,42 @@ export function VerifierFichesPaiePage2({
   const comparaisonSelection = selectionMouvement
     ? (comparaisons.find((c) => c.utilisateur.id === selectionMouvement.utilisateurId) ?? null)
     : null;
-  const categorieSelection =
-    comparaisonSelection && selectionMouvement
-      ? categorieSolde(comparaisonSelection, selectionMouvement.code)
-      : null;
+
+  // Congés "sans solde" (CSS/CE/RECUP/EVT_FAM) par collaborateur, sur CET
+  // export — jamais dans `TYPES_SOLDE`, donc absents de `comparaisons`
+  // (17/09/2026, PTP Vincent).
+  const autresParUtilisateur = new Map(
+    collaborateurs.map((c) => {
+      const totaux = new Map<TypeBadgeCode, number>();
+      for (const { ligne, demande } of c.lignes) {
+        const code = typeBadgeDeDemande(demande);
+        if ((TYPES_SOLDE as readonly string[]).includes(code)) continue;
+        totaux.set(code, (totaux.get(code) ?? 0) + ligne.joursInclus);
+      }
+      const autres = Array.from(totaux, ([code, jours]) => ({ code, jours })).filter(
+        ({ jours }) => jours !== 0,
+      );
+      return [c.utilisateur.id, autres] as const;
+    }),
+  );
+
+  // Un code hors `TYPES_SOLDE` (ligne CE/RECUP/EVT_FAM/CSS, cliquée comme
+  // n'importe quelle autre) n'a pas d'entrée dans `comparaisons`
+  // (`categorieSolde` ne le connaît pas) — reconstruit depuis
+  // `autresParUtilisateur` à la place, même forme `{moisPrecedent, moisEnCours}`.
+  const categorieSelection = selectionMouvement
+    ? (TYPES_SOLDE as readonly string[]).includes(selectionMouvement.code)
+      ? comparaisonSelection
+        ? categorieSolde(comparaisonSelection, selectionMouvement.code)
+        : null
+      : {
+          moisPrecedent: 0,
+          moisEnCours:
+            (autresParUtilisateur.get(selectionMouvement.utilisateurId) ?? []).find(
+              (a) => a.code === selectionMouvement.code,
+            )?.jours ?? 0,
+        }
+    : null;
   const lignesSelection = selectionMouvement
     ? (collaborateurs
         .find((c) => c.utilisateur.id === selectionMouvement.utilisateurId)
@@ -772,6 +830,7 @@ export function VerifierFichesPaiePage2({
                     )
                   }
                   prisEnCompte={prisEnCompte}
+                  autres={autresParUtilisateur.get(c.utilisateur.id) ?? []}
                 />
               ))}
             </div>

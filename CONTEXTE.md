@@ -6729,6 +6729,61 @@ bascule de période" passé en résolu ; nouvel item "Parcours transmission paie
 d'optimisation", alimenté au fil de l'eau par Vincent pendant ce test, 12 points à date — voir
 Backlog.md pour le détail, hors scope de cette session).
 
+## Parcours transmission paie — 2 points traités tout de suite (17/09/2026)
+
+Deux des points remontés pendant la session ci-dessus, traités dans la foulée plutôt que laissés en
+Backlog :
+
+**(1) Congés exceptionnels (CE/RECUP/EVT_FAM/CSS) intégrés au récap "Vérifier les fiches de
+paie".** Ces types "sans solde" (pas de card CP/RTT/CPA dédiée, aucune notion de capital) étaient
+déjà visibles sur "Quels congés transmettre" (bandeau sticky, pastilles `TypeBadge`, masquées quand
+nulles — voir "couleurs des congés CP" du 15/09/2026) mais totalement absents de "Vérifier les
+fiches de paie 2" : les lignes existaient bien dans `collaborateurs[i].lignes`
+(`fetchCheckFichesPaie`), simplement jamais itérées hors des 3 types de `TYPES_SOLDE`. Premier essai
+en pastilles `TypeBadge` sous la card, écarté dans la foulée par Vincent — "on va les traiter comme
+des lignes de tableau identique à CP/RTT/CPA". Version retenue : `lignesTableau` dans
+`CardSoldeCollaborateur` fusionne `TYPES_SOLDE` et les types "autres" présents (`autresParUtilisateur`,
+calculé une fois pour toute la page) dans une seule liste rendue par le même gabarit de ligne —
+`moisPrecedent` toujours à 0 pour un type "autre" (pas de capital reporté d'un mois sur l'autre),
+`moisEnCours` = jours transmis, cliquable comme les autres pour ouvrir `PanelJoursMouvement`.
+Masquées quand absentes (pas de ligne "0j" permanente, contrairement à CP/RTT/CPA). Deux garde-fous
+ajoutés dans `PanelJoursMouvement` pour ces types (`estTypeSolde`) : pas de ligne "Acquisition"
+résiduelle (le calcul par résidu suppose un accrual qui n'existe pas pour ces types — l'appliquer
+tel quel aurait affiché une acquisition fantôme du double de la valeur réelle) et pas de bouton
+"Ajuster le solde" (aucune notion de capital à ajuster). `categorieSelection`/`comparaisonSelection`
+du composant parent étendus en conséquence (un code hors `TYPES_SOLDE` n'a pas d'entrée dans
+`comparaisons`, reconstruit depuis `autresParUtilisateur`).
+
+**(2) Suppression de "Vérifier les fiches de paie 3"** (`VerifierFichesPaiePage3.tsx`) — le proto
+d'itération du 11/09/2026 (voir Backlog "Validation des fiches de paie — chantier consolidé"),
+jamais finalisé, redondant avec la 2 une fois celle-ci complétée du point (1) ci-dessus. Onglet et
+import retirés de `TransmissionsPaiePage.tsx` (`Onglet` n'a plus que `"transmettre"`/`"verifier2"`),
+libellé de l'onglet restant simplifié en "Vérifier les fiches de paie" (le "2" n'avait plus lieu
+d'être une fois seul survivant) — `id` interne `"verifier2"` laissé tel quel pour limiter le diff.
+Fichier supprimé.
+
+**Investigation en passant — DJI + RECUP le 17/09 comptée en jour entier chez "lambda Collaborateur"
+(pas un bug).** Vincent a remarqué une RECUP du 17/09 (`nb_demi_journees: 2`, jour entier) alors
+qu'une DJI matin existe ce jour-là sur acme — elle aurait dû ne compter que 0,5j (après-midi).
+Vérifié : `calculerNbDemiJournees` (serveur, `demandes.repository.ts:163`) exclut bien
+correctement une demi-journée DJI du décompte pour toute NOUVELLE demande — mais ce calcul n'est
+fait qu'à la création, jamais recalculé après coup si la config calendrier change ensuite (la RECUP
+a été créée le 15/09, la DJI probablement configurée/reconfigurée après, pendant les tests). Le
+mécanisme "Conflit d'agenda" (`CalendrierPage.tsx:389`, croise chaque CPI/DJI paramétré avec les
+demandes personnelles actives qui chevauchent la même demi-journée) aurait dû faire remonter ce
+chevauchement précis pour arbitrage — volontairement **transparence, pas blocage** ("Delphine
+arbitre manuellement", décision du 22/08/2026) : rien n'ajuste automatiquement le `nb_demi_journees`
+d'une demande déjà existante. Conclusion : cas de test resté sans arbitrage manuel, pas un bug de
+calcul ni un trou de validation à corriger.
+
+### Fichiers modifiés
+
+`components/suivre/VerifierFichesPaiePage2.tsx` (pastilles congés exceptionnels),
+`components/suivre/TransmissionsPaiePage.tsx` (retrait de l'onglet "verifier3"),
+`components/suivre/VerifierFichesPaiePage3.tsx` (supprimé). `Backlog.md` mis à jour (point (1) de
+"Parcours transmission paie" passé en résolu, référence à `VerifierFichesPaiePage3.tsx` dans
+l'item "Validation des fiches de paie" corrigée).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

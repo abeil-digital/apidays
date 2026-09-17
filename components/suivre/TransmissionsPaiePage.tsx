@@ -48,11 +48,9 @@ import { useEntreprise } from "@/hooks/useEntreprise";
 // explicite — "on va rechallenger cette fonctionnalité écart, donc on ne la
 // garde pas telle quelle") : le contrôle ligne par ligne "Écart"/"OK"
 // qu'elle portait est remis à plat, pas juste caché. Seule
-// `VerifierFichesPaiePage2` reste, point de départ de la refonte.
 import { VerifierFichesPaiePage2 } from "@/components/suivre/VerifierFichesPaiePage2";
-import { VerifierFichesPaiePage3 } from "@/components/suivre/VerifierFichesPaiePage3";
 
-type Onglet = "transmettre" | "verifier2" | "verifier3";
+type Onglet = "transmettre" | "verifier2";
 
 // Codes de type suivis par le récap (25/08/2026) — mêmes 7 codes que le
 // sélecteur "Poser pour un collaborateur", CPA dérivé de CP + isAnticipation.
@@ -952,8 +950,11 @@ export function TransmissionsPaiePage({
 
   const onglets: { id: Onglet; label: string }[] = [
     { id: "transmettre", label: "Quels congés transmettre" },
-    { id: "verifier2", label: "Vérifier les fiches de paie 2" },
-    { id: "verifier3", label: "Vérifier les fiches de paie 3" },
+    // "2" retiré du libellé (17/09/2026, suppression de "Vérifier les
+    // fiches de paie 3" — le proto d'itération, voir CONTEXTE.md) : plus
+    // besoin de désambiguïser, un seul écran "Vérifier" reste. `id` interne
+    // ("verifier2") laissé tel quel pour ne pas toucher au reste du fichier.
+    { id: "verifier2", label: "Vérifier les fiches de paie" },
   ];
 
   return (
@@ -1007,7 +1008,7 @@ export function TransmissionsPaiePage({
           même principe que "Transmis le" côté "Quels congés transmettre",
           pour que le statut de validation reste visible sans avoir à
           rouvrir le détail de chaque collaborateur. */}
-      {(onglet === "verifier2" || onglet === "verifier3") &&
+      {onglet === "verifier2" &&
         exportPaie?.prisEnCompte &&
         exportPaie.prisEnCompteLe && (
           <div className="bg-status-success-bg text-status-success-fg rounded-control mx-1 px-4 py-2.5 text-sm font-semibold">
@@ -1024,14 +1025,6 @@ export function TransmissionsPaiePage({
       )}
       {onglet === "verifier2" && (
         <VerifierFichesPaiePage2
-          exportId={exportPaie?.id ?? null}
-          prisEnCompte={exportPaie?.prisEnCompte ?? false}
-          onValide={rafraichirExport}
-          periode={periode}
-        />
-      )}
-      {onglet === "verifier3" && (
-        <VerifierFichesPaiePage3
           exportId={exportPaie?.id ?? null}
           prisEnCompte={exportPaie?.prisEnCompte ?? false}
           onValide={rafraichirExport}
