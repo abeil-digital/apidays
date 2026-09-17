@@ -5,6 +5,7 @@ import { Check, Plus, SquareSplitHorizontal } from "lucide-react";
 import {
   fetchCheckFichesPaie,
   fetchComparaisonSoldes,
+  fetchLignesTransmissionParDemande,
   validerExportPaie,
   type CheckFichePaieCollaborateur,
   type ComparaisonSoldeCollaborateur,
@@ -268,6 +269,30 @@ function PanelJoursMouvement({
   onAjustementCree: () => void;
 }) {
   const [demandeOuverte, setDemandeOuverte] = useState<DemandeEquipe | null>(null);
+  // Historique COMPLET de transmission de la demande ouverte, toutes
+  // périodes confondues (17/09/2026, PTP Vincent — "la popin de détail
+  // n'affiche pas le même historique selon l'écran d'ouverture") — `lignes`
+  // ci-dessous ne contient que la ligne de CET export (`fetchCheckFichesPaie`
+  // filtre sur `export_paie_id`), donc pour une demande à cheval déjà
+  // transmise sur un export précédent (ex. CPA 30/10 → 02/11, testé sur
+  // l'export de novembre), le feed de `DetailCongePanel` manquait la
+  // transmission/le "pris en compte" du mois précédent — visibles, eux,
+  // depuis "Quels congés transmettre" (`TransmissionsPaiePage.tsx`), qui
+  // utilise déjà `fetchLignesTransmissionParDemande` (toutes périodes) pour
+  // la même raison.
+  const [lignesTransmissionCompletes, setLignesTransmissionCompletes] = useState<
+    LigneExportPaie[]
+  >([]);
+  useEffect(() => {
+    if (!demandeOuverte) return;
+    let cancelled = false;
+    fetchLignesTransmissionParDemande([demandeOuverte.id]).then((data) => {
+      if (!cancelled) setLignesTransmissionCompletes(data[demandeOuverte.id] ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [demandeOuverte]);
   const [ajustementOuvert, setAjustementOuvert] = useState<{
     id: string;
     deltaJours: number;
@@ -552,9 +577,7 @@ function PanelJoursMouvement({
                 selection={demandeOuverte}
                 onClose={() => setDemandeOuverte(null)}
                 pleineLargeur
-                lignesTransmission={lignes
-                  .filter(({ demande }) => demande.id === demandeOuverte.id)
-                  .map(({ ligne }) => ligne)}
+                lignesTransmission={lignesTransmissionCompletes}
               />
             </div>
           )}

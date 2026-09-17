@@ -6643,19 +6643,91 @@ période navigable.
   sur la période suivante — texte final (après un premier essai plus long, raccourci par Vincent) :
   **"Un congé CP sur la période suivante — comptabilisé dans le solde CPA."**
 
-### Fichiers modifiés (non commités à la fin de la session du 16/09/2026)
+### Fichiers modifiés
 
 `components/nouvelle-demande/PoserDemandeModal.tsx`,
 `components/suivre/PoserCongePourCollaborateurModal.tsx` (scission à cheval, sans le détail de
 prévisualisation), `lib/data/soldes.repository.ts` (`fetchCapitalPeriodeFuture`, extension de
 `fetchHistoriqueCpa`/`fetchHistoriqueCp`/`fetchSoldes`), `hooks/useCapitalPeriodeFuture.ts`
 (nouveau), `lib/types.ts` (`estCpDirect`, `cpSurPeriodeSuivante`), `components/suivre/
-SoldeDetailPanel.tsx` (label CPN+1, icône warning, mention dans le feed CP).
+SoldeDetailPanel.tsx` (label CPN+1, icône warning, mention dans le feed CP). **Commité le
+16/09/2026** (`192b0bb`, poussé sur `origin`).
 
-**Reste à faire** : vérifier en conditions réelles la vraie bascule de période sur un CP "Parcours
-B" (Vincent teste en direct à la fin de cette session) — s'assurer qu'il est bien compté comme un CP
-normal de la nouvelle période, sans traitement spécial nécessaire puisqu'il n'a jamais été marqué
-`is_anticipation`. Committer une fois la bascule vérifiée.
+## Vérification de la bascule de période + audit de fond (17/09/2026)
+
+Suite du chantier Parcours B ci-dessus : Vincent a rejoué en conditions réelles le passage paie de
+septembre à décembre 2026 puis la vraie bascule de la période de référence (acme, année civile), sur
+son propre profil (Vincent Mayol/acme).
+
+### Nettoyage préalable des données de test
+
+Avant de rejouer le test, la base acme portait des résidus d'essais précédents (exports déjà
+transmis, accruals mensuels gelés) qui auraient faussé un nouveau passage propre. Nettoyage effectué
+en base (accès `service_role`, scope strictement filtré `entreprise_id = acme`, confirmé avant
+exécution) : 24 lignes `export_paie_lignes`, 4 `exports_paie`, 18 `acquisitions_gelees` supprimées.
+`soldes_periode` était déjà vide pour acme (aucune période encore réellement figée). Aucune
+`demande_conges` touchée — seul l'historique "transmis en paie"/"accrual gelé" repart à zéro. Aucun
+impact sur Abeil ni un autre tenant (filtre `entreprise_id` systématique, vérifié avant chaque
+requête).
+
+### Bug trouvé et corrigé en testant : historique de transmission incomplet selon l'écran d'ouverture
+
+Sur un CPA à cheval sur deux mois (30/10 → 02/11), la popin de détail d'un congé
+(`DetailCongePanel`) affichait un historique différent selon l'écran d'où elle s'ouvre : depuis
+"Quels congés transmettre" (`TransmissionsPaiePage.tsx`), le feed montrait bien les 2 transmissions
+(octobre + novembre) et le "pris en compte" d'octobre ; depuis "Vérifier les fiches de paie 2" et
+"3", seule la transmission d'octobre apparaissait — ni son "pris en compte", ni la transmission de
+novembre.
+
+**Cause** : `VerifierFichesPaiePage2.tsx`/`VerifierFichesPaiePage3.tsx` construisaient les
+`lignesTransmission` passées à `DetailCongePanel` à partir de `fetchCheckFichesPaie(exportId)`, qui
+ne renvoie QUE les lignes de l'export en cours de vérification (`.eq("export_paie_id", exportId)`)
+— exactement la même limitation que documentée dans l'item Backlog "Gestion des demandes à cheval"
+(29/08/2026), qui n'avait été corrigée qu'à moitié à l'époque ("lignesTransmission jamais passé" →
+corrigé en le passant, mais scopé au mauvais périmètre). `TransmissionsPaiePage.tsx`, lui, utilisait
+déjà la bonne fonction (`fetchLignesTransmissionParDemande`, toutes périodes confondues) — pas
+touché.
+
+**Correctif** : dans les deux fichiers, ajout d'un fetch dédié de l'historique complet
+(`fetchLignesTransmissionParDemande([demandeId])`) déclenché à l'ouverture de la popin de détail,
+passé à `DetailCongePanel` à la place des lignes scopées à l'export — la liste "Jours"/événements du
+mois affichée dans la card elle-même (hors popin) reste, elle, intentionnellement scopée à l'export
+courant (contexte de vérification de CE mois précis).
+
+### Audit de fond du moteur de calcul et du parcours transmission paie
+
+Passe de relecture ciblée sur `soldes.repository.ts`/`exportsPaie.repository.ts`, en particulier
+tout ce qui touche au Parcours B (code le plus récent) :
+- **CP/CPA reste une distinction purement d'affichage** partout dans l'app (13 fichiers audités) :
+  `demande.type` est toujours "CP" en base, jamais littéralement "CPA" — le badge est dérivé
+  (`type==="CP" && isAnticipation`), appliqué de façon strictement identique partout. Aucun risque
+  qu'un CP "Parcours B" (toujours `is_anticipation:false`) soit mal classé quelque part.
+- `genererExportPaie` transmet un CPA en paie exactement comme un CP normal — **comportement voulu**
+  (`TYPES_TRANSMISSIBLES_PAIE` filtre sur le type d'absence réel, pas sur `is_anticipation`) : la
+  transmission paie porte sur une vraie absence physique, pas sur la source de financement interne.
+- Pas de double-comptage possible à la bascule entre `fetchHistoriqueCp`/`fetchHistoriqueCpa` pour
+  une demande Parcours B à cheval : une fois la période "+1" devenue la période en cours, elle sort
+  automatiquement de la fenêtre "CP direct future" de `fetchHistoriqueCpa` (bornée à `>
+  periodeEnCours.fin`) et rentre dans le feed CP normal — passage de relais propre.
+- `geleAcquisitionsPourExport` (gel mensuel CP/RTT à la validation d'un export) n'a aucun point de
+  contact avec le Parcours B, logique indépendante.
+
+Aucun autre bug trouvé au-delà de celui ci-dessus.
+
+### Résultat du test réel (acme, profil Vincent Mayol)
+
+Export rejoué de septembre à décembre 2026, puis bascule de la période de référence (année civile,
+01/01/2027) : **reliquat de 3,5j de CP** reporté, **solde CPA de 21j** transféré, et le CP "Parcours
+B" posé à cheval sur 2026/2027 **bien pris en compte en deux temps**, sans doublon ni oubli sur
+aucune des deux périodes. Chantier "Parcours B" considéré solide côté moteur de calcul.
+
+### Fichiers modifiés (17/09/2026)
+
+`components/suivre/VerifierFichesPaiePage2.tsx`, `components/suivre/VerifierFichesPaiePage3.tsx`
+(fix historique de transmission incomplet, voir ci-dessus). `Backlog.md` (item "Vérification de la
+bascule de période" passé en résolu ; nouvel item "Parcours transmission paie — points
+d'optimisation", alimenté au fil de l'eau par Vincent pendant ce test, 12 points à date — voir
+Backlog.md pour le détail, hors scope de cette session).
 
 ## À faire
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   fetchCheckFichesPaie,
   fetchComparaisonSoldes,
+  fetchLignesTransmissionParDemande,
   validerExportPaie,
   type CheckFichePaieCollaborateur,
   type ComparaisonSoldeCollaborateur,
@@ -83,6 +84,7 @@ function SectionType({
   periode,
   demandes,
   lignesParDemande,
+  lignesTransmissionCompletes,
   selectedId,
   onDateClick,
   onCloseDetail,
@@ -92,6 +94,7 @@ function SectionType({
   periode: { debut: string; fin: string };
   demandes: Demande[];
   lignesParDemande: Record<string, LigneExportPaie[]>;
+  lignesTransmissionCompletes: LigneExportPaie[];
   selectedId: string | null;
   onDateClick: (id: string) => void;
   onCloseDetail: () => void;
@@ -112,7 +115,6 @@ function SectionType({
   // collaborateur) : `demandes` est déjà filtré sur ce type par l'appelant,
   // donc cette recherche scope naturellement le détail au bon type.
   const selection = demandes.find((d) => d.id === selectedId) ?? null;
-  const lignesTransmissionSelection = selectedId ? (lignesParDemande[selectedId] ?? []) : [];
 
   return (
     // Card par type de congé (14/09/2026, demande explicite de Vincent —
@@ -191,7 +193,7 @@ function SectionType({
               key={selection.id}
               selection={selection}
               onClose={onCloseDetail}
-              lignesTransmission={lignesTransmissionSelection}
+              lignesTransmission={lignesTransmissionCompletes}
             />
           )}
         </div>
@@ -204,6 +206,7 @@ function CardCollaborateurV3({
   c,
   periode,
   lignes,
+  lignesTransmissionCompletes,
   selectedId,
   onDateClick,
   onCloseDetail,
@@ -211,6 +214,7 @@ function CardCollaborateurV3({
   c: ComparaisonSoldeCollaborateur;
   periode: { debut: string; fin: string };
   lignes: { ligne: LigneExportPaie; demande: DemandeEquipe }[];
+  lignesTransmissionCompletes: LigneExportPaie[];
   selectedId: string | null;
   onDateClick: (id: string) => void;
   onCloseDetail: () => void;
@@ -240,6 +244,7 @@ function CardCollaborateurV3({
               .filter(({ demande }) => typeBadgeDeDemande(demande) === code)
               .map(({ demande }) => demande)}
             lignesParDemande={lignesParDemande}
+            lignesTransmissionCompletes={lignesTransmissionCompletes}
             selectedId={selectedId}
             onDateClick={onDateClick}
             onCloseDetail={onCloseDetail}
@@ -285,6 +290,26 @@ export function VerifierFichesPaiePage3({
   const [loading, setLoading] = useState(true);
   const [selectionId, setSelectionId] = useState<string | null>(null);
   const [enCoursValidation, setEnCoursValidation] = useState(false);
+  // Historique COMPLET de transmission de la demande sélectionnée, toutes
+  // périodes confondues (17/09/2026, PTP Vincent — voir la même note dans
+  // `VerifierFichesPaiePage2.tsx`) : `lignesParDemande`/`collaborateurs` ne
+  // portent que les lignes de CET export (`fetchCheckFichesPaie`), donc pour
+  // une demande à cheval déjà transmise sur un export précédent, le feed de
+  // `DetailCongePanel` manquait la transmission/le "pris en compte" du mois
+  // précédent.
+  const [lignesTransmissionCompletes, setLignesTransmissionCompletes] = useState<
+    LigneExportPaie[]
+  >([]);
+  useEffect(() => {
+    if (!selectionId) return;
+    let cancelled = false;
+    fetchLignesTransmissionParDemande([selectionId]).then((data) => {
+      if (!cancelled) setLignesTransmissionCompletes(data[selectionId] ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -351,6 +376,7 @@ export function VerifierFichesPaiePage3({
               c={c}
               periode={periode}
               lignes={lignesParUtilisateur.get(c.utilisateur.id) ?? []}
+              lignesTransmissionCompletes={lignesTransmissionCompletes}
               selectedId={selectionId}
               onDateClick={setSelectionId}
               onCloseDetail={() => setSelectionId(null)}
