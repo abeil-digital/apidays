@@ -155,65 +155,11 @@ export function HistoriquePage() {
         className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
         style={{ animationDelay: "90ms" }}
       >
-        <div className="bg-surface-card w-full min-w-0">
-          <div className="bg-mint-tint/50 flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
-            <div className="flex flex-wrap items-end gap-2">
-              <SelectFiltrePill
-                value={typeFiltre}
-                onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
-              >
-                <option value="tous">Tous les types</option>
-                {TYPES_FILTRABLES.map((code) => (
-                  <option key={code} value={code}>
-                    {LABEL_LONG[code]}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              <SelectFiltrePill
-                value={filtre}
-                onChange={(e) => setFiltre(e.target.value as Filtre)}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
-              >
-                {FILTRES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              <SelectFiltrePill
-                value={periodeFiltre}
-                onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
-                classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                classeChevron="text-slate"
-              >
-                {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              {periodeFiltre === "personnalisee" && (
-                <>
-                  <InputFiltrePill
-                    type="date"
-                    aria-label="Du"
-                    value={debutPerso}
-                    onChange={(e) => setDebutPerso(e.target.value)}
-                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                  />
-                  <InputFiltrePill
-                    type="date"
-                    aria-label="Au"
-                    value={finPerso}
-                    onChange={(e) => setFinPerso(e.target.value)}
-                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
-                  />
-                </>
-              )}
-            </div>
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          {/* "Exporter" sorti de la barre de filtres, fond transparent
+              au-dessus (17/09/2026, même principe que "Suivre les
+              demandes", PTP Vincent). */}
+          <div className="flex justify-end px-1 print:hidden">
             <button
               onClick={() => window.print()}
               className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
@@ -223,15 +169,88 @@ export function HistoriquePage() {
             </button>
           </div>
 
-          <div className="border-slate/30 border-t">
-            <HistoriqueTable
-              demandes={filtered}
-              emptyText="Aucune demande sur cette période."
-              onDateClick={setSelectionId}
-              selectedId={selectionId}
-              typeCourt
-              lignesTransmissionParDemande={lignesTransmissionParId}
-            />
+          <div className="bg-surface-card w-full min-w-0">
+            <div className="bg-mint-tint/50 flex flex-wrap items-start gap-3 px-4 py-3 print:hidden">
+              <div className="flex flex-wrap items-start gap-2">
+                <SelectFiltrePill
+                  value={typeFiltre}
+                  onChange={(e) => setTypeFiltre(e.target.value as TypeBadgeCode | "tous")}
+                  classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                  classeChevron="text-slate"
+                >
+                  <option value="tous">Tous les types</option>
+                  {TYPES_FILTRABLES.map((code) => (
+                    <option key={code} value={code}>
+                      {LABEL_LONG[code]}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                <SelectFiltrePill
+                  value={filtre}
+                  onChange={(e) => setFiltre(e.target.value as Filtre)}
+                  classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                  classeChevron="text-slate"
+                >
+                  {FILTRES.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                {/* Sélecteur de période + "Du"/"Au" regroupés dans leur
+                    propre colonne (17/09/2026, même principe que "Suivre
+                    les demandes") — la ligne de dates apparaît directement
+                    sous le sélecteur, jamais scindée par un retour à la
+                    ligne intempestif, avec des libellés "Du"/"Au" visibles. */}
+                <div className="flex flex-col items-start gap-2">
+                  <SelectFiltrePill
+                    value={periodeFiltre}
+                    onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+                    classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                    classeChevron="text-slate"
+                  >
+                    {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(
+                      ([v, label]) => (
+                        <option key={v} value={v}>
+                          {label}
+                        </option>
+                      ),
+                    )}
+                  </SelectFiltrePill>
+                  {periodeFiltre === "personnalisee" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-500 text-xs font-semibold">Du</span>
+                      <InputFiltrePill
+                        type="date"
+                        aria-label="Du"
+                        value={debutPerso}
+                        onChange={(e) => setDebutPerso(e.target.value)}
+                        classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                      />
+                      <span className="text-ink-500 text-xs font-semibold">Au</span>
+                      <InputFiltrePill
+                        type="date"
+                        aria-label="Au"
+                        value={finPerso}
+                        onChange={(e) => setFinPerso(e.target.value)}
+                        classeBordure="border border-slate text-slate font-semibold hover:bg-slate/10 focus-visible:ring-slate"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-slate/30 border-t">
+              <HistoriqueTable
+                demandes={filtered}
+                emptyText="Aucune demande sur cette période."
+                onDateClick={setSelectionId}
+                selectedId={selectionId}
+                typeCourt
+                lignesTransmissionParDemande={lignesTransmissionParId}
+              />
+            </div>
           </div>
         </div>
 

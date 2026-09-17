@@ -453,8 +453,17 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
         <tbody>
           {props.avecCollaborateur
             ? trierEtGrouperParCollaborateur(props.demandes, tri).map(
-                ({ demande, rowSpan, groupeIds }) => {
+                ({ demande, rowSpan, groupeIds }, index) => {
                   const code = codeDemande(demande);
+                  // Séparateur entre collaborateurs (17/09/2026, PTP Vincent
+                  // — "ajouter de l'espace entre les lignes collaborateurs")
+                  // : aucune bordure n'existait entre les lignes de ce
+                  // tableau (juste le fond au survol), rendant les groupes
+                  // par collaborateur difficiles à distinguer une fois
+                  // fusionnés (`rowSpan`). Bordure haute sur la première
+                  // ligne de CHAQUE groupe (`rowSpan > 0`), sauf le tout
+                  // premier (pas de bordure orpheline sous l'en-tête).
+                  const debutGroupe = rowSpan > 0 && index > 0;
                   // La ligne qui porte la cellule fusionnée (rowSpan > 0)
                   // reçoit déjà sa propre teinte via `classeLigne` sur son
                   // `<tr>` (active ou survolée) — cette teinte native couvre
@@ -476,7 +485,7 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
                   return (
                     <tr
                       key={demande.id}
-                      className={`transition-colors duration-150 ${classeLigne(demande)} ${onDateClick ? "cursor-pointer" : ""}`}
+                      className={`transition-colors duration-150 ${classeLigne(demande)} ${debutGroupe ? "border-mint-tint border-t-2" : ""} ${onDateClick ? "cursor-pointer" : ""}`}
                       onClick={onDateClick ? () => onDateClick(demande.id) : undefined}
                       onMouseEnter={() => setHoveredId(demande.id)}
                       onMouseLeave={() => setHoveredId((h) => (h === demande.id ? null : h))}

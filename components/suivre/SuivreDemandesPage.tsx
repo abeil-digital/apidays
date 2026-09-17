@@ -215,75 +215,14 @@ export function SuivreDemandesPage() {
         className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
         style={{ animationDelay: "90ms" }}
       >
-        <div className="bg-surface-card w-full min-w-0">
-          <div className="bg-mint-tint/50 flex flex-wrap items-end justify-between gap-3 px-4 py-3 print:hidden">
-            <div className="flex flex-wrap items-end gap-2">
-              <SelectFiltrePill
-                value={typeFiltre}
-                onChange={(e) =>
-                  setTypeFiltre(e.target.value as TypeBadgeCode | TypeFiltreRegul | "tous")
-                }
-              >
-                <option value="tous">Tous les types</option>
-                {TYPES_FILTRABLES.map((code) => (
-                  <option key={code} value={code}>
-                    {LABEL_LONG[code]}
-                  </option>
-                ))}
-                {TYPES_REGUL.map((r) => (
-                  <option key={r.valeur} value={r.valeur}>
-                    {r.label}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              <SelectFiltrePill
-                value={filtre}
-                onChange={(e) => setFiltre(e.target.value as Filtre)}
-              >
-                {FILTRES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              <SelectFiltrePill
-                value={collaborateurFiltre}
-                onChange={(e) => setCollaborateurFiltre(e.target.value)}
-              >
-                <option value="tous">Tous les collaborateurs</option>
-                {collaborateurs.map(([id, nom]) => (
-                  <option key={id} value={id}>
-                    {nom}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              <SelectFiltrePill
-                value={periodeFiltre}
-                onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
-              >
-                {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(([v, label]) => (
-                  <option key={v} value={v}>
-                    {label}
-                  </option>
-                ))}
-              </SelectFiltrePill>
-              {periodeFiltre === "personnalisee" && (
-                <>
-                  <InputFiltrePill
-                    type="date"
-                    aria-label="Du"
-                    value={debutPerso}
-                    onChange={(e) => setDebutPerso(e.target.value)}
-                  />
-                  <InputFiltrePill
-                    type="date"
-                    aria-label="Au"
-                    value={finPerso}
-                    onChange={(e) => setFinPerso(e.target.value)}
-                  />
-                </>
-              )}
-            </div>
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          {/* "Exporter" sorti de la barre de filtres (17/09/2026, PTP
+              Vincent) — restait poussé vers le bas quand le groupe "Du"/"Au"
+              grandit en dessous de "Sélectionner une période" (voir plus
+              bas), même une fois la barre passée en `items-start`. Sortie du
+              conteneur `bg-surface-card` (fond transparent, pas la carte
+              blanche) et placée au-dessus de toute la barre de filtres. */}
+          <div className="flex justify-end px-1 print:hidden">
             <button
               onClick={() => window.print()}
               className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
@@ -293,24 +232,118 @@ export function SuivreDemandesPage() {
             </button>
           </div>
 
-          <div className="border-slate/30 border-t">
-            {regulSelectionne ? (
-              <TableauAjustements
-                ajustements={ajustementsFiltres}
-                selectionId={selectionId}
-                onSelect={setSelectionId}
-              />
-            ) : (
-              <HistoriqueTable
-                demandes={filtered}
-                emptyText="Aucune demande sur cette période."
-                avecCollaborateur
-                compact
-                onDateClick={setSelectionId}
-                selectedId={selectionId}
-                lignesTransmissionParDemande={lignesTransmissionParDemande}
-              />
-            )}
+          <div className="bg-surface-card w-full min-w-0">
+            <div className="bg-mint-tint/50 flex flex-wrap items-start gap-3 px-4 py-3 print:hidden">
+              <div className="flex flex-wrap items-start gap-2">
+                <SelectFiltrePill
+                  value={typeFiltre}
+                  onChange={(e) =>
+                    setTypeFiltre(e.target.value as TypeBadgeCode | TypeFiltreRegul | "tous")
+                  }
+                >
+                  <option value="tous">Tous les types</option>
+                  {TYPES_FILTRABLES.map((code) => (
+                    <option key={code} value={code}>
+                      {LABEL_LONG[code]}
+                    </option>
+                  ))}
+                  {TYPES_REGUL.map((r) => (
+                    <option key={r.valeur} value={r.valeur}>
+                      {r.label}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                <SelectFiltrePill
+                  value={filtre}
+                  onChange={(e) => setFiltre(e.target.value as Filtre)}
+                >
+                  {FILTRES.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                <SelectFiltrePill
+                  value={collaborateurFiltre}
+                  onChange={(e) => setCollaborateurFiltre(e.target.value)}
+                >
+                  <option value="tous">Tous les collaborateurs</option>
+                  {collaborateurs.map(([id, nom]) => (
+                    <option key={id} value={id}>
+                      {nom}
+                    </option>
+                  ))}
+                </SelectFiltrePill>
+                {/* Sélecteur de période + "Du"/"Au" regroupés dans leur propre
+                  colonne (17/09/2026, PTP Vincent — "les deux sélecteurs
+                  doivent se caler sous 'Sélectionner une période'") : la
+                  ligne de dates apparaît directement sous le sélecteur plutôt
+                  qu'en pleine largeur depuis le bord gauche de la barre de
+                  filtres, et les deux champs restent toujours groupés (jamais
+                  scindés par un retour à la ligne intempestif entre les deux,
+                  l'un sur une ligne et l'autre isolé sur la suivante).
+                  Libellés "Du"/"Au" rendus visibles (avant seulement
+                  `aria-label`, les deux champs étaient indiscernables). Ce
+                  bloc grandissant verticalement sans agrandir le conteneur
+                  parent (`items-end` uniquement DANS ce sous-groupe, jamais
+                  propagé au conteneur global) — voir aussi le passage de la
+                  barre entière à `items-start` ci-dessus, pour que le bouton
+                  "Exporter" ne soit plus poussé vers le bas quand cette
+                  colonne grandit. */}
+                <div className="flex flex-col items-start gap-2">
+                  <SelectFiltrePill
+                    value={periodeFiltre}
+                    onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+                  >
+                    {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(
+                      ([v, label]) => (
+                        <option key={v} value={v}>
+                          {label}
+                        </option>
+                      ),
+                    )}
+                  </SelectFiltrePill>
+                  {periodeFiltre === "personnalisee" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-500 text-xs font-semibold">Du</span>
+                      <InputFiltrePill
+                        type="date"
+                        aria-label="Du"
+                        value={debutPerso}
+                        onChange={(e) => setDebutPerso(e.target.value)}
+                      />
+                      <span className="text-ink-500 text-xs font-semibold">Au</span>
+                      <InputFiltrePill
+                        type="date"
+                        aria-label="Au"
+                        value={finPerso}
+                        onChange={(e) => setFinPerso(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-slate/30 border-t">
+              {regulSelectionne ? (
+                <TableauAjustements
+                  ajustements={ajustementsFiltres}
+                  selectionId={selectionId}
+                  onSelect={setSelectionId}
+                />
+              ) : (
+                <HistoriqueTable
+                  demandes={filtered}
+                  emptyText="Aucune demande sur cette période."
+                  avecCollaborateur
+                  compact
+                  onDateClick={setSelectionId}
+                  selectedId={selectionId}
+                  lignesTransmissionParDemande={lignesTransmissionParDemande}
+                />
+              )}
+            </div>
           </div>
         </div>
 

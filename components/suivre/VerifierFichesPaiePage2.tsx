@@ -319,6 +319,13 @@ function PanelJoursMouvement({
     auteurNom: string;
   } | null>(null);
   const libelleMoisPrecedent = `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
+  // Solde du mois FDP en bas de la popin (17/09/2026, PTP Vincent) — même
+  // valeur que la pill "mois en cours" de la card collaborateur, calculée
+  // ici par simple somme plutôt que reprise séparément (`soldeDepart +
+  // mouvementTotal` EST par construction `categorieSelection.moisEnCours`,
+  // peu importe ce qu'il y a dedans — lignes, acquisition, ajustements).
+  const libelleMoisEnCours = `Solde ${nomMois(periode.debut)}`;
+  const soldeFinal = soldeDepart + mouvementTotal;
 
   // `code` couvre désormais aussi CSS/CE/RECUP/EVT_FAM (17/09/2026, PTP
   // Vincent — "on va les traiter comme des lignes de tableau identique à
@@ -523,6 +530,20 @@ function PanelJoursMouvement({
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-ink-300 border-t">
+              <td className="px-4 py-2.5">
+                <span
+                  className={`flex w-fit items-center px-2.5 py-1 text-xs font-semibold text-white ${classeFondTypeBadge(code)}`}
+                >
+                  {libelleMoisEnCours}
+                </span>
+              </td>
+              <td className="text-ink-900 px-2 py-2.5 text-center font-semibold">
+                {formatJours(soldeFinal)} j
+              </td>
+            </tr>
+          </tfoot>
         </table>
         {aucunEvenement && <EmptyRow text="Aucun jour ni acquisition sur cette période." />}
         {!estTypeSolde ? null : !formulaireOuvert ? (

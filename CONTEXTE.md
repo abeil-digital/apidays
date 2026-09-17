@@ -6784,6 +6784,71 @@ calcul ni un trou de validation à corriger.
 "Parcours transmission paie" passé en résolu, référence à `VerifierFichesPaiePage3.tsx` dans
 l'item "Validation des fiches de paie" corrigée).
 
+### (2) Espace entre les collaborateurs sur "Quels congés transmettre"
+
+`HistoriqueTable.tsx` (partagé par "Quels congés transmettre", "Suivre les demandes", "Historique"
+et la liste Utilisateurs, mode `avecCollaborateur`) n'avait AUCUNE bordure entre ses lignes — les
+groupes par collaborateur (fusionnés via `rowSpan` quand triés par "collaborateur") n'étaient donc
+distinguables qu'au survol, difficile à lire une fois plusieurs collaborateurs enchaînés. Ajouté :
+bordure haute sur la première ligne de chaque groupe (`rowSpan > 0`), sauf le tout premier groupe
+(pas de bordure orpheline juste sous l'en-tête) — **affinée dans la foulée sur demande de Vincent**
+("plus visible : vert épaisseur 2" puis `border-mint-tint`) : `border-mint-tint border-t-2`
+(`--color-mint-tint`, la teinte pâle plutôt que `--color-mint` plein).
+
+### (4) Solde du mois FDP en bas de la popin-récap ("Vérifier les fiches de paie")
+
+`PanelJoursMouvement` (popin ouverte au clic sur une ligne CP/RTT/CPA/CE/RECUP/EVT_FAM/CSS)
+s'arrêtait sur la dernière ligne de mouvement (acquisition ou régul), sans jamais afficher le
+résultat final. Ajouté en pied de tableau (`<tfoot>`) : une ligne "Solde {mois en cours}", même
+gabarit que la ligne "Solde {mois précédent}" en tête — valeur = `soldeDepart + mouvementTotal`,
+qui EST par construction `categorieSelection.moisEnCours` (même pill que celle affichée sur la card
+collaborateur), peu importe ce qui compose le mouvement entre les deux (lignes de transmission,
+acquisition résiduelle, ajustements manuels) — pas de recalcul séparé à maintenir.
+
+### (5) "Du"/"Au" scindés sur 2 lignes + repositionnement d'"Exporter" — "Suivre les demandes"
+
+Sur le sélecteur de période "Sélectionner une période" (`SuivreDemandesPage.tsx`), les deux champs
+date "Du"/"Au" (seulement un `aria-label`, jamais de libellé visible) pouvaient se retrouver chacun
+sur sa propre ligne dans le `flex flex-wrap` de la barre de filtres — l'un restant sur la ligne du
+sélecteur, l'autre isolé sur la ligne suivante, tous deux affichés en simple `jj/mm/aaaa` sans
+libellé pour les distinguer.
+
+**Itéré en plusieurs passes avec Vincent** :
+1. "Du"/"Au" regroupés dans leur propre colonne (`flex flex-col`) sous "Sélectionner une période"
+   (jamais scindés par un retour à la ligne intempestif), avec un libellé "Du"/"Au" visible devant
+   chacun — barre de filtres passée en `items-start` (au lieu de `items-end`) pour que la hauteur
+   variable de cette colonne n'affecte plus l'alignement du reste.
+2. "Le bouton Exporter doit rester à sa place initiale" : sorti de la barre de filtres et placé sur
+   sa propre ligne — d'abord au-dessus du tableau (entre filtres et tableau), puis **au-dessus de la
+   barre de filtres elle-même** (position finale demandée).
+3. "Sur un fond transparent" : sorti du conteneur `bg-surface-card` (la carte blanche) — la ligne du
+   bouton n'a plus de fond propre, elle est désormais un sibling de la carte plutôt qu'un enfant.
+
+**Même principe appliqué à "Historique" collaborateur** (`HistoriquePage.tsx`, même code dupliqué,
+même sélecteur de période) — demande explicite de Vincent ("tu appliques ce principe à l'historique
+collaborateur").
+
+### (6) Navigation du "Calendrier consolidé" alignée sur les calendriers collaborateurs
+
+Demande de Vincent, en passant : "il faudrait y appliquer le même système d'affichage que les
+calendriers collaborateurs plutôt que les anciens filtres". `CalendrierGlobal.tsx` (heatmap "Vue
+consolidée", `/suivre/calendrier`) utilisait encore les **3 onglets** "En cours/Période de
+référence CP/Année suivante" (+ leurs bascules "Débute : Aujourd'hui/complet") — exactement le
+système que Vincent avait déjà abandonné sur `DashboardPage.tsx` le 14/09/2026 ("le sélecteur de
+calendrier est aussi compliqué en définitive"), remplacé là-bas par une **fenêtre glissante de 9
+mois** + sélecteur "Commence : Aujourd'hui / Il y a 3 mois" (`SelectCommence`).
+
+Remplacé à l'identique dans `CalendrierGlobal.tsx` : même formule de fenêtre glissante (portée
+telle quelle depuis `DashboardPage.tsx`, `commenceIlYA3Mois`/`moisIndexDebutBrut`/modulo reconstruit
+à la main pour un décalage négatif), même composant `SelectCommence` (dupliqué une 3ᵉ fois, même
+convention assumée que pour `CalendrierCollaborateur.tsx`). Seule la NAVIGATION change — le rendu
+en grille de mini-calendriers (heatmap, `MiniCalendrier`/`tipoDuJour`/dégradé OrRd) reste identique,
+aucune de ces fonctions n'a été touchée. Code mort retiré avec les 3 onglets : `Onglet`,
+`vueCompleteEnCours`/`vueCompletePeriodeCp`, `regleCp`/`debutPeriodeCp`/`finPeriodeCp`/
+`etatAvantBascule`/`rangeTroisiemeOnglet`, `formatMoisAnneeCourt`, et `useReglesConges` (plus utilisé
+du tout dans ce fichier). Vérifié en live (acme, connecté par Vincent) : fenêtre septembre→mai par
+défaut, bascule "Il y a 3 mois" décale bien vers juin→février sans erreur console.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

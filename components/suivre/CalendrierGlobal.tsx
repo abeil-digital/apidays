@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { formatPeriodePillNumerique, nomJourSemaine, todayISO } from "@/lib/format";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
-import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { JourBadge } from "@/components/ui/JourBadge";
@@ -14,7 +13,25 @@ import { classeBordureTypeBadge, type TypeBadgeCode } from "@/components/demande
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import type { DemandeEquipe } from "@/lib/types";
 
-type Onglet = "en_cours" | "periode_cp" | "annee_suivante";
+/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois" — même composant que
+ * `SelectCommence` de `DashboardPage.tsx`/`CalendrierCollaborateur.tsx`
+ * (duplication assumée, même convention). */
+function SelectCommence({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="relative inline-flex w-fit items-center gap-1.5">
+      <span className="text-ink-500 text-xs">Commence :</span>
+      <select
+        value={actif ? "il_y_a_3_mois" : "aujourdhui"}
+        onChange={(e) => onChange(e.target.value === "il_y_a_3_mois")}
+        className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
+      >
+        <option value="aujourdhui">Aujourd&apos;hui</option>
+        <option value="il_y_a_3_mois">Il y a 3 mois</option>
+      </select>
+      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
+    </div>
+  );
+}
 
 function isoDate(annee: number, moisIndex: number, jour: number): string {
   return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
@@ -24,17 +41,6 @@ function ajouterJoursIso(dateIso: string, n: number): string {
   const d = new Date(`${dateIso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
-}
-
-/** "Juin 26" — même helper que `DashboardPage`/`CalendrierCollaborateur`. */
-function formatMoisAnneeCourt(dateIso: string): string {
-  const d = new Date(`${dateIso}T00:00:00Z`);
-  const texte = new Intl.DateTimeFormat("fr-FR", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  }).format(d);
-  return texte.charAt(0).toUpperCase() + texte.slice(1).replace(".", "");
 }
 
 /** "15 septembre 2026" — sans le nom du jour, déjà porté par le `JourBadge`
@@ -180,18 +186,21 @@ const SECTIONS_JOURNEE: { cle: SectionJournee; libelle: string }[] = [
 export function CalendrierGlobal() {
   const { demandes, loading: loadingDemandes } = useDemandesEquipe();
   const { utilisateurs, loading: loadingUtilisateurs } = useUtilisateursAdmin();
-  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
-  const [onglet, setOnglet] = useState<Onglet>("en_cours");
-  const [vueCompleteEnCours, setVueCompleteEnCours] = useState(false);
-  const [vueCompletePeriodeCp, setVueCompletePeriodeCp] = useState(false);
+  // "Commence : Aujourd'hui / Il y a 3 mois" (17/09/2026, demande explicite
+  // de Vincent — "appliquer le même système d'affichage que les calendriers
+  // collaborateurs plutôt que les anciens filtres") : remplace les 3 onglets
+  // En cours/Période CP/Année suivante par la même fenêtre glissante de 9
+  // mois que `DashboardPage.tsx`/`CalendrierCollaborateur.tsx`, formule
+  // reprise à l'identique (voir le commentaire détaillé là-bas).
+  const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
   // Jour du panneau détail ouvert par défaut au chargement (29/08/2026) —
   // "aujourd'hui" plutôt qu'aucune sélection, cohérent avec `estMisEnAvant`/
   // `estAujourdhui` déjà mis en avant sur la grille dès l'ouverture.
   const [dateSelectionnee, setDateSelectionnee] = useState<string | null>(() => todayISO());
 
   // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
-  // de Vincent) — voir DashboardPage.tsx, même correctif : sans ça, le
-  // bandeau de date simulée ne pouvait pas tester la rotation des 3 onglets.
+  // de Vincent) — voir DashboardPage.tsx, même correctif : pour que le
+  // bandeau de date simulée locale entraîne bien la fenêtre glissante.
   const anneeActuelle = getAujourdhui().getFullYear();
   const anneePrecedente = anneeActuelle - 1;
   const anneeSuivante = anneeActuelle + 1;
@@ -202,7 +211,6 @@ export function CalendrierGlobal() {
   const loading =
     loadingDemandes ||
     loadingUtilisateurs ||
-    loadingRegles ||
     calendrierAnneePrecedente.loading ||
     calendrierAnneeA.loading ||
     calendrierAnneeB.loading;
@@ -215,53 +223,21 @@ export function CalendrierGlobal() {
   const totalActifs = actifsIds.size;
 
   const todayIso = todayISO();
-  const debutAnneeActuelle = isoDate(anneeActuelle, 0, 1);
-  const finAnneeActuelle = isoDate(anneeActuelle, 11, 31);
-  const debutMoisActuel = isoDate(anneeActuelle, getAujourdhui().getMonth(), 1);
 
-  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
-  const debutPeriodeCp = regleCp
-    ? todayIso >= isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      ? isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-      : isoDate(anneePrecedente, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour)
-    : debutAnneeActuelle;
-  const finPeriodeCp = regleCp
-    ? ajouterJoursIso(
-        isoDate(
-          Number(debutPeriodeCp.slice(0, 4)) + 1,
-          regleCp.periodeDebutMois - 1,
-          regleCp.periodeDebutJour,
-        ),
-        -1,
-      )
-    : finAnneeActuelle;
-
-  // Rotation des 3 onglets (10/09/2026) — voir le commentaire détaillé dans
-  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
-  const etatAvantBascule = Number(debutPeriodeCp.slice(0, 4)) < anneeActuelle;
-  const rangeTroisiemeOnglet =
-    regleCp && etatAvantBascule
-      ? {
-          debut: isoDate(anneeActuelle, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-          fin: ajouterJoursIso(
-            isoDate(anneeActuelle + 1, regleCp.periodeDebutMois - 1, regleCp.periodeDebutJour),
-            -1,
-          ),
-        }
-      : { debut: isoDate(anneeSuivante, 0, 1), fin: isoDate(anneeSuivante, 11, 31) };
-
-  const ranges: Record<Onglet, { debut: string; fin: string }> = {
-    en_cours: {
-      debut: vueCompleteEnCours ? debutAnneeActuelle : debutMoisActuel,
-      fin: finAnneeActuelle,
-    },
-    periode_cp: {
-      debut: vueCompletePeriodeCp ? debutPeriodeCp : debutMoisActuel,
-      fin: finPeriodeCp,
-    },
-    annee_suivante: rangeTroisiemeOnglet,
-  };
-  const rangeActive = ranges[onglet];
+  // Fenêtre glissante de 9 mois (17/09/2026, formule identique à
+  // `DashboardPage.tsx`) — `moisIndexDebutBrut` peut être négatif (ex. mois
+  // en cours = janvier, décalage -3 → octobre de l'année PRÉCÉDENTE), le
+  // modulo est reconstruit à la main pour rester positif.
+  const decalageMoisDebut = commenceIlYA3Mois ? -3 : 0;
+  const moisIndexDebutBrut = getAujourdhui().getMonth() + decalageMoisDebut;
+  const moisIndexDebut = ((moisIndexDebutBrut % 12) + 12) % 12;
+  const anneeDebutFenetre = anneeActuelle + Math.floor(moisIndexDebutBrut / 12);
+  const debutMoisActuel = isoDate(anneeDebutFenetre, moisIndexDebut, 1);
+  const moisIndexFinBrut = moisIndexDebutBrut + 8;
+  const moisIndexFin = ((moisIndexFinBrut % 12) + 12) % 12;
+  const anneeFinFenetre = anneeActuelle + Math.floor(moisIndexFinBrut / 12);
+  const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
+  const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function occupantsDuJour(iso: string): DemandeEquipe[] {
@@ -416,97 +392,10 @@ export function CalendrierGlobal() {
     dji: s.cle === sectionDji,
   })).filter((s) => s.demandes.length > 0 || s.dji);
 
-  // Boutons d'onglet extraits en constantes JSX (10/09/2026) — voir
-  // DashboardPage.tsx, même mécanique reprise à l'identique ici.
-  const boutonEnCours = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("en_cours")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "en_cours"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {anneeActuelle}
-      </button>
-      {onglet === "en_cours" && (
-        <div className="relative inline-flex w-fit items-center gap-1.5">
-          <span className="text-ink-500 text-xs">Débute :</span>
-          <select
-            value={vueCompleteEnCours ? "complete" : "mois_en_cours"}
-            onChange={(e) => setVueCompleteEnCours(e.target.value === "complete")}
-            className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-          >
-            <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
-            <option value="complete">{formatMoisAnneeCourt(debutAnneeActuelle)}</option>
-          </select>
-        </div>
-      )}
-    </>
-  );
-  const boutonPeriodeCp = (
-    <>
-      <button
-        type="button"
-        onClick={() => setOnglet("periode_cp")}
-        className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-          onglet === "periode_cp"
-            ? "bg-slate/90 hover:bg-slate text-white"
-            : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-        }`}
-      >
-        {`${formatMoisAnneeCourt(debutPeriodeCp)} → ${formatMoisAnneeCourt(finPeriodeCp)}`}
-      </button>
-      {onglet === "periode_cp" && (
-        <div className="relative inline-flex w-fit items-center gap-1.5">
-          <span className="text-ink-500 text-xs">Débute :</span>
-          <select
-            value={vueCompletePeriodeCp ? "complete" : "mois_en_cours"}
-            onChange={(e) => setVueCompletePeriodeCp(e.target.value === "complete")}
-            className="text-ink-900 relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-          >
-            <option value="mois_en_cours">{formatMoisAnneeCourt(todayIso)}</option>
-            <option value="complete">{formatMoisAnneeCourt(debutPeriodeCp)}</option>
-          </select>
-        </div>
-      )}
-    </>
-  );
-  const boutonTroisieme = (
-    <button
-      type="button"
-      onClick={() => setOnglet("annee_suivante")}
-      className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-150 ${
-        onglet === "annee_suivante"
-          ? "bg-slate/90 hover:bg-slate text-white"
-          : "border-slate text-slate hover:bg-slate/10 border bg-transparent"
-      }`}
-    >
-      {etatAvantBascule
-        ? `${formatMoisAnneeCourt(rangeTroisiemeOnglet.debut)} → ${formatMoisAnneeCourt(rangeTroisiemeOnglet.fin)}`
-        : anneeSuivante}
-    </button>
-  );
-
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <div className="flex flex-wrap items-center gap-2 px-1">
-          {etatAvantBascule ? (
-            <>
-              {boutonPeriodeCp}
-              {boutonEnCours}
-            </>
-          ) : (
-            <>
-              {boutonEnCours}
-              {boutonPeriodeCp}
-            </>
-          )}
-          {boutonTroisieme}
-        </div>
+      <div className="px-1">
+        <SelectCommence actif={commenceIlYA3Mois} onChange={setCommenceIlYA3Mois} />
       </div>
 
       {/* `minmax(0,797px)` plutôt que `max-content` (11/09/2026, bug signalé
