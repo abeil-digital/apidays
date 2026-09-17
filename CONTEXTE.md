@@ -6849,6 +6849,170 @@ aucune de ces fonctions n'a été touchée. Code mort retiré avec les 3 onglets
 du tout dans ce fichier). Vérifié en live (acme, connecté par Vincent) : fenêtre septembre→mai par
 défaut, bascule "Il y a 3 mois" décale bien vers juin→février sans erreur console.
 
+## Parcours transmission paie — points (7) et (8) traités (18/09/2026)
+
+Suite du chantier "Parcours transmission paie" (17/09/2026 ci-dessus) : deux points du Backlog
+traités dans cette session.
+
+**(8) Badge "Régul transmise"/"Régul prise en compte"** (`BadgeTransmission`,
+`components/historique/HistoriqueTable.tsx`, partagé par "Suivre les demandes"/"Historique"/"Quels
+congés transmettre") — cas signalé par Vincent : un CP déjà "pris en compte en paie" peut être
+annulé après coup (ex. Vincent Mayol, CP 01/01/27→04/01/27, annulé le 17/09/26 par Olivier). Le badge
+passait alors par "À régulariser" (`statut === "annulé" && soldeNet > 0`) puis, une fois la ligne de
+correction "(retro)" effectivement transmise (`soldeNet` revenu à 0), retombait silencieusement sur
+le badge générique "Transmis"/"Pris en compte" — trompeur pour une demande dont le statut reste
+"Annulé". Ajout d'un état dédié pour ce cas : la ligne de correction (`joursInclus < 0`) détermine
+si elle est déjà "prise en compte" (`prisEnCompteLe`) → badge **"Régul transmise"** (orange) ou
+**"Régul prise en compte"** (vert), plutôt que de retomber sur le badge générique.
+
+**(7) Aide contextuelle "CPN+1" — en deux temps.** Premier temps exploré (déplacer l'encart "Un
+congé CP sur la période suivante — comptabilisé dans le solde CPA." du haut du feed CP vers un
+bandeau sticky fluo au-dessus de "Solde actuel") **annulé par Vincent en cours de session** — au
+final l'encart est purement et simplement retiré de `SoldeDetailPanel.tsx`. Deuxième temps, retenu :
+la pill "CPN+1" du feed CPA (`SoldeDetailPanel.tsx`, lignes validées ET en attente) gagne une icône
+`CircleHelp` cliquable à côté d'elle (remplace l'ancien `title` au survol — pas d'équivalent tactile,
+et Vincent voulait un clic plutôt qu'un survol) : un clic ouvre un encart contextuel sous l'icône
+avec le texte **"CP période N+1 : sera pris en compte dans votre solde CP à partir du JJ/MM/AAAA"**
+— la date est calculée dynamiquement (`periodeReferenceCp(regleCp, new Date(m.date))`, `regleCp` via
+`useReglesConges`, nouveau dans ce fichier) comme le début de la période de référence CIBLE contenant
+la date du congé, pas la période en cours. Un seul id ouvert à la fois (`aideCpDirectId`), même
+composant réutilisé pour les deux listes.
+
+**Bug corrigé en passant, découvert en testant (7) avec le simulateur de date** : `finPeriodeCp`
+dans `PoserDemandeModal.tsx` (label "CP en période de référence +1") appelait `periodeReferenceCp(regleCp)`
+sans référence — retombant sur `new Date()` (la vraie horloge serveur) au lieu de `todayISO()` (qui
+respecte la date simulée). Résultat : sous simulation, le label "+1" pouvait apparaître à tort,
+comparé à la période RÉELLE plutôt qu'à la période simulée — aucun impact en prod, où `todayISO()`
+retombe de toute façon sur `new Date()` en l'absence de date simulée (mécanisme "local uniquement").
+Corrigé en passant explicitement `new Date(\`${todayISO()}T00:00:00Z\`)` en référence.
+`PoserCongePourCollaborateurModal.tsx` (même parcours, vue manager) n'a pas cette variable par
+défaut, pas concerné.
+
+### Fichiers modifiés
+
+`components/historique/HistoriqueTable.tsx` (badge Régul), `components/suivre/SoldeDetailPanel.tsx`
+(retrait de l'encart, icône + popover CPN+1, imports `useReglesConges`/`periodeReferenceCp`/
+`formatDateAction`/`CircleHelp`), `components/nouvelle-demande/PoserDemandeModal.tsx` (fix
+`finPeriodeCp` sur la date simulée). `Backlog.md` mis à jour (points (7) et (8) passés en résolus).
+
+## Parcours transmission paie — points (9) et (10) traités (18/09/2026)
+
+Suite directe de la session ci-dessus.
+
+**(9) Statut "Régularisé" (vert)** — jusqu'ici, un congé annulé après avoir été pris en compte en
+paie restait affiché "Annulé" (rouge, `StatusBadge`) indéfiniment, même une fois sa régularisation
+(ligne de correction "retro") effectivement prise en compte à son tour — trompeur, à distinguer du
+badge "Paie"/`BadgeTransmission` (colonne différente, déjà traité au point (8)). `StatusBadge`
+(`components/ui/StatusBadge.tsx`) accepte désormais un prop optionnel `lignes` : quand
+`statut === "annulé"` et que la ligne de correction (`joursInclus < 0`) est `prisEnCompteLe`, le
+badge passe en **"Régularisé"** (vert, `CheckCircle2`) au lieu de "Annulé". Câblé dans
+`HistoriqueTable.tsx` (même lignes que celles déjà passées à `BadgeTransmission`) — absent partout
+ailleurs (`RequestRow`, `SnippetJourCalendrier`...), comportement inchangé.
+
+**(10) Badge "Paie" avec fraction sur transmission partielle.** Cas signalé par Vincent : un congé à
+cheval sur deux mois, transmis pour la 1ʳᵉ période mais pas encore pour la 2ᵉ (export du mois suivant
+jamais généré, la ligne `export_paie_lignes` correspondante n'existe pas encore), s'affichait à tort
+"Pris en compte" en totalité sur "Quels congés transmettre" — `BadgeTransmission` testait seulement
+`lignes.every(l => l.prisEnCompteLe)`, vacuously vrai sur la seule ligne existante. Corrigé en deux
+temps : d'abord bloqué sur "Transmis" tant que le total transmis n'atteint pas le total de la
+demande (`totalJours`) ; **affiné ensuite sur demande de Vincent** ("il faut Transmis/Pris en compte
+1/2 en transmission partielle") — le libellé porte désormais la fraction `N/M` (nombre de lignes déjà
+générées / nombre de mois calendaires couverts par la demande, `nbMoisCalendaires`, nouvel utilitaire
+local) plutôt que de masquer que la partie déjà transmise est, elle, bien confirmée : **"Pris en
+compte 1/2"** (vert) si la ligne existante est confirmée, **"Transmis 1/2"** (orange) sinon. Une fois
+toutes les périodes couvertes, le badge redevient le libellé simple sans fraction.
+
+### Fichiers modifiés
+
+`components/ui/StatusBadge.tsx` (prop `lignes`, badge "Régularisé"),
+`components/historique/HistoriqueTable.tsx` (`BadgeTransmission` avec fraction, `nbMoisCalendaires`,
+câblage du prop `lignes` sur `StatusBadge`). `Backlog.md` mis à jour (points (9) et (10) passés en
+résolus).
+
+## Bonus d'ancienneté : mode d'attribution paramétrable (18/09/2026)
+
+Réponse au point Backlog "Bonus d'ancienneté : rendre le mode de calcul paramétrable" — nouveau
+réglage sur Paramétrer > Congés & RTT (CP uniquement, sans effet sur RTT) : **"Jour(s) d'ancienneté
+attribués"**, 3 options.
+
+**(1) "à la période de référence suivante"** (défaut, comportement historique inchangé) : le bonus
+est injecté dans le capital d'ouverture dès la bascule de période, évalué sur l'ancienneté au 1er
+jour de la période (`resolverCapitalOuvertureCp`).
+
+**(2) "le mois suivant la date d'anniversaire"** et **(3) "au début du mois de la date
+d'anniversaire"** (nouveaux) : le bonus devient un événement à part — pill **"Jour supp.
+anniversaire {mois}"** dans le feed CP (`fetchHistoriqueCp`, même gabarit que "+ Acquisition {mois}"
+RTT/CPA), daté au 1er jour du mois suivant (2) ou du même mois (3) que l'anniversaire du
+collaborateur — compté dans le capital seulement une fois cette date atteinte. Si l'anniversaire
+tombe dans le dernier mois de la période, la date d'effet (mode 2) bascule naturellement sur la
+période suivante — décision explicite de Vincent : "le collaborateur débute le mois suivant avec un
+jour de plus", pas de traitement spécial. Un seul mécanisme partagé (`dateEffetBonusAncienneteDans
+Periode`, `decalageMoisAttribution` : 0 ou 1 mois) pour les modes (2) et (3).
+
+**Bugs trouvés et corrigés en auditant AVANT de tester en navigateur** (demande explicite de
+Vincent : "vérifier qu'il n'existe pas de cas à la marge") :
+- **Événement fantôme "+0j"** — un collaborateur n'ayant atteint aucun seuil d'ancienneté aurait vu
+  la pill "Jour supp. anniversaire" apparaître quand même chaque année avec un montant nul.
+  `bonusDateEffet` n'est désormais fixé que si le montant réel est `> 0`.
+- **Incohérence avec le Parcours B** (`fetchCapitalPeriodeFuture`, projection de solvabilité pour un
+  CP posé sur la période suivante) : évaluait toujours le bonus à la date de début de la période
+  cible, jamais selon le nouveau mode. Corrigé pour utiliser la date DE LA DEMANDE (pas "aujourd'hui")
+  comme pivot — cohérent avec la question posée ("quels jours seront disponibles à cette date").
+- **Double comptage** : le capital d'ouverture (`capitalOuverture.total`) inclut déjà le bonus une
+  fois sa date d'effet passée — il fallait donc l'exclure de "Solde N-1" (`soldeDepart`) et le
+  réintégrer via l'événement, sinon compté deux fois. Variable partagée `bonusExclu`, appliquée à la
+  fois au réel (`mouvementsBruts`) et au théorique (`mouvementsBrutsTheorique`/`cumulTheorique`).
+
+**Tests numériques** (script isolé, 20 cas — voir méthode dans le scratchpad de session, non
+conservé) : chevauchement d'années civiles, anniversaire en décembre/janvier, anniversaire pile au
+premier/dernier jour de période, année bissextile (29 février dans une année non bissextile — bascule
+proprement au 1er mars via le comportement natif de `Date.UTC`), pas de double-comptage entre deux
+périodes consécutives, seuils multiples non cumulables — tous ✅, pour le mode (2).
+
+**Test en conditions réelles (acme, navigateur, date simulée)** pour le mode (2) : migration SQL
+appliquée par Vincent (nouvelle colonne `bonus_anciennete_attribution` sur `regles_acquisition`,
+défaut `'periode_suivante'`, donc aucun impact sur les tenants existants tant que le réglage n'est
+pas changé). Bascule du mode confirmée persistante après rechargement. Vincent Mayol (5 ans+
+d'ancienneté) : pill "Jour supp. anniversaire mai 27 : +1 j" affichée correctement en Réel ET
+Théorique, arithmétique cohérente (pas de double comptage). Vincent DUPONT (aucune ancienneté) :
+aucun événement fantôme, confirme le correctif. Réglage acme remis à "periode_suivante" (défaut)
+après test, pour ne rien laisser d'altéré sur le tenant réel.
+
+**Bug préexistant relevé en passant, sans lien avec ce chantier, pas corrigé** : erreur d'hydratation
+React sur le bouton "Appliquer" du bandeau de date simulée (mismatch `disabled` serveur/client).
+
+**Risque identifié à la question de Vincent ("que se passe-t-il si on change ce paramètre alors qu'il
+y a déjà des données ?")** : les lignes de transmission déjà envoyées (`export_paie_lignes`) sont
+toujours figées, MAIS le capital d'ouverture de la période de référence EN COURS ne l'est jamais tant
+que cette période n'est pas terminée (`soldes_periode` ne gèle qu'à la clôture de la période entière,
+pas à chaque export mensuel validé) — changer ce réglage en cours d'année peut donc faire
+sauter/baisser le solde CP affiché pour la période en cours, sans transmission ni action du
+collaborateur, même si plusieurs mois de cette période sont déjà "passés en paie". Pas de correctif
+demandé pour l'instant (juste un avertissement UI éventuellement à ajouter plus tard, pas tranché).
+
+**3ᵉ mode ajouté dans la foulée** ("au début du mois de la date d'anniversaire", `decalageMois = 0`
+au lieu de `1`) — même mécanisme partagé, migration de la contrainte `check` appliquée par Vincent
+pour accepter la 3ᵉ valeur.
+
+### Reste à faire (prochaine session)
+
+**Tests non encore faits pour le 3ᵉ mode** ("au début du mois de la date d'anniversaire") — la
+session s'est arrêtée avant de les lancer : reprendre la même méthode que pour le mode (2) (batterie
+de cas limites en isolation, puis test en conditions réelles sur acme avec la date simulée, sans
+oublier de remettre le réglage à "periode_suivante" après coup).
+
+Éventuellement à trancher plus tard : faut-il un avertissement/confirmation explicite au changement
+de ce réglage, pour prévenir le saut de solde en cours de période décrit ci-dessus ?
+
+### Fichiers modifiés
+
+`lib/types.ts` (`AttributionBonusAnciennete`, 3 valeurs), `lib/data/reglesConges.repository.ts`
+(select/map/upsert), `lib/data/soldes.repository.ts` (`dateEffetBonusAncienneteDansPeriode`,
+`decalageMoisAttribution`, `resolverCapitalOuvertureCp`, `fetchCapitalPeriodeFuture`,
+`fetchHistoriqueCp`), `components/parametrer/CongesRttPage.tsx` (select "Jour(s) d'ancienneté
+attribués"), `supabase/schema.sql` (colonne `bonus_anciennete_attribution` sur
+`regles_acquisition`, 2 migrations SQL appliquées manuellement par Vincent).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

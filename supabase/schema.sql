@@ -401,6 +401,14 @@ create table regles_acquisition (
   taux_acquisition_mensuel numeric(5,2) not null,
   report_autorise boolean not null default false,
   anticipation_autorisee boolean not null default false,
+  -- Moment d'attribution du bonus de jour(s) d'ancienneté (18/09/2026, CP
+  -- uniquement — voir `AttributionBonusAnciennete`, lib/types.ts) : porté ici
+  -- plutôt que sur `regles_anciennete` (plusieurs seuils, un seul moment
+  -- d'attribution partagé). Sans effet pour RTT.
+  bonus_anciennete_attribution text not null default 'periode_suivante'
+    check (bonus_anciennete_attribution in (
+      'periode_suivante', 'mois_suivant_anniversaire', 'debut_mois_anniversaire'
+    )),
   updated_at timestamptz not null default now(),
   unique (entreprise_id, type_absence_id)
 );

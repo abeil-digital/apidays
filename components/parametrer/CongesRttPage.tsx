@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Check, Trash2 } from "lucide-react";
 import type {
+  AttributionBonusAnciennete,
   ObjectifsCalendrier,
   ObjectifsCalendrierInput,
   RegleAcquisition,
@@ -56,6 +57,14 @@ const PRESET_PERIODE_LABEL: Record<PresetPeriode, string> = {
   annee_scolaire: "Année scolaire (septembre)",
   avril_mars: "Avril → mars",
   personnalisee: "Date personnalisée",
+};
+
+// Menu "attribués" du bonus d'ancienneté (18/09/2026, CP uniquement — voir
+// `BlocAnciennete`).
+const LABEL_ATTRIBUTION_BONUS: Record<AttributionBonusAnciennete, string> = {
+  periode_suivante: "à la période de référence suivante",
+  mois_suivant_anniversaire: "le mois suivant la date d'anniversaire",
+  debut_mois_anniversaire: "au début du mois de la date d'anniversaire",
 };
 
 const ORDRE_PRESETS_CP: PresetPeriode[] = [
@@ -166,6 +175,9 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
     );
     const [report, setReport] = useState(regle?.reportAutorise ?? false);
     const [anticipation, setAnticipation] = useState(regle?.anticipationAutorisee ?? false);
+    const [attributionBonus, setAttributionBonus] = useState<AttributionBonusAnciennete>(
+      regle?.bonusAncienneteAttribution ?? "periode_suivante",
+    );
     const [erreur, setErreur] = useState("");
     const [modifie, setModifie] = useState(false);
 
@@ -198,6 +210,10 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
               tauxAcquisitionMensuel: taux,
               reportAutorise: report,
               anticipationAutorisee: anticipation,
+              // Sans effet côté moteur pour RTT (pas de bonus d'ancienneté
+              // RTT) — le select ne s'affiche que pour CP ci-dessous, RTT
+              // envoie toujours la valeur par défaut.
+              bonusAncienneteAttribution: attributionBonus,
             });
             setModifie(false);
             return true;
@@ -207,7 +223,17 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
           }
         },
       }),
-      [acquisition, preset, mois, jour, report, anticipation, type, onEnregistrer],
+      [
+        acquisition,
+        preset,
+        mois,
+        jour,
+        report,
+        anticipation,
+        attributionBonus,
+        type,
+        onEnregistrer,
+      ],
     );
 
     return (
@@ -335,6 +361,37 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
             }}
             guidance={guidanceAnticipation}
           />
+
+          {type === "CP" && (
+            <div>
+              <label
+                htmlFor={`${type}-attribution-bonus`}
+                className="text-ink-900 mb-1.5 block text-sm font-bold"
+              >
+                Jour(s) d&rsquo;ancienneté attribués
+              </label>
+              <SelectPille
+                id={`${type}-attribution-bonus`}
+                value={attributionBonus}
+                onChange={(e) => {
+                  setAttributionBonus(e.target.value as AttributionBonusAnciennete);
+                  marquerModifie();
+                }}
+                borderClassName="border-slate"
+                chevronClassName="text-ink-900"
+                hoverClassName="enabled:hover:bg-surface-app"
+                className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
+              >
+                {(Object.keys(LABEL_ATTRIBUTION_BONUS) as AttributionBonusAnciennete[]).map(
+                  (valeur) => (
+                    <option key={valeur} value={valeur}>
+                      {LABEL_ATTRIBUTION_BONUS[valeur]}
+                    </option>
+                  ),
+                )}
+              </SelectPille>
+            </div>
+          )}
 
           {erreur && (
             <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
@@ -590,10 +647,7 @@ const BlocObjectifsCalendrier = forwardRef<
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label
-              htmlFor="objectifs-cpi"
-              className="text-ink-900 mb-1.5 block text-sm font-bold"
-            >
+            <label htmlFor="objectifs-cpi" className="text-ink-900 mb-1.5 block text-sm font-bold">
               CP Imposés
             </label>
             <div className="flex items-center gap-2">
@@ -614,10 +668,7 @@ const BlocObjectifsCalendrier = forwardRef<
           </div>
 
           <div>
-            <label
-              htmlFor="objectifs-dji"
-              className="text-ink-900 mb-1.5 block text-sm font-bold"
-            >
+            <label htmlFor="objectifs-dji" className="text-ink-900 mb-1.5 block text-sm font-bold">
               Demi-journées imposées
             </label>
             <div className="flex items-center gap-2">

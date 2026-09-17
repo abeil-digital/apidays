@@ -63,7 +63,16 @@ const CODE_ACTIF_20: Record<TypeBadgeCode, string> = {
 
 // "Pris en compte" une fois TOUTES les lignes confirmées (11/09/2026) — une
 // demande à cheval sur deux exports, l'un validé et l'autre pas encore,
-// reste "Transmis" tant que tout n'est pas confirmé.
+// reste "Transmis" tant que tout n'est pas confirmé. `totalPeriodes`
+// (18/09/2026, demande explicite — point (10) du chantier "Parcours
+// transmission paie") couvre le cas où la DEUXIÈME ligne n'existe même pas
+// encore (export de la période suivante jamais généré) : `every()` sur les
+// lignes EXISTANTES ne voit alors qu'une seule ligne, déjà confirmée, et
+// affichait à tort "Pris en compte" pour un congé à cheval seulement
+// transmis à moitié. En transmission partielle (`lignes.length <
+// totalPeriodes`), le libellé porte désormais la fraction
+// (ex. "Pris en compte 1/2") plutôt qu'un simple "Transmis" qui masquerait
+// que la partie déjà envoyée est, elle, bien confirmée.
 //
 // "À régulariser" (11/09/2026, demande explicite — un congé annulé APRÈS
 // avoir été transmis et pris en compte reste affiché "Pris en compte",
@@ -71,23 +80,47 @@ const CODE_ACTIF_20: Record<TypeBadgeCode, string> = {
 // que la ligne de correction négative n'est pas partie dans le PROCHAIN
 // export, voir `genererExportPaie`). Priment sur "Pris en compte"/"Transmis"
 // dès que la demande est annulée ET que son solde de transmission net
-// (somme signée de toutes ses lignes) n'est pas encore revenu à 0 — une fois
-// la correction effectivement transmise, `soldeNet` retombe à 0 et l'état
-// redevient neutre (plus rien à régulariser).
-function BadgeTransmission({ statut, lignes }: { statut: StatutDemande; lignes: LigneExportPaie[] }) {
+// (somme signée de toutes ses lignes) n'est pas encore revenu à 0.
+//
+// "Régul transmise"/"Régul prise en compte" (18/09/2026, demande explicite —
+// une fois la ligne de correction effectivement transmise, `soldeNet`
+// retombe à 0 : l'état ne doit PAS redevenir le "Transmis"/"Pris en compte"
+// générique, trompeur pour une demande annulée. Repris de la ligne de
+// correction (`joursInclus < 0`, voir `DetailCongePanel`) plutôt que de
+// toutes les lignes de la demande.
+function BadgeTransmission({
+  statut,
+  lignes,
+  totalPeriodes,
+}: {
+  statut: StatutDemande;
+  lignes: LigneExportPaie[];
+  totalPeriodes: number;
+}) {
   if (lignes.length === 0) return null;
   const soldeNet = lignes.reduce((somme, l) => somme + l.joursInclus, 0);
-  if (statut === "annulé" && soldeNet > 0) {
+  if (statut === "annulé") {
+    if (soldeNet > 0) {
+      return (
+        <Badge tone="danger">
+          <span>À régulariser</span>
+        </Badge>
+      );
+    }
+    const ligneRegul = lignes.find((l) => l.joursInclus < 0);
+    const regulPriseEnCompte = ligneRegul?.prisEnCompteLe != null;
     return (
-      <Badge tone="danger">
-        <span>À régulariser</span>
+      <Badge tone={regulPriseEnCompte ? "success" : "warning"}>
+        <span>{regulPriseEnCompte ? "Régul prise en compte" : "Régul transmise"}</span>
       </Badge>
     );
   }
-  const prisEnCompte = lignes.every((l) => l.prisEnCompteLe);
+  const partiel = lignes.length < totalPeriodes;
+  const toutesConfirmees = lignes.every((l) => l.prisEnCompteLe);
+  const libelle = toutesConfirmees ? "Pris en compte" : "Transmis";
   return (
-    <Badge tone={prisEnCompte ? "success" : "warning"}>
-      <span>{prisEnCompte ? "Pris en compte" : "Transmis"}</span>
+    <Badge tone={toutesConfirmees ? "success" : "warning"}>
+      <span>{partiel ? `${libelle} ${lignes.length}/${totalPeriodes}` : libelle}</span>
     </Badge>
   );
 }
@@ -140,6 +173,16 @@ type HistoriqueTableProps =
 // gardée telle quelle pour ses autres usages ("au" voulu ailleurs).
 function periodeCourte(debut: string, fin: string): string {
   return formatPeriodeDemande(debut, fin).replace(" au ", " - ");
+}
+
+// Nombre de mois calendaires couverts par une demande (18/09/2026, voir
+// `BadgeTransmission`) — un congé à cheval génère une ligne `export_paie_lignes`
+// PAR mois (`repartitionParMoisCalendaire`), ce compte donne donc le nombre
+// total de lignes attendues à terme, indépendamment de celles déjà générées.
+function nbMoisCalendaires(debut: string, fin: string): number {
+  const [anneeDebut, moisDebut] = debut.split("-").map(Number);
+  const [anneeFin, moisFin] = fin.split("-").map(Number);
+  return (anneeFin - anneeDebut) * 12 + (moisFin - moisDebut) + 1;
 }
 
 /**
@@ -366,13 +409,17 @@ export function HistoriqueTable(props: HistoriqueTableProps) {
           </td>
         )}
         <td className="w-px px-4 py-3 whitespace-nowrap">
-          <StatusBadge statut={demande.statut} />
+          <StatusBadge
+            statut={demande.statut}
+            lignes={lignesTransmissionParDemande?.[demande.id]}
+          />
         </td>
         {lignesTransmissionParDemande && (
           <td className="w-px px-4 py-3 whitespace-nowrap">
             <BadgeTransmission
               statut={demande.statut}
               lignes={lignesTransmissionParDemande[demande.id] ?? []}
+              totalPeriodes={nbMoisCalendaires(demande.debut, demande.fin)}
             />
           </td>
         )}

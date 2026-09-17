@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Send, X } from "lucide-react";
 import type { Demande, DemiJournee, TypeDemande } from "@/lib/types";
-import { formatJours } from "@/lib/format";
+import { formatJours, todayISO } from "@/lib/format";
 import { estJourOuvre } from "@/lib/joursFeries";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandes } from "@/hooks/useDemandes";
@@ -199,7 +199,7 @@ export function PoserDemandeModal({
   // celle en cours. "Congés anticipés" (Parcours A) garde son comportement
   // exact d'avant, inchangé.
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
-  const finPeriodeCp = periodeReferenceCp(regleCp).fin;
+  const finPeriodeCp = periodeReferenceCp(regleCp, new Date(`${todayISO()}T00:00:00Z`)).fin;
 
   const [optionKey, setOptionKey] = useState("CP");
   const [debut, setDebut] = useState(dateInitiale ?? "");

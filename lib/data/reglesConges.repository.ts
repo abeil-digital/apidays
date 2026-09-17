@@ -1,4 +1,5 @@
 import type {
+  AttributionBonusAnciennete,
   RegleAcquisition,
   RegleAcquisitionInput,
   RegleAnciennete,
@@ -23,11 +24,12 @@ interface RegleAcquisitionRow {
   taux_acquisition_mensuel: number | string;
   report_autorise: boolean;
   anticipation_autorisee: boolean;
+  bonus_anciennete_attribution: AttributionBonusAnciennete;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
 }
 
 const SELECT_REGLE_ACQUISITION =
-  "id, periode_debut_mois, periode_debut_jour, taux_acquisition_mensuel, report_autorise, anticipation_autorisee, types_absences(code)";
+  "id, periode_debut_mois, periode_debut_jour, taux_acquisition_mensuel, report_autorise, anticipation_autorisee, bonus_anciennete_attribution, types_absences(code)";
 
 function mapRegleAcquisitionDepuisDb(row: RegleAcquisitionRow): RegleAcquisition {
   const typeAbsence = Array.isArray(row.types_absences)
@@ -42,6 +44,7 @@ function mapRegleAcquisitionDepuisDb(row: RegleAcquisitionRow): RegleAcquisition
     tauxAcquisitionMensuel: Number(row.taux_acquisition_mensuel),
     reportAutorise: row.report_autorise,
     anticipationAutorisee: row.anticipation_autorisee,
+    bonusAncienneteAttribution: row.bonus_anciennete_attribution,
   };
 }
 
@@ -85,6 +88,7 @@ export async function enregistrerRegleAcquisition(
         taux_acquisition_mensuel: input.tauxAcquisitionMensuel,
         report_autorise: input.reportAutorise,
         anticipation_autorisee: input.anticipationAutorisee,
+        bonus_anciennete_attribution: input.bonusAncienneteAttribution,
       },
       { onConflict: "entreprise_id,type_absence_id" },
     )

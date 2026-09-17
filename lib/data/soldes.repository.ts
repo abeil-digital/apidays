@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AjustementSoldeInput,
+  AttributionBonusAnciennete,
   HistoriqueSolde,
   MoisHistoriqueSolde,
   MouvementSolde,
@@ -133,6 +134,43 @@ function bonusAnciennete(regles: RegleAnciennete[], ans: number): number {
   return Math.max(...eligibles.map((r) => r.joursSupplementaires));
 }
 
+// Date d'effet du bonus d'ancienneté en mode "mois_suivant_anniversaire"/
+// "debut_mois_anniversaire" (18/09/2026) — 1er jour du mois suivant
+// (`decalageMois = 1`) ou du même mois (`decalageMois = 0`) que la date
+// anniversaire du collaborateur, SI cette date d'effet tombe dans `periode`.
+// On teste la date d'EFFET (pas l'anniversaire lui-même) contre les bornes
+// de la période : si l'anniversaire tombe dans le dernier mois de la
+// période (mode "mois_suivant"), sa date d'effet (1er jour du mois suivant)
+// tombe naturellement dans la période SUIVANTE plutôt que celle-ci — pas de
+// traitement spécial à faire, chaque période ne fait que vérifier si SA
+// fenêtre contient la date d'effet. `annee ± 1` couvre les bascules de
+// fin/début d'année civile.
+function dateEffetBonusAncienneteDansPeriode(
+  dateReferenceAncienneteIso: string,
+  periode: Periode,
+  decalageMois: 0 | 1,
+): Date | null {
+  const anniv = new Date(`${dateReferenceAncienneteIso}T00:00:00Z`);
+  const moisAnniv = anniv.getUTCMonth();
+  const jourAnniv = anniv.getUTCDate();
+  const anneeBase = periode.debut.getUTCFullYear();
+  for (const annee of [anneeBase - 1, anneeBase, anneeBase + 1]) {
+    const dateAnniv = new Date(Date.UTC(annee, moisAnniv, jourAnniv));
+    const dateEffet = new Date(
+      Date.UTC(dateAnniv.getUTCFullYear(), dateAnniv.getUTCMonth() + decalageMois, 1),
+    );
+    if (dateEffet >= periode.debut && dateEffet <= periode.fin) return dateEffet;
+  }
+  return null;
+}
+
+// Décalage (en mois) associé à chaque mode "événement à part" — partagé par
+// `resolverCapitalOuvertureCp` et `fetchCapitalPeriodeFuture` pour ne pas
+// dupliquer ce mapping.
+function decalageMoisAttribution(mode: AttributionBonusAnciennete): 0 | 1 {
+  return mode === "debut_mois_anniversaire" ? 0 : 1;
+}
+
 interface EntreeTauxActivite {
   ancienneValeur: string | null;
   nouvelleValeur: string;
@@ -237,7 +275,8 @@ function montantAcquisitionMois(
   const gele = gelees.get(cle);
   if (gele !== undefined) return gele;
   return (
-    tauxAcquisitionMensuel * (resolverTauxActiviteEffectif(historique, tauxActuel, cle, moisLimite) / 100)
+    tauxAcquisitionMensuel *
+    (resolverTauxActiviteEffectif(historique, tauxActuel, cle, moisLimite) / 100)
   );
 }
 
@@ -262,7 +301,9 @@ async function accrualMensuelSommeAvecGel(
     const dateMois = new Date(
       Date.UTC(periodeDebut.getUTCFullYear(), periodeDebut.getUTCMonth() + i, 1),
     );
-    cles.push(`${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`);
+    cles.push(
+      `${dateMois.getUTCFullYear()}-${String(dateMois.getUTCMonth() + 1).padStart(2, "0")}`,
+    );
   }
   const gelees = await fetchAcquisitionsGelees(
     supabase,
@@ -275,7 +316,14 @@ async function accrualMensuelSommeAvecGel(
   return cles.reduce(
     (total, cle) =>
       total +
-      montantAcquisitionMois(gelees, tauxAcquisitionMensuel, historique, tauxActuel, cle, moisLimite),
+      montantAcquisitionMois(
+        gelees,
+        tauxAcquisitionMensuel,
+        historique,
+        tauxActuel,
+        cle,
+        moisLimite,
+      ),
     0,
   );
 }
@@ -320,7 +368,9 @@ export async function geleAcquisitionsPourExport(
     curseur = new Date(Date.UTC(curseur.getUTCFullYear(), curseur.getUTCMonth(), 1));
     const fin = new Date(`${periodeFin}T00:00:00Z`);
     while (curseur <= fin) {
-      cles.push(`${curseur.getUTCFullYear()}-${String(curseur.getUTCMonth() + 1).padStart(2, "0")}`);
+      cles.push(
+        `${curseur.getUTCFullYear()}-${String(curseur.getUTCMonth() + 1).padStart(2, "0")}`,
+      );
       curseur = new Date(Date.UTC(curseur.getUTCFullYear(), curseur.getUTCMonth() + 1, 1));
     }
   }
@@ -343,7 +393,12 @@ export async function geleAcquisitionsPourExport(
 
     for (const cle of cles) {
       if (moisLimite && cle > moisLimite) continue;
-      const tauxEffectif = resolverTauxActiviteEffectif(historiqueTaux, tauxActuel, cle, moisLimite);
+      const tauxEffectif = resolverTauxActiviteEffectif(
+        historiqueTaux,
+        tauxActuel,
+        cle,
+        moisLimite,
+      );
       if (regleRTT && typeRttId) {
         lignes.push({
           entreprise_id: entrepriseId,
@@ -421,12 +476,12 @@ function resolverPointDepartAccrual(
   return { debut: periode.debut, base: 0, dateAffichage: dateIso(periode.debut) };
 }
 
-
 interface RegleAcquisitionMinimal {
   tauxAcquisitionMensuel: number;
   reportAutorise: boolean;
   periodeDebutMois: number;
   periodeDebutJour: number;
+  bonusAncienneteAttribution: AttributionBonusAnciennete;
 }
 
 /**
@@ -468,6 +523,12 @@ interface CapitalOuvertureCp {
   transfertCpa: number;
   /** Bonus d'ancienneté de CETTE période (un jour de CP comme un autre). */
   bonus: number;
+  /** Date d'effet du bonus en mode "mois_suivant_anniversaire" (18/09/2026)
+   * — `null` en mode "periode_suivante" (bonus injecté dès l'ouverture,
+   * pas d'événement à part) ou si aucun bonus n'est dû cette période.
+   * Sert à `fetchHistoriqueCp` pour afficher l'événement "Jour supp.
+   * anniversaire" au bon endroit du feed. */
+  bonusDateEffet: string | null;
   /** "solde_initial"/"gelee" : chiffre opaque, pas de détail
    * report/transfert/bonus à afficher (voir `fetchHistoriqueCp`). */
   gouvernePar: "solde_initial" | "gelee" | "calcul";
@@ -511,7 +572,14 @@ async function resolverCapitalOuvertureCp(
   // possible (`gouvernePar: "solde_initial"`, affiché comme une ligne
   // opaque unique par l'appelant, voir `fetchHistoriqueCp`).
   if (ctx.soldeInitial && dateIso(periodePrecedente.fin) <= ctx.soldeInitial.dateReference) {
-    return { total: ctx.soldeInitial.cp, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "solde_initial" };
+    return {
+      total: ctx.soldeInitial.cp,
+      report: 0,
+      transfertCpa: 0,
+      bonus: 0,
+      bonusDateEffet: null,
+      gouvernePar: "solde_initial",
+    };
   }
 
   // Plancher de récursion (14/09/2026, bug bloquant trouvé en testant le
@@ -526,7 +594,14 @@ async function resolverCapitalOuvertureCp(
   // Backlog "avertir/bloquer" — ce cas-ci n'a même pas besoin d'avertir, 0
   // est la seule valeur correcte avant l'embauche).
   if (dateIso(periodePrecedente.fin) < ctx.dateEntree) {
-    return { total: 0, report: 0, transfertCpa: 0, bonus: 0, gouvernePar: "calcul" };
+    return {
+      total: 0,
+      report: 0,
+      transfertCpa: 0,
+      bonus: 0,
+      bonusDateEffet: null,
+      gouvernePar: "calcul",
+    };
   }
 
   // `date_debut_utilisation` (14/09/2026, branchement demandé par Vincent —
@@ -561,6 +636,7 @@ async function resolverCapitalOuvertureCp(
       report: 0,
       transfertCpa: 0,
       bonus: 0,
+      bonusDateEffet: null,
       gouvernePar: "gelee",
     };
   }
@@ -633,10 +709,44 @@ async function resolverCapitalOuvertureCp(
   );
   const transfertCpa = Math.max(0, accrualCpaComplet - consommeCpa);
 
-  const bonus = bonusAnciennete(
-    ctx.reglesAnciennete,
-    ansAnciennete(ctx.dateReferenceAnciennete, periode.debut),
-  );
+  // Modes "mois_suivant_anniversaire"/"debut_mois_anniversaire" (18/09/2026) :
+  // le bonus n'est plus injecté dès l'ouverture de la période, il devient un
+  // événement à part daté au 1er jour du mois suivant/du même mois que
+  // l'anniversaire, compté dans le capital seulement une fois cette date
+  // passée — sinon `bonus` reste à 0 pour cette période (il sera compté au
+  // prochain appel, une fois la date effective atteinte ; pour une période
+  // déjà close, `bonusDateEffet` est par construction déjà passé, voir la
+  // note sur le gel ci-dessous).
+  let bonus = 0;
+  let bonusDateEffet: string | null = null;
+  if (ctx.regleCP.bonusAncienneteAttribution !== "periode_suivante") {
+    const dateEffet = dateEffetBonusAncienneteDansPeriode(
+      ctx.dateReferenceAnciennete,
+      periode,
+      decalageMoisAttribution(ctx.regleCP.bonusAncienneteAttribution),
+    );
+    if (dateEffet && dateIso(dateEffet) <= dateIso(ctx.aujourdhui)) {
+      const montant = bonusAnciennete(
+        ctx.reglesAnciennete,
+        ansAnciennete(ctx.dateReferenceAnciennete, dateEffet),
+      );
+      // Pas d'événement fantôme "+0j" (18/09/2026, trouvé en audit) — un
+      // collaborateur qui n'a encore atteint aucun seuil d'ancienneté a une
+      // date d'effet qui existe (elle tombe chaque année), mais sans jour à
+      // attribuer : `bonusDateEffet` doit rester `null` dans ce cas, sinon
+      // `fetchHistoriqueCp` afficherait quand même la pill "Jour supp.
+      // anniversaire" avec un montant de 0.
+      if (montant > 0) {
+        bonus = montant;
+        bonusDateEffet = dateIso(dateEffet);
+      }
+    }
+  } else {
+    bonus = bonusAnciennete(
+      ctx.reglesAnciennete,
+      ansAnciennete(ctx.dateReferenceAnciennete, periode.debut),
+    );
+  }
 
   const capitalOuverture = report + transfertCpa + bonus;
 
@@ -656,7 +766,14 @@ async function resolverCapitalOuvertureCp(
     );
   }
 
-  return { total: capitalOuverture, report, transfertCpa, bonus, gouvernePar: "calcul" };
+  return {
+    total: capitalOuverture,
+    report,
+    transfertCpa,
+    bonus,
+    bonusDateEffet,
+    gouvernePar: "calcul",
+  };
 }
 
 /**
@@ -1200,11 +1317,35 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       fin: periodeConsoCpaSansPlafond.fin,
     };
     const consommeCpa =
-      (await sommeJours(supabase, id, "CP", ["validee"], true, periodeConsoCpaSansPlafond, aujourdhui)) +
+      (await sommeJours(
+        supabase,
+        id,
+        "CP",
+        ["validee"],
+        true,
+        periodeConsoCpaSansPlafond,
+        aujourdhui,
+      )) +
       (await sommeJours(supabase, id, "CP", ["validee"], false, periodeCpDirectFuture, aujourdhui));
     const enAttenteCpa =
-      (await sommeJours(supabase, id, "CP", ["en_attente"], true, periodeConsoCpaSansPlafond, aujourdhui)) +
-      (await sommeJours(supabase, id, "CP", ["en_attente"], false, periodeCpDirectFuture, aujourdhui));
+      (await sommeJours(
+        supabase,
+        id,
+        "CP",
+        ["en_attente"],
+        true,
+        periodeConsoCpaSansPlafond,
+        aujourdhui,
+      )) +
+      (await sommeJours(
+        supabase,
+        id,
+        "CP",
+        ["en_attente"],
+        false,
+        periodeCpDirectFuture,
+        aujourdhui,
+      ));
     const transmisCpa =
       (await sommeTransmis(supabase, id, "CP", true, periodeConsoCpaSansPlafond, aujourdhui)) +
       (await sommeTransmis(supabase, id, "CP", false, periodeCpDirectFuture, aujourdhui));
@@ -1527,9 +1668,8 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
   // `resolverCapitalOuvertureCp`, appliquée ici une période plus loin).
   let capitalCourant = 0;
   try {
-    capitalCourant = (
-      await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital)
-    ).total;
+    capitalCourant = (await resolverCapitalOuvertureCp(supabase, id, periodeEnCours, ctxCapital))
+      .total;
   } catch (erreur) {
     if (!(erreur instanceof SoldeIndeterminableError)) throw erreur;
   }
@@ -1578,7 +1718,29 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
   );
   const transfertCpa = Math.max(0, accrualCpa - consommeCpa);
 
-  const bonus = bonusAnciennete(reglesAnciennete, ansAnciennete(dateReferenceAnciennete, periodeCible.debut));
+  // Modes "mois_suivant_anniversaire"/"debut_mois_anniversaire" (18/09/2026)
+  // — même principe que `resolverCapitalOuvertureCp`, mais le pivot est
+  // `dateReference` (la date DE LA DEMANDE posée sur la période cible), pas
+  // `aujourd'hui` : la question posée ici est "quels jours seront
+  // disponibles à CETTE date", pas "aujourd'hui". Si la date d'effet du
+  // bonus tombe avant la date demandée, il est déjà acquis pour cette
+  // projection même si "aujourd'hui" ne l'a pas encore atteinte.
+  const bonus =
+    regleCP.bonusAncienneteAttribution !== "periode_suivante"
+      ? (() => {
+          const dateEffet = dateEffetBonusAncienneteDansPeriode(
+            dateReferenceAnciennete,
+            periodeCible,
+            decalageMoisAttribution(regleCP.bonusAncienneteAttribution),
+          );
+          return dateEffet && dateIso(dateEffet) <= dateReference
+            ? bonusAnciennete(reglesAnciennete, ansAnciennete(dateReferenceAnciennete, dateEffet))
+            : 0;
+        })()
+      : bonusAnciennete(
+          reglesAnciennete,
+          ansAnciennete(dateReferenceAnciennete, periodeCible.debut),
+        );
 
   // `null` = pas de filtre `is_anticipation` (contrairement au calcul du
   // transfert ci-dessus) : compte toute demande CP déjà posée sur la
@@ -1679,17 +1841,28 @@ export async function fetchHistoriqueCp(
     periodeEnCours,
     ctxCapital,
   );
-  const soldeDepart = capitalOuverture.total;
+  // Le bonus d'ancienneté en mode "mois_suivant_anniversaire" (18/09/2026)
+  // est retiré du "Solde N-1" affiché ICI (`capitalOuverture.bonusDateEffet`
+  // non nul) : il redevient un événement à part dans le feed
+  // (`evenementBonusAnciennete` plus bas), sans quoi il serait compté deux
+  // fois (une fois dans `soldeDepart`, une fois dans l'événement). Mode
+  // "periode_suivante" inchangé : le bonus reste baké dans `total` dès
+  // l'ouverture, `bonusDateEffet` est alors toujours `null`, `bonusExclu`
+  // reste à 0.
+  const bonusExclu = capitalOuverture.bonusDateEffet ? capitalOuverture.bonus : 0;
+  const soldeDepart = capitalOuverture.total - bonusExclu;
   // Décomposition "rendre tangible" (14/09/2026) — voir doc du champ sur
   // `HistoriqueSolde`. Ordre demandé par Vincent : CPA N-1, ancienneté,
   // report CP. `undefined` (pas `[]`) quand le capital vient d'un solde
   // initial saisi à la main — l'UI distingue "pas de détail à afficher" de
-  // "détail vide" pour retomber sur la ligne opaque existante.
+  // "détail vide" pour retomber sur la ligne opaque existante. Bonus omis ici
+  // s'il est déjà affiché comme événement à part (voir `soldeDepart`
+  // ci-dessus).
   const decompositionDepart =
     capitalOuverture.gouvernePar === "calcul"
       ? [
           { libelle: "Congés acquis N-1", jours: capitalOuverture.transfertCpa },
-          { libelle: "Jour(s) ancienneté", jours: capitalOuverture.bonus },
+          { libelle: "Jour(s) ancienneté", jours: capitalOuverture.bonus - bonusExclu },
           { libelle: "Report CP N-1", jours: capitalOuverture.report },
         ].filter((c) => c.jours !== 0)
       : undefined;
@@ -1776,7 +1949,7 @@ export async function fetchHistoriqueCp(
   interface MouvementBrut {
     id: string;
     demandeId?: string;
-    type: "demande" | "ajustement";
+    type: "demande" | "ajustement" | "acquisition";
     date: string;
     libelle: string;
     jours: number;
@@ -1803,7 +1976,28 @@ export async function fetchHistoriqueCp(
     return `${prefixe} : ${formatPeriodePillNumerique(d.date_debut, d.date_fin)}`;
   }
 
+  // "Jour supp. anniversaire" (18/09/2026, mode "mois_suivant_anniversaire")
+  // — événement à part entière plutôt qu'injecté silencieusement dans le
+  // capital d'ouverture (voir `resolverCapitalOuvertureCp`) : même gabarit
+  // que les pills "Acquisition {mois}" RTT/CPA. `capitalOuverture.bonus`/
+  // `.bonusDateEffet` sont déjà résolus par la source de vérité unique — pas
+  // de recalcul indépendant ici, juste sa mise en forme. Compté dans le réel
+  // ET le théorique : un fait acquis une fois la date passée, pas une
+  // décision en attente de validation.
+  const evenementBonusAnciennete: MouvementBrut | null = capitalOuverture.bonusDateEffet
+    ? {
+        id: `bonus-anciennete-${capitalOuverture.bonusDateEffet}`,
+        type: "acquisition",
+        date: capitalOuverture.bonusDateEffet,
+        libelle: `Jour supp. anniversaire ${formatMoisAnnee(
+          new Date(`${capitalOuverture.bonusDateEffet}T00:00:00Z`),
+        )}`,
+        jours: capitalOuverture.bonus,
+      }
+    : null;
+
   const mouvementsBruts: MouvementBrut[] = [
+    ...(evenementBonusAnciennete ? [evenementBonusAnciennete] : []),
     ...lignesTransmises.map((l): MouvementBrut => ({
       id: l.id,
       demandeId: l.demande_id,
@@ -1885,6 +2079,7 @@ export async function fetchHistoriqueCp(
   // `soldeTheorique` — un salarié pouvait voir "Solde N-1 62j, -1j, -1j" puis
   // "Solde actuel 45j", incohérent en apparence (bug remonté par Vincent).
   const mouvementsBrutsTheorique: MouvementBrut[] = [
+    ...(evenementBonusAnciennete ? [evenementBonusAnciennete] : []),
     ...(demandesValideesRows ?? []).map((d): MouvementBrut => ({
       id: d.id,
       type: "demande",
@@ -1927,7 +2122,11 @@ export async function fetchHistoriqueCp(
     return { ...m, soldeApres: cumulValidee };
   });
 
-  let cumulTheorique = soldeDepart - consommeValideeTotal + ajustementsTotal;
+  // `+ bonusExclu` (18/09/2026) — réintègre ce que `soldeDepart` a
+  // volontairement exclu plus haut, comme pour `cumul`/`cumulValidee` (qui le
+  // réintègrent via `evenementBonusAnciennete` dans leur propre tableau de
+  // mouvements).
+  let cumulTheorique = soldeDepart + bonusExclu - consommeValideeTotal + ajustementsTotal;
   const enAttente: MouvementSolde[] = (enAttenteRows ?? [])
     .sort((a, b) => a.date_debut.localeCompare(b.date_debut))
     .map((d) => {
@@ -2427,9 +2626,7 @@ export async function fetchHistoriqueCpa(utilisateurId: string): Promise<Histori
   // Statut résolu à `aujourdhui` — voir `fetchHistoriqueCp`, même correctif.
   const statutsResolus = await resoudreStatutsADate(supabase, demandesRowsToutes, aujourdhui);
   const demandesRows = demandesRowsToutes.filter((d) => statutsResolus.get(d.id) === "validee");
-  const enAttenteRows = demandesRowsToutes.filter(
-    (d) => statutsResolus.get(d.id) === "en_attente",
-  );
+  const enAttenteRows = demandesRowsToutes.filter((d) => statutsResolus.get(d.id) === "en_attente");
 
   interface MouvementBrut {
     id: string;

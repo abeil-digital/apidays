@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ChevronDown, ChevronUp, Plus, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleHelp, Plus, TriangleAlert, X } from "lucide-react";
 import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
-import { formatJours } from "@/lib/format";
+import { formatDateAction, formatJours } from "@/lib/format";
 import { useHistoriqueSolde } from "@/hooks/useHistoriqueSolde";
+import { useReglesConges } from "@/hooks/useReglesConges";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { fetchDemandeParId } from "@/lib/data/demandes.repository";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { ajouterAjustementSolde } from "@/lib/data/soldes.repository";
@@ -213,6 +215,41 @@ export function SoldeDetailPanel({
   onRefuser,
 }: SoldeDetailPanelProps) {
   const { historique, loading, error, refetch } = useHistoriqueSolde(utilisateurId, code);
+  // Aide contextuelle "CPN+1" (18/09/2026, demande explicite — transparence
+  // sur le mécanisme "Parcours B" : le CP posé sur la période suivante
+  // impute le solde CPA, sans que ce soit visible pour l'utilisateur au-delà
+  // de l'icône d'avertissement). Point d'interrogation cliquable plutôt
+  // qu'une infobulle au survol (pas d'équivalent tactile) — un seul id
+  // ouvert à la fois, la même popover est réutilisée par les lignes
+  // validées et "en attente". `regleCp` sert uniquement à retrouver la date
+  // de début de LA PÉRIODE CIBLE de chaque ligne (`m.date`), pas celle en
+  // cours.
+  const { reglesAcquisition } = useReglesConges();
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const messageCpDirect = (dateIso: string) =>
+    `CP période N+1 : sera pris en compte dans votre solde CP à partir du ${formatDateAction(periodeReferenceCp(regleCp, new Date(`${dateIso}T00:00:00Z`)).debut)}`;
+  const [aideCpDirectId, setAideCpDirectId] = useState<string | null>(null);
+  function iconAidePeriodeSuivante(id: string, dateIso: string, actif: boolean) {
+    return (
+      <span className="relative inline-flex shrink-0">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setAideCpDirectId((prev) => (prev === id ? null : id));
+          }}
+          className={actif ? "text-white" : "text-status-warning-fg"}
+        >
+          <CircleHelp size={13} />
+        </button>
+        {aideCpDirectId === id && (
+          <div className="bg-ink-900 absolute left-1/2 top-full z-20 mt-1 w-56 -translate-x-1/2 rounded-control px-2.5 py-2 text-left text-xs font-normal text-white shadow-lg">
+            {messageCpDirect(dateIso)}
+          </div>
+        )}
+      </span>
+    );
+  }
   const [mode, setMode] = useState<ModeSolde>(modeParDefaut);
   // `idSelectionne` distinct de `demandeSelectionnee` (20/08/2026) — mis à
   // jour dès le clic, AVANT la résolution du fetch, pour savoir sous quelle
@@ -489,17 +526,6 @@ export function SoldeDetailPanel({
         <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
       ) : (
         <>
-        {code === "CP" && historique.cpSurPeriodeSuivante && (
-          // Mention "Parcours B" (16/09/2026, demande explicite : "on ajoutera
-          // une mention dans l'historique CP") — le CP posé sur la période
-          // suivante ne baisse pas le solde CP affiché ici, il faut donc dire
-          // où il est visible (feed CPA, voir `fetchHistoriqueCpa`/
-          // `codeAffichageMouvement`).
-          <div className="bg-status-warning-bg text-status-warning-fg mx-4 mt-3 flex items-start gap-2 rounded-control px-3 py-2.5 text-sm">
-            <TriangleAlert size={16} className="mt-0.5 shrink-0" />
-            <span>Un congé CP sur la période suivante — comptabilisé dans le solde CPA.</span>
-          </div>
-        )}
         {/* Hauteur plafonnée + scroll interne (20/08/2026) — un historique
             avec beaucoup d'entrées ne doit pas faire grandir la popin à
             l'infini. En `vh` plutôt qu'un px fixe (20/08/2026, demande
@@ -693,28 +719,31 @@ export function SoldeDetailPanel({
                     }
                   >
                     <td className="px-4 py-3">
-                      {avecDetailConge && m.type === "demande" ? (
-                        <button type="button" onClick={() => ouvrirDetail(idDemande)}>
-                          {pill}
-                        </button>
-                      ) : ajustementCliquable ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            ouvrirDetailAjustement({
-                              id: m.id,
-                              date: m.date,
-                              jours: m.jours,
-                              motif: m.motif,
-                              auteurNom: m.auteurNom,
-                            })
-                          }
-                        >
-                          {pill}
-                        </button>
-                      ) : (
-                        pill
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {avecDetailConge && m.type === "demande" ? (
+                          <button type="button" onClick={() => ouvrirDetail(idDemande)}>
+                            {pill}
+                          </button>
+                        ) : ajustementCliquable ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              ouvrirDetailAjustement({
+                                id: m.id,
+                                date: m.date,
+                                jours: m.jours,
+                                motif: m.motif,
+                                auteurNom: m.auteurNom,
+                              })
+                            }
+                          >
+                            {pill}
+                          </button>
+                        ) : (
+                          pill
+                        )}
+                        {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
+                      </div>
                     </td>
                     <td
                       className={`px-4 py-3 text-center font-semibold ${
@@ -790,13 +819,16 @@ export function SoldeDetailPanel({
                     }
                   >
                     <td className="px-4 py-3">
-                      {avecDetailConge ? (
-                        <button type="button" onClick={() => ouvrirDetail(m.id)}>
-                          {pill}
-                        </button>
-                      ) : (
-                        pill
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {avecDetailConge ? (
+                          <button type="button" onClick={() => ouvrirDetail(m.id)}>
+                            {pill}
+                          </button>
+                        ) : (
+                          pill
+                        )}
+                        {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
+                      </div>
                     </td>
                     <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
                       {formatJours(m.jours)} j
