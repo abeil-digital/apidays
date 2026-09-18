@@ -7096,6 +7096,38 @@ cette session), `lib/types.ts` (`HistoriqueAttributionBonus`), `lib/data/reglesC
 `components/parametrer/CongesRttPage.tsx` (`BlocAttributionBonus`, nouveau composant à sauvegarde
 immédiate).
 
+## Incident prod — GRANT manquant sur la nouvelle table (18/09/2026)
+
+Suite immédiate du chantier ci-dessus : une fois la migration (suppression de colonne + nouvelle
+table) appliquée, Vincent a signalé une casse en prod ET en local — Accueil et "Vérifier les fiches
+de paie" bloqués en chargement infini, "Suivre les soldes" n'affichait plus les soldes, "Paramétrer >
+Congés & RTT" affichait "Impossible de charger les règles de congés/RTT.".
+
+**Fausses pistes écartées rapidement** (vérifiées avant de conclure) : le déploiement Vercel
+correspondait bien au dernier commit (créé 9 secondes après) ; un rechargement complet de la page
+côté navigateur n'a rien changé — pas un souci de cache. Interrogée directement en base
+(`service_role`, lecture seule) : la table `historique_bonus_anciennete_attribution` existait bien,
+peuplée pour chaque tenant (dont Abeil), et `regles_acquisition` n'avait plus l'ancienne colonne — la
+migration s'était bien déroulée.
+
+**Cause réelle, trouvée en reproduisant en local** (connecté dans le navigateur, `read_console_messages`
+→ 2 erreurs 403 ; requête reconstruite manuellement avec le token de session + la clé anon pour lire
+le corps de la réponse) : `permission denied for table historique_bonus_anciennete_attribution`
+(Postgres 42501). Les policies RLS existaient, mais le **GRANT de base Postgres** pour le rôle
+`authenticated` n'avait jamais été posé sur cette nouvelle table — oubli lors de l'écriture de la
+migration. Ce projet n'a pas de `alter default privileges ... to authenticated` (seulement pour
+`service_role`, voir schema.sql) : chaque nouvelle table doit être ajoutée EXPLICITEMENT à la liste
+fixe du bloc `grant select, insert, update, delete on (...) to authenticated;` — étape connue et déjà
+documentée dans schema.sql, simplement oubliée pour cette table précise.
+
+**Corrigé** : `grant select, insert, update, delete on public.historique_bonus_anciennete_attribution
+to authenticated;` appliqué par Vincent, `historique_bonus_anciennete_attribution` ajoutée à la liste
+dans `supabase/schema.sql`. Revérifié en local : "Paramétrer > Congés & RTT" charge normalement.
+
+**Leçon retenue** : pour toute nouvelle table créée dans ce projet, ne pas oublier le GRANT explicite
+en plus des policies RLS — les deux sont nécessaires, RLS seule ne suffit pas (le bloc GRANT de
+schema.sql le documentait déjà, mais ça n'a pas empêché l'oubli sur le coup).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

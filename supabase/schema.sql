@@ -1353,6 +1353,7 @@ grant select, insert, update, delete on
   conges_imposes,
   regles_acquisition,
   regles_anciennete,
+  historique_bonus_anciennete_attribution,
   objectifs_calendrier,
   parametrage_notifications,
   ajustements_solde,
