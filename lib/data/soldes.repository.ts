@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   AjustementSoldeInput,
   AttributionBonusAnciennete,
+  HistoriqueAttributionBonus,
   HistoriqueSolde,
   MoisHistoriqueSolde,
   MouvementSolde,
@@ -15,7 +16,12 @@ import { formatPeriodePillNumerique, moisEffet } from "@/lib/format";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { createClient } from "@/lib/supabase/client";
 import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
-import { fetchReglesAcquisition, fetchReglesAnciennete } from "@/lib/data/reglesConges.repository";
+import {
+  enregistrerAttributionBonus,
+  fetchHistoriqueAttributionBonus,
+  fetchReglesAcquisition,
+  fetchReglesAnciennete,
+} from "@/lib/data/reglesConges.repository";
 import { fetchHistoriqueUtilisateur, fetchSoldeInitial } from "@/lib/data/utilisateurs.repository";
 import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
 
@@ -171,6 +177,64 @@ function dateEffetBonusAncienneteDansPeriode(
     if (dateEffet >= periode.debut && dateEffet <= periode.fin) return dateEffet;
   }
   return null;
+}
+
+// Résout, PAR COLLABORATEUR, quel mode "Jour(s) d'ancienneté attribués"
+// s'applique à une période donnée — et sa date d'effet (18/09/2026,
+// individuellement, demande explicite : "on est capables d'évaluer qui en a
+// bénéficié déjà"). Un changement de réglage ne doit jamais annuler ce qui
+// est déjà individuellement acquis : on parcourt l'historique du plus
+// récent au plus ancien, et on retient le PREMIER mode dont la date d'effet
+// théorique (calculée avec SA propre formule) tombe dans la fenêtre où IL
+// était réellement actif — ni avant qu'il le devienne (`effectiveDepuis`),
+// ni après avoir été remplacé (`limiteSup`, l'`effectiveDepuis` de l'entrée
+// plus récente déjà écartée). Dès qu'un mode produit une date valide, on la
+// garde — même si un mode plus récent a depuis pris le relais — ce qui
+// préserve ce qui est déjà arrivé sans jamais l'annuler rétroactivement.
+//
+// "periode_suivante" est traité comme un pseudo-événement dont la date
+// d'effet est le 1er jour de LA période elle-même (il n'injecte le bonus en
+// continu dès le jour 1 que s'il était déjà le mode actif à ce moment-là,
+// pas s'il vient d'être choisi en cours de route — voir
+// `enregistrerAttributionBonusAnciennete` pour le calcul d'`effectiveDepuis`
+// selon le mode, qui rend ce cas de figure impossible pour ce mode
+// spécifiquement : son `effectiveDepuis` tombe toujours pile sur une bascule
+// de période).
+//
+// Défaut "periode_suivante" (dateEffet `null`) si aucune ligne d'historique
+// n'est encore valide — tenant jamais configuré, comportement historique
+// inchangé.
+function resoudreAttributionBonus(
+  historique: HistoriqueAttributionBonus[],
+  periode: Periode,
+  dateReferenceAnciennete: string,
+): { mode: AttributionBonusAnciennete; dateEffet: Date | null } {
+  const triDesc = [...historique].sort((a, b) =>
+    b.effectiveDepuis.localeCompare(a.effectiveDepuis),
+  );
+  let limiteSup: string | null = null;
+  for (const h of triDesc) {
+    if (h.valeur === "periode_suivante") {
+      const candidatIso = dateIso(periode.debut);
+      if (h.effectiveDepuis <= candidatIso && (limiteSup === null || candidatIso < limiteSup)) {
+        return { mode: "periode_suivante", dateEffet: null };
+      }
+    } else {
+      const candidat = dateEffetBonusAncienneteDansPeriode(
+        dateReferenceAnciennete,
+        periode,
+        h.valeur,
+      );
+      if (candidat) {
+        const candidatIso = dateIso(candidat);
+        if (candidatIso >= h.effectiveDepuis && (limiteSup === null || candidatIso < limiteSup)) {
+          return { mode: h.valeur, dateEffet: candidat };
+        }
+      }
+    }
+    limiteSup = h.effectiveDepuis;
+  }
+  return { mode: "periode_suivante", dateEffet: null };
 }
 
 interface EntreeTauxActivite {
@@ -483,7 +547,6 @@ interface RegleAcquisitionMinimal {
   reportAutorise: boolean;
   periodeDebutMois: number;
   periodeDebutJour: number;
-  bonusAncienneteAttribution: AttributionBonusAnciennete;
 }
 
 /**
@@ -560,6 +623,7 @@ async function resolverCapitalOuvertureCp(
     moisLimite: string | null;
     soldeInitial: SoldeInitial | null;
     reglesAnciennete: RegleAnciennete[];
+    historiqueAttributionBonus: HistoriqueAttributionBonus[];
     dateReferenceAnciennete: string;
     aujourdhui: Date;
     dateEntree: string;
@@ -721,16 +785,16 @@ async function resolverCapitalOuvertureCp(
   // note sur le gel ci-dessous).
   let bonus = 0;
   let bonusDateEffet: string | null = null;
-  if (ctx.regleCP.bonusAncienneteAttribution !== "periode_suivante") {
-    const dateEffet = dateEffetBonusAncienneteDansPeriode(
-      ctx.dateReferenceAnciennete,
-      periode,
-      ctx.regleCP.bonusAncienneteAttribution,
-    );
-    if (dateEffet && dateIso(dateEffet) <= dateIso(ctx.aujourdhui)) {
+  const { mode: modeAttributionBonus, dateEffet: dateEffetAttributionBonus } =
+    resoudreAttributionBonus(ctx.historiqueAttributionBonus, periode, ctx.dateReferenceAnciennete);
+  if (modeAttributionBonus !== "periode_suivante") {
+    if (
+      dateEffetAttributionBonus &&
+      dateIso(dateEffetAttributionBonus) <= dateIso(ctx.aujourdhui)
+    ) {
       const montant = bonusAnciennete(
         ctx.reglesAnciennete,
-        ansAnciennete(ctx.dateReferenceAnciennete, dateEffet),
+        ansAnciennete(ctx.dateReferenceAnciennete, dateEffetAttributionBonus),
       );
       // Pas d'événement fantôme "+0j" (18/09/2026, trouvé en audit) — un
       // collaborateur qui n'a encore atteint aucun seuil d'ancienneté a une
@@ -740,7 +804,7 @@ async function resolverCapitalOuvertureCp(
       // anniversaire" avec un montant de 0.
       if (montant > 0) {
         bonus = montant;
-        bonusDateEffet = dateIso(dateEffet);
+        bonusDateEffet = dateIso(dateEffetAttributionBonus);
       }
     }
   } else {
@@ -1141,6 +1205,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
     { data: utilisateurRow, error: erreurUtilisateur },
     reglesAcquisition,
     reglesAnciennete,
+    historiqueAttributionBonus,
     historiqueTaux,
     soldeInitial,
     { dateDebutUtilisation },
@@ -1152,6 +1217,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       .single(),
     fetchReglesAcquisition(),
     fetchReglesAnciennete(),
+    fetchHistoriqueAttributionBonus(),
     fetchHistoriqueTauxActivite(id),
     fetchSoldeInitial(id),
     fetchEntrepriseCourante(),
@@ -1199,6 +1265,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       moisLimite,
       soldeInitial,
       reglesAnciennete,
+      historiqueAttributionBonus,
       dateReferenceAnciennete,
       aujourdhui,
       dateEntree: utilisateurRow.date_entree,
@@ -1578,6 +1645,66 @@ export async function fetchSoldeAnticipe(
 }
 
 /**
+ * Met en attente un changement du mode "Jour(s) d'ancienneté attribués"
+ * (Paramétrer > Congés & RTT, 18/09/2026) — orchestration ici plutôt que
+ * dans `reglesConges.repository.ts` (repository CRUD pur) car elle a besoin
+ * de `periodeContenant`/`decalerPeriode`, déjà source de vérité unique dans
+ * ce fichier pour tout ce qui touche aux bornes de période.
+ *
+ * Calcule `effectiveDepuis` — deux cas (18/09/2026, demande explicite,
+ * "individuellement") :
+ * - **"periode_suivante"** : ce mode injecte le bonus en continu dès le 1er
+ *   jour de la période (pas un événement précis) — un changement vers/depuis
+ *   ce mode ne peut donc s'appliquer qu'à partir de la PROCHAINE bascule de
+ *   période, jamais à la période déjà entamée.
+ * - **Les 3 modes "événement"** (`debut_mois_anniversaire`,
+ *   `jour_anniversaire`, `mois_suivant_anniversaire`) sont des régularisations
+ *   mensuelles — le changement s'applique dès le **1er jour du mois
+ *   calendaire suivant**, jamais avant : le mois en cours, déjà transmis ou
+ *   en passe de l'être, n'est jamais retouché. `resoudreAttributionBonus`
+ *   préserve individuellement, par collaborateur, ce qui a déjà été acquis
+ *   sous un mode antérieur avant ce changement — voir sa documentation.
+ *
+ * La toute première configuration du tenant (aucun historique) s'applique
+ * immédiatement dans les deux cas (`effectiveDepuis` = début de la période
+ * en cours) — rien à protéger, puisqu'aucun calcul n'a jamais utilisé un
+ * autre mode avant elle.
+ */
+export async function enregistrerAttributionBonusAnciennete(
+  valeur: AttributionBonusAnciennete,
+): Promise<HistoriqueAttributionBonus> {
+  const [reglesAcquisition, historique] = await Promise.all([
+    fetchReglesAcquisition(),
+    fetchHistoriqueAttributionBonus(),
+  ]);
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  if (!regleCP) {
+    throw new Error("Aucune règle d'acquisition CP paramétrée.");
+  }
+
+  const aujourdhui = new Date(`${dateIso(getAujourdhui())}T00:00:00Z`);
+  const periodeEnCours = periodeContenant(
+    aujourdhui,
+    regleCP.periodeDebutMois,
+    regleCP.periodeDebutJour,
+  );
+
+  let effectiveDepuis: string;
+  if (historique.length === 0) {
+    effectiveDepuis = dateIso(periodeEnCours.debut);
+  } else if (valeur === "periode_suivante") {
+    effectiveDepuis = dateIso(decalerPeriode(periodeEnCours, 1).debut);
+  } else {
+    const premierJourMoisSuivant = new Date(
+      Date.UTC(aujourdhui.getUTCFullYear(), aujourdhui.getUTCMonth() + 1, 1),
+    );
+    effectiveDepuis = dateIso(premierJourMoisSuivant);
+  }
+
+  return enregistrerAttributionBonus(valeur, effectiveDepuis);
+}
+
+/**
  * Capital projeté d'une période CP future — "Parcours B" (16/09/2026, poser
  * un CP directement pour une date au-delà de la période de référence en
  * cours, plutôt que de passer par "Congés anticipés"). `dateReference` ne
@@ -1612,6 +1739,7 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
     { data: utilisateurRow, error: erreurUtilisateur },
     reglesAcquisition,
     reglesAnciennete,
+    historiqueAttributionBonus,
     historiqueTaux,
     soldeInitial,
     { dateDebutUtilisation },
@@ -1623,6 +1751,7 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
       .single(),
     fetchReglesAcquisition(),
     fetchReglesAnciennete(),
+    fetchHistoriqueAttributionBonus(),
     fetchHistoriqueTauxActivite(id),
     fetchSoldeInitial(id),
     fetchEntrepriseCourante(),
@@ -1659,6 +1788,7 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
     moisLimite,
     soldeInitial,
     reglesAnciennete,
+    historiqueAttributionBonus,
     dateReferenceAnciennete,
     aujourdhui,
     dateEntree: utilisateurRow.date_entree,
@@ -1727,18 +1857,16 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
   // disponibles à CETTE date", pas "aujourd'hui". Si la date d'effet du
   // bonus tombe avant la date demandée, il est déjà acquis pour cette
   // projection même si "aujourd'hui" ne l'a pas encore atteinte.
+  const { mode: modeAttributionBonusCible, dateEffet: dateEffetAttributionBonusCible } =
+    resoudreAttributionBonus(historiqueAttributionBonus, periodeCible, dateReferenceAnciennete);
   const bonus =
-    regleCP.bonusAncienneteAttribution !== "periode_suivante"
-      ? (() => {
-          const dateEffet = dateEffetBonusAncienneteDansPeriode(
-            dateReferenceAnciennete,
-            periodeCible,
-            regleCP.bonusAncienneteAttribution,
-          );
-          return dateEffet && dateIso(dateEffet) <= dateReference
-            ? bonusAnciennete(reglesAnciennete, ansAnciennete(dateReferenceAnciennete, dateEffet))
-            : 0;
-        })()
+    modeAttributionBonusCible !== "periode_suivante"
+      ? dateEffetAttributionBonusCible && dateIso(dateEffetAttributionBonusCible) <= dateReference
+        ? bonusAnciennete(
+            reglesAnciennete,
+            ansAnciennete(dateReferenceAnciennete, dateEffetAttributionBonusCible),
+          )
+        : 0
       : bonusAnciennete(
           reglesAnciennete,
           ansAnciennete(dateReferenceAnciennete, periodeCible.debut),
@@ -1777,6 +1905,7 @@ export async function fetchHistoriqueCp(
     { data: utilisateurRow, error: erreurUtilisateur },
     reglesAcquisition,
     reglesAnciennete,
+    historiqueAttributionBonus,
     historiqueTaux,
     soldeInitial,
     { dateDebutUtilisation },
@@ -1788,6 +1917,7 @@ export async function fetchHistoriqueCp(
       .single(),
     fetchReglesAcquisition(),
     fetchReglesAnciennete(),
+    fetchHistoriqueAttributionBonus(),
     fetchHistoriqueTauxActivite(utilisateurId),
     fetchSoldeInitial(utilisateurId),
     fetchEntrepriseCourante(),
@@ -1823,6 +1953,7 @@ export async function fetchHistoriqueCp(
     moisLimite,
     soldeInitial,
     reglesAnciennete,
+    historiqueAttributionBonus,
     dateReferenceAnciennete,
     aujourdhui,
     dateEntree: utilisateurRow.date_entree,

@@ -401,15 +401,6 @@ create table regles_acquisition (
   taux_acquisition_mensuel numeric(5,2) not null,
   report_autorise boolean not null default false,
   anticipation_autorisee boolean not null default false,
-  -- Moment d'attribution du bonus de jour(s) d'ancienneté (18/09/2026, CP
-  -- uniquement — voir `AttributionBonusAnciennete`, lib/types.ts) : porté ici
-  -- plutôt que sur `regles_anciennete` (plusieurs seuils, un seul moment
-  -- d'attribution partagé). Sans effet pour RTT.
-  bonus_anciennete_attribution text not null default 'periode_suivante'
-    check (bonus_anciennete_attribution in (
-      'periode_suivante', 'debut_mois_anniversaire', 'jour_anniversaire',
-      'mois_suivant_anniversaire'
-    )),
   updated_at timestamptz not null default now(),
   unique (entreprise_id, type_absence_id)
 );
@@ -466,6 +457,31 @@ create table regles_anciennete (
   seuil_annees int not null,
   jours_supplementaires numeric(4,1) not null,
   created_at timestamptz not null default now()
+);
+
+-- Moment d'attribution du bonus de jour(s) d'ancienneté (18/09/2026, CP
+-- uniquement — voir `AttributionBonusAnciennete`, lib/types.ts), historisé
+-- plutôt qu'une simple colonne sur `regles_acquisition` : un changement de ce
+-- réglage ne doit s'appliquer qu'à partir de la PROCHAINE bascule de période,
+-- jamais à la période en cours (le capital d'ouverture d'une période déjà
+-- entamée ne doit pas sauter sans transmission ni action du collaborateur).
+-- `effective_depuis` = date de début de la période à partir de laquelle
+-- cette valeur s'applique — le moteur de calcul (`soldes.repository.ts`)
+-- résout "quelle était la valeur effective au début de CETTE période" en
+-- cherchant la ligne la plus récente dont `effective_depuis <=
+-- periode.debut`. `unique` par date : un second changement avant la bascule
+-- met à jour la même ligne en attente plutôt que d'en créer une seconde.
+create table historique_bonus_anciennete_attribution (
+  id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
+  valeur text not null
+    check (valeur in (
+      'periode_suivante', 'debut_mois_anniversaire', 'jour_anniversaire',
+      'mois_suivant_anniversaire'
+    )),
+  effective_depuis date not null,
+  created_at timestamptz not null default now(),
+  unique (entreprise_id, effective_depuis)
 );
 
 -- FAQ (Accueil, `FaqCard.tsx`) — administrée depuis Paramétrer > FAQ
@@ -704,6 +720,7 @@ alter table acquisitions_gelees enable row level security;
 alter table objectifs_calendrier enable row level security;
 alter table parametrage_notifications enable row level security;
 alter table regles_anciennete enable row level security;
+alter table historique_bonus_anciennete_attribution enable row level security;
 alter table faqs enable row level security;
 alter table exports_paie enable row level security;
 alter table export_paie_lignes enable row level security;
@@ -1122,6 +1139,15 @@ create policy "regles_anciennete: lecture par tout utilisateur authentifié"
 
 create policy "regles_anciennete: manager et admin modifient"
   on regles_anciennete for all
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
+  with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
+
+create policy "historique_bonus_anciennete_attribution: lecture par tout utilisateur authentifié"
+  on historique_bonus_anciennete_attribution for select
+  using (auth.role() = 'authenticated' and entreprise_id = my_entreprise_id());
+
+create policy "historique_bonus_anciennete_attribution: manager et admin modifient"
+  on historique_bonus_anciennete_attribution for all
   using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id())
   with check (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
 

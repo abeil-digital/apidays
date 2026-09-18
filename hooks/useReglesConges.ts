@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+  AttributionBonusAnciennete,
+  HistoriqueAttributionBonus,
   RegleAcquisition,
   RegleAcquisitionInput,
   RegleAnciennete,
@@ -11,15 +13,18 @@ import type {
 import {
   creerRegleAnciennete,
   enregistrerRegleAcquisition,
+  fetchHistoriqueAttributionBonus,
   fetchReglesAcquisition,
   fetchReglesAnciennete,
   modifierRegleAnciennete as modifierRegleAncienneteApi,
   supprimerRegleAnciennete,
 } from "@/lib/data/reglesConges.repository";
+import { enregistrerAttributionBonusAnciennete } from "@/lib/data/soldes.repository";
 
 interface UseReglesCongesResult {
   reglesAcquisition: RegleAcquisition[];
   reglesAnciennete: RegleAnciennete[];
+  historiqueAttributionBonus: HistoriqueAttributionBonus[];
   loading: boolean;
   error: string | null;
   enregistrerAcquisition: (
@@ -29,6 +34,9 @@ interface UseReglesCongesResult {
   ajouterRegleAnciennete: (input: RegleAncienneteInput) => Promise<RegleAnciennete>;
   modifierRegleAnciennete: (id: string, input: RegleAncienneteInput) => Promise<RegleAnciennete>;
   retirerRegleAnciennete: (id: string) => Promise<void>;
+  enregistrerAttributionBonus: (
+    valeur: AttributionBonusAnciennete,
+  ) => Promise<HistoriqueAttributionBonus>;
 }
 
 /**
@@ -39,17 +47,25 @@ interface UseReglesCongesResult {
 export function useReglesConges(): UseReglesCongesResult {
   const [reglesAcquisition, setReglesAcquisition] = useState<RegleAcquisition[]>([]);
   const [reglesAnciennete, setReglesAnciennete] = useState<RegleAnciennete[]>([]);
+  const [historiqueAttributionBonus, setHistoriqueAttributionBonus] = useState<
+    HistoriqueAttributionBonus[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([fetchReglesAcquisition(), fetchReglesAnciennete()])
-      .then(([acquisition, anciennete]) => {
+    Promise.all([
+      fetchReglesAcquisition(),
+      fetchReglesAnciennete(),
+      fetchHistoriqueAttributionBonus(),
+    ])
+      .then(([acquisition, anciennete, attributionBonus]) => {
         if (!cancelled) {
           setReglesAcquisition(acquisition);
           setReglesAnciennete(anciennete);
+          setHistoriqueAttributionBonus(attributionBonus);
           setError(null);
         }
       })
@@ -93,14 +109,28 @@ export function useReglesConges(): UseReglesCongesResult {
     setReglesAnciennete((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
+  // Met à jour la même ligne en attente si elle existe déjà (même
+  // `effectiveDepuis`, contrainte `unique` côté base) plutôt que d'ajouter un
+  // doublon — voir `enregistrerAttributionBonusAnciennete`.
+  const enregistrerAttributionBonusCb = useCallback(async (valeur: AttributionBonusAnciennete) => {
+    const ligne = await enregistrerAttributionBonusAnciennete(valeur);
+    setHistoriqueAttributionBonus((prev) => [
+      ...prev.filter((h) => h.effectiveDepuis !== ligne.effectiveDepuis),
+      ligne,
+    ]);
+    return ligne;
+  }, []);
+
   return {
     reglesAcquisition,
     reglesAnciennete,
+    historiqueAttributionBonus,
     loading,
     error,
     enregistrerAcquisition,
     ajouterRegleAnciennete,
     modifierRegleAnciennete,
     retirerRegleAnciennete,
+    enregistrerAttributionBonus: enregistrerAttributionBonusCb,
   };
 }

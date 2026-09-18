@@ -1,5 +1,6 @@
 import type {
   AttributionBonusAnciennete,
+  HistoriqueAttributionBonus,
   RegleAcquisition,
   RegleAcquisitionInput,
   RegleAnciennete,
@@ -11,10 +12,11 @@ import { getTypeAbsenceId } from "@/lib/data/typesAbsences";
 
 /**
  * Repository du moteur de calcul des soldes (écran Paramétrer > Congés &
- * RTT) — `regles_acquisition` (une ligne par type d'absence, upsert) et
+ * RTT) — `regles_acquisition` (une ligne par type d'absence, upsert),
  * `regles_anciennete` (plusieurs lignes, rattachées aux CP uniquement pour
- * l'instant). RLS : lecture large authentifiée, écriture manager/admin,
- * comme `parametrage_periode` — voir BASE-DE-DONNEES.md.
+ * l'instant) et `historique_bonus_anciennete_attribution` (historisé, voir
+ * `HistoriqueAttributionBonus`). RLS : lecture large authentifiée, écriture
+ * manager/admin, comme `parametrage_periode` — voir BASE-DE-DONNEES.md.
  */
 
 interface RegleAcquisitionRow {
@@ -24,12 +26,11 @@ interface RegleAcquisitionRow {
   taux_acquisition_mensuel: number | string;
   report_autorise: boolean;
   anticipation_autorisee: boolean;
-  bonus_anciennete_attribution: AttributionBonusAnciennete;
   types_absences: { code: TypeDemande } | { code: TypeDemande }[] | null;
 }
 
 const SELECT_REGLE_ACQUISITION =
-  "id, periode_debut_mois, periode_debut_jour, taux_acquisition_mensuel, report_autorise, anticipation_autorisee, bonus_anciennete_attribution, types_absences(code)";
+  "id, periode_debut_mois, periode_debut_jour, taux_acquisition_mensuel, report_autorise, anticipation_autorisee, types_absences(code)";
 
 function mapRegleAcquisitionDepuisDb(row: RegleAcquisitionRow): RegleAcquisition {
   const typeAbsence = Array.isArray(row.types_absences)
@@ -44,7 +45,6 @@ function mapRegleAcquisitionDepuisDb(row: RegleAcquisitionRow): RegleAcquisition
     tauxAcquisitionMensuel: Number(row.taux_acquisition_mensuel),
     reportAutorise: row.report_autorise,
     anticipationAutorisee: row.anticipation_autorisee,
-    bonusAncienneteAttribution: row.bonus_anciennete_attribution,
   };
 }
 
@@ -88,7 +88,6 @@ export async function enregistrerRegleAcquisition(
         taux_acquisition_mensuel: input.tauxAcquisitionMensuel,
         report_autorise: input.reportAutorise,
         anticipation_autorisee: input.anticipationAutorisee,
-        bonus_anciennete_attribution: input.bonusAncienneteAttribution,
       },
       { onConflict: "entreprise_id,type_absence_id" },
     )
@@ -100,6 +99,68 @@ export async function enregistrerRegleAcquisition(
   }
 
   return mapRegleAcquisitionDepuisDb(data);
+}
+
+interface HistoriqueAttributionBonusRow {
+  id: string;
+  valeur: AttributionBonusAnciennete;
+  effective_depuis: string;
+}
+
+const SELECT_HISTORIQUE_ATTRIBUTION_BONUS = "id, valeur, effective_depuis";
+
+function mapHistoriqueAttributionBonusDepuisDb(
+  row: HistoriqueAttributionBonusRow,
+): HistoriqueAttributionBonus {
+  return { id: row.id, valeur: row.valeur, effectiveDepuis: row.effective_depuis };
+}
+
+/** Historique complet, trié du plus ancien au plus récent — le moteur de
+ * calcul (`soldes.repository.ts`) a besoin de TOUTES les lignes pour
+ * résoudre la valeur effective à une date donnée, pas seulement la plus
+ * récente. */
+export async function fetchHistoriqueAttributionBonus(): Promise<HistoriqueAttributionBonus[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("historique_bonus_anciennete_attribution")
+    .select(SELECT_HISTORIQUE_ATTRIBUTION_BONUS)
+    .order("effective_depuis", { ascending: true });
+
+  if (error) {
+    throw new Error("Impossible de charger l'historique du bonus d'ancienneté.");
+  }
+
+  return (data ?? []).map(mapHistoriqueAttributionBonusDepuisDb);
+}
+
+/** Met en attente un changement de mode d'attribution — `effectiveDepuis`
+ * doit être la date de début de la PROCHAINE bascule de période (calculée
+ * par l'appelant, jamais aujourd'hui), sauf pour la toute première
+ * configuration du tenant (aucun historique) qui peut s'appliquer
+ * immédiatement. Upsert sur `(entreprise_id, effective_depuis)` : changer
+ * d'avis avant la bascule met à jour la même ligne en attente plutôt que
+ * d'en créer une seconde. */
+export async function enregistrerAttributionBonus(
+  valeur: AttributionBonusAnciennete,
+  effectiveDepuis: string,
+): Promise<HistoriqueAttributionBonus> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from("historique_bonus_anciennete_attribution")
+    .upsert(
+      { valeur, effective_depuis: effectiveDepuis },
+      { onConflict: "entreprise_id,effective_depuis" },
+    )
+    .select(SELECT_HISTORIQUE_ATTRIBUTION_BONUS)
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible d'enregistrer ce changement.");
+  }
+
+  return mapHistoriqueAttributionBonusDepuisDb(data);
 }
 
 interface RegleAncienneteRow {

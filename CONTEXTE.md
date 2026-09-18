@@ -7037,6 +7037,65 @@ page pur, pas de nouvelle donnée) : `tsc`/`eslint`/`prettier` clean, pas de vé
 cette fois (session déconnectée entre-temps, jugé non nécessaire pour un remaniement de layout aussi
 direct).
 
+## Bonus d'ancienneté — changement de réglage non rétroactif, historisé (18/09/2026)
+
+Suite directe du chantier du même jour ci-dessus. Question de Vincent : "que se passe-t-il si on
+change ce paramètre alors qu'il y a déjà des données ?" — a révélé que le réglage n'était protégé par
+rien : le capital de la période EN COURS n'est jamais figé avant sa clôture (contrairement aux lignes
+de transmission paie, elles bien figées), donc changer le mode en cours d'année pouvait faire
+sauter/baisser le solde CP affiché sans transmission ni action du collaborateur.
+
+**Design retenu, après plusieurs itérations avec Vincent** (une simple colonne "valeur courante" sur
+`regles_acquisition` ne suffit pas — il faut un historique, pour la raison de pérennité déjà éprouvée
+sur ce projet : deux sources de la même donnée finissent toujours par diverger) :
+
+- Nouvelle table `historique_bonus_anciennete_attribution` (`entreprise_id`, `valeur`,
+  `effective_depuis` date, unique par `(entreprise_id, effective_depuis)`) — remplace la colonne
+  `bonus_anciennete_attribution` de `regles_acquisition`, supprimée. Une seule source de vérité : le
+  select de l'UI se préremplit avec la ligne la plus récente, le moteur résout la valeur effective
+  d'une date donnée en cherchant la ligne applicable — jamais deux endroits à synchroniser.
+- **Date d'effet d'un changement, différente selon le mode** (dernière itération, "individuellement",
+  proposition de Vincent) :
+  - **"Période de référence suivante"** — pas d'événement précis (bonus injecté en continu dès le 1er
+    jour de la période) → un changement vers/depuis ce mode ne peut s'appliquer qu'à la **prochaine
+    bascule de période**.
+  - **Les 3 modes "événement"** (début de mois / jour anniversaire / mois suivant) — "ce sont des
+    régularisations sur le mois en vrai" — un changement s'applique au **1er jour du mois calendaire
+    suivant**, jamais avant : le mois en cours, déjà transmis ou en passe de l'être, n'est jamais
+    retouché. "Aucun risque de se tromper" (Vincent) — pas besoin de vérifier le statut réel de la
+    transmission, le simple découpage mensuel suffit.
+  - **Première configuration d'un tenant** (aucun historique) : s'applique immédiatement — rien à
+    protéger, aucun calcul n'a jamais utilisé un autre mode avant elle.
+- **Résolution individuelle par collaborateur** (`resoudreAttributionBonus`,
+  `lib/data/soldes.repository.ts`) — ce qu'un collaborateur a déjà acquis sous un mode antérieur
+  n'est jamais annulé par un changement de réglage ultérieur : on parcourt l'historique du plus
+  récent au plus ancien, on retient le PREMIER mode dont la date d'effet théorique (calculée avec SA
+  propre formule) tombe dans la fenêtre où IL était réellement actif (après son `effectiveDepuis`,
+  avant que le mode suivant ne prenne le relais). "Période de référence suivante" est traité comme un
+  pseudo-événement daté du 1er jour de la période elle-même dans ce mécanisme, pour la même raison.
+- **UI** (`BlocAttributionBonus`, nouveau composant, sous-section "Jours attribués") : sauvegarde
+  immédiate au changement (comme `BlocAnciennete`), pas via le bandeau "Enregistrer" global — cette
+  table a sa propre sémantique de mise en attente, sans rapport avec le flux "modifier plusieurs
+  champs puis valider en bloc" du reste de la page. Message affiché quand un changement est en
+  attente : "Actuellement : {mode en vigueur}. Ce changement s'appliquera à partir du {date}."
+
+**Pas encore testé** (session arrêtée avant, budget de tokens — voir Backlog) : ni cas limites en
+isolation, ni vérification en conditions réelles sur acme pour ce nouveau mécanisme de non-
+rétroactivité/résolution individuelle. Seule la migration a été appliquée et l'erreur de chargement
+associée vérifiée résolue.
+
+### Fichiers modifiés
+
+`supabase/schema.sql` (table `historique_bonus_anciennete_attribution`, RLS, suppression de la
+colonne sur `regles_acquisition` — 3 migrations SQL appliquées manuellement par Vincent au fil de
+cette session), `lib/types.ts` (`HistoriqueAttributionBonus`), `lib/data/reglesConges.repository.ts`
+(`fetchHistoriqueAttributionBonus`/`enregistrerAttributionBonus`, CRUD pur),
+`lib/data/soldes.repository.ts` (`resoudreAttributionBonus` remplace `modeEffectifPourPeriode`,
+`enregistrerAttributionBonusAnciennete` orchestre le calcul d'`effectiveDepuis`),
+`hooks/useReglesConges.ts` (expose `historiqueAttributionBonus`/`enregistrerAttributionBonus`),
+`components/parametrer/CongesRttPage.tsx` (`BlocAttributionBonus`, nouveau composant à sauvegarde
+immédiate).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

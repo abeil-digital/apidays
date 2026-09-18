@@ -12,6 +12,7 @@ import {
 import { Check, Trash2 } from "lucide-react";
 import type {
   AttributionBonusAnciennete,
+  HistoriqueAttributionBonus,
   ObjectifsCalendrier,
   ObjectifsCalendrierInput,
   RegleAcquisition,
@@ -176,9 +177,6 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
     );
     const [report, setReport] = useState(regle?.reportAutorise ?? false);
     const [anticipation, setAnticipation] = useState(regle?.anticipationAutorisee ?? false);
-    const [attributionBonus, setAttributionBonus] = useState<AttributionBonusAnciennete>(
-      regle?.bonusAncienneteAttribution ?? "periode_suivante",
-    );
     const [erreur, setErreur] = useState("");
     const [modifie, setModifie] = useState(false);
 
@@ -211,10 +209,6 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
               tauxAcquisitionMensuel: taux,
               reportAutorise: report,
               anticipationAutorisee: anticipation,
-              // Sans effet côté moteur pour RTT (pas de bonus d'ancienneté
-              // RTT) — le select ne s'affiche que pour CP ci-dessous, RTT
-              // envoie toujours la valeur par défaut.
-              bonusAncienneteAttribution: attributionBonus,
             });
             setModifie(false);
             return true;
@@ -224,17 +218,7 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
           }
         },
       }),
-      [
-        acquisition,
-        preset,
-        mois,
-        jour,
-        report,
-        anticipation,
-        attributionBonus,
-        type,
-        onEnregistrer,
-      ],
+      [acquisition, preset, mois, jour, report, anticipation, type, onEnregistrer],
     );
 
     const champsPeriodeAcquisition = (
@@ -393,36 +377,6 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
           <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
             <h2 className="text-ink-900 text-sm font-bold">Bonus ancienneté</h2>
             {children}
-            <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">
-              <div>
-                <label
-                  htmlFor={`${type}-attribution-bonus`}
-                  className="text-ink-900 mb-1.5 block text-sm font-bold"
-                >
-                  Jours attribués
-                </label>
-                <SelectPille
-                  id={`${type}-attribution-bonus`}
-                  value={attributionBonus}
-                  onChange={(e) => {
-                    setAttributionBonus(e.target.value as AttributionBonusAnciennete);
-                    marquerModifie();
-                  }}
-                  borderClassName="border-slate"
-                  chevronClassName="text-ink-900"
-                  hoverClassName="enabled:hover:bg-surface-app"
-                  className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
-                >
-                  {(Object.keys(LABEL_ATTRIBUTION_BONUS) as AttributionBonusAnciennete[]).map(
-                    (valeur) => (
-                      <option key={valeur} value={valeur}>
-                        {LABEL_ATTRIBUTION_BONUS[valeur]}
-                      </option>
-                    ),
-                  )}
-                </SelectPille>
-              </div>
-            </div>
             {blocErreur}
           </div>
         </div>
@@ -614,6 +568,92 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
   );
 }
 
+interface BlocAttributionBonusProps {
+  historique: HistoriqueAttributionBonus[];
+  onEnregistrer: (valeur: AttributionBonusAnciennete) => Promise<HistoriqueAttributionBonus>;
+}
+
+/**
+ * Sous-section B "Jours attribués" (18/09/2026) — sauvegarde immédiate au
+ * changement (comme `BlocAnciennete`), PAS via le bandeau "Enregistrer"
+ * global : contrairement au reste de `BlocAcquisition`, cette table a sa
+ * propre sémantique de mise en attente (`effective_depuis`), qui n'a pas de
+ * sens dans un flux "modifier plusieurs champs puis valider en bloc".
+ *
+ * `historique` est trié du plus ancien au plus récent (voir
+ * `fetchHistoriqueAttributionBonus`) — le dernier élément est donc le
+ * dernier choix fait par un admin, qu'il soit déjà effectif ou encore en
+ * attente. On distingue les deux via `effectiveDepuis` comparé à
+ * aujourd'hui (comparaison simple, pas besoin de connaître les bornes de la
+ * période ici) pour afficher, le cas échéant, "en vigueur" vs "à venir".
+ */
+function BlocAttributionBonus({ historique, onEnregistrer }: BlocAttributionBonusProps) {
+  const trie = [...historique].sort((a, b) => a.effectiveDepuis.localeCompare(b.effectiveDepuis));
+  const dernierChoix = trie[trie.length - 1];
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const enAttente = dernierChoix && dernierChoix.effectiveDepuis > aujourdhui ? dernierChoix : null;
+  const enVigueur = enAttente
+    ? [...trie].reverse().find((h) => h.effectiveDepuis <= aujourdhui)
+    : dernierChoix;
+
+  const [valeur, setValeur] = useState<AttributionBonusAnciennete>(
+    dernierChoix?.valeur ?? "periode_suivante",
+  );
+  const [envoi, setEnvoi] = useState(false);
+  const [erreur, setErreur] = useState("");
+
+  async function handleChange(nouvelleValeur: AttributionBonusAnciennete) {
+    const precedente = valeur;
+    setValeur(nouvelleValeur);
+    setErreur("");
+    setEnvoi(true);
+    try {
+      await onEnregistrer(nouvelleValeur);
+    } catch {
+      setErreur("Impossible d'enregistrer ce changement.");
+      setValeur(precedente);
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  return (
+    <div>
+      <label htmlFor="attribution-bonus" className="text-ink-900 mb-1.5 block text-sm font-bold">
+        Jours attribués
+      </label>
+      <SelectPille
+        id="attribution-bonus"
+        value={valeur}
+        disabled={envoi}
+        onChange={(e) => handleChange(e.target.value as AttributionBonusAnciennete)}
+        borderClassName="border-slate"
+        chevronClassName="text-ink-900"
+        hoverClassName="enabled:hover:bg-surface-app"
+        className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
+      >
+        {(Object.keys(LABEL_ATTRIBUTION_BONUS) as AttributionBonusAnciennete[]).map((v) => (
+          <option key={v} value={v}>
+            {LABEL_ATTRIBUTION_BONUS[v]}
+          </option>
+        ))}
+      </SelectPille>
+      {enAttente && (
+        <p className="text-ink-500 mt-1.5 text-xs">
+          Actuellement : {LABEL_ATTRIBUTION_BONUS[enVigueur?.valeur ?? "periode_suivante"]}. Ce
+          changement s&rsquo;appliquera à partir du{" "}
+          {new Date(`${enAttente.effectiveDepuis}T00:00:00`).toLocaleDateString("fr-FR")}.
+        </p>
+      )}
+      {erreur && (
+        <div className="rounded-control bg-status-danger-bg text-status-danger-fg mt-2 px-3 py-2.5 text-sm">
+          {erreur}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Objectifs annuels de volume CPI (congés imposés) et DJI (demi-journées
  * imposées) — réglage global (pas par année), consommé par l'écran
@@ -737,12 +777,14 @@ export function CongesRttPage() {
   const {
     reglesAcquisition,
     reglesAnciennete,
+    historiqueAttributionBonus,
     loading,
     error,
     enregistrerAcquisition,
     ajouterRegleAnciennete,
     modifierRegleAnciennete,
     retirerRegleAnciennete,
+    enregistrerAttributionBonus,
   } = useReglesConges();
   const {
     objectifs,
@@ -831,6 +873,12 @@ export function CongesRttPage() {
                 onModifier={modifierRegleAnciennete}
                 onSupprimer={retirerRegleAnciennete}
               />
+              <div className="border-ink-300/60 border-t pt-5">
+                <BlocAttributionBonus
+                  historique={historiqueAttributionBonus}
+                  onEnregistrer={enregistrerAttributionBonus}
+                />
+              </div>
             </BlocAcquisition>
           </div>
 

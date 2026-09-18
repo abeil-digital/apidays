@@ -292,13 +292,28 @@ export interface SoldeInitial {
  * dernier mois de la période, elle bascule naturellement sur la période
  * suivante (le collaborateur démarre avec un jour de plus dès que sa date
  * d'effet arrive, pas de traitement spécial). Non pertinent pour RTT (pas de
- * bonus d'ancienneté RTT), mais porté par la même table que le reste de la
- * règle d'acquisition. */
+ * bonus d'ancienneté RTT). Historisé (voir `HistoriqueAttributionBonus`
+ * ci-dessous) plutôt que porté par une colonne sur `regles_acquisition` —
+ * un changement ne doit s'appliquer qu'à partir de la PROCHAINE bascule de
+ * période, jamais rétroactivement à la période en cours. */
 export type AttributionBonusAnciennete =
   | "periode_suivante"
   | "debut_mois_anniversaire"
   | "jour_anniversaire"
   | "mois_suivant_anniversaire";
+
+/** Une ligne d'historique du réglage "Jour(s) d'ancienneté attribués"
+ * (18/09/2026) — `effectiveDepuis` est la date de début de la période de
+ * référence CP à partir de laquelle `valeur` s'applique. Le moteur de calcul
+ * résout "quelle était la valeur effective au début de CETTE période" en
+ * prenant la ligne la plus récente dont `effectiveDepuis` est déjà passée à
+ * cette date. L'UI (menu déroulant) se préremplit avec la ligne la plus
+ * RÉCENTE (que sa date soit déjà effective ou encore à venir). */
+export interface HistoriqueAttributionBonus {
+  id: string;
+  valeur: AttributionBonusAnciennete;
+  effectiveDepuis: string; // date ISO
+}
 
 export interface RegleAcquisition {
   id: string;
@@ -308,7 +323,6 @@ export interface RegleAcquisition {
   tauxAcquisitionMensuel: number; // jours/mois
   reportAutorise: boolean;
   anticipationAutorisee: boolean;
-  bonusAncienneteAttribution: AttributionBonusAnciennete;
 }
 
 export interface RegleAcquisitionInput {
@@ -317,7 +331,6 @@ export interface RegleAcquisitionInput {
   tauxAcquisitionMensuel: number;
   reportAutorise: boolean;
   anticipationAutorisee: boolean;
-  bonusAncienneteAttribution: AttributionBonusAnciennete;
 }
 
 export interface RegleAnciennete {
