@@ -7128,6 +7128,61 @@ dans `supabase/schema.sql`. Revérifié en local : "Paramétrer > Congés & RTT"
 en plus des policies RLS — les deux sont nécessaires, RLS seule ne suffit pas (le bloc GRANT de
 schema.sql le documentait déjà, mais ça n'a pas empêché l'oubli sur le coup).
 
+## "Validation des fiches de paie" — volet 3 clos sans nouveau correctif (18/09/2026)
+
+Vincent considère traité le volet **(3) Impact des actions de validation sur les soldes** du chantier
+consolidé "Validation des fiches de paie" (Backlog). Récapitulatif des points qui le composaient :
+
+1. **Bug `sommeTransmis`/`genere_le`** (le solde réel se laissait contaminer par un export généré en
+   avance sur des congés futurs) — déjà corrigé le 14/09/2026, commit "Vérifier les fiches de paie :
+   corrige le solde réel post-export et son affichage" (ajout du filtre `exports_paie.periode_debut
+   <= dateReference`, factorisé une seule fois pour les 4 écrans concernés).
+2. **Rattrapage tardif hors période** (congé transmis en retard qui ne compte qu'à partir de sa date de
+   transmission réelle, jamais réinjecté rétroactivement) — comportement confirmé comme voulu avec
+   Vincent le 28/08/2026, pas un bug.
+3. **RLS salarié sur `export_paie_lignes`/`exports_paie`** (un collaborateur ne voyait pas ses propres
+   transmissions dans son solde réel) — policies SELECT ajoutées le 07/09/2026, considéré résolu.
+4. **"Acquisition" fantôme sur CP** dans `VerifierFichesPaiePage2.tsx` (résidu de calcul qui invente une
+   acquisition pour un type qui n'en a pas) — reste un cas identifié mais non corrigé dans le code ;
+   Vincent ferme quand même ce volet sans y revenir pour l'instant.
+
+Pas de changement de code associé à cette clôture — décision de Vincent, sans nouvelle vérification en
+navigateur demandée.
+
+## Accueil manager/admin — première card "what's up" (18/09/2026)
+
+Première brique du Backlog "Section what's up pour le dashboard manager et administrateur" (item
+(27), passé en priorité Haute le 15/09/2026) : demande explicite de Vincent — un encart similaire à
+"Demandes à étudier" reprenant le code couleur du jour du heatmap de "Calendrier consolidé", affichant
+le nombre de collaborateurs en congé aujourd'hui.
+
+**Implémenté** : nouveau composant `CollaborateursEnCongeCard.tsx` (même gabarit que
+`DemandesAEtudierCard.tsx` — chiffre + libellé + chevron, lien vers `/suivre/calendrier`), coloré via
+`couleurHeatmap`, extraite de `CalendrierGlobal.tsx` vers `lib/heatmap.ts` (source unique du dégradé
+5 paliers "OrRd", pour ne pas dupliquer l'échelle de couleurs entre les deux écrans). Ratio calculé en
+version volontairement simplifiée pour une première itération : jours-personnes occupés aujourd'hui
+(pondérés par demi-journée) / effectif actif, **sans** les fériés/CPI/DJI communs pris en compte par
+le vrai heatmap (`CalendrierGlobal.tsx` — un jour férié afficherait donc "0 collaborateur" en blanc au
+lieu de la couleur dédiée fériés). À affiner ensemble si besoin.
+
+**Itérations de style faites en direct avec Vincent** : largeur max des 2 cards passée de 160px à
+180px ; bug corrigé où le mot "Collaborateurs" (plus long que "Demande(s)") débordait de la card et
+poussait le chevron hors du cadre arrondi (`min-w-0 break-words` ajouté sur le libellé, absent
+jusqu'ici sur `DemandesAEtudierCard` où aucun mot n'était assez long pour révéler le bug) ; libellé
+simplifié en "Employé(s) en congé(s)" (au lieu de "Collaborateur(s) en congé aujourd'hui") ; taille de
+police des libellés des 2 cards passée de `text-xs` à `text-[11px]`, poids `font-bold` → `font-semibold` ;
+coins carrés (`rounded-xl` → `rounded-none`) sur les 2 cards.
+
+**"Demandes à étudier" ouverte à l'admin (18/09/2026)** : jusqu'ici visible manager uniquement
+(rendu conditionnel dans `DashboardPage.tsx`), demande explicite de Vincent de la rendre aussi
+disponible pour l'admin — condition simplifiée, les deux cards s'affichent désormais ensemble pour
+`role === "manager" || role === "admin"`.
+
+**Reste à faire pour ce chantier "what's up"** (voir Backlog) : les 3 autres volets identifiés le
+15/09/2026 ("congés récemment validés (admin)", "qui est in/qui est out" — en partie couvert par
+cette première card — et "tâches à venir pour Delphine") n'ont pas de fonction repository dédiée
+aujourd'hui, à construire au fil des prochaines itérations.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

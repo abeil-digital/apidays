@@ -19,6 +19,7 @@ import { compterTypologies } from "@/components/demandes/compterTypologies";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
 import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
+import { CollaborateursEnCongeCard } from "@/components/dashboard/CollaborateursEnCongeCard";
 import { FaqCard } from "@/components/dashboard/FaqCard";
 import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffCard";
 import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
@@ -628,9 +629,10 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {utilisateur.role === "manager" && (
-        <div className="animate-stagger-in" style={{ animationDelay: "140ms" }}>
+      {(utilisateur.role === "manager" || utilisateur.role === "admin") && (
+        <div className="animate-stagger-in flex flex-wrap gap-3" style={{ animationDelay: "140ms" }}>
           <DemandesAEtudierCard />
+          <CollaborateursEnCongeCard />
         </div>
       )}
 
