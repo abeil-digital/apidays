@@ -237,173 +237,207 @@ const BlocAcquisition = forwardRef<BlocReglageHandle, BlocAcquisitionProps>(
       ],
     );
 
+    const champsPeriodeAcquisition = (
+      <>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label
+              htmlFor={`${type}-periode`}
+              className="text-ink-900 mb-1.5 block text-sm font-bold"
+            >
+              Période de référence
+            </label>
+            <SelectPille
+              id={`${type}-periode`}
+              value={preset}
+              onChange={(e) => {
+                setPreset(e.target.value as PresetPeriode);
+                marquerModifie();
+              }}
+              borderClassName="border-slate"
+              chevronClassName="text-ink-900"
+              hoverClassName="enabled:hover:bg-surface-app"
+              className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
+            >
+              {ordrePresets.map((p) => (
+                <option key={p} value={p}>
+                  {PRESET_PERIODE_LABEL[p]}
+                </option>
+              ))}
+            </SelectPille>
+          </div>
+
+          <div>
+            <label
+              htmlFor={`${type}-acquisition`}
+              className="text-ink-900 mb-1.5 block text-sm font-bold"
+            >
+              Acquisition
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                id={`${type}-acquisition`}
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Ex. 2.08"
+                value={acquisition}
+                onChange={(e) => {
+                  setAcquisition(e.target.value);
+                  marquerModifie();
+                }}
+                className="!border-slate w-20"
+              />
+              <span className="text-ink-500 text-sm">jours / mois</span>
+            </div>
+          </div>
+        </div>
+
+        {preset === "personnalisee" && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label
+                htmlFor={`${type}-mois`}
+                className="text-ink-900 mb-1.5 block text-sm font-bold"
+              >
+                Mois de début
+              </label>
+              <Input
+                id={`${type}-mois`}
+                type="number"
+                min={1}
+                max={12}
+                value={mois}
+                onChange={(e) => {
+                  setMois(Number(e.target.value));
+                  marquerModifie();
+                }}
+                className="!border-slate w-20"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor={`${type}-jour`}
+                className="text-ink-900 mb-1.5 block text-sm font-bold"
+              >
+                Jour de début
+              </label>
+              <Input
+                id={`${type}-jour`}
+                type="number"
+                min={1}
+                max={31}
+                value={jour}
+                onChange={(e) => {
+                  setJour(Number(e.target.value));
+                  marquerModifie();
+                }}
+                className="!border-slate w-20"
+              />
+            </div>
+          </div>
+        )}
+      </>
+    );
+
+    const champsReportAnticipation = (
+      <>
+        <RadioOuiNon
+          name={`${type}-report`}
+          titre={titreReport}
+          valeur={report}
+          onChange={(valeur) => {
+            setReport(valeur);
+            marquerModifie();
+          }}
+          guidance={guidanceReport}
+        />
+
+        <RadioOuiNon
+          name={`${type}-anticipation`}
+          titre={titreAnticipation}
+          valeur={anticipation}
+          onChange={(valeur) => {
+            setAnticipation(valeur);
+            marquerModifie();
+          }}
+          guidance={guidanceAnticipation}
+        />
+      </>
+    );
+
+    const blocErreur = erreur && (
+      <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+        {erreur}
+      </div>
+    );
+
+    // CP (18/09/2026, demande explicite) : titre sorti de la card, scindé en
+    // 3 cards (Période/Acquisition, Report/Anticipation, Bonus ancienneté
+    // avec ses 2 sous-sections Règles/Jours attribués) plutôt qu'une seule
+    // grande card — RTT garde le gabarit d'origine (pas de bonus
+    // d'ancienneté, pas demandé pour RTT).
+    if (type === "CP") {
+      return (
+        <div className="flex flex-col gap-5">
+          <h2 className="text-ink-900 px-1 text-lg font-semibold">{titre}</h2>
+
+          <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+            {champsPeriodeAcquisition}
+          </div>
+
+          <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+            {champsReportAnticipation}
+          </div>
+
+          <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
+            <h2 className="text-ink-900 text-sm font-bold">Bonus ancienneté</h2>
+            {children}
+            <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">
+              <div>
+                <label
+                  htmlFor={`${type}-attribution-bonus`}
+                  className="text-ink-900 mb-1.5 block text-sm font-bold"
+                >
+                  Jours attribués
+                </label>
+                <SelectPille
+                  id={`${type}-attribution-bonus`}
+                  value={attributionBonus}
+                  onChange={(e) => {
+                    setAttributionBonus(e.target.value as AttributionBonusAnciennete);
+                    marquerModifie();
+                  }}
+                  borderClassName="border-slate"
+                  chevronClassName="text-ink-900"
+                  hoverClassName="enabled:hover:bg-surface-app"
+                  className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
+                >
+                  {(Object.keys(LABEL_ATTRIBUTION_BONUS) as AttributionBonusAnciennete[]).map(
+                    (valeur) => (
+                      <option key={valeur} value={valeur}>
+                        {LABEL_ATTRIBUTION_BONUS[valeur]}
+                      </option>
+                    ),
+                  )}
+                </SelectPille>
+              </div>
+            </div>
+            {blocErreur}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-surface-card border-ink-300/60 flex flex-col gap-5 border p-5">
         <h2 className="text-ink-900 text-sm font-bold">{titre}</h2>
 
         <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label
-                htmlFor={`${type}-periode`}
-                className="text-ink-900 mb-1.5 block text-sm font-bold"
-              >
-                Période de référence
-              </label>
-              <SelectPille
-                id={`${type}-periode`}
-                value={preset}
-                onChange={(e) => {
-                  setPreset(e.target.value as PresetPeriode);
-                  marquerModifie();
-                }}
-                borderClassName="border-slate"
-                chevronClassName="text-ink-900"
-                hoverClassName="enabled:hover:bg-surface-app"
-                className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
-              >
-                {ordrePresets.map((p) => (
-                  <option key={p} value={p}>
-                    {PRESET_PERIODE_LABEL[p]}
-                  </option>
-                ))}
-              </SelectPille>
-            </div>
-
-            <div>
-              <label
-                htmlFor={`${type}-acquisition`}
-                className="text-ink-900 mb-1.5 block text-sm font-bold"
-              >
-                Acquisition
-              </label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id={`${type}-acquisition`}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="Ex. 2.08"
-                  value={acquisition}
-                  onChange={(e) => {
-                    setAcquisition(e.target.value);
-                    marquerModifie();
-                  }}
-                  className="!border-slate w-20"
-                />
-                <span className="text-ink-500 text-sm">jours / mois</span>
-              </div>
-            </div>
-          </div>
-
-          {preset === "personnalisee" && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label
-                  htmlFor={`${type}-mois`}
-                  className="text-ink-900 mb-1.5 block text-sm font-bold"
-                >
-                  Mois de début
-                </label>
-                <Input
-                  id={`${type}-mois`}
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={mois}
-                  onChange={(e) => {
-                    setMois(Number(e.target.value));
-                    marquerModifie();
-                  }}
-                  className="!border-slate w-20"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor={`${type}-jour`}
-                  className="text-ink-900 mb-1.5 block text-sm font-bold"
-                >
-                  Jour de début
-                </label>
-                <Input
-                  id={`${type}-jour`}
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={jour}
-                  onChange={(e) => {
-                    setJour(Number(e.target.value));
-                    marquerModifie();
-                  }}
-                  className="!border-slate w-20"
-                />
-              </div>
-            </div>
-          )}
-
-          <RadioOuiNon
-            name={`${type}-report`}
-            titre={titreReport}
-            valeur={report}
-            onChange={(valeur) => {
-              setReport(valeur);
-              marquerModifie();
-            }}
-            guidance={guidanceReport}
-          />
-
-          <RadioOuiNon
-            name={`${type}-anticipation`}
-            titre={titreAnticipation}
-            valeur={anticipation}
-            onChange={(valeur) => {
-              setAnticipation(valeur);
-              marquerModifie();
-            }}
-            guidance={guidanceAnticipation}
-          />
-
-          {type === "CP" && (
-            <div>
-              <label
-                htmlFor={`${type}-attribution-bonus`}
-                className="text-ink-900 mb-1.5 block text-sm font-bold"
-              >
-                Jour(s) d&rsquo;ancienneté attribués
-              </label>
-              <SelectPille
-                id={`${type}-attribution-bonus`}
-                value={attributionBonus}
-                onChange={(e) => {
-                  setAttributionBonus(e.target.value as AttributionBonusAnciennete);
-                  marquerModifie();
-                }}
-                borderClassName="border-slate"
-                chevronClassName="text-ink-900"
-                hoverClassName="enabled:hover:bg-surface-app"
-                className="w-fit !py-2.5 !pr-8 !pl-3 !text-sm"
-              >
-                {(Object.keys(LABEL_ATTRIBUTION_BONUS) as AttributionBonusAnciennete[]).map(
-                  (valeur) => (
-                    <option key={valeur} value={valeur}>
-                      {LABEL_ATTRIBUTION_BONUS[valeur]}
-                    </option>
-                  ),
-                )}
-              </SelectPille>
-            </div>
-          )}
-
-          {erreur && (
-            <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-              {erreur}
-            </div>
-          )}
+          {champsPeriodeAcquisition}
+          {champsReportAnticipation}
+          {blocErreur}
         </div>
-
-        {children && (
-          <div className="border-ink-300/60 flex flex-col gap-4 border-t pt-5">{children}</div>
-        )}
       </div>
     );
   },
@@ -503,7 +537,7 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
 
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-ink-900 text-sm font-bold">Ancienneté</h2>
+      <label className="text-ink-900 text-sm font-bold">Règles</label>
 
       <p className="text-ink-500 text-xs">
         Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté.

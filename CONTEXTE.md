@@ -7013,17 +7013,29 @@ remis à "periode_suivante" après coup. **Les 4 modes sont désormais testés e
 Risque non traité, mentionné plus haut : faut-il un avertissement/confirmation explicite au
 changement de ce réglage, pour prévenir le saut de solde en cours de période ? Pas tranché.
 
-Éventuellement à trancher plus tard : faut-il un avertissement/confirmation explicite au changement
-de ce réglage, pour prévenir le saut de solde en cours de période décrit ci-dessus ?
-
 ### Fichiers modifiés
 
-`lib/types.ts` (`AttributionBonusAnciennete`, 3 valeurs), `lib/data/reglesConges.repository.ts`
+`lib/types.ts` (`AttributionBonusAnciennete`, 4 valeurs), `lib/data/reglesConges.repository.ts`
 (select/map/upsert), `lib/data/soldes.repository.ts` (`dateEffetBonusAncienneteDansPeriode`,
-`decalageMoisAttribution`, `resolverCapitalOuvertureCp`, `fetchCapitalPeriodeFuture`,
-`fetchHistoriqueCp`), `components/parametrer/CongesRttPage.tsx` (select "Jour(s) d'ancienneté
-attribués"), `supabase/schema.sql` (colonne `bonus_anciennete_attribution` sur
-`regles_acquisition`, 2 migrations SQL appliquées manuellement par Vincent).
+`resolverCapitalOuvertureCp`, `fetchCapitalPeriodeFuture`, `fetchHistoriqueCp`),
+`components/parametrer/CongesRttPage.tsx` (select "Jour(s) d'ancienneté attribués"),
+`supabase/schema.sql` (colonne `bonus_anciennete_attribution` sur `regles_acquisition`, 3 migrations
+SQL appliquées manuellement par Vincent — une par mode ajouté).
+
+## Paramétrer > Congés & RTT — restructuration en cards (18/09/2026)
+
+Demande explicite de Vincent, cosmétique : la card "Congés Payés" (titre + tous les champs dans un
+seul bloc) scindée en 3 cards distinctes, titre sorti au-dessus plutôt que dans la première card —
+**(1)** Période de référence + Acquisition, **(2)** Congés reportés + Congés anticipés, **(3)**
+"Bonus ancienneté" (nouveau titre de card), avec 2 sous-sections : **Règles** (la liste des seuils,
+ex-titre "Ancienneté" de `BlocAnciennete` renommé pour ne pas faire doublon avec le titre de la card)
+et **Jours attribués** (le select "à la période de référence suivante"/etc.). RTT inchangé (une seule
+card, pas de bonus d'ancienneté). `BlocAcquisition` (`CongesRttPage.tsx`) branche désormais son rendu
+sur `type === "CP"` — mêmes champs, mêmes state/logique de sauvegarde, JSX extrait en variables
+réutilisées entre les deux gabarits plutôt que dupliqué. Vérification allégée (changement de mise en
+page pur, pas de nouvelle donnée) : `tsc`/`eslint`/`prettier` clean, pas de vérification navigateur
+cette fois (session déconnectée entre-temps, jugé non nécessaire pour un remaniement de layout aussi
+direct).
 
 ## À faire
 
