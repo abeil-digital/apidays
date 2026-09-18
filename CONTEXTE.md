@@ -7183,6 +7183,32 @@ disponible pour l'admin — condition simplifiée, les deux cards s'affichent d�
 cette première card — et "tâches à venir pour Delphine") n'ont pas de fonction repository dédiée
 aujourd'hui, à construire au fil des prochaines itérations.
 
+**Deuxième passe de style, même session (18/09/2026)** : après le premier commit (`ce079fa`),
+nouvelle série d'itérations sur les 2 cards, toujours en direct avec Vincent :
+- Taille des libellés remontée à `text-[12px]` (le `text-[11px]` du 1er commit était finalement trop
+  petit).
+- Tentative "cadre de couleur autour du chiffre + fond de card blanc" (au lieu du fond plein coloré)
+  — **essayée puis explicitement annulée** ("non on revient en arrière") : revenue au fond plein
+  coloré d'origine. Pas de code cadre-couleur dans le repo, juste testée en local puis `git checkout
+  --` pour revenir à l'état commité.
+- Hauteur réduite d'environ 30% (`py-4` → `py-[5px]`).
+- Ombres retirées (`shadow-sm`/`hover:shadow` supprimés).
+- Largeur réduite de 15% (180px → 153px), puis élargie de 15% (153px → 176px) — largeur finale
+  **176px**, légèrement inférieure au 180px du premier commit.
+- Tentative d'élargir la zone de texte en réduisant le padding horizontal du container (`px-5` →
+  `px-[5px]`) — **rejetée** ("seulement la partie texte, pas les chiffres") : revenue à `px-5`, essai
+  d'une marge négative uniquement sur le span de texte (`-mx-[15px]`) — **rejetée aussi** ("non"),
+  retirée. Solution finalement retenue : décaler seulement le chevron vers la droite (`-mr-2` sur
+  `ChevronRight`), qui grappille un peu de place pour le texte sans toucher au chiffre.
+- **Test de robustesse "3 chiffres"** : question de Vincent sur le rendu avec un nombre à 3 chiffres
+  (ex. 100+ collaborateurs) — analysé (le span du chiffre n'a pas de `min-w-0`, donc ne rétrécit
+  jamais sous sa largeur de contenu ; c'est le libellé, lui `min-w-0`/`break-words`, qui absorbe toute
+  la perte de place en wrappant davantage) puis testé en direct en forçant temporairement l'affichage
+  en `padStart(2, "0")` (ex. "01"), retiré avant ce commit — **pas de bug bloquant constaté, juste un
+  risque de libellé sur beaucoup de lignes avec un effectif à 3 chiffres**, non traité pour l'instant.
+- Les 2 cards remontées **au-dessus** du bloc "Depuis ma dernière visite" dans `DashboardPage.tsx`
+  (ordre d'apparition inversé, délais d'animation `animate-stagger-in` échangés en conséquence).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

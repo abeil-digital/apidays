@@ -26,7 +26,7 @@ export function DemandesAEtudierCard() {
   return (
     <Link
       href="/suivre/demandes?statut=en_attente&periode=toutes_dates"
-      className={`group flex w-full origin-left items-center gap-3 rounded-none px-5 py-4 shadow-sm transition-[background-color,box-shadow,transform] duration-200 hover:scale-[1.02] hover:shadow md:max-w-[180px] ${
+      className={`group flex w-full origin-left items-center gap-3 rounded-none px-5 py-[5px] transition-[background-color,transform] duration-200 hover:scale-[1.02] md:max-w-[176px] ${
         aJour
           ? "bg-status-success-bg text-status-success-fg"
           : "bg-status-warning-bg text-status-warning-fg"
@@ -35,11 +35,11 @@ export function DemandesAEtudierCard() {
       <span className="origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.1]">
         {nbEnAttente}
       </span>
-      <span className="flex-1 text-[11px] leading-snug font-semibold">
+      <span className="flex-1 text-[12px] leading-snug font-semibold">
         {nbEnAttente > 1 ? "Demandes" : "Demande"}
         <br />à étudier
       </span>
-      <ChevronRight size={20} className="shrink-0" />
+      <ChevronRight size={20} className="-mr-2 shrink-0" />
     </Link>
   );
 }

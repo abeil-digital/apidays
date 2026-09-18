@@ -60,19 +60,19 @@ export function CollaborateursEnCongeCard() {
     <Link
       href="/suivre/calendrier"
       style={{ background: couleur }}
-      className={`group flex w-full origin-left items-center gap-3 rounded-none px-5 py-4 shadow-sm transition-[background-color,box-shadow,transform] duration-200 hover:scale-[1.02] hover:shadow md:max-w-[180px] ${
+      className={`group flex w-full origin-left items-center gap-3 rounded-none px-5 py-[5px] transition-[background-color,transform] duration-200 hover:scale-[1.02] md:max-w-[176px] ${
         texteSombre ? "text-ink-900" : "text-white"
       }`}
     >
       <span className="origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.1]">
         {occupants.length}
       </span>
-      <span className="min-w-0 flex-1 text-[11px] leading-snug font-semibold break-words">
+      <span className="min-w-0 flex-1 text-[12px] leading-snug font-semibold break-words">
         {occupants.length === 1 ? "Employé" : "Employés"}
         <br />
         en congé{occupants.length === 1 ? "" : "s"}
       </span>
-      <ChevronRight size={20} className="shrink-0" />
+      <ChevronRight size={20} className="-mr-2 shrink-0" />
     </Link>
   );
 }

@@ -576,9 +576,16 @@ export function DashboardPage() {
         <h1 className="text-ink-900 text-2xl font-semibold">Bonjour, {utilisateur.prenom}</h1>
       </div>
 
+      {(utilisateur.role === "manager" || utilisateur.role === "admin") && (
+        <div className="animate-stagger-in flex flex-wrap gap-3" style={{ animationDelay: "70ms" }}>
+          <DemandesAEtudierCard />
+          <CollaborateursEnCongeCard />
+        </div>
+      )}
+
       <div
         className="animate-stagger-in flex w-fit flex-col gap-1 rounded-xl bg-transparent px-3 py-2"
-        style={{ animationDelay: "70ms" }}
+        style={{ animationDelay: "140ms" }}
       >
         <span className="text-ink-500 text-xs font-semibold">Depuis ma dernière visite</span>
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
@@ -628,13 +635,6 @@ export function DashboardPage() {
           )}
         </div>
       </div>
-
-      {(utilisateur.role === "manager" || utilisateur.role === "admin") && (
-        <div className="animate-stagger-in flex flex-wrap gap-3" style={{ animationDelay: "140ms" }}>
-          <DemandesAEtudierCard />
-          <CollaborateursEnCongeCard />
-        </div>
-      )}
 
       {/* Titre de section réduit + interlignage resserré (20/08/2026, demande
           explicite) — le h2 passe de text-lg/text-ink-900 à text-sm/text-ink-500
