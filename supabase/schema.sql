@@ -407,7 +407,8 @@ create table regles_acquisition (
   -- d'attribution partagé). Sans effet pour RTT.
   bonus_anciennete_attribution text not null default 'periode_suivante'
     check (bonus_anciennete_attribution in (
-      'periode_suivante', 'mois_suivant_anniversaire', 'debut_mois_anniversaire'
+      'periode_suivante', 'debut_mois_anniversaire', 'jour_anniversaire',
+      'mois_suivant_anniversaire'
     )),
   updated_at timestamptz not null default now(),
   unique (entreprise_id, type_absence_id)

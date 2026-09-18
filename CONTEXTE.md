@@ -6990,16 +6990,28 @@ sauter/baisser le solde CP affiché pour la période en cours, sans transmission
 collaborateur, même si plusieurs mois de cette période sont déjà "passés en paie". Pas de correctif
 demandé pour l'instant (juste un avertissement UI éventuellement à ajouter plus tard, pas tranché).
 
-**3ᵉ mode ajouté dans la foulée** ("au début du mois de la date d'anniversaire", `decalageMois = 0`
-au lieu de `1`) — même mécanisme partagé, migration de la contrainte `check` appliquée par Vincent
-pour accepter la 3ᵉ valeur.
+**3ᵉ puis 4ᵉ mode ajoutés dans la foulée** : "au début du mois de la date d'anniversaire" (1er jour du
+même mois que l'anniversaire), puis "le jour de la date d'anniversaire" (attribution exacte, ni
+décalée au 1er du mois ni au mois suivant — repéré par Vincent après coup : "j'ai zappé que le jour
+pouvait aussi être attribué le jour de la date d'anniversaire"). `dateEffetBonusAncienneteDansPeriode`
+généralisé pour prendre le mode directement (plus de paramètre `decalageMois` intermédiaire) — un seul
+mécanisme partagé pour les 3 modes "événement à part". 2 migrations de la contrainte `check`
+appliquées par Vincent au fil de l'eau (une par mode ajouté).
 
-### Reste à faire (prochaine session)
+**Les 2 modes restants testés le même jour** : 21 cas limites en isolation (chevauchement d'années,
+bornes de période, 29 février non bissextile, pas de double-comptage, cohérence croisée entre les 4
+modes sur un même cas — `debut_mois ≤ jour_anniversaire ≤ mois_suivant`) — tous ✅. Test navigateur
+réel sur acme : Delphine Dubosclard écartée (période 2026 gouvernée par un solde initial de test, pas
+de calcul possible) ; Vincent Mayol (anniversaire 01/04, jour=1) confirme les deux modes — pill "Jour
+supp. anniversaire avril 27 : +1 j" correcte, arithmétique cohérente (résultat identique entre les
+deux modes pour lui, attendu puisque son anniversaire tombe déjà le 1er du mois). Garde-fou anti-
+événement fantôme reconfirmé sur Vincent DUPONT (aucune ancienneté) pour les deux modes. Réglage acme
+remis à "periode_suivante" après coup. **Les 4 modes sont désormais testés et validés.**
 
-**Tests non encore faits pour le 3ᵉ mode** ("au début du mois de la date d'anniversaire") — la
-session s'est arrêtée avant de les lancer : reprendre la même méthode que pour le mode (2) (batterie
-de cas limites en isolation, puis test en conditions réelles sur acme avec la date simulée, sans
-oublier de remettre le réglage à "periode_suivante" après coup).
+### Reste à faire
+
+Risque non traité, mentionné plus haut : faut-il un avertissement/confirmation explicite au
+changement de ce réglage, pour prévenir le saut de solde en cours de période ? Pas tranché.
 
 Éventuellement à trancher plus tard : faut-il un avertissement/confirmation explicite au changement
 de ce réglage, pour prévenir le saut de solde en cours de période décrit ci-dessus ?

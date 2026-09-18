@@ -134,41 +134,43 @@ function bonusAnciennete(regles: RegleAnciennete[], ans: number): number {
   return Math.max(...eligibles.map((r) => r.joursSupplementaires));
 }
 
-// Date d'effet du bonus d'ancienneté en mode "mois_suivant_anniversaire"/
-// "debut_mois_anniversaire" (18/09/2026) — 1er jour du mois suivant
-// (`decalageMois = 1`) ou du même mois (`decalageMois = 0`) que la date
-// anniversaire du collaborateur, SI cette date d'effet tombe dans `periode`.
-// On teste la date d'EFFET (pas l'anniversaire lui-même) contre les bornes
-// de la période : si l'anniversaire tombe dans le dernier mois de la
-// période (mode "mois_suivant"), sa date d'effet (1er jour du mois suivant)
-// tombe naturellement dans la période SUIVANTE plutôt que celle-ci — pas de
-// traitement spécial à faire, chaque période ne fait que vérifier si SA
-// fenêtre contient la date d'effet. `annee ± 1` couvre les bascules de
-// fin/début d'année civile.
+// Date d'effet du bonus d'ancienneté pour les 3 modes "événement à part"
+// (18/09/2026) — "jour_anniversaire" : le jour exact de l'anniversaire.
+// "debut_mois_anniversaire" : 1er jour du même mois. "mois_suivant_
+// anniversaire" : 1er jour du mois suivant. Retourne `null` pour
+// "periode_suivante" (pas de date d'effet à part, bonus baké dans le
+// capital d'ouverture — voir l'appelant). On teste la date d'EFFET (pas
+// l'anniversaire lui-même) contre les bornes de la période : si
+// l'anniversaire tombe dans le dernier mois de la période (mode "mois_
+// suivant"), sa date d'effet (1er jour du mois suivant) tombe naturellement
+// dans la période SUIVANTE plutôt que celle-ci — pas de traitement spécial à
+// faire, chaque période ne fait que vérifier si SA fenêtre contient la date
+// d'effet. `annee ± 1` couvre les bascules de fin/début d'année civile.
 function dateEffetBonusAncienneteDansPeriode(
   dateReferenceAncienneteIso: string,
   periode: Periode,
-  decalageMois: 0 | 1,
+  mode: AttributionBonusAnciennete,
 ): Date | null {
+  if (mode === "periode_suivante") return null;
   const anniv = new Date(`${dateReferenceAncienneteIso}T00:00:00Z`);
   const moisAnniv = anniv.getUTCMonth();
   const jourAnniv = anniv.getUTCDate();
   const anneeBase = periode.debut.getUTCFullYear();
   for (const annee of [anneeBase - 1, anneeBase, anneeBase + 1]) {
     const dateAnniv = new Date(Date.UTC(annee, moisAnniv, jourAnniv));
-    const dateEffet = new Date(
-      Date.UTC(dateAnniv.getUTCFullYear(), dateAnniv.getUTCMonth() + decalageMois, 1),
-    );
+    const dateEffet =
+      mode === "jour_anniversaire"
+        ? dateAnniv
+        : new Date(
+            Date.UTC(
+              dateAnniv.getUTCFullYear(),
+              dateAnniv.getUTCMonth() + (mode === "mois_suivant_anniversaire" ? 1 : 0),
+              1,
+            ),
+          );
     if (dateEffet >= periode.debut && dateEffet <= periode.fin) return dateEffet;
   }
   return null;
-}
-
-// Décalage (en mois) associé à chaque mode "événement à part" — partagé par
-// `resolverCapitalOuvertureCp` et `fetchCapitalPeriodeFuture` pour ne pas
-// dupliquer ce mapping.
-function decalageMoisAttribution(mode: AttributionBonusAnciennete): 0 | 1 {
-  return mode === "debut_mois_anniversaire" ? 0 : 1;
 }
 
 interface EntreeTauxActivite {
@@ -723,7 +725,7 @@ async function resolverCapitalOuvertureCp(
     const dateEffet = dateEffetBonusAncienneteDansPeriode(
       ctx.dateReferenceAnciennete,
       periode,
-      decalageMoisAttribution(ctx.regleCP.bonusAncienneteAttribution),
+      ctx.regleCP.bonusAncienneteAttribution,
     );
     if (dateEffet && dateIso(dateEffet) <= dateIso(ctx.aujourdhui)) {
       const montant = bonusAnciennete(
@@ -1731,7 +1733,7 @@ export async function fetchCapitalPeriodeFuture(dateReference: string): Promise<
           const dateEffet = dateEffetBonusAncienneteDansPeriode(
             dateReferenceAnciennete,
             periodeCible,
-            decalageMoisAttribution(regleCP.bonusAncienneteAttribution),
+            regleCP.bonusAncienneteAttribution,
           );
           return dateEffet && dateIso(dateEffet) <= dateReference
             ? bonusAnciennete(reglesAnciennete, ansAnciennete(dateReferenceAnciennete, dateEffet))

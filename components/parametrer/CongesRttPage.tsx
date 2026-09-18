@@ -63,8 +63,9 @@ const PRESET_PERIODE_LABEL: Record<PresetPeriode, string> = {
 // `BlocAnciennete`).
 const LABEL_ATTRIBUTION_BONUS: Record<AttributionBonusAnciennete, string> = {
   periode_suivante: "à la période de référence suivante",
-  mois_suivant_anniversaire: "le mois suivant la date d'anniversaire",
   debut_mois_anniversaire: "au début du mois de la date d'anniversaire",
+  jour_anniversaire: "le jour de la date d'anniversaire",
+  mois_suivant_anniversaire: "le mois suivant la date d'anniversaire",
 };
 
 const ORDRE_PRESETS_CP: PresetPeriode[] = [

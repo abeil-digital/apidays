@@ -284,18 +284,21 @@ export interface SoldeInitial {
 /** Moment où le bonus de jour(s) d'ancienneté (CP uniquement) est attribué
  * (18/09/2026, demande explicite) — "periode_suivante" (défaut, comportement
  * historique) : bonus injecté dans le capital d'ouverture à la bascule de
- * période, évalué sur l'ancienneté au 1er jour de la période. "mois_suivant_
- * anniversaire"/"debut_mois_anniversaire" : le bonus devient un événement à
- * part, daté au 1er jour du mois suivant/du même mois que la date
- * anniversaire du collaborateur — s'il tombe dans le dernier mois de la
- * période, il bascule naturellement sur la période suivante (le
- * collaborateur démarre le mois suivant avec un jour de plus, pas de
- * traitement spécial). "debut_mois_anniversaire" attribue donc le bonus
- * avant le jour exact de l'anniversaire s'il ne tombe pas le 1er du mois.
- * Non pertinent pour RTT (pas de bonus d'ancienneté RTT), mais porté par la
- * même table que le reste de la règle d'acquisition. */
+ * période, évalué sur l'ancienneté au 1er jour de la période. Les 3 autres
+ * modes en font un événement à part dans le feed CP, daté selon le cas :
+ * "debut_mois_anniversaire" (1er jour du même mois que l'anniversaire),
+ * "jour_anniversaire" (le jour exact de l'anniversaire), "mois_suivant_
+ * anniversaire" (1er jour du mois suivant). Si cette date tombe dans le
+ * dernier mois de la période, elle bascule naturellement sur la période
+ * suivante (le collaborateur démarre avec un jour de plus dès que sa date
+ * d'effet arrive, pas de traitement spécial). Non pertinent pour RTT (pas de
+ * bonus d'ancienneté RTT), mais porté par la même table que le reste de la
+ * règle d'acquisition. */
 export type AttributionBonusAnciennete =
-  "periode_suivante" | "mois_suivant_anniversaire" | "debut_mois_anniversaire";
+  | "periode_suivante"
+  | "debut_mois_anniversaire"
+  | "jour_anniversaire"
+  | "mois_suivant_anniversaire";
 
 export interface RegleAcquisition {
   id: string;
