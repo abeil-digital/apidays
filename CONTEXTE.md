@@ -7209,6 +7209,59 @@ nouvelle série d'itérations sur les 2 cards, toujours en direct avec Vincent :
 - Les 2 cards remontées **au-dessus** du bloc "Depuis ma dernière visite" dans `DashboardPage.tsx`
   (ordre d'apparition inversé, délais d'animation `animate-stagger-in` échangés en conséquence).
 
+## Bonus d'ancienneté non rétroactif — test en conditions réelles (21/09/2026)
+
+Vérification demandée par Vincent du mécanisme non rétroactif livré le 18/09/2026 (historique
+`historique_bonus_anciennete_attribution`, résolution par `resoudreAttributionBonus`) — resté non
+testé faute de budget à l'époque. Testé sur **acme**, connecté en manager (Olivier), date réelle
+(21/09/2026, pas de simulation) :
+
+1. **Changement de réglage** (Paramétrer > Congés & RTT, `periode_suivante` → `jour_anniversaire`) :
+   message affiché "Actuellement : à la période de référence suivante. Ce changement s'appliquera à
+   partir du 01/10/2026." — correct, mode "événement" ⇒ effectif au 1er du mois calendaire suivant.
+2. **Vérifié en base** (requête directe, `service_role`) : nouvelle ligne insérée avec
+   `effective_depuis = 2026-10-01`, ligne d'origine (`periode_suivante` depuis 2020-01-01)
+   inchangée — historisation additive, pas de remplacement destructif.
+3. **Lecture** : le réglage "en vigueur" affiché reste l'ancien tant que la date d'effet n'est pas
+   atteinte (pas de bascule anticipée côté UI).
+4. **"Suivre les soldes"** : chargé sans erreur pour les 5 collaborateurs d'acme avec le changement
+   en attente — pas de régression/crash.
+
+**Non testé** (limite du jeu de données) : le cas central "un collaborateur a déjà reçu son bonus
+sous l'ancien mode avant la bascule, le changement ne doit pas y toucher" — aucun collaborateur
+d'acme n'a un anniversaire d'ancienneté tombant sur un multiple de 5 ans dans une fenêtre testable
+sans avancer la date de plusieurs mois (lambda Collaborateur est à 14 ans d'ancienneté, pas un
+multiple de 5 ; les autres ont déjà passé leur dernier palier il y a plusieurs mois/années). Ce
+scénario reste couvert uniquement par les 41 tests unitaires en isolation du 18/09/2026, pas par un
+test en conditions réelles.
+
+Nettoyage effectué après le test : ligne de test supprimée en base (`DELETE` ciblé par id), acme
+revenu à son état d'origine (une seule ligne `periode_suivante` depuis 2020-01-01).
+
+## Pré-check avant onboarding du vrai tenant Abeil (21/09/2026)
+
+Vincent devait paramétrer l'après-midi même le vrai tenant Abeil avec Delphine (le tenant existant
+`Abeil (sandbox)`, `entreprise_id c52b18b8-...`, créé le 09/09/2026, ne contient que des comptes de
+test — `test-playwright@abeil.local`, `test-salarie@abeil.local`, une "Delphine Admin-test" avec un
+email factice — pas de donnée réelle, pas de doublon avec le nouveau tenant à créer).
+
+**Conflit trouvé et corrigé avant l'onboarding** : Delphine a un compte admin de test sur **acme**
+avec sa **vraie adresse** email (`delphine.dubosclard@abeil-bretagne.fr`, entreprise_id acme). Deux
+contraintes du schéma en auraient fait un blocage pur et simple si Vincent avait invité Delphine avec
+cette même adresse comme premier admin du vrai tenant Abeil :
+- `utilisateurs.email` est **`unique` globalement** (pas scopé par `entreprise_id`,
+  `supabase/schema.sql:98`) — une deuxième ligne avec le même email, même sur un autre tenant, est
+  rejetée par Postgres.
+- L'adresse existe déjà dans `auth.users` (un seul compte Auth par email sur tout le projet Supabase,
+  pas par tenant) — confirmé par requête directe à l'admin API Auth. `utilisateurs.auth_id` est aussi
+  `unique`, donc pas de risque de mélange silencieux entre tenants, juste un blocage net à la création.
+
+**Corrigé** : email du compte de test de Delphine sur acme changé vers `vincentmayol+acme-admin@gmail.com`
+(même convention que les autres comptes de test acme — `+acme-manager`, `+acme-collab`), synchronisé
+sur les deux tables comme le fait `synchroniserEmailAuth` en production (`auth.users.email` via
+l'admin API + `utilisateurs.email`). Vérifié après coup : `delphine.dubosclard@abeil-bretagne.fr` ne
+matche plus aucune ligne dans `auth.users` ni `utilisateurs` — libre pour le vrai onboarding.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
