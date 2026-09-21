@@ -7262,6 +7262,49 @@ sur les deux tables comme le fait `synchroniserEmailAuth` en production (`auth.u
 l'admin API + `utilisateurs.email`). Vérifié après coup : `delphine.dubosclard@abeil-bretagne.fr` ne
 matche plus aucune ligne dans `auth.users` ni `utilisateurs` — libre pour le vrai onboarding.
 
+## Bug trouvé en testant la case "Envoyer l'invitation par email" (21/09/2026)
+
+Vincent a demandé de vérifier que la case à cocher "Envoyer l'invitation par email" (Créer un profil,
+livrée le 14/09/2026) fonctionne bien dans les deux sens, avant de créer les vrais profils Abeil
+l'après-midi même.
+
+**Checkbox elle-même : fonctionne parfaitement**, testée en conditions réelles sur acme avec un compte
+admin (Vincent) : décochée → `utilisateurs` créé, `auth_id` reste `null`, aucun compte Auth, aucun
+email possible ; cochée → `utilisateurs` créé, compte Auth créé, `auth_id` lié, lien d'invitation
+généré (seul l'envoi Resend échoue en local, `RESEND_API_KEY`/`RESEND_API_KEY_INVITATIONS` absentes de
+`.env.local` — normal en dev, ces clés sont configurées côté Vercel en prod).
+
+**Bug trouvé en marge, sans rapport avec la checkbox** : testé une première fois connecté en
+**manager** (Olivier) — "Impossible de créer ce profil.", peu importe l'état de la case. Diagnostiqué
+en reconstruisant l'appel `insert` directement (fetch authentifié depuis la page, même méthode que
+l'incident prod du 18/09/2026) : `403, code 42501, "new row violates row-level security policy for
+table utilisateurs"`. Cause : `utilisateurs: admin crée les profils`/`admin modifie les profils`
+(`supabase/schema.sql`) sont restées strictement admin-only, alors que le bouton "+ Créer un profil"
+et le formulaire s'affichent normalement à un manager (aucun gate par rôle dans
+`UtilisateursListPage.tsx`/`UtilisateurFichePage.tsx`) — échec silencieux en base, jamais en façade.
+
+**Audit d'impact demandé par Vincent avant d'appliquer un correctif** : comparaison avec le reste du
+schéma — **toutes** les autres tables de config (`regles_acquisition`, `regles_anciennete`,
+`parametrage_periode`, `jours_feries`, `conges_imposes`, `objectifs_calendrier`,
+`parametrage_notifications`, `faqs`, `exports_paie`, `export_paie_lignes`...) ont déjà une policy
+`"X: manager et admin modifient"` en plus d'un `"admin gère tout"` — `utilisateurs` est la seule
+exception pour INSERT/UPDATE (seule la lecture a sa variante manager). Anomalie probable, pas une
+exclusion volontaire documentée.
+
+**Risque identifié avant de corriger** : le garde-fou "toujours un admin actif" (`dernierAdmin`,
+`UtilisateurFichePage.tsx:1117`) n'existe **qu'en React** (désactive des options dans l'UI) — aucune
+contrainte/trigger en base. Copier tel quel le pattern standard "manager et admin modifient" aurait
+donné à un manager, via un appel API direct contournant l'UI, la possibilité de se promouvoir admin ou
+de démettre/archiver le dernier admin, sans aucun frein côté base.
+
+**Corrigé (schema.sql, migration à appliquer par Vincent en Supabase)** : les 2 policies réécrites avec
+un `role <> 'admin'` des deux côtés (`using`/`with check`) pour la branche manager — un manager peut
+créer/modifier un profil collaborateur ou manager, mais jamais un profil admin (ni en créer un, ni
+toucher un profil déjà admin, ni s'auto-promouvoir). L'admin garde un accès total sans restriction.
+Items Backlog ouverts pour la suite : cadrage plus large des droits manager sur les profils admin
+(suppression, délégation...), et un nouveau type de profil "Admin visiteur" sans solde de congés,
+demandé par Vincent dans la foulée.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

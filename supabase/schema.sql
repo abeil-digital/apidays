@@ -868,13 +868,33 @@ create policy "utilisateurs: admin lit tout"
   on utilisateurs for select
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
-create policy "utilisateurs: admin crée les profils"
+-- Ouvert au manager le 21/09/2026 (bug trouvé en testant la case "Envoyer
+-- l'invitation par email" : le bouton "+ Créer un profil" s'affichait à un
+-- manager sans qu'il puisse réellement rien créer, RLS bloquait en
+-- silence) — mais borné à `role <> 'admin'` des deux côtés (`using`/`with
+-- check`) : un manager ne doit jamais pouvoir créer un compte admin, ni
+-- toucher (modifier/archiver/changer le rôle d')un profil déjà admin, ni se
+-- promouvoir lui-même admin par cette voie. Le garde-fou "toujours un admin
+-- actif" (`dernierAdmin`, `UtilisateurFichePage.tsx`) reste uniquement côté
+-- UI — cette restriction RLS est ce qui l'empêche réellement d'être
+-- contournée par un appel API direct.
+create policy "utilisateurs: manager et admin créent les profils"
   on utilisateurs for insert
-  with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+  with check (
+    entreprise_id = my_entreprise_id()
+    and (my_role() = 'admin' or (my_role() = 'manager' and role <> 'admin'))
+  );
 
-create policy "utilisateurs: admin modifie les profils (dont archivage)"
+create policy "utilisateurs: manager et admin modifient (dont archivage)"
   on utilisateurs for update
-  using (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+  using (
+    entreprise_id = my_entreprise_id()
+    and (my_role() = 'admin' or (my_role() = 'manager' and role <> 'admin'))
+  )
+  with check (
+    entreprise_id = my_entreprise_id()
+    and (my_role() = 'admin' or (my_role() = 'manager' and role <> 'admin'))
+  );
 
 -- ------------------------------------------------------------
 -- POLICIES — manager_salaries
