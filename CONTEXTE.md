@@ -7377,6 +7377,57 @@ déjà correctement dans "Validées — prochain export" — la règle `demande.
 que les dates futures, aucune borne basse, même principe que le "rattrapage du reliquat" déjà géré par
 `genererExportPaie`. Rien à changer.
 
+## Kanban — itération finale de la session (21/09/2026)
+
+Après le constat que 5 colonnes séparées (Transmise/En paie/Refusée en plus) faisaient doublon avec
+"Quels congés transmettre"/"Vérifier les fiches de paie", plusieurs allers-retours ont affiné la
+structure jusqu'à un état stable. **4 zones dans `KanbanDemandes.tsx`** :
+
+1. **"En attente de validation"** — inchangée.
+2. **"Prochain export"** — une seule colonne avec **3 sous-groupes optionnels**, chacun avec son
+   propre sous-titre qui ne s'affiche que s'il contient au moins une card :
+   - **"Congés annulés"** — congé annulé après avoir déjà été transmis, correction (ligne négative)
+     pas encore envoyée (`soldeNetTransmis(lignes) > 0`, même calcul que `BadgeTransmission`).
+   - **"Périodes précédentes"** — backlog validé ce mois-ci mais dont la période de congé est
+     antérieure au mois en cours, jamais transmis ("rattrapage").
+   - **"Congés du mois"** — cas normal. Règle explicite de Vincent : **ce sous-titre ne s'affiche que
+     si un des deux autres sous-groupes est aussi présent** — si la colonne est homogène (que des
+     congés du mois), pas besoin de la nommer, les cards s'affichent nues.
+3. **"Exports futurs"** — congés validés dont la date est postérieure au mois en cours
+   (`demande.debut > borneExport`). Le titre de la colonne **est** le sélecteur — pas de select
+   séparé en dessous : texte souligné + chevron (même convention que `SelectCommence`,
+   `CalendrierGlobal.tsx`), qui déclenche directement le menu déroulant des mois disponibles
+   (uniquement ceux réellement présents dans les données, ex. "octobre 2026"… "mai 2027"). Affiche
+   "Exports futurs" par défaut, le nom du mois choisi une fois sélectionné.
+4. **"Refusées et annulées"** — nouvelle colonne archive (congés `refusé`, et `annulé` déjà soldés à
+   0 — auparavant simplement exclus du Kanban). **Repliée par défaut** : simple bande verticale de
+   40px (texte en écriture verticale, compteur), cliquable pour se déplier en colonne pleine largeur
+   avec les cards (libellé de date adapté : "Refusée le"/"Annulée le" selon le statut). Fond rouge
+   (`bg-status-danger-bg`), cohérent avec le badge "Refusé" existant ailleurs.
+
+**Couleurs finales** : En attente = orange (`status-warning`) ; Prochain export = vert plein
+(`status-success`) ; Exports futurs = **vert plus pâle** (`bg-status-success-bg/50`, même famille mais
+atténuée — pour rester visuellement distinct de "Prochain export" sans sortir de la palette
+sémantique) ; Refusées et annulées = rouge (`status-danger`).
+
+**Filtres de la page** : "Statut" et "Période" masqués en vue Kanban (`!vueKanban`) — le statut EST
+déjà la classification en colonnes (les masquer viderait des colonnes entières, ex. "Congés annulés"
+a besoin des demandes `annulé`), et aucune colonne n'est plus bornée par une date de la page. Seuls
+Type et Collaborateur restent pertinents et actifs. `filteredSansPeriode` (nom conservé malgré
+l'évolution) ignore désormais aussi le filtre statut, pas seulement période.
+
+**Hauteur du panneau de détail alignée sur les colonnes** (demande de Vincent) : `DetailCongePanel`
+utilise `pleineLargeur` (prop déjà existante, neutralise son `xl:sticky xl:w-64 xl:shrink-0` interne
+— convention déjà utilisée par `SoldeDetailPanel`/`DetailSoldeDepartPanel`/`DetailAjustementPanel`)
+en vue Kanban, ré-enveloppé dans un `div` avec `xl:w-64 xl:shrink-0 self-stretch` côté
+`SuivreDemandesPage.tsx`, et la grille racine passe de `items-start` à `xl:items-stretch` en Kanban
+uniquement (la vue Liste garde `items-start`, comportement sticky inchangé). Le panneau s'étire donc
+sur la hauteur de la ligne kanban au lieu de rester collé en haut avec du vide en dessous.
+
+**Toujours un test** (pas de pagination au-delà de 15 cards/sous-groupe, pas d'interaction "le panneau
+pousse les colonnes" des mockups d'origine — le panneau s'ouvre simplement à droite, dans la 4ᵉ colonne
+de la grille).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -189,16 +189,16 @@ export function SuivreDemandesPage() {
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
   // Vue Kanban (21/09/2026, scope réduit à 3 colonnes le même jour — voir
-  // CONTEXTE.md) : le filtre "période" de la page n'a plus de sens ici —
-  // aucune des 3 colonnes retenues (En attente / Validées-prochain export /
-  // Validées-pas encore dues) ne doit être bornée par une date, une
-  // demande non traitée depuis longtemps est justement ce que ce Kanban
-  // doit faire remonter. Même filtres statut/collaborateur/type que
-  // `filtered`, sans le filtre période.
+  // CONTEXTE.md) : les filtres "période" et "statut" de la page n'ont plus
+  // de sens ici — aucune des 3 colonnes retenues (En attente /
+  // Validées-prochain export / Validées-pas encore dues, avec ses
+  // sous-groupes Congés annulés/Périodes précédentes) ne doit être bornée
+  // par une date, et le statut EST la classification en colonnes elle-même
+  // (filtrer par statut viderait des colonnes entières, ex. "Régul" a
+  // besoin des demandes annulées). Seuls collaborateur/type restent
+  // pertinents.
   const filteredSansPeriode = demandes
     .filter((d) => {
-      const statutAttendu = STATUT_PAR_FILTRE[filtre];
-      if (statutAttendu && d.statut !== statutAttendu) return false;
       if (collaborateurFiltre !== "tous" && d.demandeur.id !== collaborateurFiltre) return false;
       if (typeFiltre !== "tous") {
         const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
@@ -237,7 +237,9 @@ export function SuivreDemandesPage() {
       </div>
 
       <div
-        className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
+        className={`animate-stagger-in grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block ${
+          vueKanban ? "xl:items-stretch" : "items-start"
+        }`}
         style={{ animationDelay: "90ms" }}
       >
         <div className="flex w-full min-w-0 flex-col gap-2">
@@ -299,16 +301,18 @@ export function SuivreDemandesPage() {
                     </option>
                   ))}
                 </SelectFiltrePill>
-                <SelectFiltrePill
-                  value={filtre}
-                  onChange={(e) => setFiltre(e.target.value as Filtre)}
-                >
-                  {FILTRES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </SelectFiltrePill>
+                {/* Masqué en vue Kanban (21/09/2026) : le statut EST déjà la
+                    classification en colonnes, un filtre en plus n'aurait
+                    plus de sens (viderait des colonnes entières). */}
+                {!vueKanban && (
+                  <SelectFiltrePill value={filtre} onChange={(e) => setFiltre(e.target.value as Filtre)}>
+                    {FILTRES.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </SelectFiltrePill>
+                )}
                 <SelectFiltrePill
                   value={collaborateurFiltre}
                   onChange={(e) => setCollaborateurFiltre(e.target.value)}
@@ -424,27 +428,37 @@ export function SuivreDemandesPage() {
         )}
 
         {selection && (
-          <DetailCongePanel
-            key={selection.id}
-            selection={selection}
-            onClose={() => setSelectionId(null)}
-            onValider={estManager ? (commentaire) => valider(selection.id, commentaire) : undefined}
-            onRefuser={estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined}
-            onRetirer={
-              estManager || estAdmin
-                ? (commentaire) => retirer(selection.id, commentaire)
-                : undefined
-            }
-            peutAnnulerDejaTransmis={estManager || estAdmin}
-            onValiderSucces={(id, message) => setToast({ id, message })}
-            joursFeries={joursFeries}
-            congesImposes={congesImposes}
-            djImposees={djImposees}
-            autresDemandes={demandes.filter(
-              (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
-            )}
-            lignesTransmission={lignesTransmissionParDemande[selection.id]}
-          />
+          // En vue Kanban (21/09/2026, demande de Vincent) : `pleineLargeur`
+          // neutralise le `xl:sticky xl:w-64 xl:shrink-0` interne du panneau
+          // (pensé pour un docking à côté d'une longue liste qui défile) —
+          // repris manuellement ici + `self-stretch` pour que le panneau
+          // s'aligne sur la hauteur de la ligne kanban (`xl:items-stretch`
+          // sur la grille ci-dessus), au lieu de rester collé en haut avec
+          // du vide en dessous à côté de colonnes bien plus hautes.
+          <div className={vueKanban ? "xl:w-64 xl:shrink-0 self-stretch" : undefined}>
+            <DetailCongePanel
+              key={selection.id}
+              selection={selection}
+              pleineLargeur={vueKanban}
+              onClose={() => setSelectionId(null)}
+              onValider={estManager ? (commentaire) => valider(selection.id, commentaire) : undefined}
+              onRefuser={estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined}
+              onRetirer={
+                estManager || estAdmin
+                  ? (commentaire) => retirer(selection.id, commentaire)
+                  : undefined
+              }
+              peutAnnulerDejaTransmis={estManager || estAdmin}
+              onValiderSucces={(id, message) => setToast({ id, message })}
+              joursFeries={joursFeries}
+              congesImposes={congesImposes}
+              djImposees={djImposees}
+              autresDemandes={demandes.filter(
+                (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
+              )}
+              lignesTransmission={lignesTransmissionParDemande[selection.id]}
+            />
+          </div>
         )}
       </div>
 
