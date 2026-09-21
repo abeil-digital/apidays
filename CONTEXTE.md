@@ -7305,6 +7305,78 @@ Items Backlog ouverts pour la suite : cadrage plus large des droits manager sur 
 (suppression, délégation...), et un nouveau type de profil "Admin visiteur" sans solde de congés,
 demandé par Vincent dans la foulée.
 
+## "Suivre les demandes" : test d'affichage Kanban, scope réduit après réflexion (21/09/2026)
+
+Vincent avait un point avec Delphine décalé côté onboarding réel d'Abeil — session basculée sur le
+cadrage/test de la vue Kanban discutée le matin même (voir plus haut, item Backlog "Section what's up").
+
+**Test d'affichage construit et vérifié en direct** : nouveau composant `KanbanDemandes.tsx`, toggle
+Liste/Kanban sur `SuivreDemandesPage.tsx` (`vueKanban`, défaut Kanban pour la vérif). Réutilise le
+style existant (pill dates `formatPeriodePillNumerique`, dot+libellé `TypeBadge`, durée en vert —
+mêmes classes que `HistoriqueTable.tsx`) et `DetailCongePanel` tel quel au clic sur une card (pas
+encore l'interaction "le panneau pousse les colonnes" des mockups Vincent, hors scope de ce test).
+
+**Itération 1 — 5 colonnes** : En attente / Validées / **Transmise** (nouvelle, pas dans le cadrage du
+matin) / En paie / Refusée. "Transmise" vs "En paie" reprend la distinction déjà faite par
+`BadgeTransmission` (`lignes.every(l => l.prisEnCompteLe)`). Bug corrigé en testant :
+`formatDateActionCourte` plantait sur `genereLe`/`prisEnCompteLe` (`timestamptz`, avec l'heure) —
+`.slice(0, 10)` avant formatage, contrairement à `datePose`/`dateDecision` qui sont déjà des dates
+pures.
+
+**Discussion sur le filtrage** : le filtre période de la page (défaut "Année en cours") videait la
+colonne "Validées" et perdait tout son sens pour un Kanban — **décision de Vincent** : les colonnes
+actionnables (En attente/Validées/Transmise) ne doivent **jamais** être bornées par une date (une
+demande non transmise depuis 3 mois est justement ce que le Kanban doit faire remonter), seules les
+colonnes terminales (En paie/Refusée) le sont, sur le **mois en cours**. Implémenté (`filteredSansPeriode`
+dans `SuivreDemandesPage.tsx`, sans le filtre `debut`/`fin` ; bornage mois-en-cours dans
+`KanbanDemandes.tsx` via `todayISO().slice(0,7)`) ; le sélecteur de période de la page masqué en vue
+Kanban (n'aurait plus aucun effet, trompeur de le laisser affiché).
+
+**Remise en question, en testant** : Vincent a remarqué que les cards "En paie" affichaient des congés
+de décembre alors qu'on était censé être bornés au mois en cours — **pas un bug** (vérifié : toutes les
+cards affichaient bien "Passé en paie le 17/09/26", le mois en cours ; la confusion venait de la pill
+de dates du CONGÉ lui-même, restée visuellement dominante sur la card, alors qu'elle n'a plus de lien
+avec le mois du filtre une fois qu'on borne sur la date de TRANSMISSION plutôt que sur la date du
+congé). Ça a déclenché une réflexion plus large : "cet écran devient-il vraiment utile au-delà de la
+visualisation ?" — constat que la colonne "En paie" est structurellement **fugace** : contrairement aux
+autres colonnes alimentées en continu (une action individuelle à la fois), elle se remplit d'un coup
+par l'action groupée "Générer l'export", une fois par mois — le reste du temps soit vide, soit figée
+sur le mois précédent. Piste explorée (non retenue, voir plus bas) : transformer "Validées, dues ce
+mois" en aperçu live de ce que "Générer l'export" produirait, avec le bouton d'action directement dans
+le Kanban.
+
+**Conclusion finale de Vincent, après réflexion** : le Kanban à 5 colonnes se mettait en fait à vouloir
+remplacer "Quels congés transmettre"/"Vérifier les fiches de paie" — or ces deux écrans existants
+remplissent déjà bien leur rôle (vue tableau globale des congés transmis, vérification des soldes vs
+fiche de paie réelle) : "la vue tableau est plus simple en vrai pour voir de façon globale les congés
+qui sont envoyés en paie" / "la vue Vérifier les fiches de paie permet de vérifier les soldes, je pense
+que ça marche en l'état". **Scope du Kanban réduit à 3 colonnes**, qui ne font doublon avec rien
+d'existant : **(1) En attente de validation** ; **(2) Validées — incluses dans le prochain export**
+(dues maintenant) ; **(3) Validées — pas encore dues** (période future, exclues du prochain export par
+le moteur, `demande.debut > periode.fin`). Transmise/En paie/Refusée abandonnées pour ce chantier.
+
+**`KanbanDemandes.tsx` réécrit en 3 colonnes le même jour** (toujours en test, pas encore un chantier
+"fini" — reste l'interaction "le panneau pousse les colonnes" à designer, et la question de
+pagination au-delà de 15 cards) : bucketing sur `demande.debut` vs fin du mois en cours
+(`finMoisEnCours()`, même cadence que `genererExportPaie`), aucune colonne bornée par une date. Vérifié
+en navigateur sur acme : 1 en attente, 15 "prochain export" (toutes datées ≤ 30/09), 16 "pas encore
+dues" (toutes ≥ octobre) — répartition cohérente.
+
+**4ᵉ colonne "Régul — prochain export" ajoutée dans la foulée** (demande de Vincent — "les congés qui
+ont été posés, passés en paie et annulés depuis") : `lignesTransmissionParDemande` rebranché (retiré
+puis réintroduit). Une demande `statut === "annulé"` y apparaît si son solde déjà transmis
+(`somme(jours_inclus)`) est encore positif — même calcul que `BadgeTransmission` (`À régulariser`),
+disparaît une fois la ligne de correction négative envoyée. Vérifié directement en base sur acme (22
+demandes annulées) : 2 avaient des lignes transmises, toutes les deux déjà soldées à 0 (+1/-1) — donc
+"0" dans la colonne est le résultat correct, pas un trou dans la logique, juste aucun cas réel à
+régulariser actuellement sur ce tenant.
+
+**Cas "backlog" vérifié par le raisonnement, pas testé en direct** (pas de donnée disponible sur acme) :
+une demande validée ce mois-ci mais dont la période de congé est antérieure (jamais transmise) tombe
+déjà correctement dans "Validées — prochain export" — la règle `demande.debut > borneExport` n'exclut
+que les dates futures, aucune borne basse, même principe que le "rattrapage du reliquat" déjà géré par
+`genererExportPaie`. Rien à changer.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

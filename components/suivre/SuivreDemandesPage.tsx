@@ -18,6 +18,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
 import { TableauAjustements } from "@/components/suivre/TableauAjustements";
+import { KanbanDemandes } from "@/components/suivre/KanbanDemandes";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés" | "Annulés";
 type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
@@ -111,6 +112,10 @@ export function SuivreDemandesPage() {
   const [collaborateurFiltre, setCollaborateurFiltre] = useState("tous");
   const [typeFiltre, setTypeFiltre] = useState<TypeBadgeCode | TypeFiltreRegul | "tous">("tous");
   const [selectionId, setSelectionId] = useState<string | null>(null);
+  // Toggle Liste/Kanban (21/09/2026, test d'affichage — voir Backlog "Suivre
+  // les demandes : vue Kanban") — par défaut sur Kanban pour la vérif,
+  // repassera par défaut sur Liste une fois le chantier officiellement lancé.
+  const [vueKanban, setVueKanban] = useState(true);
   const [lignesTransmissionParDemande, setLignesTransmissionParDemande] = useState<
     Record<string, LigneExportPaie[]>
   >({});
@@ -183,6 +188,26 @@ export function SuivreDemandesPage() {
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
+  // Vue Kanban (21/09/2026, scope réduit à 3 colonnes le même jour — voir
+  // CONTEXTE.md) : le filtre "période" de la page n'a plus de sens ici —
+  // aucune des 3 colonnes retenues (En attente / Validées-prochain export /
+  // Validées-pas encore dues) ne doit être bornée par une date, une
+  // demande non traitée depuis longtemps est justement ce que ce Kanban
+  // doit faire remonter. Même filtres statut/collaborateur/type que
+  // `filtered`, sans le filtre période.
+  const filteredSansPeriode = demandes
+    .filter((d) => {
+      const statutAttendu = STATUT_PAR_FILTRE[filtre];
+      if (statutAttendu && d.statut !== statutAttendu) return false;
+      if (collaborateurFiltre !== "tous" && d.demandeur.id !== collaborateurFiltre) return false;
+      if (typeFiltre !== "tous") {
+        const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
+        if (code !== typeFiltre) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.debut.localeCompare(a.debut));
+
   // Régularisations filtrées avec les mêmes critères période/collaborateur
   // que les demandes (27/08/2026) — pas de filtre "Filtre" (statut), les
   // ajustements n'ont pas de workflow de validation.
@@ -222,7 +247,28 @@ export function SuivreDemandesPage() {
               bas), même une fois la barre passée en `items-start`. Sortie du
               conteneur `bg-surface-card` (fond transparent, pas la carte
               blanche) et placée au-dessus de toute la barre de filtres. */}
-          <div className="flex justify-end px-1 print:hidden">
+          <div className="flex items-center justify-between px-1 print:hidden">
+            {/* Toggle Liste/Kanban (21/09/2026, test d'affichage) */}
+            <div className="border-ink-300/60 inline-flex rounded-full border p-0.5 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setVueKanban(true)}
+                className={`rounded-full px-3 py-1 transition-colors ${
+                  vueKanban ? "bg-slate text-white" : "text-ink-500"
+                }`}
+              >
+                Kanban
+              </button>
+              <button
+                type="button"
+                onClick={() => setVueKanban(false)}
+                className={`rounded-full px-3 py-1 transition-colors ${
+                  !vueKanban ? "bg-slate text-white" : "text-ink-500"
+                }`}
+              >
+                Liste
+              </button>
+            </div>
             <button
               onClick={() => window.print()}
               className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
@@ -290,38 +336,44 @@ export function SuivreDemandesPage() {
                   barre entière à `items-start` ci-dessus, pour que le bouton
                   "Exporter" ne soit plus poussé vers le bas quand cette
                   colonne grandit. */}
-                <div className="flex flex-col items-start gap-2">
-                  <SelectFiltrePill
-                    value={periodeFiltre}
-                    onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
-                  >
-                    {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(
-                      ([v, label]) => (
-                        <option key={v} value={v}>
-                          {label}
-                        </option>
-                      ),
+                {/* Masqué en vue Kanban (21/09/2026) : le filtre période ne
+                    s'y applique plus, aucune des 3 colonnes n'est bornée
+                    par une date — le laisser affiché serait trompeur, il
+                    n'aurait plus aucun effet. */}
+                {!vueKanban && (
+                  <div className="flex flex-col items-start gap-2">
+                    <SelectFiltrePill
+                      value={periodeFiltre}
+                      onChange={(e) => setPeriodeFiltre(e.target.value as PeriodeFiltre)}
+                    >
+                      {(Object.entries(LABEL_PERIODE) as [PeriodeFiltre, string][]).map(
+                        ([v, label]) => (
+                          <option key={v} value={v}>
+                            {label}
+                          </option>
+                        ),
+                      )}
+                    </SelectFiltrePill>
+                    {periodeFiltre === "personnalisee" && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-ink-500 text-xs font-semibold">Du</span>
+                        <InputFiltrePill
+                          type="date"
+                          aria-label="Du"
+                          value={debutPerso}
+                          onChange={(e) => setDebutPerso(e.target.value)}
+                        />
+                        <span className="text-ink-500 text-xs font-semibold">Au</span>
+                        <InputFiltrePill
+                          type="date"
+                          aria-label="Au"
+                          value={finPerso}
+                          onChange={(e) => setFinPerso(e.target.value)}
+                        />
+                      </div>
                     )}
-                  </SelectFiltrePill>
-                  {periodeFiltre === "personnalisee" && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-ink-500 text-xs font-semibold">Du</span>
-                      <InputFiltrePill
-                        type="date"
-                        aria-label="Du"
-                        value={debutPerso}
-                        onChange={(e) => setDebutPerso(e.target.value)}
-                      />
-                      <span className="text-ink-500 text-xs font-semibold">Au</span>
-                      <InputFiltrePill
-                        type="date"
-                        aria-label="Au"
-                        value={finPerso}
-                        onChange={(e) => setFinPerso(e.target.value)}
-                      />
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -332,6 +384,15 @@ export function SuivreDemandesPage() {
                   selectionId={selectionId}
                   onSelect={setSelectionId}
                 />
+              ) : vueKanban ? (
+                <div className="p-3">
+                  <KanbanDemandes
+                    demandes={filteredSansPeriode}
+                    lignesTransmissionParDemande={lignesTransmissionParDemande}
+                    selectionId={selectionId}
+                    onCardClick={setSelectionId}
+                  />
+                </div>
               ) : (
                 <HistoriqueTable
                   demandes={filtered}
