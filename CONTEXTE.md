@@ -7562,6 +7562,55 @@ changements de tons ("check moi la partie kanban dans le détail") :
   alors qu'il n'était lu que pour le sous-groupe "annules") — déplacé dans `CardKanban` lui-même,
   calculé à la demande depuis `lignes` (déjà en prop).
 
+## État des lieux toasters/popins, bug reliquat Kanban, menu profil (22/09/2026)
+
+Suite de session, plusieurs sujets indépendants traités à la demande de Vincent.
+
+**État des lieux toasters/popins de confirmation** (Backlog "Refonte UI / visibilité des messages de
+confirmation et des toasters") : page temporaire `/temp-confirmations` construite pour rejouer les
+vrais `Toast`/`Modal` avec le texte réel de chaque site d'appel (3 toasters, 6 popins), puis
+supprimée. Constats principaux — aucun composant de confirmation partagé (`demanderConfirmation`
+n'existe que localement dans `DetailCongePanel.tsx`, chaque site réimplémente son propre `Modal` + 2
+boutons), friction très inégale selon l'action (Annuler/Confirmer simple pour la plupart, taper le
+slug pour supprimer un tenant, **aucune** étape de confirmation pour "Fin de contrat"), `tone="success"`
+du toast rendu en orange (nom trompeur), 2 en-têtes de modale (`EnTeteModalDanger`/`EnTeteModalNavy`)
+dupliqués à l'identique dans 2 fichiers. **Un seul changement concret livré** : reformulation du texte
+de "Transmettre" (`TransmissionsPaiePage.tsx`) — "Vous allez transmettre ces données en paie. Celles-ci
+ne seront plus modifiables dans cette rubrique." (remplace l'ancienne question "Confirmez-vous que...").
+Chantier considéré traité par Vincent malgré les écarts restants, volontairement non harmonisés (pas de
+nouveau composant partagé créé).
+
+**Bug "0/X j" dans le Kanban trouvé par Vincent en testant** : une demande DÉJÀ ENTIÈREMENT transmise
+(reliquat à 0) affichait quand même une fraction ("0/1,5 j" au lieu de "1,5 j"), trompeur — la
+condition `partiellementTransmis` (`KanbanDemandes.tsx`) ne vérifiait que `joursRestants ≠ joursTotal`,
+donc se déclenchait aussi bien pour une vraie transmission partielle (congé à cheval, le cas voulu à
+l'origine) que pour un reliquat tombé à 0 (transmission complète, pas "partielle"). Corrigé en ajoutant
+`joursRestants > 0.001` à la condition — un reliquat à 0 affiche désormais juste le total, comme avant
+transmission.
+
+**Anomalie de données investiguée en base** (à l'origine du signalement ci-dessus, "les différences de
+données entre le Kanban et l'export paie") : sur l'instance de test, 3 congés de septembre de Vincent
+Mayol apparaissaient "Transmis" sur le Kanban alors que "Vérifier les fiches de paie" de septembre
+affichait un mouvement CP à 0j. Requêtes REST directes sur Supabase (service role, lecture) : les 3
+lignes `export_paie_lignes` en question appartenaient à un **export dont la période est
+décembre 2026** (`genere_le` 14/09/2026) — résidu de la session de test "Vérification de la bascule de
+période" (16-17/09/2026, exports rejoués de septembre à décembre) : en simulant la date en décembre, le
+repêchage habituel des congés non transmis des mois précédents a ramassé ces 3 congés de septembre
+encore en attente à ce moment-là, dans l'export de décembre plutôt que dans un export de septembre. Pas
+un bug de code — chaque écran a raison indépendamment (Kanban classe par date du congé, "Vérifier les
+fiches de paie" filtre par période d'export, fix du 14/09) — mais le résultat affiché est trompeur.
+**Nettoyage bloqué** : la suppression de cet export test (+ ses 3 lignes) via REST DELETE a été refusée
+par le classificateur auto-mode ("Cloud Storage Mass Delete"), y compris sur une ligne unique par id —
+reste à faire soit en autorisant la règle Bash, soit à la main depuis Supabase Studio (requêtes SQL
+fournies à Vincent, pas encore exécutées).
+
+**Menu profil pour la déconnexion** (demande explicite de Vincent — "le log out sera accessible en
+cliquant sur le profil") : l'icône `LogOut` isolée du header a été retirée, remplacée par un menu
+(`MenuProfil`, `HeaderBar.tsx`) déclenché en cliquant sur avatar+nom — un seul item aujourd'hui ("Se
+déconnecter", même action serveur `logout` qu'avant). Portail + position `fixed` calée sur le
+déclencheur (même pattern que `SnippetConge`/`DatePicker`) plutôt qu'un `absolute` classique — le
+header a `overflow-x-auto`, qui aurait pu rogner un menu positionné en absolu.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
