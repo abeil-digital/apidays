@@ -240,8 +240,15 @@ function CardKanban({
   // congé à cheval déjà partiellement transmis (bug trouvé le 22/09/2026 en
   // testant sur Abeil sandbox : un congé transmis en août ré-apparaissait
   // en septembre avec toujours sa durée totale, pas le reste à transmettre).
+  // `joursRestants > 0.001` (22/09/2026, 2nd bug trouvé en revue) : un
+  // reliquat tombé à 0 (tout transmis) n'est pas une transmission PARTIELLE
+  // — sans ce garde-fou, une demande "Congés du mois" entièrement transmise
+  // affichait "0/1,5 j" au lieu de "1,5 j", trompeur (la pill Transmis/En
+  // paie dit déjà où ça en est).
   const partiellementTransmis =
-    joursRestants !== undefined && Math.abs(joursRestants - joursTotal) > 0.001;
+    joursRestants !== undefined &&
+    joursRestants > 0.001 &&
+    Math.abs(joursRestants - joursTotal) > 0.001;
   // Calculé ici plutôt que poussé en prop par l'appelant (22/09/2026, revue
   // de code) — seul `estRegul` en a besoin, pas la peine que les sous-groupes
   // "Périodes précédentes"/"Congés du mois" le recalculent pour rien.

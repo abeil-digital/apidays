@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -7,6 +9,81 @@ import { Avatar } from "@/components/ui/Avatar";
 import { getNiveau1Items, isNiveau1Actif } from "@/components/layout/niveau1";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { logout } from "@/app/connexion/actions";
+
+/**
+ * Menu profil (22/09/2026, demande de Vincent — "le log out sera accessible
+ * en cliquant sur le profil") : remplace l'icône `LogOut` isolée par un menu
+ * déclenché en cliquant sur avatar+nom, pour l'instant un seul item
+ * ("Se déconnecter") mais ouvre la voie à d'autres entrées plus tard (ex.
+ * "Mon profil"). Portail + position `fixed` calée sur `ancre` (même pattern
+ * que `SnippetConge`/`DatePicker`) — le header a `overflow-x-auto`, un menu
+ * `absolute` risquerait d'y être rogné.
+ */
+function MenuProfil({ prenom, nom, initiales }: { prenom: string; nom: string; initiales: string }) {
+  const [ouvert, setOuvert] = useState(false);
+  const declencheurRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [ancre, setAncre] = useState<DOMRect | null>(null);
+
+  useEffect(() => {
+    if (!ouvert) return;
+    function handleClicExterieur(e: MouseEvent) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as Node) &&
+        !declencheurRef.current?.contains(e.target as Node)
+      ) {
+        setOuvert(false);
+      }
+    }
+    window.addEventListener("mousedown", handleClicExterieur);
+    return () => window.removeEventListener("mousedown", handleClicExterieur);
+  }, [ouvert]);
+
+  function toggle() {
+    if (!ouvert) setAncre(declencheurRef.current?.getBoundingClientRect() ?? null);
+    setOuvert((v) => !v);
+  }
+
+  return (
+    <>
+      <button
+        ref={declencheurRef}
+        type="button"
+        onClick={toggle}
+        className="flex shrink-0 items-center gap-3 rounded-full py-1 pr-1 pl-2 hover:bg-white/10"
+      >
+        <span className="hidden text-right lg:block">
+          <span className="block text-xs font-semibold whitespace-nowrap text-white">
+            {prenom} {nom}
+          </span>
+        </span>
+        <Avatar initiales={initiales} />
+      </button>
+
+      {ouvert &&
+        ancre &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ position: "fixed", top: ancre.bottom + 8, right: window.innerWidth - ancre.right }}
+            className="bg-surface-card border-ink-300/60 z-50 w-48 rounded-xl border py-1.5 shadow-lg"
+          >
+            <form action={logout}>
+              <button
+                type="submit"
+                className="text-ink-900 hover:bg-surface-app flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm font-semibold"
+              >
+                <LogOut size={16} className="text-ink-500" />
+                Se déconnecter
+              </button>
+            </form>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
 
 /**
  * Header général de l'application — fond bleu nuit (vraie charte Abeil,
@@ -67,23 +144,11 @@ export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
 
       <div className="ml-auto flex shrink-0 items-center gap-3">
         {utilisateur && (
-          <>
-            <div className="hidden text-right lg:block">
-              <div className="text-xs font-semibold whitespace-nowrap text-white">
-                {utilisateur.prenom} {utilisateur.nom}
-              </div>
-            </div>
-            <Avatar initiales={utilisateur.initiales} />
-            <form action={logout}>
-              <button
-                type="submit"
-                title="Se déconnecter"
-                className="text-white/70 hover:text-white"
-              >
-                <LogOut size={16} />
-              </button>
-            </form>
-          </>
+          <MenuProfil
+            prenom={utilisateur.prenom}
+            nom={utilisateur.nom}
+            initiales={utilisateur.initiales}
+          />
         )}
       </div>
     </header>

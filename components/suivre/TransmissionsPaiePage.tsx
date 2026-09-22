@@ -875,8 +875,8 @@ function QuelsCongesTransmettre({
         <Modal title="Transmettre ces données" onClose={() => setModalOuverte(false)}>
           <div className="flex flex-col gap-4">
             <p className="text-ink-700 text-sm">
-              Confirmez-vous que vous allez envoyer ces données à la paie ? L&apos;historique sera
-              consultable dans Apidays.
+              Vous allez transmettre ces données en paie. Celles-ci ne seront plus modifiables dans
+              cette rubrique.
             </p>
             {erreurTransmission && (
               <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
