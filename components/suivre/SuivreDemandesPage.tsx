@@ -19,6 +19,7 @@ import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
 import { TableauAjustements } from "@/components/suivre/TableauAjustements";
 import { KanbanDemandes } from "@/components/suivre/KanbanDemandes";
+import { BandeauExportPaie } from "@/components/suivre/BandeauExportPaie";
 
 type Filtre = "Tous les statuts" | "En validation" | "Validés" | "Refusés" | "Annulés";
 type PeriodeFiltre = "toutes_dates" | "annee_en_cours" | "periode_reference" | "personnalisee";
@@ -389,7 +390,8 @@ export function SuivreDemandesPage() {
                   onSelect={setSelectionId}
                 />
               ) : vueKanban ? (
-                <div className="p-3">
+                <div className="flex flex-col gap-3 p-3">
+                  <BandeauExportPaie />
                   <KanbanDemandes
                     demandes={filteredSansPeriode}
                     lignesTransmissionParDemande={lignesTransmissionParDemande}

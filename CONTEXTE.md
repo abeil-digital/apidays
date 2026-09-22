@@ -7428,6 +7428,75 @@ sur la hauteur de la ligne kanban au lieu de rester collé en haut avec du vide 
 pousse les colonnes" des mockups d'origine — le panneau s'ouvre simplement à droite, dans la 4ᵉ colonne
 de la grille).
 
+## Kanban — session du 22/09/2026 : bug critique, refonte des cards, bandeau export paie
+
+Vincent a testé le Kanban en conditions réelles sur **Abeil (sandbox)** (pas acme cette fois) et a
+tout de suite trouvé un vrai bug.
+
+**Bug critique trouvé et corrigé** : "j'ai fait un export paie le 31/08, sur le Kanban je retrouve
+(en septembre) des congés qui sont passés en paie fin août". Cause : `classer()` ne vérifiait la
+colonne "Prochain export" que sur la DATE de la demande, jamais sur ce qui avait déjà été transmis —
+un congé d'août entièrement payé restait affiché indéfiniment. **Corrigé** : calcul du reliquat
+(`joursRestants = durée totale − solde déjà transmis`, même formule que `genererExportPaie`) ; une
+demande dont le reliquat est ≤ 0 disparaît. Vérifié en base sur Abeil sandbox (8 demandes de l'export
+du 31/08 recoupées avec `nb_demi_journees`/`jours_inclus`) : 4 entièrement soldées (disparaissent
+correctement), 1 partiellement transmise (7j au total, 4j envoyés → reliquat 3j, reste affiché) — ce
+cas a révélé un second bug annexe : la card affichait encore la durée totale (7j) au lieu du reliquat
+(3j), corrigé en passant `joursRestants` jusqu'à la card, affiché en **fraction "3/7 j"** (pas "3 j
+restant", changé sur demande de Vincent — cohérent avec le format `X/Y j` déjà utilisé ailleurs dans
+l'app pour un congé à cheval).
+
+**Highlight d'arrivée** ("il faudrait une transition qui montre le transfert" — la vraie translation
+physique entre colonnes jugée trop complexe pour ce test, remplacée par un fondu, confirmé par
+Vincent) : `positionPrecedente` (`useRef<Map>`) mémorise la position de chaque demande entre deux
+rendus ; un changement de position déclenche `justArrivees`, qui colore brièvement la card
+(`bg-status-success-bg`, `transition-colors duration-700`) avant de s'effacer après 1,2s. Testé en
+validant réellement un congé d'Olivier Test dans le Kanban (déplacement confirmé vers "Congés du
+mois"), **puis remis en attente après coup** (`remettreEnAttenteDemande` répliqué à la main en base
+pour ne pas laisser de donnée de test — l'app n'a pas de bouton "annuler une validation" en dehors du
+toast transitoire).
+
+**"Prochain export" repensé en profondeur**, suite à une question de Vincent sur le comportement
+attendu ("ça pose un problème logique") :
+- Renommé en **"Export de {mois}"**, dynamique (`nomMoisAnnee(bornes.debut)`).
+- **Un congé du mois en cours reste affiché tout le mois**, même une fois transmis/pris en compte
+  (contrairement au comportement précédent qui l'excluait dès que `joursRestants ≤ 0`) — seul le
+  sous-groupe "Périodes précédentes" (mois antérieurs) continue de disparaître une fois soldé, c'est
+  précisément le bug du 31/08 ci-dessus. Nouvelle fonction `statutPill()` calcule un badge combinant
+  la logique déjà établie de `StatusBadge`/`BadgeTransmission` (`HistoriqueTable.tsx`) — En attente /
+  Validé / Transmis / Pris en compte / À régulariser / Régularisé / Refusé / Annulé — réutilise le
+  composant `Badge` du design system tel quel (pas de nouvelle pastille réinventée).
+- Colonne "Refusées et annulées" (archive) **bornée au mois en cours**, mais sur 2 dates différentes
+  selon le cas : date de DÉCISION pour un refus (reste pertinent tant qu'il est récent), date du
+  CONGÉ lui-même pour une annulation déjà soldée (pertinent tant que le congé concerné est dans le
+  mois). Passé de 38 à 8 items sur Abeil sandbox après ce filtre, vérifié un par un.
+
+**Card entièrement réorganisée**, 2 itérations sur mockups fournis par Vincent :
+1. 1ère passe : pill statut + jours en haut, date seule, nom, puis dot+type+dates pill en bas.
+2. **2ᵁᵉ passe (retenue)** : la date ("Validée le"/"Posé le"/"Annulée le") sort de la card, affichée
+   au-dessus en petit gris directement sur le fond coloré de la colonne. Dans la card : ligne
+   dot+type (gauche) / pill statut (droite) ; ligne nom (gauche) / jours en gros et gras (droite,
+   `text-lg`) ; pill de dates seule en bas. `CardKanban` passe d'un seul `<button>` à un `<div>`
+   englobant (date + `<button>` pour la card elle-même, seule la card reste cliquable).
+
+**Nouveau : bandeau "rappel export paie"** (`BandeauExportPaie.tsx`, au-dessus du Kanban, visible
+uniquement en vue Kanban) — 3 états, actif seulement à partir du **21 de chaque mois** (rien avant,
+"on repart à zéro à partir du 01") :
+1. Aucun export généré pour le mois en cours → "Tic Tac Tic Tac — il est temps de préparer les
+   exports paie {mois}" + bouton "Let's go" → `/suivre/transmissions-paie/{mois}-01`.
+2. Export généré mais pas `pris_en_compte` → "Export paie passé — vérifier les soldes fiche de paie
+   {mois}" + même bouton.
+3. Export généré ET pris en compte → "Fiches de paie {mois} vérifiées." (pas de bouton).
+Couleurs ajustées en direct avec Vincent : essayé vert plein, puis **jaune stabilo** (`bg-yellow-200`,
+même convention que le "stabilo" déjà utilisé ailleurs dans l'app) avec le **bouton "Let's go" resté
+vert** (`bg-status-success-fg`). Testé en conditions réelles sur Abeil sandbox (22/09/2026, jour 22
+≥ 21) : état 1 confirmé correct (aucun export de septembre encore généré), lien vérifié menant à
+"Transmissions paie — Septembre 2026".
+
+**Reste pour une prochaine session** ("on va gérer les statuts après", Vincent) : `statutPill()` a
+été posée rapidement pour la refonte de la card, pas encore repassée en revue en détail — c'est le
+prochain sujet à traiter.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
