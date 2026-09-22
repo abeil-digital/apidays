@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Download } from "lucide-react";
 import type { Soldes, UtilisateurAdmin } from "@/lib/types";
 import { formatJours } from "@/lib/format";
@@ -358,47 +359,79 @@ export function SuivreSoldesPage2() {
                 ))}
               </div>
             </div>
+            {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
+                "le composant suivi solde doit aussi s'afficher en popin sur
+                mobile") : sous `sm:`, ce panneau s'ouvre en popin (voir plus
+                bas) plutôt que de s'empiler sous la liste des cards. */}
             {selection && utilisateurSelectionne && (
-              <SoldeDetailPanel
-                key={`${selection.utilisateurId}-${selection.code}-${selection.mode}`}
-                code={selection.code}
-                utilisateurId={utilisateurSelectionne.id}
-                nomComplet={`${utilisateurSelectionne.prenom} ${utilisateurSelectionne.nom}`}
-                onClose={() => setSelection(null)}
-                modeParDefaut={selection.mode}
-                avecDetailConge
-                avecAjustement
-                style={{ marginTop: panelTop }}
-                onRetirer={
-                  peutAnnulerDepuisSoldes
-                    ? async (demandeId, commentaire) => {
-                        await retirerDemande(demandeId, commentaire);
-                        await rafraichirSoldes();
-                      }
-                    : undefined
-                }
-                peutAnnulerDejaTransmis={peutAnnulerDepuisSoldes}
-                onValider={
-                  estManager
-                    ? async (demandeId, commentaire) => {
-                        await validerDemande(demandeId, commentaire);
-                        await rafraichirSoldes();
-                      }
-                    : undefined
-                }
-                onRefuser={
-                  estManager
-                    ? async (demandeId, commentaire) => {
-                        await refuserDemande(demandeId, commentaire);
-                        await rafraichirSoldes();
-                      }
-                    : undefined
-                }
-              />
+              <div className="hidden sm:block">{panelJsx({ marginTop: panelTop })}</div>
             )}
           </div>
         </>
       )}
+
+      {/* Popin mobile — portail vers `document.body`, `sm:hidden` sur le
+          backdrop uniquement : toujours monté, invisible dès `sm:`. */}
+      {selection &&
+        utilisateurSelectionne &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setSelection(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              {panelJsx()}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
+
+  // Extrait en fonction (22/09/2026) — rendu à deux endroits (colonne
+  // desktop + popin mobile) sans dupliquer le bloc de props ; `style`
+  // optionnel car seule la colonne desktop a besoin du calage `marginTop`
+  // sur la ligne cliquée (la popin mobile est toujours centrée).
+  function panelJsx(style?: CSSProperties) {
+    if (!selection || !utilisateurSelectionne) return null;
+    return (
+      <SoldeDetailPanel
+        key={`${selection.utilisateurId}-${selection.code}-${selection.mode}`}
+        code={selection.code}
+        utilisateurId={utilisateurSelectionne.id}
+        nomComplet={`${utilisateurSelectionne.prenom} ${utilisateurSelectionne.nom}`}
+        onClose={() => setSelection(null)}
+        modeParDefaut={selection.mode}
+        avecDetailConge
+        avecAjustement
+        style={style}
+        onRetirer={
+          peutAnnulerDepuisSoldes
+            ? async (demandeId, commentaire) => {
+                await retirerDemande(demandeId, commentaire);
+                await rafraichirSoldes();
+              }
+            : undefined
+        }
+        peutAnnulerDejaTransmis={peutAnnulerDepuisSoldes}
+        onValider={
+          estManager
+            ? async (demandeId, commentaire) => {
+                await validerDemande(demandeId, commentaire);
+                await rafraichirSoldes();
+              }
+            : undefined
+        }
+        onRefuser={
+          estManager
+            ? async (demandeId, commentaire) => {
+                await refuserDemande(demandeId, commentaire);
+                await rafraichirSoldes();
+              }
+            : undefined
+        }
+      />
+    );
+  }
 }

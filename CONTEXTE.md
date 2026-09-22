@@ -7709,6 +7709,56 @@ simple vu qu'il dépend de plusieurs variables dérivées de `dateSelectionnee`)
 `xl:sticky` passée en `hidden sm:flex`, popin `sm:hidden` en portail vers `document.body`. Vérifié aux
 deux largeurs (mobile : popin ; desktop 1400px : 0 overlay `fixed z-50`).
 
+## Popin mobile sur "Suivre les soldes", cadrage "Admin visiteur" (22/09/2026)
+
+Suite de session, deux sujets.
+
+**Popin mobile étendue au composant "Suivi solde" lui-même** (`SuivreSoldesPage2.tsx`) : jusqu'ici
+seul le détail congé/ajustement NICHÉ à l'intérieur de `SoldeDetailPanel` avait le traitement popin
+mobile (session précédente) — le panneau `SoldeDetailPanel` lui-même, ouvert en cliquant une pastille
+CP/RTT/CPA depuis "Suivre les soldes", restait poussé dans le flux sous la liste des cards sur mobile.
+Même principe appliqué : props extraites dans une fonction `panelJsx(style?)` (déclaration de fonction,
+hoisted — appelée avant sa définition textuelle dans le JSX retourné, valide en JS), colonne desktop
+`hidden sm:block` (calage `marginTop` sur la ligne cliquée inchangé), popin `sm:hidden` en portail.
+Vérifié aux deux largeurs (mobile : popin ; desktop 1400px : 0 overlay `fixed z-50`).
+
+**Cadrage "Admin visiteur"** (item Backlog du 21/09/2026, repris et affiné — 2 tours de questions avec
+Vincent avant d'écrire un plan) : besoin réel — Vincent (Citizen D) doit pouvoir administrer un tenant
+client (Suivre/Paramétrer) avec **son propre email/mot de passe existant**, activable depuis le
+paramétrage de chaque tenant, sans être un collaborateur de cette entreprise (pas de solde, pas de
+comptage effectifs/exports).
+
+Premier brouillon de plan (nouvelle valeur d'enum `user_role`) **rejeté en cours de route** — bloqué
+par une contrainte réelle trouvée en explorant le schéma : `utilisateurs.auth_id` est `unique`
+**globalement** (`schema.sql:95`), donc une identité ne peut avoir qu'une seule ligne `utilisateurs`,
+donc qu'un seul tenant. Incompatible avec "même identité sur plusieurs tenants".
+
+**Architecture retenue** (2ᵉ tour) : nouvelle table `admin_visiteurs(auth_id, entreprise_id)`,
+indépendante de `utilisateurs` — même principe que `super_admins` (déjà dans le schéma, cross-tenant),
+mais scopée par tenant. `my_entreprise_id()`/`my_role()` (les 2 fonctions centrales utilisées par
+quasi toutes les policies RLS) replient dessus quand aucune ligne `utilisateurs` n'existe — `my_role()`
+renvoie `'manager'` (périmètre de droits décidé), ce qui évite de toucher aux ~28 policies déjà écrites
+en `in ('manager','admin')`. Conséquence importante, actée avec Vincent : cette identité n'apparaîtra
+**jamais** dans `utilisateurs`, donc **aucun** blocage d'accrual ni exclusion d'effectifs/exports à
+coder — les calculs concernés (`fetchSoldes`, `CollaborateursEnCongeCard`, calendrier consolidé,
+comparateur de soldes paie) n'itèrent que sur cette table, cette identité ne peut pas y apparaître par
+construction.
+
+Deux décisions de scope actées explicitement (posées via question fermée, pas devinées) : **un seul
+tenant admin-visiteur actif à la fois** pour Vincent (`my_entreprise_id()` reste une fonction scalaire
+— passer à un pattern `EXISTS` pour supporter plusieurs tenants simultanés toucherait ~20 policies
+RLS, zone jugée trop sensible pour un besoin pas encore exprimé — 2 fuites RLS réelles déjà trouvées et
+corrigées sur ce projet par le passé, voir MULTI-TENANT.md) ; **V1 spécifique au compte de Vincent**
+(auth_id constant, pas de recherche générique par email — pourrait être généralisé plus tard si
+besoin).
+
+**Plan détaillé écrit, pas encore implémenté** :
+`/Users/vincentmayol/.claude/plans/quirky-crunching-stroustrup.md` — schéma de la table + RLS, repli
+des 2 fonctions centrales, toggle admin-only par tenant (Server Action, pattern repris de
+`app/admin/actions.ts`), hors-scope explicite (généralisation, multi-tenant simultané), plan de
+vérification (test en session réelle admin-visiteur, pas seulement rendu UI — leçon du multi-tenant).
+Item Backlog passé en **priorité Haute**.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
