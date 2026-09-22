@@ -7690,6 +7690,25 @@ partagé, 5 onglets dont "Notifications"/"Congés & RTT").
 Vérifié en direct sur mobile (375px) : les deux rendus corrects, aucun changement visible à largeur
 desktop.
 
+## Calendrier consolidé : largeur mobile et détail jour en popin (22/09/2026)
+
+Suite de session sur "Calendrier consolidé" (`/suivre/calendrier`, `CalendrierGlobal.tsx`), deux
+autres écarts trouvés par Vincent après le fix `justify-center`.
+
+**Largeur de card différente des calendriers "normaux" sur mobile** : `max-w-[259px]` s'appliquait à
+toutes les largeurs (hérité du plafond desktop) alors que les calendriers "normaux"
+(`DashboardPage.tsx`/`CalendrierCollaborateur.tsx`, vraie grille CSS `grid-cols-1`) remplissent 100%
+de la largeur sous `sm:`. Plafond désormais réservé à `sm:` et plus (`sm:max-w-[259px]`) — vérifié
+identique aux calendriers normaux sur mobile (375px).
+
+**Détail d'un jour poussé dans le flux plutôt qu'en popin sur mobile** : même sujet que
+`DetailCongePanel` ailleurs dans l'app (voir sessions précédentes) mais jamais traité ici — ce panneau
+est un bandeau fait main (pas `DetailCongePanel`), pas couvert par les changements précédents. Même
+principe appliqué : contenu extrait dans une IIFE (`detailJourJsx`, le panneau n'est pas une valeur
+simple vu qu'il dépend de plusieurs variables dérivées de `dateSelectionnee`), colonne desktop
+`xl:sticky` passée en `hidden sm:flex`, popin `sm:hidden` en portail vers `document.body`. Vérifié aux
+deux largeurs (mobile : popin ; desktop 1400px : 0 overlay `fixed z-50`).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

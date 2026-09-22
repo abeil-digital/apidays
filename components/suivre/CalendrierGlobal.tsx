@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { formatPeriodePillNumerique, nomJourSemaine, todayISO } from "@/lib/format";
@@ -381,11 +382,20 @@ export function CalendrierGlobal() {
             </p>
           )}
           {/* `justify-center` (22/09/2026, demande explicite de Vincent —
-              "caler le calendrier consolidé sur mobile") : sous `sm:`, une
-              seule card tient par ligne (`max-w-[259px]`) et se retrouvait
-              collée à gauche avec tout le reste de la largeur vide à droite
-              — centre aussi la dernière ligne incomplète à `sm:`/`lg:`, sans
-              effet visible sur une ligne déjà pleine. */}
+              "caler le calendrier consolidé sur mobile") : centre la
+              dernière ligne incomplète à `sm:`/`lg:`, sans effet visible sur
+              une ligne déjà pleine.
+              `max-w-[259px]` réservé à `sm:` et plus (même jour, 2e retour —
+              "les calendriers normaux et le calendrier consolidé n'ont pas
+              le même comportement sur mobile") : sous `sm:`, les calendriers
+              "normaux" (`DashboardPage.tsx`/`CalendrierCollaborateur.tsx`)
+              utilisent une vraie grille CSS `grid-cols-1` — chaque card
+              occupe 100% de la largeur, sans plafond. Ici en `flex-wrap`,
+              le plafond s'appliquait à TOUTES les largeurs (hérité du
+              plafond desktop/`lg:`, pas lié au bug d'origine du 11/09 —
+              "les calendriers se compressent" à 3 colonnes), ce qui
+              rétrécissait la card mobile à 259px au lieu de remplir l'écran
+              comme partout ailleurs. */}
           <div className="flex max-w-[797px] flex-wrap justify-center gap-[10px]">
             {moisActifs.map(({ annee, moisIndex }) => (
               <MiniCalendrier
@@ -396,7 +406,7 @@ export function CalendrierGlobal() {
                 onJourClick={(iso) => setDateSelectionnee(iso)}
                 estAujourdhui={(iso) => iso === todayIso}
                 estMisEnAvant={(iso) => iso === dateSelectionnee}
-                className="h-[290px] w-full max-w-[259px] sm:w-[calc(50%-5px)] lg:w-[calc((100%-20px)/3)]"
+                className="h-[290px] w-full sm:w-[calc(50%-5px)] sm:max-w-[259px] lg:w-[calc((100%-20px)/3)]"
                 texteJour="text-base"
                 paddingClassName="p-6"
                 classeTitreMois="text-slate text-base"
@@ -405,101 +415,139 @@ export function CalendrierGlobal() {
           </div>
         </div>
 
-        {dateSelectionnee && statsSelection && couleurSelection && (
-          // Largeur/position identiques à `DetailCongePanel` (`xl:w-64
-          // xl:shrink-0 xl:sticky xl:top-4`) — même gabarit que le panneau de
-          // détail d'un congé, dont ce bandeau reprend aussi la structure
-          // (28/08/2026, demande explicite) : bandeau coloré (ici la couleur
-          // heatmap du jour plutôt qu'une couleur de type) avec titre + sous-
-          // titre + fermer, puis un corps blanc en dessous.
-          <div className="flex w-full flex-col gap-[3px] xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
-            <div className="px-4 py-3" style={{ background: couleurSelection.couleur }}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <JourBadge>{nomJourSemaine(dateSelectionnee).slice(0, 2)}</JourBadge>
-                  <div>
-                    <div
-                      className={`text-sm font-bold ${couleurSelection.texteSombre ? "text-ink-900" : "text-white"}`}
-                    >
-                      {formatDateSansJour(dateSelectionnee)}
+        {dateSelectionnee &&
+          statsSelection &&
+          couleurSelection &&
+          (() => {
+            // Contenu du détail jour — extrait pour être rendu à deux
+            // endroits : la colonne desktop `xl:sticky` juste en dessous
+            // (inchangée), ET la popin mobile plus bas (22/09/2026, demande
+            // explicite de Vincent — "sur le calendrier consolidé le détail
+            // d'un jour doit aussi s'afficher en popin sur mobile", même
+            // principe que `DetailCongePanel` partout ailleurs).
+            const detailJourJsx = (
+              <>
+                <div className="px-4 py-3" style={{ background: couleurSelection.couleur }}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <JourBadge>{nomJourSemaine(dateSelectionnee).slice(0, 2)}</JourBadge>
+                      <div>
+                        <div
+                          className={`text-sm font-bold ${couleurSelection.texteSombre ? "text-ink-900" : "text-white"}`}
+                        >
+                          {formatDateSansJour(dateSelectionnee)}
+                        </div>
+                        <div
+                          className={`text-xs font-semibold ${couleurSelection.texteSombre ? "text-ink-900/70" : "text-white/80"}`}
+                        >
+                          {communSelection?.type === "ferie"
+                            ? "Jour férié"
+                            : `${statsSelection.nbCollaborateurs} Collab. off · ${statsSelection.nbDemiJournees} demi-jour.`}
+                        </div>
+                      </div>
                     </div>
-                    <div
-                      className={`text-xs font-semibold ${couleurSelection.texteSombre ? "text-ink-900/70" : "text-white/80"}`}
+                    <button
+                      type="button"
+                      onClick={() => setDateSelectionnee(null)}
+                      aria-label="Fermer"
+                      className={`shrink-0 ${
+                        couleurSelection.texteSombre
+                          ? "text-ink-900/60 hover:text-ink-900"
+                          : "text-white/70 hover:text-white"
+                      }`}
                     >
-                      {communSelection?.type === "ferie"
-                        ? "Jour férié"
-                        : `${statsSelection.nbCollaborateurs} Collab. off · ${statsSelection.nbDemiJournees} demi-jour.`}
-                    </div>
+                      <X size={16} />
+                    </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDateSelectionnee(null)}
-                  aria-label="Fermer"
-                  className={`shrink-0 ${
-                    couleurSelection.texteSombre
-                      ? "text-ink-900/60 hover:text-ink-900"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </div>
 
-            <div className="bg-surface-card flex flex-col gap-4 p-4 shadow-sm">
-              {communSelection?.type === "cpi" && (
-                <div className="rounded-control bg-status-warning-bg text-status-warning-fg px-3 py-2 text-xs font-semibold">
-                  Congé imposé pour tous les collaborateurs
-                </div>
-              )}
-              {communSelection?.type === "ferie" ? (
-                <p className="text-ink-500 text-center text-[11px] font-semibold">
-                  Personne ne travaille aujourd&apos;hui !
-                </p>
-              ) : sectionsSelection.length === 0 && !communSelection ? (
-                <EmptyRow text="Aucun collaborateur en congé ce jour-là." />
-              ) : (
-                sectionsSelection.map((section) => (
-                  <div key={section.cle} className="flex flex-col gap-2.5">
-                    <h4 className="text-ink-900 text-sm font-semibold">{section.libelle}</h4>
-                    {section.demandes.map((d) => {
-                      const code = codeBadgeDemande(d);
-                      return (
-                        <div key={d.id} className="flex items-center gap-2.5 pl-3">
-                          <div className="flex min-w-0 flex-col gap-0.5">
-                            <span className="text-ink-500 truncate text-xs font-semibold">
-                              {d.demandeur.prenom} {d.demandeur.nom}
-                            </span>
-                            <span
-                              className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                  d.statut === "validé"
-                                    ? "bg-status-success-fg"
-                                    : "bg-status-warning-fg"
-                                }`}
-                              />
-                              {code} : {formatPeriodePillNumerique(d.debut, d.fin)}
+                <div className="bg-surface-card flex flex-col gap-4 p-4 shadow-sm">
+                  {communSelection?.type === "cpi" && (
+                    <div className="rounded-control bg-status-warning-bg text-status-warning-fg px-3 py-2 text-xs font-semibold">
+                      Congé imposé pour tous les collaborateurs
+                    </div>
+                  )}
+                  {communSelection?.type === "ferie" ? (
+                    <p className="text-ink-500 text-center text-[11px] font-semibold">
+                      Personne ne travaille aujourd&apos;hui !
+                    </p>
+                  ) : sectionsSelection.length === 0 && !communSelection ? (
+                    <EmptyRow text="Aucun collaborateur en congé ce jour-là." />
+                  ) : (
+                    sectionsSelection.map((section) => (
+                      <div key={section.cle} className="flex flex-col gap-2.5">
+                        <h4 className="text-ink-900 text-sm font-semibold">{section.libelle}</h4>
+                        {section.demandes.map((d) => {
+                          const code = codeBadgeDemande(d);
+                          return (
+                            <div key={d.id} className="flex items-center gap-2.5 pl-3">
+                              <div className="flex min-w-0 flex-col gap-0.5">
+                                <span className="text-ink-500 truncate text-xs font-semibold">
+                                  {d.demandeur.prenom} {d.demandeur.nom}
+                                </span>
+                                <span
+                                  className={`bg-surface-app text-ink-900 flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${classeBordureTypeBadge(code)}`}
+                                >
+                                  <span
+                                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                      d.statut === "validé"
+                                        ? "bg-status-success-fg"
+                                        : "bg-status-warning-fg"
+                                    }`}
+                                  />
+                                  {code} : {formatPeriodePillNumerique(d.debut, d.fin)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {section.dji && (
+                          <div className="flex items-center pl-3">
+                            <span className="bg-dji/15 text-dji w-fit rounded-sm px-1 text-xs font-semibold">
+                              Demi-journée imposée
                             </span>
                           </div>
-                        </div>
-                      );
-                    })}
-                    {section.dji && (
-                      <div className="flex items-center pl-3">
-                        <span className="bg-dji/15 text-dji w-fit rounded-sm px-1 text-xs font-semibold">
-                          Demi-journée imposée
-                        </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
+                    ))
+                  )}
+                </div>
+              </>
+            );
+
+            return (
+              <>
+                {/* Largeur/position identiques à `DetailCongePanel` (`xl:w-64
+                    xl:shrink-0 xl:sticky xl:top-4`) — même gabarit que le
+                    panneau de détail d'un congé (28/08/2026, demande
+                    explicite). `hidden sm:flex` (22/09/2026) : sous `sm:`, ce
+                    panneau s'ouvre en popin (voir plus bas) plutôt que de
+                    s'empiler sous la grille des mois. */}
+                <div className="hidden w-full flex-col gap-[3px] sm:flex xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
+                  {detailJourJsx}
+                </div>
+
+                {/* Popin mobile — portail vers `document.body`, `sm:hidden`
+                    sur le backdrop uniquement : toujours monté, invisible dès
+                    `sm:`. */}
+                {typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+                      onClick={() => setDateSelectionnee(null)}
+                    >
+                      <div
+                        className="flex w-full flex-col gap-[3px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {detailJourJsx}
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
+              </>
+            );
+          })()}
       </div>
     </div>
   );
