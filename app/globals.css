@@ -48,7 +48,7 @@
   --color-ink-300: #e5e7eb;
 
   /* Statuts — sémantiques, ne pas teinter avec la palette de marque. Utilisés par
-     components/ui/Badge.tsx (tone success/warning/danger/neutral). */
+     components/ui/Badge.tsx (tone success/warning/danger/neutral/info). */
   --color-status-success-bg: #e7f8ec;
   --color-status-success-fg: #248a3d;
   --color-status-warning-bg: #fff3e0;
@@ -57,6 +57,12 @@
   --color-status-danger-fg: #d70015;
   --color-status-neutral-bg: #e5e7eb;
   --color-status-neutral-fg: #6b7280;
+  /* "info" (22/09/2026, demande de Vincent) — bleu réservé aux statuts paie
+     déjà confirmés par le comptable (En paie, Régul en paie), distinct du
+     bleu `--color-cp` (typologie de congé) pour ne pas mélanger les deux
+     codes visuels. */
+  --color-status-info-bg: #e5f1ff;
+  --color-status-info-fg: #0071e3;
 
   /* Catégories de congés — seul code visuel de typologie (cartes, listes, badges) */
   --color-cp: #5b8def; /* bleu — CP */

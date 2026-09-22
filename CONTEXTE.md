@@ -7497,6 +7497,71 @@ vert** (`bg-status-success-fg`). Testé en conditions réelles sur Abeil sandbox
 été posée rapidement pour la refonte de la card, pas encore repassée en revue en détail — c'est le
 prochain sujet à traiter.
 
+## Statuts de congé — renommage, différenciation graphique, revue de code Kanban (22/09/2026)
+
+Suite du chantier laissé en attente ci-dessus. Session en plusieurs étapes, toutes confirmées par
+Vincent en direct.
+
+**Renommage "Pris en compte" → "En paie"** (et "Régul prise en compte" → "Régul en paie") dans les 4
+endroits qui l'affichaient littéralement : `StatusBadge` (avant sa refonte, voir plus bas),
+`BadgeTransmission`/`HistoriqueTable.tsx`, `statutPill`/`KanbanDemandes.tsx`,
+`VerifierFichesPaiePage2.tsx`, `DetailCongePanel.tsx` (reformulé "Pris en compte en paie le..." →
+"En paie le..." pour éviter la redite). Uniquement le libellé affiché — `prisEnCompte`/
+`prisEnCompteLe` (colonne DB `pris_en_compte`) inchangés.
+
+**Bug "congé à cheval" dans `statutPill`** (Kanban) : même bug déjà corrigé le 18/09 dans
+`BadgeTransmission` (`HistoriqueTable.tsx`, voir plus haut) mais jamais reporté sur le Kanban —
+`lignes.every()` ne regarde que les lignes d'export DÉJÀ générées, donc un congé à cheval sur deux
+mois avec une seule ligne (confirmée) affichait "En paie" tout court au lieu de "1/2". Corrigé en
+reprenant `nbMoisCalendaires`/`totalPeriodes` de `HistoriqueTable.tsx` (réécrit localement, comme
+partout ailleurs dans le projet) pour afficher la fraction.
+
+**"Régularisé" vs "Régul en paie" — doublon identifié puis supprimé** : les deux pastilles disaient
+la même chose (`statut === "annulé"` + correction confirmée en paie) avec un texte différent, une à
+côté de l'autre sur une ligne d'`HistoriqueTable` (colonnes Statut et Paie). Décision de Vincent : le
+Statut se fige sur un nouveau libellé **"Annulé (paie)"** dès que la demande a touché la paie
+(`lignes.length > 0`) et n'évolue plus — c'est `BadgeTransmission` (colonne Paie) qui reste **le seul
+indicateur** de la progression (À régulariser → Régul transmise → Régul en paie). `StatusBadge`
+simplifié en conséquence (`toucheLaPaie` remplace l'ancien `regularise`/`ligneRegul`). Le Kanban
+(une seule pastille par card, pas deux colonnes) garde son libellé "Régularisé" propre.
+
+**Différenciation graphique** (le sujet initial du 22/09 précédent) : seulement 4 tons pour ~10
+libellés faisait qu'un tas de statuts différents partageaient la même couleur (page temporaire
+`/temp-statuts` construite puis supprimée pour visualiser le problème, voir historique de session si
+besoin). Décision finale de Vincent :
+- Nouveau ton **`info`** (bleu, `--color-status-info-bg/-fg` dans `app/globals.css`, distinct du bleu
+  `--color-cp` déjà utilisé pour la typologie CP) — réservé aux statuts paie déjà **confirmés par le
+  comptable** : "En paie"/"En paie X/Y" (`BadgeTransmission` + `statutPill`) et "Régul en paie".
+  "Régularisé" du Kanban harmonisé sur ce même bleu par cohérence.
+- **Contour orange** (`border border-status-warning-fg`, même ton `warning` que le fond) sur
+  "Transmis"/"Transmis X/Y"/"Régul transmise" — pour ne plus se confondre visuellement avec "En
+  attente" (même jaune, sans contour).
+- "À régulariser" reste rouge (`danger`) partout, volontairement — c'est le seul état de ce groupe où
+  rien n'est encore parti en paie, le distinguer du reste importe.
+- Une itération précédente (même session) avait teinté TOUS les statuts liés à la paie en bleu,
+  y compris "À régulariser"/"Transmis" — revenue en arrière par Vincent ("pardon, non" / "reviens en
+  arrière"), jugée trop large : elle effaçait le signal "action encore à faire" que portait le rouge/
+  jaune. Le nouveau réglage (bleu = confirmé uniquement, contour = distinction fine sur le jaune) est
+  le bon niveau de granularité.
+- Le serveur `next dev` (tournait depuis plusieurs jours) n'a pas capté le changement de thème via
+  HMR — redémarré (confirmé par Vincent) pour que les nouvelles variables `@theme` soient prises en
+  compte. À garder en tête si un futur changement de token CSS semble ne "rien faire" en preview.
+
+**Revue de code du Kanban** (`KanbanDemandes.tsx`), demandée explicitement par Vincent après les
+changements de tons ("check moi la partie kanban dans le détail") :
+- **Tri de "Exports futurs" inversé** : toutes les colonnes triaient par `debut` décroissant (le plus
+  récent en premier, cohérent pour l'activité passée/en cours) — mais ça s'appliquait aussi à
+  "Exports futurs", qui affichait donc les congés les plus LOINTAINS en premier. Corrigé : seule
+  cette colonne trie maintenant en croissant (le plus proche en premier).
+- **Couleur du montant de jours dans l'Archive** : une card "Refusé"/"Annulé (paie)" (colonne Archive,
+  fond rouge) affichait quand même son nombre de jours en vert "succès" (`estRegul` ne couvrait que
+  le sous-groupe "Congés annulés" de "Prochain export", pas la colonne Archive). Corrigé :
+  `colonne === "archive"` bascule aussi en rouge.
+- **Nettoyage** : coquille `jourseTotal` → `joursTotal` ; `soldeARegulariser` n'est plus poussé en
+  prop par les 3 sites d'appel de `CardKanban` (calculé pour toutes les cards de "Prochain export"
+  alors qu'il n'était lu que pour le sous-groupe "annules") — déplacé dans `CardKanban` lui-même,
+  calculé à la demande depuis `lignes` (déjà en prop).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

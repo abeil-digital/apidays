@@ -1,12 +1,15 @@
 import type { ReactNode } from "react";
 
-export type BadgeTone = "success" | "warning" | "danger" | "neutral";
+export type BadgeTone = "success" | "warning" | "danger" | "neutral" | "info";
 
 const TONE_STYLES: Record<BadgeTone, string> = {
   success: "bg-status-success-bg text-status-success-fg",
   warning: "bg-status-warning-bg text-status-warning-fg",
   danger: "bg-status-danger-bg text-status-danger-fg",
   neutral: "bg-status-neutral-bg text-status-neutral-fg",
+  /** "info" (22/09/2026) — bleu réservé aux statuts paie déjà confirmés par
+   * le comptable (`BadgeTransmission`/`statutPill`, ex. "En paie"). */
+  info: "bg-status-info-bg text-status-info-fg",
 };
 
 interface BadgeProps {

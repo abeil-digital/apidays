@@ -226,7 +226,7 @@ function CardSoldeCollaborateur({
                   n'ayant jamais eu d'action réelle avant aujourd'hui. */}
                   {prisEnCompte ? (
                     <span className="text-status-success-fg inline-flex items-center gap-1 text-sm font-semibold">
-                      Pris en compte
+                      En paie
                     </span>
                   ) : (
                     <span className="text-ink-500 text-sm font-semibold">Transmis</span>
@@ -666,9 +666,10 @@ export function VerifierFichesPaiePage2({
   periode,
 }: {
   exportId: string | null;
-  /** "Pris en compte" (11/09/2026) — posé une fois la fiche de paie reçue
-   * confirmée conforme, via le bouton "Valider" ci-dessous. Devient la
-   * vraie définition du "solde réel" (`soldes.repository.ts`). */
+  /** "En paie" (11/09/2026, renommé depuis "Pris en compte" le 22/09/2026) —
+   * posé une fois la fiche de paie reçue confirmée conforme, via le bouton
+   * "Valider" ci-dessous. Devient la vraie définition du "solde réel"
+   * (`soldes.repository.ts`). */
   prisEnCompte: boolean;
   /** Rafraîchit l'export côté parent (`TransmissionsPaiePage`) une fois
    * validé — pour que `prisEnCompte` reflète le nouvel état sans recharger
@@ -765,7 +766,7 @@ export function VerifierFichesPaiePage2({
   // (27/08/2026) — l'ajustement modifie le solde réel calculé, pas juste la
   // liste des événements de la popin. Rafraîchit aussi `collaborateurs`
   // (11/09/2026, "il faut un rafraîchissement" — après "Valider", les badges
-  // "Pris en compte" affichés ici même restaient sur l'ancien état tant que
+  // "En paie" affichés ici même restaient sur l'ancien état tant que
   // la page n'était pas rechargée : `handleValider` ne rafraîchissait que
   // l'export côté parent, jamais cette liste).
   function rafraichirDonnees(prisEnCompteOverride?: boolean) {
@@ -885,7 +886,7 @@ export function VerifierFichesPaiePage2({
       <div className="bg-surface-card border-ink-300/60 sticky bottom-0 z-10 flex items-center justify-between gap-4 rounded-xl border-t px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.08)]">
         <span className="text-ink-500 text-sm">
           {prisEnCompte
-            ? "Pris en compte"
+            ? "En paie"
             : `${comparaisons.length} collaborateur${comparaisons.length > 1 ? "s" : ""} vérifié${comparaisons.length > 1 ? "s" : ""}`}
         </span>
         <Button

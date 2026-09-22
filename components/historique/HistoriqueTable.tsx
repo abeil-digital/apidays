@@ -61,32 +61,32 @@ const CODE_ACTIF_20: Record<TypeBadgeCode, string> = {
   FERIE: "bg-ferie/20",
 };
 
-// "Pris en compte" une fois TOUTES les lignes confirmées (11/09/2026) — une
-// demande à cheval sur deux exports, l'un validé et l'autre pas encore,
-// reste "Transmis" tant que tout n'est pas confirmé. `totalPeriodes`
-// (18/09/2026, demande explicite — point (10) du chantier "Parcours
-// transmission paie") couvre le cas où la DEUXIÈME ligne n'existe même pas
-// encore (export de la période suivante jamais généré) : `every()` sur les
-// lignes EXISTANTES ne voit alors qu'une seule ligne, déjà confirmée, et
-// affichait à tort "Pris en compte" pour un congé à cheval seulement
-// transmis à moitié. En transmission partielle (`lignes.length <
-// totalPeriodes`), le libellé porte désormais la fraction
-// (ex. "Pris en compte 1/2") plutôt qu'un simple "Transmis" qui masquerait
+// "En paie" une fois TOUTES les lignes confirmées (11/09/2026, renommé
+// depuis "Pris en compte" le 22/09/2026, demande explicite) — une demande à
+// cheval sur deux exports, l'un validé et l'autre pas encore, reste
+// "Transmis" tant que tout n'est pas confirmé. `totalPeriodes` (18/09/2026,
+// demande explicite — point (10) du chantier "Parcours transmission paie")
+// couvre le cas où la DEUXIÈME ligne n'existe même pas encore (export de la
+// période suivante jamais généré) : `every()` sur les lignes EXISTANTES ne
+// voit alors qu'une seule ligne, déjà confirmée, et affichait à tort "En
+// paie" pour un congé à cheval seulement transmis à moitié. En transmission
+// partielle (`lignes.length < totalPeriodes`), le libellé porte désormais la
+// fraction (ex. "En paie 1/2") plutôt qu'un simple "Transmis" qui masquerait
 // que la partie déjà envoyée est, elle, bien confirmée.
 //
 // "À régulariser" (11/09/2026, demande explicite — un congé annulé APRÈS
-// avoir été transmis et pris en compte reste affiché "Pris en compte",
-// trompeur : la fiche de paie déjà émise ne reflète plus la réalité tant
-// que la ligne de correction négative n'est pas partie dans le PROCHAIN
-// export, voir `genererExportPaie`). Priment sur "Pris en compte"/"Transmis"
-// dès que la demande est annulée ET que son solde de transmission net
-// (somme signée de toutes ses lignes) n'est pas encore revenu à 0.
+// avoir été transmis et pris en compte reste affiché "En paie", trompeur :
+// la fiche de paie déjà émise ne reflète plus la réalité tant que la ligne
+// de correction négative n'est pas partie dans le PROCHAIN export, voir
+// `genererExportPaie`). Priment sur "En paie"/"Transmis" dès que la demande
+// est annulée ET que son solde de transmission net (somme signée de toutes
+// ses lignes) n'est pas encore revenu à 0.
 //
-// "Régul transmise"/"Régul prise en compte" (18/09/2026, demande explicite —
-// une fois la ligne de correction effectivement transmise, `soldeNet`
-// retombe à 0 : l'état ne doit PAS redevenir le "Transmis"/"Pris en compte"
-// générique, trompeur pour une demande annulée. Repris de la ligne de
-// correction (`joursInclus < 0`, voir `DetailCongePanel`) plutôt que de
+// "Régul transmise"/"Régul en paie" (18/09/2026, demande explicite — une
+// fois la ligne de correction effectivement transmise, `soldeNet` retombe à
+// 0 : l'état ne doit PAS redevenir le "Transmis"/"En paie" générique,
+// trompeur pour une demande annulée. Repris de la ligne de correction
+// (`joursInclus < 0`, voir `DetailCongePanel`) plutôt que de
 // toutes les lignes de la demande.
 function BadgeTransmission({
   statut,
@@ -109,17 +109,27 @@ function BadgeTransmission({
     }
     const ligneRegul = lignes.find((l) => l.joursInclus < 0);
     const regulPriseEnCompte = ligneRegul?.prisEnCompteLe != null;
+    // Bleu une fois confirmé par le comptable ; "Régul transmise" reprend le
+    // même contour que "Transmis" ci-dessous (22/09/2026, demande de
+    // Vincent) pour ne pas se confondre avec "En attente", ton warning
+    // identique mais sans contour.
     return (
-      <Badge tone={regulPriseEnCompte ? "success" : "warning"}>
-        <span>{regulPriseEnCompte ? "Régul prise en compte" : "Régul transmise"}</span>
+      <Badge
+        tone={regulPriseEnCompte ? "info" : "warning"}
+        className={regulPriseEnCompte ? "" : "border border-status-warning-fg"}
+      >
+        <span>{regulPriseEnCompte ? "Régul en paie" : "Régul transmise"}</span>
       </Badge>
     );
   }
   const partiel = lignes.length < totalPeriodes;
   const toutesConfirmees = lignes.every((l) => l.prisEnCompteLe);
-  const libelle = toutesConfirmees ? "Pris en compte" : "Transmis";
+  const libelle = toutesConfirmees ? "En paie" : "Transmis";
   return (
-    <Badge tone={toutesConfirmees ? "success" : "warning"}>
+    <Badge
+      tone={toutesConfirmees ? "info" : "warning"}
+      className={toutesConfirmees ? "" : "border border-status-warning-fg"}
+    >
       <span>{partiel ? `${libelle} ${lignes.length}/${totalPeriodes}` : libelle}</span>
     </Badge>
   );

@@ -544,10 +544,10 @@ export function DetailCongePanel({
       ),
     });
 
-    // "Pris en compte" (11/09/2026) — posé une fois l'export validé depuis
-    // "Vérifier les fiches de paie" (`exports_paie.pris_en_compte`), une
-    // étape distincte de la transmission elle-même. `null` tant que pas
-    // encore validé, pas d'entrée dans ce cas.
+    // "En paie" (11/09/2026, renommé depuis "Pris en compte" le 22/09/2026) —
+    // posé une fois l'export validé depuis "Vérifier les fiches de paie"
+    // (`exports_paie.pris_en_compte`), une étape distincte de la transmission
+    // elle-même. `null` tant que pas encore validé, pas d'entrée dans ce cas.
     if (ligne.prisEnCompteLe) {
       entreesFeed.push({
         key: `pris-en-compte-${ligne.id}`,
@@ -555,7 +555,7 @@ export function DetailCongePanel({
         node: (
           <>
             <span className="text-status-success-fg font-semibold">
-              Pris en compte en paie le {formatJjMmAa(ligne.prisEnCompteLe.slice(0, 10))}
+              En paie le {formatJjMmAa(ligne.prisEnCompteLe.slice(0, 10))}
             </span>
             {ligne.prisEnComptePar && (
               <span className="text-ink-500"> par {ligne.prisEnComptePar}</span>

@@ -84,6 +84,17 @@ function soldeNetTransmis(lignes: LigneExportPaie[]): number {
   return lignes.reduce((somme, l) => somme + l.joursInclus, 0);
 }
 
+/** Nombre de mois calendaires couverts par une demande — même calcul que
+ * `nbMoisCalendaires` (`HistoriqueTable.tsx`, réécrit ici comme partout
+ * ailleurs dans le projet) : un congé à cheval génère une ligne
+ * `export_paie_lignes` PAR mois, ce compte donne donc le nombre total de
+ * lignes attendues à terme, indépendamment de celles déjà générées. */
+function nbMoisCalendaires(debut: string, fin: string): number {
+  const [anneeDebut, moisDebut] = debut.split("-").map(Number);
+  const [anneeFin, moisFin] = fin.split("-").map(Number);
+  return (anneeFin - anneeDebut) * 12 + (moisFin - moisDebut) + 1;
+}
+
 function classer(
   demande: DemandeEquipe,
   bornes: { debut: string; fin: string },
@@ -141,7 +152,7 @@ function classer(
 
 /** Pill de statut de la card (22/09/2026, réorganisation demandée par
  * Vincent — "la pill statut alterne le statut : En attente / Validé /
- * Transmis / Pris en compte / Annulé / À régulariser...") : combine la
+ * Transmis / En paie / Annulé / À régulariser...") : combine la
  * logique déjà établie de `StatusBadge`/`BadgeTransmission`
  * (`HistoriqueTable.tsx`) en une seule pastille par card, plutôt que deux
  * composants séparés — mêmes tons/libellés, pas de nouvelle convention. */
@@ -150,23 +161,40 @@ function statutPill(
   sousGroupe: SousGroupe | undefined,
   demande: DemandeEquipe,
   lignes: LigneExportPaie[],
-): { tone: BadgeTone; label: string } {
+): { tone: BadgeTone; label: string; className?: string } {
   if (colonne === "en_attente") return { tone: "warning", label: "En attente" };
   if (sousGroupe === "annules") return { tone: "danger", label: "À régulariser" };
   if (colonne === "archive") {
     if (demande.statut === "refusé") return { tone: "danger", label: "Refusé" };
     const ligneRegul = lignes.find((l) => l.joursInclus < 0);
+    // Bleu (22/09/2026, revue de code, confirmé par Vincent) — même famille
+    // que "Régul en paie" (`BadgeTransmission`, `HistoriqueTable.tsx`),
+    // harmonisé maintenant que le Kanban a son propre ton `info`.
     return ligneRegul?.prisEnCompteLe != null
-      ? { tone: "success", label: "Régularisé" }
+      ? { tone: "info", label: "Régularisé" }
       : { tone: "danger", label: "Annulé" };
   }
   // Validée (colonnes "Export de {mois}"/"Exports futurs") — pas encore
-  // transmise, transmise, ou déjà confirmée par le comptable.
+  // transmise, transmise, ou déjà confirmée par le comptable. `totalPeriodes`
+  // (même bug que `BadgeTransmission`, `HistoriqueTable.tsx`, 22/09/2026) :
+  // un congé à cheval sur deux mois dont une seule ligne d'export existe
+  // encore, déjà confirmée, ne doit PAS afficher "En paie" tout court —
+  // `every()` sur les lignes EXISTANTES ne voit que celle-là et masque que
+  // l'autre moitié n'est même pas encore transmise. Le libellé porte alors
+  // la fraction (ex. "En paie 1/2").
   if (lignes.length === 0) return { tone: "success", label: "Validé" };
+  const totalPeriodes = nbMoisCalendaires(demande.debut, demande.fin);
+  const partiel = lignes.length < totalPeriodes;
   const toutesConfirmees = lignes.every((l) => l.prisEnCompteLe);
-  return toutesConfirmees
-    ? { tone: "success", label: "Pris en compte" }
-    : { tone: "warning", label: "Transmis" };
+  const libelle = toutesConfirmees ? "En paie" : "Transmis";
+  // Bleu une fois confirmé par le comptable ; contour orange sur "Transmis"
+  // pour ne pas se confondre avec "En attente" (22/09/2026, demande de
+  // Vincent — même traitement que `BadgeTransmission`, `HistoriqueTable.tsx`).
+  return {
+    tone: toutesConfirmees ? "info" : "warning",
+    label: partiel ? `${libelle} ${lignes.length}/${totalPeriodes}` : libelle,
+    className: toutesConfirmees ? undefined : "border border-status-warning-fg",
+  };
 }
 
 function dateLabel(sousGroupe: SousGroupe | undefined, colonne: Colonne, demande: DemandeEquipe): string {
@@ -184,7 +212,6 @@ function CardKanban({
   demande,
   sousGroupe,
   colonne,
-  soldeARegulariser,
   joursRestants,
   lignes,
   justArrivee,
@@ -194,7 +221,6 @@ function CardKanban({
   demande: DemandeEquipe;
   sousGroupe: SousGroupe | undefined;
   colonne: Colonne;
-  soldeARegulariser: number;
   joursRestants: number | undefined;
   lignes: LigneExportPaie[];
   /** Vient de changer de colonne/sous-groupe depuis le dernier rendu
@@ -209,14 +235,21 @@ function CardKanban({
 }) {
   const code = codeDemande(demande);
   const estRegul = sousGroupe === "annules";
-  const jourseTotal = demande.nbDemiJournees / 2;
+  const joursTotal = demande.nbDemiJournees / 2;
   // Reliquat affiché (au lieu de la durée totale) uniquement s'il diffère —
   // congé à cheval déjà partiellement transmis (bug trouvé le 22/09/2026 en
   // testant sur Abeil sandbox : un congé transmis en août ré-apparaissait
   // en septembre avec toujours sa durée totale, pas le reste à transmettre).
   const partiellementTransmis =
-    joursRestants !== undefined && Math.abs(joursRestants - jourseTotal) > 0.001;
-  const jours = estRegul ? soldeARegulariser : partiellementTransmis ? joursRestants! : jourseTotal;
+    joursRestants !== undefined && Math.abs(joursRestants - joursTotal) > 0.001;
+  // Calculé ici plutôt que poussé en prop par l'appelant (22/09/2026, revue
+  // de code) — seul `estRegul` en a besoin, pas la peine que les sous-groupes
+  // "Périodes précédentes"/"Congés du mois" le recalculent pour rien.
+  const jours = estRegul
+    ? soldeNetTransmis(lignes)
+    : partiellementTransmis
+      ? joursRestants!
+      : joursTotal;
   const pill = statutPill(colonne, sousGroupe, demande, lignes);
 
   return (
@@ -234,7 +267,9 @@ function CardKanban({
             <span className={`h-2 w-2 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
             <span className="text-ink-900 text-xs font-semibold">{LABEL_COURT[code]}</span>
           </span>
-          <Badge tone={pill.tone}>{pill.label}</Badge>
+          <Badge tone={pill.tone} className={pill.className}>
+            {pill.label}
+          </Badge>
         </div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-ink-900 min-w-0 truncate text-sm font-bold">
@@ -242,12 +277,12 @@ function CardKanban({
           </span>
           <span
             className={`shrink-0 text-lg font-bold ${
-              estRegul ? "text-status-danger-fg" : "text-status-success-fg"
+              estRegul || colonne === "archive" ? "text-status-danger-fg" : "text-status-success-fg"
             }`}
           >
             {estRegul ? "-" : ""}
             {partiellementTransmis
-              ? `${formatJours(jours)}/${formatJours(jourseTotal)} j`
+              ? `${formatJours(jours)}/${formatJours(joursTotal)} j`
               : `${formatJours(jours)} j`}
           </span>
         </div>
@@ -360,12 +395,16 @@ export function KanbanDemandes({
       ? parColonne.pas_encore_due
       : parColonne.pas_encore_due.filter(({ demande }) => demande.debut.slice(0, 7) === moisExportFutur);
 
+  // "Exports futurs" trié croissant (le plus proche en premier, 22/09/2026 —
+  // revue de code, confirmé par Vincent) : seule colonne qui regarde vers
+  // l'avenir, l'ordre "plus récent en premier" des autres colonnes (activité
+  // passée/en cours) y serait contre-intuitif.
   (Object.keys(parColonne) as Colonne[]).forEach((colonne) => {
-    parColonne[colonne].sort((a, b) =>
-      colonne === "en_attente"
-        ? b.demande.datePose.localeCompare(a.demande.datePose)
-        : b.demande.debut.localeCompare(a.demande.debut),
-    );
+    parColonne[colonne].sort((a, b) => {
+      if (colonne === "en_attente") return b.demande.datePose.localeCompare(a.demande.datePose);
+      if (colonne === "pas_encore_due") return a.demande.debut.localeCompare(b.demande.debut);
+      return b.demande.debut.localeCompare(a.demande.debut);
+    });
   });
 
   const sousGroupesOrdre: SousGroupe[] = ["annules", "periodes_precedentes", "mois"];
@@ -456,7 +495,6 @@ export function KanbanDemandes({
                       demande={demande}
                       sousGroupe={undefined}
                       colonne={colonne}
-                      soldeARegulariser={0}
                       joursRestants={joursRestants}
                       lignes={lignes}
                       justArrivee={justArrivees.has(demande.id)}
@@ -487,7 +525,6 @@ export function KanbanDemandes({
                         demande={demande}
                         sousGroupe={sg}
                         colonne={colonne}
-                        soldeARegulariser={soldeNetTransmis(lignes)}
                         joursRestants={joursRestants}
                         lignes={lignes}
                         justArrivee={justArrivees.has(demande.id)}
@@ -508,7 +545,6 @@ export function KanbanDemandes({
                           demande={demande}
                           sousGroupe={sg}
                           colonne={colonne}
-                          soldeARegulariser={soldeNetTransmis(lignes)}
                           joursRestants={joursRestants}
                           lignes={lignes}
                           justArrivee={justArrivees.has(demande.id)}
