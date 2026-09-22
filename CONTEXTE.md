@@ -7637,6 +7637,36 @@ parcours ; desktop ≥1280px : comportement inchangé, colonne latérale sticky)
 de polish mobile prioritaire) — cette page hérite du même changement mobile sans que ce soit
 l'objectif, sans impact desktop.
 
+## Popin mobile étendue à Suivre, badge profil collé au bord (22/09/2026)
+
+Suite de session, deux sujets.
+
+**Popin mobile "détail congé" étendue à Suivre** : demande explicite de Vincent — "appliquer ce
+principe aux éléments similaires de Suivre en y incluant aussi les popin de suivi de solde", après le
+traitement du même sujet côté collaborateur (Accueil) plus tôt dans la session. Même idiome répliqué
+sans composant partagé (contenu extrait en variable locale + `hidden sm:block` sur la colonne desktop
+existante + popin `sm:hidden` en portail vers `document.body`) dans **5 fichiers** : `HistoriquePage.tsx`,
+`TransmissionsPaiePage.tsx` (congé ET régularisation), `SuivreDemandesPage.tsx` (vue Liste ET Kanban),
+`CalendrierCollaborateur.tsx` (`/suivre/calendrier`), et surtout `SoldeDetailPanel.tsx` — branche
+`avecAjustement` (utilisée par `SuivreSoldesPage2.tsx`, "Suivre les soldes"), qui n'avait jusque-là
+AUCUNE gestion mobile du tout (layout fixe `w-72`/`w-64` sans le moindre préfixe `sm:`/`xl:`). Vérifié
+en direct sur "Suivre les soldes" aux deux largeurs (mobile 375px : popin ; desktop ≥1280px : aucun
+overlay, `document.querySelectorAll` confirmé à 0 élément `fixed z-50`). Non touchés, volontairement :
+`VerifierFichesPaiePage2.tsx` (déjà `pleineLargeur`, pattern différent) et `ListingTiroir.tsx` (déjà un
+tiroir plein écran). Mémoire session mise à jour (`feedback_mobile_priorite_collaborateur` +
+nouvelle `project_mobile_popin_detail_conge`) — cette exception ne vaut que pour ce pattern précis, pas
+un blanc-seing pour retoucher `/suivre` en mobile de son propre chef.
+
+**Badge utilisateur collé au bord sur mobile réel (Safari iOS)** : signalé par Vincent via capture
+d'écran (`apidays-seven.vercel.app` sur iPhone) — l'avatar du menu profil touchait le bord droit de
+l'écran malgré `pr-4`/`md:pr-8` sur le `<header>`. Cause : bug connu de Safari, le `padding-right`
+d'un conteneur flex en scroll horizontal (`overflow-x-auto`, le header quand nav+logo+avatar dépassent
+la largeur de l'écran) n'est pas respecté en fin de scroll — seul un vrai élément de contenu force
+l'espace. Corrigé par un espaceur explicite (`<div className="w-4 shrink-0 md:w-8" />`) après le badge
+plutôt que de compter sur le padding. Non reproductible dans le navigateur de test (Chromium n'a pas ce
+défaut, le padding y fonctionnait déjà) — fix appliqué sur la base du diagnostic, à confirmer par
+Vincent sur son iPhone.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import type { LigneExportPaie, StatutDemande } from "@/lib/types";
@@ -414,19 +415,25 @@ export function SuivreDemandesPage() {
           </div>
         </div>
 
+        {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
+            "appliquer ce principe aux éléments similaires de Suivre") : sous
+            `sm:`, ces deux panneaux s'ouvrent en popin (voir plus bas)
+            plutôt que de s'empiler sous la liste/le Kanban. */}
         {ajustementSelectionne && (
-          <DetailAjustementPanel
-            key={ajustementSelectionne.id}
-            ajustement={{
-              code: ajustementSelectionne.code,
-              nomComplet: ajustementSelectionne.nomComplet,
-              deltaJours: ajustementSelectionne.deltaJours,
-              date: ajustementSelectionne.date,
-              auteurNom: ajustementSelectionne.auteurNom,
-              motif: ajustementSelectionne.motif,
-            }}
-            onClose={() => setSelectionId(null)}
-          />
+          <div className="hidden sm:block">
+            <DetailAjustementPanel
+              key={ajustementSelectionne.id}
+              ajustement={{
+                code: ajustementSelectionne.code,
+                nomComplet: ajustementSelectionne.nomComplet,
+                deltaJours: ajustementSelectionne.deltaJours,
+                date: ajustementSelectionne.date,
+                auteurNom: ajustementSelectionne.auteurNom,
+                motif: ajustementSelectionne.motif,
+              }}
+              onClose={() => setSelectionId(null)}
+            />
+          </div>
         )}
 
         {selection && (
@@ -437,7 +444,9 @@ export function SuivreDemandesPage() {
           // s'aligne sur la hauteur de la ligne kanban (`xl:items-stretch`
           // sur la grille ci-dessus), au lieu de rester collé en haut avec
           // du vide en dessous à côté de colonnes bien plus hautes.
-          <div className={vueKanban ? "xl:w-64 xl:shrink-0 self-stretch" : undefined}>
+          <div
+            className={`hidden sm:block ${vueKanban ? "xl:w-64 xl:shrink-0 self-stretch" : ""}`}
+          >
             <DetailCongePanel
               key={selection.id}
               selection={selection}
@@ -463,6 +472,63 @@ export function SuivreDemandesPage() {
           </div>
         )}
       </div>
+
+      {/* Popin mobile (22/09/2026) — portail vers `document.body`, `sm:hidden`
+          sur le backdrop uniquement : toujours monté, invisible dès `sm:`. */}
+      {(ajustementSelectionne || selection) &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setSelectionId(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              {ajustementSelectionne ? (
+                <DetailAjustementPanel
+                  key={ajustementSelectionne.id}
+                  ajustement={{
+                    code: ajustementSelectionne.code,
+                    nomComplet: ajustementSelectionne.nomComplet,
+                    deltaJours: ajustementSelectionne.deltaJours,
+                    date: ajustementSelectionne.date,
+                    auteurNom: ajustementSelectionne.auteurNom,
+                    motif: ajustementSelectionne.motif,
+                  }}
+                  onClose={() => setSelectionId(null)}
+                  pleineLargeur
+                />
+              ) : selection ? (
+                <DetailCongePanel
+                  key={selection.id}
+                  selection={selection}
+                  onClose={() => setSelectionId(null)}
+                  onValider={
+                    estManager ? (commentaire) => valider(selection.id, commentaire) : undefined
+                  }
+                  onRefuser={
+                    estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined
+                  }
+                  onRetirer={
+                    estManager || estAdmin
+                      ? (commentaire) => retirer(selection.id, commentaire)
+                      : undefined
+                  }
+                  peutAnnulerDejaTransmis={estManager || estAdmin}
+                  onValiderSucces={(id, message) => setToast({ id, message })}
+                  joursFeries={joursFeries}
+                  congesImposes={congesImposes}
+                  djImposees={djImposees}
+                  autresDemandes={demandes.filter(
+                    (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
+                  )}
+                  lignesTransmission={lignesTransmissionParDemande[selection.id]}
+                  pleineLargeur
+                />
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {toast && (
         <Toast

@@ -871,6 +871,60 @@ export function SoldeDetailPanel({
   // Accueil) — juste la card tableau (`bg-surface-card shadow-sm`) et sa
   // colonne détail animée, à plat.
   if (avecAjustement) {
+    // Contenu du détail — extrait une seule fois pour être rendu à deux
+    // endroits, même principe que la branche `avecDetailConge` seule
+    // ci-dessous : la colonne desktop `w-64` juste en dessous (inchangée,
+    // toujours affichée seulement à partir de `sm:`), ET la popin mobile
+    // plus bas (22/09/2026, demande explicite de Vincent — "appliquer ce
+    // principe aux éléments similaires de Suivre... les popin de suivi de
+    // solde").
+    const detailAjustementJsx =
+      departOuvert && historique?.decompositionDepart ? (
+        <div className="animate-detail-fade-in">
+          <DetailSoldeDepartPanel
+            code={code}
+            nomComplet={nomComplet}
+            date={historique.soldeDepartDate}
+            total={historique.soldeDepart}
+            decomposition={historique.decompositionDepart}
+            onClose={fermerDetail}
+            pleineLargeur
+          />
+        </div>
+      ) : ajustementSelectionne ? (
+        <div className="animate-detail-fade-in">
+          <DetailAjustementPanel
+            ajustement={{
+              code,
+              nomComplet,
+              deltaJours: ajustementSelectionne.jours,
+              date: ajustementSelectionne.date,
+              auteurNom: ajustementSelectionne.auteurNom,
+              motif: ajustementSelectionne.motif,
+            }}
+            onClose={fermerDetail}
+            pleineLargeur
+          />
+        </div>
+      ) : demandeSelectionnee ? (
+        <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
+          <DetailCongePanel
+            selection={demandeSelectionnee}
+            onClose={fermerDetail}
+            pleineLargeur
+            onValider={onValiderDemande}
+            onRefuser={onRefuserDemande}
+            onRetirer={onRetirerDemande}
+            peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+            lignesTransmission={lignesTransmission}
+          />
+        </div>
+      ) : chargementDetail ? (
+        <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in p-8 text-center text-sm">
+          Chargement…
+        </div>
+      ) : null;
+
     return (
       <>
         <div
@@ -1001,58 +1055,36 @@ export function SoldeDetailPanel({
               </div>
             )}
           </div>
+          {/* `hidden sm:block` (22/09/2026) — sous `sm:`, le détail s'affiche
+              en popin (`sm:hidden`, voir plus bas) plutôt qu'ici en colonne
+              à droite. */}
           <div
-            className={`overflow-hidden transition-[width] duration-300 ease-in-out ${detailOuvert ? "w-64" : "w-0"}`}
+            className={`hidden overflow-hidden transition-[width] duration-300 ease-in-out sm:block ${detailOuvert ? "sm:w-64" : "sm:w-0"}`}
           >
-            <div className="w-64">
-              {departOuvert && historique?.decompositionDepart ? (
-                <div className="animate-detail-fade-in">
-                  <DetailSoldeDepartPanel
-                    code={code}
-                    nomComplet={nomComplet}
-                    date={historique.soldeDepartDate}
-                    total={historique.soldeDepart}
-                    decomposition={historique.decompositionDepart}
-                    onClose={fermerDetail}
-                    pleineLargeur
-                  />
-                </div>
-              ) : ajustementSelectionne ? (
-                <div className="animate-detail-fade-in">
-                  <DetailAjustementPanel
-                    ajustement={{
-                      code,
-                      nomComplet,
-                      deltaJours: ajustementSelectionne.jours,
-                      date: ajustementSelectionne.date,
-                      auteurNom: ajustementSelectionne.auteurNom,
-                      motif: ajustementSelectionne.motif,
-                    }}
-                    onClose={fermerDetail}
-                    pleineLargeur
-                  />
-                </div>
-              ) : demandeSelectionnee ? (
-                <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-                  <DetailCongePanel
-                    selection={demandeSelectionnee}
-                    onClose={fermerDetail}
-                    pleineLargeur
-                    onValider={onValiderDemande}
-                    onRefuser={onRefuserDemande}
-                    onRetirer={onRetirerDemande}
-                    peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
-                    lignesTransmission={lignesTransmission}
-                  />
-                </div>
-              ) : chargementDetail ? (
-                <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in p-8 text-center text-sm">
-                  Chargement…
-                </div>
-              ) : null}
-            </div>
+            <div className="w-64">{detailAjustementJsx}</div>
           </div>
         </div>
+
+        {/* Popin mobile (22/09/2026, demande explicite de Vincent —
+            "appliquer ce principe aux éléments similaires de Suivre... les
+            popin de suivi de solde") — portail vers `document.body`, comme
+            `Modal` : cette popin peut se retrouver imbriquée dans une autre
+            popin (Accueil manager, "Suivre les soldes" — à vérifier selon
+            l'appelant). `sm:hidden` sur le backdrop uniquement — toujours
+            monté, invisible dès `sm:`. */}
+        {detailOuvert &&
+          typeof document !== "undefined" &&
+          createPortal(
+            <div
+              className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+              onClick={fermerDetail}
+            >
+              <div className="w-full" onClick={(e) => e.stopPropagation()}>
+                {detailAjustementJsx}
+              </div>
+            </div>,
+            document.body,
+          )}
         {confirmationAjustement && (
           <Modal onClose={() => setConfirmationAjustement(false)} className="max-w-sm">
             <div className="flex flex-col gap-4">

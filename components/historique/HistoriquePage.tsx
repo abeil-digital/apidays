@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { Printer } from "lucide-react";
 import type { LigneExportPaie, StatutDemande } from "@/lib/types";
@@ -254,16 +255,47 @@ export function HistoriquePage() {
           </div>
         </div>
 
+        {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
+            "appliquer ce principe aux éléments similaires de Suivre") : sous
+            `sm:`, ce panneau s'ouvre en popin (voir plus bas) plutôt que de
+            s'empiler sous le tableau — même traitement que "Suivre mon
+            solde"/"Mon Calendrier" (`SoldeDetailPanel.tsx`/`DashboardPage.tsx`). */}
         {selection && (
-          <DetailCongePanel
-            key={selection.id}
-            selection={selection}
-            onClose={() => setSelectionId(null)}
-            onRetirer={(commentaire) => retirer(selection.id, commentaire)}
-            lignesTransmission={lignesTransmissionParId[selection.id]}
-          />
+          <div className="hidden sm:block">
+            <DetailCongePanel
+              key={selection.id}
+              selection={selection}
+              onClose={() => setSelectionId(null)}
+              onRetirer={(commentaire) => retirer(selection.id, commentaire)}
+              lignesTransmission={lignesTransmissionParId[selection.id]}
+            />
+          </div>
         )}
       </div>
+
+      {/* Popin mobile (22/09/2026) — portail vers `document.body` (comme
+          `Modal`), `sm:hidden` sur le backdrop uniquement : toujours monté,
+          invisible dès `sm:`, pas de détection JS de largeur d'écran. */}
+      {selection &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setSelectionId(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <DetailCongePanel
+                key={selection.id}
+                selection={selection}
+                onClose={() => setSelectionId(null)}
+                onRetirer={(commentaire) => retirer(selection.id, commentaire)}
+                lignesTransmission={lignesTransmissionParId[selection.id]}
+                pleineLargeur
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

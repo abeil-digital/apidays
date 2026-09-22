@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { ChevronLeft, Send } from "lucide-react";
 import { useCongesATransmettre } from "@/hooks/useCongesATransmettre";
@@ -773,23 +774,29 @@ function QuelsCongesTransmettre({
           </div>
         </div>
 
+        {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
+            "appliquer ce principe aux éléments similaires de Suivre") : sous
+            `sm:`, ces deux panneaux s'ouvrent en popin (voir plus bas)
+            plutôt que de s'empiler sous le tableau. */}
         {ajustementSelectionne && (
-          <DetailAjustementPanel
-            key={ajustementSelectionne.id}
-            ajustement={{
-              code: ajustementSelectionne.code,
-              nomComplet: ajustementSelectionne.nomComplet,
-              deltaJours: ajustementSelectionne.deltaJours,
-              date: ajustementSelectionne.date,
-              auteurNom: ajustementSelectionne.auteurNom,
-              motif: ajustementSelectionne.motif,
-            }}
-            onClose={() => setSelectionAjustementId(null)}
-          />
+          <div className="hidden sm:block">
+            <DetailAjustementPanel
+              key={ajustementSelectionne.id}
+              ajustement={{
+                code: ajustementSelectionne.code,
+                nomComplet: ajustementSelectionne.nomComplet,
+                deltaJours: ajustementSelectionne.deltaJours,
+                date: ajustementSelectionne.date,
+                auteurNom: ajustementSelectionne.auteurNom,
+                motif: ajustementSelectionne.motif,
+              }}
+              onClose={() => setSelectionAjustementId(null)}
+            />
+          </div>
         )}
 
         {selection && (
-          <div className="flex flex-col gap-3">
+          <div className="hidden sm:flex sm:flex-col sm:gap-3">
             <DetailCongePanel
               key={selection.id}
               selection={selection}
@@ -803,6 +810,51 @@ function QuelsCongesTransmettre({
           </div>
         )}
       </div>
+
+      {/* Popin mobile (22/09/2026) — portail vers `document.body`, `sm:hidden`
+          sur le backdrop uniquement : toujours monté, invisible dès `sm:`. */}
+      {(ajustementSelectionne || selection) &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => {
+              setSelectionAjustementId(null);
+              setSelectionId(null);
+            }}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              {ajustementSelectionne ? (
+                <DetailAjustementPanel
+                  key={ajustementSelectionne.id}
+                  ajustement={{
+                    code: ajustementSelectionne.code,
+                    nomComplet: ajustementSelectionne.nomComplet,
+                    deltaJours: ajustementSelectionne.deltaJours,
+                    date: ajustementSelectionne.date,
+                    auteurNom: ajustementSelectionne.auteurNom,
+                    motif: ajustementSelectionne.motif,
+                  }}
+                  onClose={() => setSelectionAjustementId(null)}
+                  pleineLargeur
+                />
+              ) : selection ? (
+                <DetailCongePanel
+                  key={selection.id}
+                  selection={selection}
+                  onClose={() => setSelectionId(null)}
+                  onRetirer={estTransmis ? undefined : retirer}
+                  peutAnnulerDejaTransmis={estAdmin}
+                  libelleRetirer="Annuler ce congé"
+                  texteRetirer="Ce congé n'a pas été pris par le collaborateur"
+                  lignesTransmission={lignesTransmissionParId[selection.id]}
+                  pleineLargeur
+                />
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* Bandeau sticky (25/08/2026, demande explicite) — porte le récap
           "jours transmis par type" (toujours visible, plus seulement quand

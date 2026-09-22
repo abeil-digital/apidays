@@ -151,6 +151,13 @@ export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
           />
         )}
       </div>
+      {/* Espaceur explicite (22/09/2026, badge utilisateur collé au bord sur
+          mobile réel — Safari iOS) : le `padding-right` d'un conteneur flex
+          en scroll horizontal (`overflow-x-auto`, ce `<header>`) n'est pas
+          respecté en fin de scroll dans Safari — `pr-4`/`md:pr-8` ci-dessus
+          ne suffisent pas. Un vrai élément de contenu, lui, est toujours
+          honoré. */}
+      <div className="w-4 shrink-0 md:w-8" />
     </header>
   );
 }

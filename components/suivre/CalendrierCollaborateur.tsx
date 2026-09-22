@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
@@ -409,29 +410,40 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
               ))}
             </div>
             <div className="flex flex-col gap-4">
+              {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
+                  "appliquer ce principe aux éléments similaires de Suivre") :
+                  sous `sm:`, ce panneau s'ouvre en popin (voir plus bas)
+                  plutôt que de s'empiler sous la grille des mois — même
+                  traitement que `DashboardPage.tsx`. */}
               {demandeSelectionnee && (
-                <DetailCongePanel
-                  key={demandeSelectionnee.id}
-                  selection={demandeSelectionnee}
-                  onClose={() => setDemandeSelectionnee(null)}
-                  onValider={
-                    estManager ? (commentaire) => valider(demandeSelectionnee.id, commentaire) : undefined
-                  }
-                  onRefuser={
-                    estManager ? (commentaire) => refuser(demandeSelectionnee.id, commentaire) : undefined
-                  }
-                  onRetirer={
-                    estManager || estAdmin
-                      ? (commentaire) => retirer(demandeSelectionnee.id, commentaire)
-                      : undefined
-                  }
-                  peutAnnulerDejaTransmis={estManager || estAdmin}
-                  joursFeries={joursFeriesToutesAnnees}
-                  congesImposes={congesImposesVisibles}
-                  djImposees={djImposeesVisibles}
-                  autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
-                  lignesTransmission={lignesTransmissionParDemande[demandeSelectionnee.id]}
-                />
+                <div className="hidden sm:block">
+                  <DetailCongePanel
+                    key={demandeSelectionnee.id}
+                    selection={demandeSelectionnee}
+                    onClose={() => setDemandeSelectionnee(null)}
+                    onValider={
+                      estManager
+                        ? (commentaire) => valider(demandeSelectionnee.id, commentaire)
+                        : undefined
+                    }
+                    onRefuser={
+                      estManager
+                        ? (commentaire) => refuser(demandeSelectionnee.id, commentaire)
+                        : undefined
+                    }
+                    onRetirer={
+                      estManager || estAdmin
+                        ? (commentaire) => retirer(demandeSelectionnee.id, commentaire)
+                        : undefined
+                    }
+                    peutAnnulerDejaTransmis={estManager || estAdmin}
+                    joursFeries={joursFeriesToutesAnnees}
+                    congesImposes={congesImposesVisibles}
+                    djImposees={djImposeesVisibles}
+                    autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                    lignesTransmission={lignesTransmissionParDemande[demandeSelectionnee.id]}
+                  />
+                </div>
               )}
               {jourCommunSelectionne && (
                 <DetailJourCommunPanel
@@ -446,6 +458,44 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
           </div>
         </div>
       </div>
+
+      {/* Popin mobile (22/09/2026) — portail vers `document.body`, `sm:hidden`
+          sur le backdrop uniquement : toujours monté, invisible dès `sm:`. */}
+      {demandeSelectionnee &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setDemandeSelectionnee(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <DetailCongePanel
+                key={demandeSelectionnee.id}
+                selection={demandeSelectionnee}
+                onClose={() => setDemandeSelectionnee(null)}
+                onValider={
+                  estManager ? (commentaire) => valider(demandeSelectionnee.id, commentaire) : undefined
+                }
+                onRefuser={
+                  estManager ? (commentaire) => refuser(demandeSelectionnee.id, commentaire) : undefined
+                }
+                onRetirer={
+                  estManager || estAdmin
+                    ? (commentaire) => retirer(demandeSelectionnee.id, commentaire)
+                    : undefined
+                }
+                peutAnnulerDejaTransmis={estManager || estAdmin}
+                joursFeries={joursFeriesToutesAnnees}
+                congesImposes={congesImposesVisibles}
+                djImposees={djImposeesVisibles}
+                autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                lignesTransmission={lignesTransmissionParDemande[demandeSelectionnee.id]}
+                pleineLargeur
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {snippet && (
         <SnippetJourCalendrier
