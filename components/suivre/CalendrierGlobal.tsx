@@ -380,7 +380,13 @@ export function CalendrierGlobal() {
               </span>
             </p>
           )}
-          <div className="flex max-w-[797px] flex-wrap gap-[10px]">
+          {/* `justify-center` (22/09/2026, demande explicite de Vincent —
+              "caler le calendrier consolidé sur mobile") : sous `sm:`, une
+              seule card tient par ligne (`max-w-[259px]`) et se retrouvait
+              collée à gauche avec tout le reste de la largeur vide à droite
+              — centre aussi la dernière ligne incomplète à `sm:`/`lg:`, sans
+              effet visible sur une ligne déjà pleine. */}
+          <div className="flex max-w-[797px] flex-wrap justify-center gap-[10px]">
             {moisActifs.map(({ annee, moisIndex }) => (
               <MiniCalendrier
                 key={`${annee}-${moisIndex}`}

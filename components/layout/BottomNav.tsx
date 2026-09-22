@@ -21,7 +21,7 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className={`flex flex-col items-center gap-1 py-2.5 transition-colors duration-150 ${
+              className={`flex flex-col items-center gap-1 px-1 py-2.5 transition-colors duration-150 ${
                 active
                   ? "bg-brand-accent/8 text-brand-accent hover:bg-brand-accent/15"
                   : "text-brand-primary hover:bg-brand-primary/5"
@@ -32,7 +32,16 @@ export function BottomNav() {
                 strokeWidth={active ? 2.4 : 2}
                 className={active ? "text-brand-accent" : "text-brand-primary"}
               />
-              <span className="text-xs font-semibold">{label}</span>
+              {/* `text-[11px]`/`leading-tight` (22/09/2026, demande explicite
+                  de Vincent — "caler la nav secondaire") : à 4-5 onglets
+                  répartis en largeur égale, un libellé comme "Suivre les
+                  demandes"/"Transmissions paie" passe sur 2 lignes quelle que
+                  soit la taille (colonne ~90-100px) — resserré et centré
+                  pour que ça reste propre plutôt que juste réduit au hasard,
+                  cohérent que le libellé tienne sur 1 ou 2 lignes. */}
+              <span className="text-center text-[11px] leading-tight font-semibold">
+                {label}
+              </span>
             </Link>
           );
         })}

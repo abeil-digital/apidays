@@ -7667,6 +7667,29 @@ plutôt que de compter sur le padding. Non reproductible dans le navigateur de t
 défaut, le padding y fonctionnait déjà) — fix appliqué sur la base du diagnostic, à confirmer par
 Vincent sur son iPhone.
 
+## Calendrier consolidé et nav secondaire calés sur mobile (22/09/2026)
+
+Signalé par Vincent via capture d'écran (`apidays-seven.vercel.app` sur iPhone) — deux écarts sur
+"Calendrier consolidé" (`/suivre/calendrier`, vue manager sans collaborateur sélectionné).
+
+**Grille de mois collée à gauche** (`CalendrierGlobal.tsx`) : la rangée de cards (`flex flex-wrap`)
+n'avait pas de `justify-center` — en `flex-start` par défaut, une seule card (`max-w-[259px]`) sous
+`sm:` restait collée à gauche avec tout le reste de la largeur vide à droite. Ajouté `justify-center`
+sur le conteneur — centre aussi la dernière ligne incomplète à `sm:`/`lg:` (2-up/3-up), sans effet
+visible sur une ligne déjà pleine.
+
+**Libellés de la nav secondaire mal calés** (`BottomNav.tsx`) : à 4-5 onglets répartis en largeur égale
+(`grid-template-columns: repeat(N, minmax(0,1fr))`, colonne ~90-100px sur un iPhone), un libellé comme
+"Suivre les demandes"/"Transmissions paie" passe sur 2 lignes quelle que soit la taille de police,
+tandis que d'autres ("Calendrier") restent sur 1 — rendu inégal. Resserré (`text-[11px]`,
+`leading-tight`, centré, `px-1`) plutôt que juste réduit au hasard : le but n'est pas d'empêcher le
+retour à la ligne partout (impossible à cette largeur de colonne) mais que ce soit propre, que le
+libellé tienne sur 1 ou 2 lignes. Concerne aussi bien "Suivre" que "Paramétrer" (même composant
+partagé, 5 onglets dont "Notifications"/"Congés & RTT").
+
+Vérifié en direct sur mobile (375px) : les deux rendus corrects, aucun changement visible à largeur
+desktop.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
