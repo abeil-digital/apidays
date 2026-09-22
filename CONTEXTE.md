@@ -7611,6 +7611,32 @@ déconnecter", même action serveur `logout` qu'avant). Portail + position `fixe
 déclencheur (même pattern que `SnippetConge`/`DatePicker`) plutôt qu'un `absolute` classique — le
 header a `overflow-x-auto`, qui aurait pu rogner un menu positionné en absolu.
 
+## Exception mobile : détail congé en popin depuis "Suivre mon solde"/"Mon Calendrier" (22/09/2026)
+
+Demande explicite de Vincent — "sur mobile, il faudrait gérer une exception : les popins suivi congés
+doivent s'afficher en popin quand elles sont déclenchées depuis le suivi solde et le calendrier".
+
+Sous `sm:` (< 640px), `DetailCongePanel` s'affichait jusqu'ici en s'empilant dans le flux de la page —
+ligne insérée sous la ligne du tableau côté `SoldeDetailPanel.tsx` (`ligneDetailMobile`, 20/08/2026),
+bloc simplement poussé sous la grille des 3 mois côté `DashboardPage.tsx` ("Mon Calendrier"). Remplacé
+par une vraie popin dans les deux cas :
+
+- **`SoldeDetailPanel.tsx`** : `ligneDetailMobile` retiré, son contenu (congé / ajustement / solde de
+  départ) extrait dans `detailContenuJsx` — réutilisé tel quel par la colonne desktop existante
+  (`hidden sm:block`, inchangée) ET par une nouvelle popin mobile (`sm:hidden`, portail vers
+  `document.body`, backdrop). Cette popin peut se retrouver imbriquée dans une autre popin (Accueil
+  collaborateur, "Suivre mes soldes") — le portail évite qu'un `fixed` local reste piégé dans le
+  contexte d'empilement de la popin parente.
+- **`DashboardPage.tsx`** : la 4ᵉ colonne réservée à `DetailCongePanel` ("Mon Calendrier") passe sous
+  `hidden sm:block`, une popin équivalente (même portail + backdrop) prend le relais sous `sm:`.
+
+Uniquement `sm:hidden`/`sm:block` (CSS pur, même convention que le reste de l'app) — pas de détection
+JS de la largeur d'écran. Vérifié aux deux largeurs (mobile 375px : popin par-dessus dans les deux
+parcours ; desktop ≥1280px : comportement inchangé, colonne latérale sticky). Effet de bord accepté :
+`SoldeDetailPanel.tsx` est aussi utilisé par `SuivreSoldesPage2.tsx` (vue manager, desktop-first, pas
+de polish mobile prioritaire) — cette page hérite du même changement mobile sans que ce soit
+l'objectif, sans impact desktop.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

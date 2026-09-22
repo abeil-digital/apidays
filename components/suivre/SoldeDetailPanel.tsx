@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, CircleHelp, Plus, TriangleAlert, X } from "lucide-react";
 import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
 import { formatDateAction, formatJours } from "@/lib/format";
@@ -428,53 +429,15 @@ export function SoldeDetailPanel({
     setIdSelectionne(null);
   }
 
-  // Ligne supplémentaire du tableau, mobile uniquement (`sm:hidden`, 20/08/2026
-  // — "DetailCongePanel doit s'afficher sous la ligne qui le concerne plutôt
-  // que sous le tableau" en dessous de `sm:`) : `DetailCongePanel` s'insère
-  // directement sous la ligne cliquée via `colSpan`, au lieu d'apparaître en
-  // colonne à droite (réservée à `sm:` et plus, voir plus bas).
-  function ligneDetailMobile(id: string) {
-    if (idSelectionne !== id) return null;
-    if (!avecDetailConge && !ajustementSelectionne) return null;
-    return (
-      <tr key={`${id}-detail-mobile`} className="sm:hidden">
-        <td colSpan={3} className="bg-surface-app px-3 py-3">
-          {ajustementSelectionne ? (
-            <div className="animate-detail-fade-in">
-              <DetailAjustementPanel
-                ajustement={{
-                  code,
-                  nomComplet,
-                  deltaJours: ajustementSelectionne.jours,
-                  date: ajustementSelectionne.date,
-                  auteurNom: ajustementSelectionne.auteurNom,
-                  motif: ajustementSelectionne.motif,
-                }}
-                onClose={fermerDetail}
-                pleineLargeur
-              />
-            </div>
-          ) : demandeSelectionnee ? (
-            <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-              <DetailCongePanel
-                selection={demandeSelectionnee}
-                onClose={fermerDetail}
-                onValider={onValiderDemande}
-                onRefuser={onRefuserDemande}
-                onRetirer={onRetirerDemande}
-                peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
-                lignesTransmission={lignesTransmission}
-              />
-            </div>
-          ) : (
-            <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in rounded-xl border p-8 text-center text-sm">
-              Chargement…
-            </div>
-          )}
-        </td>
-      </tr>
-    );
-  }
+  // Détail congé/ajustement sur mobile (`sm:hidden`, 20/08/2026 — "sous
+  // `sm:` c'est inutilisable" — puis 22/09/2026, demande explicite de Vincent
+  // — "gérer une exception sur mobile" : remplace l'ancienne ligne insérée
+  // dans le tableau (`ligneDetailMobile`, sous la ligne cliquée) par une
+  // vraie popin, cohérente avec la façon dont ce même détail congé s'ouvre
+  // désormais partout ailleurs sur mobile (`DashboardPage.tsx`, "Mon
+  // Calendrier"). Rendu par `<PopinDetailMobile>` plus bas, qui réutilise ce
+  // contenu tel quel (extrait ici pour ne pas le dupliquer avec la colonne
+  // desktop `sm:block` juste en dessous).
 
   const headerJsx = (
     <div
@@ -707,7 +670,7 @@ export function SoldeDetailPanel({
                     </span>
                   </span>
                 );
-                return [
+                return (
                   <tr
                     key={m.id}
                     style={
@@ -757,9 +720,8 @@ export function SoldeDetailPanel({
                       {m.jours > 0 ? "+" : ""}
                       {formatJours(m.jours)} j
                     </td>
-                  </tr>,
-                  ligneDetailMobile(m.type === "demande" ? idDemande : m.id),
-                ];
+                  </tr>
+                );
               })}
               {enAttente.map((m) => {
                 const active = avecDetailConge && idSelectionne === m.id;
@@ -807,7 +769,7 @@ export function SoldeDetailPanel({
                     {libelleEvenement(m)}
                   </span>
                 );
-                return [
+                return (
                   <tr
                     key={m.id}
                     style={
@@ -833,9 +795,8 @@ export function SoldeDetailPanel({
                     <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
                       {formatJours(m.jours)} j
                     </td>
-                  </tr>,
-                  ligneDetailMobile(m.id),
-                ];
+                  </tr>
+                );
               })}
             </tbody>
           </table>
@@ -1157,6 +1118,56 @@ export function SoldeDetailPanel({
   // réservées à `sm:` et plus, en dessous tout repasse en `w-full` et les
   // deux blocs s'empilent (`flex-col`) au lieu de se placer côte à côte —
   // `DetailCongePanel` a de toute façon son propre `w-full` sous `xl:`.
+  // Contenu du détail (congé / ajustement / solde de départ) — extrait une
+  // seule fois pour être rendu à deux endroits : la colonne desktop `sm:block`
+  // juste en dessous, ET la popin mobile plus bas (`sm:hidden`), sans dupliquer
+  // ce ternaire.
+  const detailContenuJsx =
+    departOuvert && historique?.decompositionDepart ? (
+      <div className="animate-detail-fade-in">
+        <DetailSoldeDepartPanel
+          code={code}
+          nomComplet={nomComplet}
+          date={historique.soldeDepartDate}
+          total={historique.soldeDepart}
+          decomposition={historique.decompositionDepart}
+          onClose={fermerDetail}
+          pleineLargeur
+        />
+      </div>
+    ) : ajustementSelectionne ? (
+      <div className="animate-detail-fade-in">
+        <DetailAjustementPanel
+          ajustement={{
+            code,
+            nomComplet,
+            deltaJours: ajustementSelectionne.jours,
+            date: ajustementSelectionne.date,
+            auteurNom: ajustementSelectionne.auteurNom,
+            motif: ajustementSelectionne.motif,
+          }}
+          onClose={fermerDetail}
+          pleineLargeur
+        />
+      </div>
+    ) : demandeSelectionnee ? (
+      <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
+        <DetailCongePanel
+          selection={demandeSelectionnee}
+          onClose={fermerDetail}
+          onValider={onValiderDemande}
+          onRefuser={onRefuserDemande}
+          onRetirer={onRetirerDemande}
+          peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
+          lignesTransmission={lignesTransmission}
+        />
+      </div>
+    ) : chargementDetail ? (
+      <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in rounded-xl border p-8 text-center text-sm">
+        Chargement…
+      </div>
+    ) : null;
+
   return (
     <div style={style} className="bg-surface-app overflow-hidden rounded-2xl shadow-lg">
       {headerJsx}
@@ -1177,63 +1188,43 @@ export function SoldeDetailPanel({
         <div className="bg-surface-card w-full overflow-hidden rounded-xl shadow-sm sm:w-[384px] sm:shrink-0">
           {bodyJsx}
         </div>
-        {/* `hidden sm:block` (20/08/2026) — sous `sm:`, `DetailCongePanel`
-            s'affiche désormais inline sous la ligne concernée
-            (`ligneDetailMobile`, dans le tableau) plutôt qu'ici en colonne à
+        {/* `hidden sm:block` (20/08/2026) — sous `sm:`, le détail s'affiche
+            en popin (`sm:hidden`, voir plus bas) plutôt qu'ici en colonne à
             droite. */}
         <div
           className={`hidden overflow-hidden transition-[width] duration-300 ease-in-out sm:block ${
             detailOuvert ? "sm:w-[256px]" : "sm:w-0"
           }`}
         >
-          <div className="sm:w-[256px]">
-            {departOuvert && historique?.decompositionDepart ? (
-              <div className="animate-detail-fade-in">
-                <DetailSoldeDepartPanel
-                  code={code}
-                  nomComplet={nomComplet}
-                  date={historique.soldeDepartDate}
-                  total={historique.soldeDepart}
-                  decomposition={historique.decompositionDepart}
-                  onClose={fermerDetail}
-                  pleineLargeur
-                />
-              </div>
-            ) : ajustementSelectionne ? (
-              <div className="animate-detail-fade-in">
-                <DetailAjustementPanel
-                  ajustement={{
-                    code,
-                    nomComplet,
-                    deltaJours: ajustementSelectionne.jours,
-                    date: ajustementSelectionne.date,
-                    auteurNom: ajustementSelectionne.auteurNom,
-                    motif: ajustementSelectionne.motif,
-                  }}
-                  onClose={fermerDetail}
-                  pleineLargeur
-                />
-              </div>
-            ) : demandeSelectionnee ? (
-              <div key={demandeSelectionnee.id} className="animate-detail-fade-in">
-                <DetailCongePanel
-                  selection={demandeSelectionnee}
-                  onClose={fermerDetail}
-                  onValider={onValiderDemande}
-                  onRefuser={onRefuserDemande}
-                  onRetirer={onRetirerDemande}
-                  peutAnnulerDejaTransmis={peutAnnulerDejaTransmis}
-                  lignesTransmission={lignesTransmission}
-                />
-              </div>
-            ) : chargementDetail ? (
-              <div className="bg-surface-card border-ink-300/60 text-ink-500 animate-detail-fade-in rounded-xl border p-8 text-center text-sm">
-                Chargement…
-              </div>
-            ) : null}
-          </div>
+          <div className="sm:w-[256px]">{detailContenuJsx}</div>
         </div>
       </div>
+
+      {/* Popin mobile (22/09/2026, demande explicite de Vincent — "les
+          popins suivi congés doivent s'afficher en popin quand elles sont
+          déclenchées depuis le suivi solde et le calendrier") : remplace
+          l'ancienne ligne insérée dans le tableau (`ligneDetailMobile`) —
+          même contenu que la colonne desktop ci-dessus, affiché en overlay
+          par-dessus la page plutôt qu'empilé dans le flux. Portail vers
+          `document.body` (comme `Modal`) : cette popin peut déjà être
+          rendue À L'INTÉRIEUR d'une autre popin (Accueil collaborateur,
+          "Suivre mes soldes"), un `fixed` local resterait piégé dans son
+          contexte d'empilement. `sm:hidden` sur le backdrop uniquement —
+          toujours monté, invisible dès `sm:`, même convention CSS que le
+          reste de l'app plutôt qu'une détection JS de la largeur d'écran. */}
+      {detailOuvert &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={fermerDetail}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              {detailContenuJsx}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

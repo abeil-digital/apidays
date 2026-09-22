@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Newspaper, PlusCircle } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
@@ -829,17 +830,24 @@ export function DashboardPage() {
                   (`vertical`, voir `CompteurTypologies`) EN DESSOUS — les
                   deux dans la même colonne fixe, jamais celle des mois. */}
               <div className="flex flex-col gap-4">
+                {/* `hidden sm:block` (22/09/2026, demande explicite de
+                    Vincent — "gérer une exception sur mobile") : sous `sm:`,
+                    ce panneau s'ouvre désormais en popin (voir plus bas)
+                    plutôt que de s'empiler dans le flux sous la grille des
+                    mois. */}
                 {demandeSelectionnee && (
-                  <DetailCongePanel
-                    key={demandeSelectionnee.id}
-                    selection={demandeSelectionnee}
-                    onClose={() => setDemandeSelectionnee(null)}
-                    onRetirer={(commentaire) => retirer(demandeSelectionnee.id, commentaire)}
-                    joursFeries={joursFeriesToutesAnnees}
-                    congesImposes={congesImposesVisibles}
-                    djImposees={djImposeesVisibles}
-                    autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
-                  />
+                  <div className="hidden sm:block">
+                    <DetailCongePanel
+                      key={demandeSelectionnee.id}
+                      selection={demandeSelectionnee}
+                      onClose={() => setDemandeSelectionnee(null)}
+                      onRetirer={(commentaire) => retirer(demandeSelectionnee.id, commentaire)}
+                      joursFeries={joursFeriesToutesAnnees}
+                      congesImposes={congesImposesVisibles}
+                      djImposees={djImposeesVisibles}
+                      autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                    />
+                  </div>
                 )}
                 {jourCommunSelectionne && (
                   <DetailJourCommunPanel
@@ -943,6 +951,41 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Popin mobile pour "Mon Calendrier" (22/09/2026, demande explicite de
+          Vincent — "les popins suivi congés doivent s'afficher en popin
+          quand elles sont déclenchées depuis le suivi solde et le
+          calendrier") : sous `sm:`, `DetailCongePanel` se détache de la 4ᵉ
+          colonne (masquée à cette largeur, voir plus haut) pour s'ouvrir en
+          overlay — même chrome que la popin "Suivre mes soldes" ci-dessus.
+          Portail vers `document.body` plutôt qu'un `fixed` local : cette
+          page a un piège documenté plus haut (`animate-stagger-in` crée un
+          référentiel de positionnement CSS pour tout `position: fixed`
+          descendant). `sm:hidden` sur le backdrop uniquement — toujours
+          monté, invisible dès `sm:`, pas de détection JS de largeur d'écran. */}
+      {demandeSelectionnee &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setDemandeSelectionnee(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <DetailCongePanel
+                key={demandeSelectionnee.id}
+                selection={demandeSelectionnee}
+                onClose={() => setDemandeSelectionnee(null)}
+                onRetirer={(commentaire) => retirer(demandeSelectionnee.id, commentaire)}
+                joursFeries={joursFeriesToutesAnnees}
+                congesImposes={congesImposesVisibles}
+                djImposees={djImposeesVisibles}
+                autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
+                pleineLargeur
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
 
       <ActiviteRecenteFeed
         demandes={demandesPourJournal}
