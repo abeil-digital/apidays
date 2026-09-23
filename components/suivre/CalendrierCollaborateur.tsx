@@ -445,11 +445,17 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
                   />
                 </div>
               )}
+              {/* `hidden sm:block` (23/09/2026, demande explicite de
+                  Vincent) : même traitement que `DetailCongePanel`
+                  ci-dessus, resté oublié sur ce panneau-ci lors du 1er
+                  passage. */}
               {jourCommunSelectionne && (
-                <DetailJourCommunPanel
-                  jour={jourCommunSelectionne}
-                  onClose={() => setJourCommunSelectionne(null)}
-                />
+                <div className="hidden sm:block">
+                  <DetailJourCommunPanel
+                    jour={jourCommunSelectionne}
+                    onClose={() => setJourCommunSelectionne(null)}
+                  />
+                </div>
               )}
               {!demandeSelectionnee && !jourCommunSelectionne && (
                 <CompteurTypologies typologies={typologies} vertical />
@@ -491,6 +497,24 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
                 autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
                 lignesTransmission={lignesTransmissionParDemande[demandeSelectionnee.id]}
                 pleineLargeur
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Popin mobile — jour commun (CPI/DJI/Férié, 23/09/2026). */}
+      {jourCommunSelectionne &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setJourCommunSelectionne(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <DetailJourCommunPanel
+                jour={jourCommunSelectionne}
+                onClose={() => setJourCommunSelectionne(null)}
               />
             </div>
           </div>,

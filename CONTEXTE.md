@@ -7759,6 +7759,18 @@ des 2 fonctions centrales, toggle admin-only par tenant (Server Action, pattern 
 vérification (test en session réelle admin-visiteur, pas seulement rendu UI — leçon du multi-tenant).
 Item Backlog passé en **priorité Haute**.
 
+## Popin mobile oubliée sur le jour commun (CPI/DJI/Férié) (23/09/2026)
+
+Signalé par Vincent : sur les calendriers "normaux" (Accueil "Mon Calendrier", `/suivre/calendrier`),
+cliquer un jour de Congé imposé ou un Férié sur mobile n'ouvrait pas de popin — contrairement à un
+congé personnel, déjà corrigé la session précédente.
+
+Cause : le traitement popin mobile appliqué le 22/09/2026 n'avait couvert que `DetailCongePanel`
+(congé personnel) dans `DashboardPage.tsx`/`CalendrierCollaborateur.tsx` — `DetailJourCommunPanel`
+(l'autre panneau de la même 4ᵉ colonne, pour CPI/DJI/Férié) était resté sans le `hidden sm:block` ni
+sa popin, oublié lors du premier passage. Même correctif appliqué : colonne desktop masquée sous
+`sm:`, popin `sm:hidden` en portail juste à côté de celle du congé personnel.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

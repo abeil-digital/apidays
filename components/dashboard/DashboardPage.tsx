@@ -849,11 +849,18 @@ export function DashboardPage() {
                     />
                   </div>
                 )}
+                {/* `hidden sm:block` (23/09/2026, demande explicite de
+                    Vincent — "les Congés imposés et FE n'ouvrent pas le
+                    template de suivi congé en popin sur mobile", même bug
+                    que `DetailCongePanel` ci-dessus mais resté sur ce
+                    panneau-ci) : même traitement, popin plus bas. */}
                 {jourCommunSelectionne && (
-                  <DetailJourCommunPanel
-                    jour={jourCommunSelectionne}
-                    onClose={() => setJourCommunSelectionne(null)}
-                  />
+                  <div className="hidden sm:block">
+                    <DetailJourCommunPanel
+                      jour={jourCommunSelectionne}
+                      onClose={() => setJourCommunSelectionne(null)}
+                    />
+                  </div>
                 )}
                 {/* Légende masquée tant qu'un panneau détail est ouvert
                     (15/09/2026, demande explicite de Vincent) — réapparaît
@@ -981,6 +988,26 @@ export function DashboardPage() {
                 djImposees={djImposeesVisibles}
                 autresDemandes={demandes.filter((d) => d.id !== demandeSelectionnee.id)}
                 pleineLargeur
+              />
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Popin mobile pour "Mon Calendrier" — jour commun (CPI/DJI/Férié,
+          23/09/2026) : même principe que `DetailCongePanel` juste au-dessus,
+          appliqué au panneau qui s'était fait oublier lors du 1er passage. */}
+      {jourCommunSelectionne &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            onClick={() => setJourCommunSelectionne(null)}
+          >
+            <div className="w-full" onClick={(e) => e.stopPropagation()}>
+              <DetailJourCommunPanel
+                jour={jourCommunSelectionne}
+                onClose={() => setJourCommunSelectionne(null)}
               />
             </div>
           </div>,
