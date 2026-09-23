@@ -152,10 +152,21 @@ export function HistoriquePage() {
         </h1>
       </div>
 
-      <div
-        className="animate-stagger-in grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block"
-        style={{ animationDelay: "90ms" }}
-      >
+      {/* Pas de `items-start` (23/09/2026, demande explicite de Vincent —
+          "le détail congé doit rester visible même en bas d'une longue
+          liste après un scroll", même bug documenté sur `DashboardPage.tsx`
+          le 14/09/2026) : un `sticky` ne peut coller que dans les limites de
+          la boîte de SON PROPRE parent — avec `items-start`, la colonne
+          détail n'est haute que du contenu du panneau (~300-500px), bien
+          moins que le tableau qui peut faire des dizaines de lignes : le
+          `xl:sticky` du panneau cesse de fonctionner dès qu'on scrolle
+          au-delà de cette hauteur. Étirement par défaut (`stretch`) : la
+          colonne détail prend la hauteur complète du tableau, le panneau
+          reste "sticky-able" sur toute la longueur de la liste. Plus
+          d'`animate-stagger-in` sur cette grille non plus (même cause que
+          `items-start` ci-dessus, cette fois via `transform`, voir
+          `SuivreDemandesPage.tsx` pour le détail complet). */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block">
         <div className="flex w-full min-w-0 flex-col gap-2">
           {/* "Exporter" sorti de la barre de filtres, fond transparent
               au-dessus (17/09/2026, même principe que "Suivre les

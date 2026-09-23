@@ -7771,6 +7771,59 @@ Cause : le traitement popin mobile appliqué le 22/09/2026 n'avait couvert que `
 sa popin, oublié lors du premier passage. Même correctif appliqué : colonne desktop masquée sous
 `sm:`, popin `sm:hidden` en portail juste à côté de celle du congé personnel.
 
+## Panneau détail congé qui sort de l'écran en scrollant (23/09/2026)
+
+Signalé par Vincent sur "Suivre les demandes" (vue Kanban) : cliquer un congé en bas d'une longue
+liste après un scroll ne laissait pas le panneau détail visible à l'écran — contrairement au
+comportement du calendrier consolidé. Investigation approfondie, 3 causes racines distinctes trouvées
+et corrigées, puis audit du reste de l'app pour vérifier qu'aucune autre ne traînait ailleurs.
+
+**Cause 1 — `items-start`** sur la grille CSS qui porte la colonne détail : plafonne cette colonne à
+la hauteur de son propre contenu (~300-500px) au lieu de celle du tableau/de la liste, souvent bien
+plus long — un `xl:sticky` ne peut coller que dans les limites de la boîte de SON PROPRE parent.
+Corrigé (`xl:items-stretch`, déjà le fix appliqué à `DashboardPage.tsx` le 14/09/2026) sur
+`HistoriquePage.tsx`, `SuivreDemandesPage.tsx` (Liste — seule la vue Kanban avait été corrigée le
+21/09), `CalendrierGlobal.tsx`.
+
+**Cause 2 — `animate-stagger-in`** directement sur cette même grille (ou un ancêtre direct du panneau
+sticky) : l'animation `stagger-in 450ms ease-out both` a pour état final `transform: translateY(0)` —
+pas `none` — et `animation-fill-mode: both` le laisse posé en permanence après coup. N'importe quel
+`transform` non-`none` sur un ancêtre casse le `position: sticky` d'un descendant (référentiel de
+positionnement redéfini). Même bug déjà trouvé et corrigé sur `DashboardPage.tsx` le 14/09/2026, pas
+généralisé au reste de l'app à l'époque. Retiré de `HistoriquePage.tsx` et `SuivreDemandesPage.tsx`
+(leurs grilles l'avaient directement dessus ; `TransmissionsPaiePage.tsx`/`CalendrierGlobal.tsx` ne
+l'avaient déjà pas sur leur grille, rien à faire là).
+
+**Cause 3 — `self-stretch` et `xl:sticky` sur le MÊME élément** (spécifique à la vue Kanban de
+`SuivreDemandesPage.tsx`) : la 1ʳᵉ tentative de fix mettait les deux classes sur un seul `<div>` — une
+boîte déjà aussi haute que tout son conteneur (`self-stretch`, ~2700px sur un Kanban à 15 cards) n'a
+plus nulle part où "coller" visuellement, `sticky` n'avait donc aucun effet réel malgré la classe bien
+présente (confirmé en inspectant `getComputedStyle` en direct — `position: sticky` actif, mais
+`rect.height` = hauteur totale de la ligne). Corrigé en séparant en 2 `<div>` imbriqués : l'extérieur
+s'étire (automatique désormais que `items-start` est retiré du parent), l'intérieur — hauteur
+naturelle — porte seul le `xl:sticky xl:top-4`.
+
+**Audit du reste de l'app** (agent dédié, lecture seule) a trouvé 2 autres emplacements avec le même
+cumul cause 1 + cause 2, corrigés dans la foulée :
+- `VerifierFichesPaiePage2.tsx` ("Vérifier les fiches de paie") — grille portant `PanelJoursMouvement`.
+- ~~`SuivreSoldesPage2.tsx`/`SoldeDetailPanel.tsx`~~ et ~~`UtilisateurFichePage.tsx`~~ — **pas encore
+  traités**, reportés à une prochaine session (voir Backlog).
+
+Un 3ᵉ point de layout trouvé **sur la même page** (`VerifierFichesPaiePage2.tsx`), signalé
+séparément par Vincent via capture d'écran : la grille `xl:grid-cols-[max-content_max-content]`
+n'avait aucun plafond de largeur — une fois le panneau `DetailCongePanel` niché dans
+`PanelJoursMouvement` ouvert (3ᵉ sous-colonne), la largeur totale pouvait dépasser le conteneur de
+l'app et déborder visuellement hors de la zone du site. Corrigé par `overflow-x-auto` sur la grille
+(même principe que `KanbanDemandes.tsx`, déjà scrollable horizontalement pour la même raison).
+
+**Bonus, même session** : "Annuler cette demande" intégré au `DetailCongePanel` niché dans
+`PanelJoursMouvement` (`VerifierFichesPaiePage2.tsx`) — jusqu'ici en lecture seule, aucune action
+possible depuis cet écran. Nouveau handler `retirerDepuisVerification` + `estAdmin` (même garde-fou
+que "Quels congés transmettre", `TransmissionsPaiePage.tsx` — admin uniquement, autorisé même sur un
+congé déjà transmis puisque tout ce qui apparaît sur cet écran l'est par construction). Vérifié en
+direct : un manager voit "contactez l'administrateur pour modifier ce congé" (comportement inchangé
+pour ce rôle), un admin verrait "Annuler cette demande" à la place.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

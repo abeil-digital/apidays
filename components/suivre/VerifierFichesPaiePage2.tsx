@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { retirerDemande } from "@/lib/data/demandes.repository";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { Check, Plus, SquareSplitHorizontal } from "lucide-react";
 import {
   fetchCheckFichesPaie,
@@ -162,7 +164,10 @@ function CardSoldeCollaborateur({
   // d'un mois sur l'autre pour un CE/RECUP/EVT_FAM/CSS).
   const lignesTableau = [
     ...TYPES_SOLDE.map((code) => ({ code, categorie: categorieSolde(c, code) })),
-    ...autres.map(({ code, jours }) => ({ code, categorie: { moisPrecedent: 0, moisEnCours: jours } })),
+    ...autres.map(({ code, jours }) => ({
+      code,
+      categorie: { moisPrecedent: 0, moisEnCours: jours },
+    })),
   ];
 
   return (
@@ -275,6 +280,8 @@ function PanelJoursMouvement({
   utilisateurId,
   nomComplet,
   onAjustementCree,
+  peutAnnuler,
+  onRetirerDemande,
 }: {
   code: TypeBadgeCode;
   periode: { debut: string; fin: string };
@@ -285,6 +292,13 @@ function PanelJoursMouvement({
   utilisateurId: string;
   nomComplet: string;
   onAjustementCree: () => void;
+  /** "Annuler cette demande" depuis "Vérifier les fiches de paie" (23/09/2026,
+   * demande explicite de Vincent) — admin uniquement, même garde-fou que
+   * "Quels congés transmettre"/`TransmissionsPaiePage.tsx`
+   * (`peutAnnulerDejaTransmis={estAdmin}`) : tout ce qui apparaît ici a par
+   * construction déjà été transmis, cette action reste possible malgré tout. */
+  peutAnnuler: boolean;
+  onRetirerDemande: (demandeId: string, commentaire: string) => Promise<void>;
 }) {
   const [demandeOuverte, setDemandeOuverte] = useState<DemandeEquipe | null>(null);
   // Historique COMPLET de transmission de la demande ouverte, toutes
@@ -298,9 +312,9 @@ function PanelJoursMouvement({
   // depuis "Quels congés transmettre" (`TransmissionsPaiePage.tsx`), qui
   // utilise déjà `fetchLignesTransmissionParDemande` (toutes périodes) pour
   // la même raison.
-  const [lignesTransmissionCompletes, setLignesTransmissionCompletes] = useState<
-    LigneExportPaie[]
-  >([]);
+  const [lignesTransmissionCompletes, setLignesTransmissionCompletes] = useState<LigneExportPaie[]>(
+    [],
+  );
   useEffect(() => {
     if (!demandeOuverte) return;
     let cancelled = false;
@@ -337,7 +351,9 @@ function PanelJoursMouvement({
   const estTypeSolde = (TYPES_SOLDE as readonly string[]).includes(code);
 
   const sommeJoursLignes = lignes.reduce((somme, { ligne }) => somme - ligne.joursInclus, 0);
-  const acquisition = estTypeSolde ? Math.round((mouvementTotal - sommeJoursLignes) * 100) / 100 : 0;
+  const acquisition = estTypeSolde
+    ? Math.round((mouvementTotal - sommeJoursLignes) * 100) / 100
+    : 0;
 
   // Ajustements manuels (27/08/2026, "Ajuster le solde") — chargés à part
   // (pas dans `lignes`, propres à `export_paie_lignes`) : refetchés au
@@ -624,6 +640,10 @@ function PanelJoursMouvement({
                 selection={demandeOuverte}
                 onClose={() => setDemandeOuverte(null)}
                 pleineLargeur
+                onRetirer={(commentaire) => onRetirerDemande(demandeOuverte.id, commentaire)}
+                peutAnnulerDejaTransmis={peutAnnuler}
+                libelleRetirer="Annuler ce congé"
+                texteRetirer="Ce congé n'a pas été pris par le collaborateur"
                 lignesTransmission={lignesTransmissionCompletes}
               />
             </div>
@@ -680,6 +700,18 @@ export function VerifierFichesPaiePage2({
   const [collaborateurs, setCollaborateurs] = useState<CheckFichePaieCollaborateur[]>([]);
   const [comparaisons, setComparaisons] = useState<ComparaisonSoldeCollaborateur[]>([]);
   const [enCoursValidation, setEnCoursValidation] = useState(false);
+  // "Annuler cette demande" (23/09/2026, demande explicite de Vincent —
+  // "intégrer les options annuler cette demande dans le contexte de la
+  // vérification des fiches de paie") : même garde-fou admin uniquement que
+  // "Quels congés transmettre" (`TransmissionsPaiePage.tsx`), reste possible
+  // même déjà transmis puisque tout ce qui apparaît ici l'est par construction.
+  const { utilisateur } = useUtilisateur();
+  const estAdmin = utilisateur?.role === "admin";
+
+  async function retirerDepuisVerification(demandeId: string, commentaire: string) {
+    await retirerDemande(demandeId, commentaire);
+    rafraichirDonnees();
+  }
 
   async function handleValider() {
     if (!exportId) return;
@@ -834,8 +866,23 @@ export function VerifierFichesPaiePage2({
       ) : (
         <>
           <EnTeteSoldes />
+          {/* Ni `items-start` ni `animate-stagger-in` sur cette grille
+              (23/09/2026, demande explicite de Vincent — même bug que
+              "Suivre les demandes"/Historique documenté plus tôt, voir
+              CONTEXTE.md) : `items-start` plafonnait la colonne détail à sa
+              propre hauteur (le `xl:sticky` de `PanelJoursMouvement` cessait
+              de fonctionner passé cette hauteur) ; `animate-stagger-in`
+              laisse un `transform: translateY(0)` résiduel après coup
+              (`fill-mode: both`) qui casse `sticky` sur tout descendant.
+              `overflow-x-auto` (même session, "le panel détail sort de la
+              zone visible du site") : la grille est en `max-content` des
+              deux côtés, sans plafond de largeur — une fois le panneau de
+              détail (3ᵉ sous-colonne interne à `PanelJoursMouvement`)
+              ouvert, la largeur totale peut dépasser le conteneur de l'app
+              et déborder visuellement hors de la zone du site plutôt que de
+              rester scrollable à l'intérieur. */}
           <div
-            className={`animate-stagger-in grid grid-cols-1 items-start gap-[5px] ${selectionMouvement ? "xl:grid-cols-[max-content_max-content]" : ""}`}
+            className={`grid grid-cols-1 items-stretch gap-[5px] overflow-x-auto ${selectionMouvement ? "xl:grid-cols-[max-content_max-content]" : ""}`}
           >
             <div ref={cardsRef} className="flex min-w-0 flex-col gap-3">
               {comparaisons.map((c) => (
@@ -868,6 +915,8 @@ export function VerifierFichesPaiePage2({
                 utilisateurId={selectionMouvement.utilisateurId}
                 nomComplet={`${comparaisonSelection?.utilisateur.prenom ?? ""} ${comparaisonSelection?.utilisateur.nom ?? ""}`.trim()}
                 onAjustementCree={rafraichirDonnees}
+                peutAnnuler={estAdmin}
+                onRetirerDemande={retirerDepuisVerification}
               />
             )}
           </div>

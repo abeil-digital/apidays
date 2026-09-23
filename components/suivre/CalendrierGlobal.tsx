@@ -370,7 +370,13 @@ export function CalendrierGlobal() {
       même gabarit "contenu + colonne latérale 16rem" que
       `TransmissionsPaiePage.tsx`/`VerifierFichesPaiePage2.tsx`
       (`minmax(0,900px)_16rem`), qui n'ont pas ce problème. */}
-      <div className="grid grid-cols-1 items-start gap-[10px] xl:grid-cols-[minmax(0,797px)_16rem]">
+      {/* `xl:items-stretch` (23/09/2026, demande explicite de Vincent) —
+          `items-start` limitait la colonne détail à la hauteur de son
+          propre contenu (~300-500px) plutôt qu'à celle de la grille des
+          mois : le `xl:sticky` du panneau cessait de fonctionner passé
+          cette hauteur en scrollant. Fonctionnait la plupart du temps par
+          coïncidence (hauteurs comparables), pas de façon fiable. */}
+      <div className="grid grid-cols-1 gap-[10px] xl:grid-cols-[minmax(0,797px)_16rem] xl:items-stretch">
         <div className="min-w-0">
           {anneesNonParametrees.length > 0 && (
             <p className="mb-4 text-sm font-normal">

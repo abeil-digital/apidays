@@ -238,12 +238,23 @@ export function SuivreDemandesPage() {
         </h1>
       </div>
 
-      <div
-        className={`animate-stagger-in grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:gap-x-2.5 print:block ${
-          vueKanban ? "xl:items-stretch" : "items-start"
-        }`}
-        style={{ animationDelay: "90ms" }}
-      >
+      {/* `xl:items-stretch` désormais dans les deux vues (23/09/2026,
+          demande explicite de Vincent — même bug `items-start`/sticky que
+          `DashboardPage.tsx`, jusqu'ici seule la vue Kanban avait été
+          corrigée le 21/09/2026, pas la Liste) : un tableau qui défile
+          longtemps faisait sortir le panneau détail de la vue une fois
+          scrollé au-delà de sa propre hauteur (~300-500px, bien moins que
+          le tableau). Plus d'`animate-stagger-in` sur CETTE grille
+          (23/09/2026, même bug déjà trouvé et corrigé le 14/09/2026 sur
+          `DashboardPage.tsx` — voir son commentaire) : son animation
+          `transform: translateY(...)` reste posée après coup
+          (`animation-fill-mode: both`, `to { transform: translateY(0) }`
+          ≠ `none`), ce qui crée un référentiel de positionnement CSS pour
+          tout `xl:sticky` descendant — le panneau détail restait confiné à
+          l'intérieur de cette grille au lieu de coller au viewport en
+          scrollant. Perte du fondu d'entrée pour cette seule grille,
+          délibéré : la correction du `sticky` prime. */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,900px)_16rem] xl:items-stretch xl:gap-x-2.5 print:block">
         <div className="flex w-full min-w-0 flex-col gap-2">
           {/* "Exporter" sorti de la barre de filtres (17/09/2026, PTP
               Vincent) — restait poussé vers le bas quand le groupe "Du"/"Au"
@@ -307,7 +318,10 @@ export function SuivreDemandesPage() {
                     classification en colonnes, un filtre en plus n'aurait
                     plus de sens (viderait des colonnes entières). */}
                 {!vueKanban && (
-                  <SelectFiltrePill value={filtre} onChange={(e) => setFiltre(e.target.value as Filtre)}>
+                  <SelectFiltrePill
+                    value={filtre}
+                    onChange={(e) => setFiltre(e.target.value as Filtre)}
+                  >
                     {FILTRES.map((f) => (
                       <option key={f} value={f}>
                         {f}
@@ -439,36 +453,46 @@ export function SuivreDemandesPage() {
         {selection && (
           // En vue Kanban (21/09/2026, demande de Vincent) : `pleineLargeur`
           // neutralise le `xl:sticky xl:w-64 xl:shrink-0` interne du panneau
-          // (pensé pour un docking à côté d'une longue liste qui défile) —
-          // repris manuellement ici + `self-stretch` pour que le panneau
-          // s'aligne sur la hauteur de la ligne kanban (`xl:items-stretch`
-          // sur la grille ci-dessus), au lieu de rester collé en haut avec
-          // du vide en dessous à côté de colonnes bien plus hautes.
-          <div
-            className={`hidden sm:block ${vueKanban ? "xl:w-64 xl:shrink-0 self-stretch" : ""}`}
-          >
-            <DetailCongePanel
-              key={selection.id}
-              selection={selection}
-              pleineLargeur={vueKanban}
-              onClose={() => setSelectionId(null)}
-              onValider={estManager ? (commentaire) => valider(selection.id, commentaire) : undefined}
-              onRefuser={estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined}
-              onRetirer={
-                estManager || estAdmin
-                  ? (commentaire) => retirer(selection.id, commentaire)
-                  : undefined
-              }
-              peutAnnulerDejaTransmis={estManager || estAdmin}
-              onValiderSucces={(id, message) => setToast({ id, message })}
-              joursFeries={joursFeries}
-              congesImposes={congesImposes}
-              djImposees={djImposees}
-              autresDemandes={demandes.filter(
-                (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
-              )}
-              lignesTransmission={lignesTransmissionParDemande[selection.id]}
-            />
+          // (pensé pour un docking à côté d'une longue liste qui défile).
+          // 2 boîtes imbriquées, PAS une seule (23/09/2026, 2e bug trouvé en
+          // corrigeant "ça ne marche pas sur la vue kanban" — la 1ʳᵉ
+          // tentative mettait `self-stretch` ET `xl:sticky` sur le MÊME
+          // `<div>` : une boîte aussi haute que toute la colonne Kanban
+          // (`self-stretch`) n'a plus rien où "coller" visuellement, sticky
+          // n'avait aucun effet) : l'extérieure s'étire sur la hauteur de la
+          // ligne (automatique désormais, `items-start` retiré du parent —
+          // pas besoin de `self-stretch` explicite) ; l'intérieure, de
+          // hauteur naturelle (juste le panneau), est celle qui est
+          // `xl:sticky xl:top-4`.
+          <div className={`hidden sm:block ${vueKanban ? "xl:w-64 xl:shrink-0" : ""}`}>
+            <div className={vueKanban ? "xl:sticky xl:top-4" : ""}>
+              <DetailCongePanel
+                key={selection.id}
+                selection={selection}
+                pleineLargeur={vueKanban}
+                onClose={() => setSelectionId(null)}
+                onValider={
+                  estManager ? (commentaire) => valider(selection.id, commentaire) : undefined
+                }
+                onRefuser={
+                  estManager ? (commentaire) => refuser(selection.id, commentaire) : undefined
+                }
+                onRetirer={
+                  estManager || estAdmin
+                    ? (commentaire) => retirer(selection.id, commentaire)
+                    : undefined
+                }
+                peutAnnulerDejaTransmis={estManager || estAdmin}
+                onValiderSucces={(id, message) => setToast({ id, message })}
+                joursFeries={joursFeries}
+                congesImposes={congesImposes}
+                djImposees={djImposees}
+                autresDemandes={demandes.filter(
+                  (d) => d.demandeur.id === selection.demandeur.id && d.id !== selection.id,
+                )}
+                lignesTransmission={lignesTransmissionParDemande[selection.id]}
+              />
+            </div>
           </div>
         )}
       </div>
