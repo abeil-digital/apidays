@@ -7999,6 +7999,25 @@ sélectionne désormais `sans_solde` en plus de `role`. Vérifié en session ré
 posé via l'API admin sur un compte manager existant, basculé temporairement en `sans_solde`) : nav
 réduite à "Suivre | Paramétrer", flag et mot de passe de test retirés après vérification.
 
+**Audit des incidences non voulues** (même jour, demande explicite de Vincent — "check cette mise à
+jour, regarde si il peut y avoir des incidences non voulues sur d'autres éléments") : revue de tous
+les `statut === "actif"` restants dans le code pour confirmer qu'aucun n'avait été oublié — le seul
+trouvé non exclu (`nombreAdminsActifs`, garde-fou "toujours un admin actif", `UtilisateurFichePage.tsx`)
+est **volontairement** resté tel quel : un admin `sans_solde` reste un admin pleinement fonctionnel,
+il doit continuer à compter dans ce garde-fou. `occupantsDuJour` (`CalendrierGlobal.tsx`) confirmé
+déjà correctement exclu (réutilise `actifsIds`, lui-même filtré).
+
+**Faille réelle trouvée et corrigée** : le garde `proxy.ts` ne couvrait que le chemin exact `/` —
+`/nouvelle-demande` restait accessible en tapant l'URL directement (aucun lien vers cette page une
+fois "Poser" retiré de la nav, mais atteignable par URL directe/ancien favori). Cette page n'a
+**aucune garde de rôle** et appelle `useSoldes()` pour l'utilisateur courant : un manager/admin
+`sans_solde` aurait pu y poser une vraie demande de congé contre un solde qui n'a pas vocation à
+exister pour lui — contournant complètement l'objectif du flag. `/historique` avait le même trou
+(risque nul, juste un historique vide affiché). Corrigé en élargissant le garde à toute la section
+"Poser" (`PAGES_POSER = ["/", "/historique", "/nouvelle-demande"]`), en excluant explicitement
+`/mentions-legales` (page neutre, accessible à tout profil). Vérifié en session réelle : les 3 pages
+redirigent bien vers `/suivre/calendrier`, `/mentions-legales` reste accessible sans redirection.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

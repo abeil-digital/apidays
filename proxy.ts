@@ -25,6 +25,10 @@ const ROUTE_CONNEXION = "/connexion";
 const ROUTE_ADMIN_CONNEXION = "/admin/connexion";
 const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
 const PREFIXE_SUPER_ADMIN = "/admin";
+// Section "Poser" — Accueil, Historique, Nouvelle demande (24/09/2026,
+// utilisée par le garde "sans suivi de solde" plus bas). Volontairement
+// PAS `/mentions-legales`, page neutre accessible à tout profil.
+const PAGES_POSER = ["/", "/historique", "/nouvelle-demande"];
 
 // Routes accessibles sans session "réelle" (07/09/2026, parcours mot de
 // passe) : toute la famille /connexion/* (login, mot de passe oublié,
@@ -147,15 +151,23 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(redirectUrl);
     }
 
-    // Profil manager/admin "sans suivi de solde" (24/09/2026) : pas de solde
-    // à consommer, donc pas d'accès à "Poser" (Accueil) — repli sur Suivre >
+    // Profil manager/admin "sans suivi de solde" (24/09/2026, seuil élargi
+    // le même jour — trouvé en auditant la fonctionnalité : le garde initial
+    // ne couvrait que `/`, laissant `/nouvelle-demande` accessible en
+    // tapant l'URL directement — cette page n'a aucune garde de rôle et
+    // appelle `useSoldes()` pour l'utilisateur courant, permettant de poser
+    // une vraie demande contre un solde qui n'a pas vocation à exister pour
+    // ce profil. `PAGES_POSER` couvre toute la section "Poser" (Accueil +
+    // Historique + Nouvelle demande), PAS `/mentions-legales` — page neutre
+    // accessible à tout le monde quel que soit le profil) : pas de solde
+    // à consommer, donc pas d'accès à cette section — repli sur Suivre >
     // Calendriers des absences, qui héberge aussi le bloc "Demandes à
     // étudier" pour ce profil (voir SuivreCalendrierPage.tsx). Le check
     // `role` est redondant en théorie (l'option n'est proposée qu'à la
     // création pour manager/admin) mais défensif si `sans_solde` était un
     // jour modifié directement en base.
     if (
-      request.nextUrl.pathname === "/" &&
+      PAGES_POSER.includes(request.nextUrl.pathname) &&
       data?.sans_solde &&
       (data?.role === "manager" || data?.role === "admin")
     ) {
