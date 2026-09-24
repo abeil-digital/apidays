@@ -42,6 +42,7 @@ import {
   synchroniserEmailAuth,
 } from "@/app/(app)/parametrer/utilisateurs/actions";
 import { TypeBadge } from "@/components/demandes/TypeBadge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel } from "@/components/ui/FieldLabel";
 import { Input } from "@/components/ui/Input";
@@ -1305,7 +1306,14 @@ function Formulaire({
   // profil).
   const carteRole = modeEdition ? (
     <div className="bg-mint-tint flex items-center justify-between px-5 py-2.5">
-      <span className="text-slate text-sm font-bold">{ROLE_LABEL[champs.role]}</span>
+      <span className="flex items-center gap-1.5">
+        <span className="text-slate text-sm font-bold">{ROLE_LABEL[champs.role]}</span>
+        {/* Badge "Sans solde" (24/09/2026) — même statut que celui affiché
+        sur Paramétrer > Utilisateurs, reporté ici pour que l'admin le voie
+        aussi directement sur la fiche (pas d'action possible : flag figé à
+        la création, pas de mécanisme d'édition en V1). */}
+        {champs.sansSolde && <Badge tone="neutral">Sans solde</Badge>}
+      </span>
       <button
         type="button"
         onClick={() => setModaleRoleOuverte(true)}

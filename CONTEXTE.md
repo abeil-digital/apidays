@@ -7977,6 +7977,17 @@ redirection automatique `/` → `/suivre/calendrier`, bloc "Demandes à étudier
 profil de test supprimés après vérification. `npm run build` complet passé sans erreur (changement
 structurel touchant ~12 fichiers).
 
+**Bascule d'un profil réel existant** (même jour, demande explicite de Vincent) : Olivier MAYOL,
+manager créé la veille sur le vrai tenant Abeil par Delphine, avait déjà validé des congés en tant
+que manager (`demandes_conges.validateur_id`) — pas question de le recréer ni de perdre cet
+historique. Basculé en `sans_solde = true` par une simple mise à jour ciblée en base (`UPDATE
+utilisateurs SET sans_solde = true WHERE id = ...`), pas via l'UI (le flag reste figé à la création,
+aucun mécanisme d'édition en V1) : aucune autre table touchée, son solde initial et les demandes
+qu'il a validées restent inchangés — seules les lectures futures (effectifs/listes/export) l'excluent
+désormais. **Badge "Sans solde" ajouté aussi sur la fiche elle-même** (`carteRole`, mode édition,
+`UtilisateurFichePage.tsx`) à la suite de cette bascule — jusque-là visible seulement dans la liste
+Paramétrer > Utilisateurs, pas sur la fiche détaillée d'un profil déjà créé.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
