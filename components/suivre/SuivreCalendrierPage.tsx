@@ -48,7 +48,11 @@ import { SelectPeriodeAdmin, type ModePeriode } from "@/components/suivre/Select
  * Suivre > Calendriers), le H1 devient "Accueil Manager"/"Accueil
  * Administrateur" plutôt que "Calendriers des absences" — avec un H2
  * "Calendriers des absences" réinséré juste après le bloc "Demandes à
- * étudier", pour ne pas perdre le repère visuel sur le contenu qui suit.
+ * étudier", pour ne pas perdre le repère visuel sur le contenu qui suit. H2
+ * et son contenu (sélecteurs + calendrier) regroupés dans un conteneur
+ * imbriqué à `gap-2` (au lieu du `gap-5` du conteneur racine) : interlignage
+ * volontairement plus resserré APRÈS le H2 (vers son contenu) qu'AVANT
+ * (entre "Demandes à étudier" et le H2, qui garde le `gap-5` standard).
  */
 export function SuivreCalendrierPage() {
   const { utilisateur: utilisateurCourant } = useUtilisateur();
@@ -79,46 +83,55 @@ export function SuivreCalendrierPage() {
         <DemandesAEtudierCard />
       </div>
 
-      {estSansSolde && (
-        <h2 className="text-ink-900 animate-stagger-in px-1 text-lg font-semibold">
-          Calendriers des absences
-        </h2>
-      )}
+      {(() => {
+        const contenu = (
+          <div className="flex flex-col gap-2">
+            <div className="animate-stagger-in flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1">
+              <SelectPille
+                value={collaborateurId}
+                onChange={(e) => setCollaborateurId(e.target.value)}
+                disabled={loading}
+                aria-label="Sélectionner un collaborateur"
+              >
+                <option value="">Vue consolidée</option>
+                {collaborateurs.map(([id, nom]) => (
+                  <option key={id} value={id}>
+                    {nom}
+                  </option>
+                ))}
+              </SelectPille>
+              <SelectPeriodeAdmin mode={modePeriode} onChange={setModePeriode} />
+            </div>
 
-      <div className="flex flex-col gap-2">
-        <div className="animate-stagger-in flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1">
-          <SelectPille
-            value={collaborateurId}
-            onChange={(e) => setCollaborateurId(e.target.value)}
-            disabled={loading}
-            aria-label="Sélectionner un collaborateur"
-          >
-            <option value="">Vue consolidée</option>
-            {collaborateurs.map(([id, nom]) => (
-              <option key={id} value={id}>
-                {nom}
-              </option>
-            ))}
-          </SelectPille>
-          <SelectPeriodeAdmin mode={modePeriode} onChange={setModePeriode} />
-        </div>
+            {error && (
+              <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+                {error}
+              </div>
+            )}
 
-        {error && (
-          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-            {error}
+            {collaborateurSelectionne ? (
+              <CalendrierCollaborateur
+                key={collaborateurSelectionne.id}
+                utilisateurId={collaborateurSelectionne.id}
+                modePeriode={modePeriode}
+              />
+            ) : (
+              !loading && <CalendrierGlobal modePeriode={modePeriode} />
+            )}
           </div>
-        )}
+        );
 
-        {collaborateurSelectionne ? (
-          <CalendrierCollaborateur
-            key={collaborateurSelectionne.id}
-            utilisateurId={collaborateurSelectionne.id}
-            modePeriode={modePeriode}
-          />
-        ) : (
-          !loading && <CalendrierGlobal modePeriode={modePeriode} />
-        )}
-      </div>
+        if (!estSansSolde) return contenu;
+
+        return (
+          <div className="flex flex-col gap-2">
+            <h2 className="text-ink-900 animate-stagger-in px-1 text-lg font-semibold">
+              Calendriers des absences
+            </h2>
+            {contenu}
+          </div>
+        );
+      })()}
     </div>
   );
 }

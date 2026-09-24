@@ -8030,6 +8030,13 @@ un seul "Calendriers des absences" en H1, pas de doublon. Vérifié en session r
 (bascule temporaire du flag sur un compte de test) : hiérarchie H1/H2 correcte pour un profil
 `sansSolde`, titre unique inchangé pour un manager normal.
 
+**Espacement autour du H2 resserré côté contenu** (même jour) : le H2 "Calendriers des absences" et
+son contenu (sélecteurs + calendrier) regroupés dans un conteneur imbriqué à `gap-2`, distinct du
+`gap-5` standard du conteneur racine qui régit l'espacement AVANT le H2 (entre "Demandes à étudier"
+et lui) — interlignage volontairement plus serré après le H2 qu'avant, demande explicite. `Olivier
+Manager` (`vincentmayol+acme-manager@gmail.com`, tenant acme, déjà utilisé comme compte de test tout
+au long de cette session) basculé en `sans_solde = true` de façon définitive à la demande de Vincent.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
