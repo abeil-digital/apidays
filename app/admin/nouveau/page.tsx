@@ -96,9 +96,15 @@ export default function NouveauTenantPage() {
       soldeInitialAdmin: soldeInitDate
         ? {
             dateReference: soldeInitDate,
-            cp: Number(soldeInitCp) || 0,
-            rtt: Number(soldeInitRtt) || 0,
-            cpa: Number(soldeInitCpa) || 0,
+            // `.replace(",", ".")` (23/09/2026, bug réel trouvé par Vincent —
+            // "on a renseigné 18,5... elle a 0 comme solde") : `Number("18,5")`
+            // renvoie `NaN`, silencieusement ramené à 0 par `|| 0`, sans la
+            // moindre erreur affichée. Même correctif déjà en place ailleurs
+            // pour un champ jours (`SoldeDetailPanel.tsx`, "Ajuster le
+            // solde") — juste jamais repris sur ce formulaire.
+            cp: Number(soldeInitCp.replace(",", ".")) || 0,
+            rtt: Number(soldeInitRtt.replace(",", ".")) || 0,
+            cpa: Number(soldeInitCpa.replace(",", ".")) || 0,
           }
         : undefined,
     });

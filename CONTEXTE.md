@@ -7891,6 +7891,37 @@ niveau du conteneur racine, h1 comme premier enfant direct — même gabarit que
 sélecteurs→calendriers resserré séparément via un conteneur imbriqué (`gap-2`), pour ne pas hériter
 du `gap-5` du conteneur racine sur cette paire précise.
 
+## Formulaire de création de profil : touche Entrée + solde initial obligatoire (24/09/2026)
+
+Use case réel remonté par Vincent : Delphine a accidentellement validé des fiches utilisateur en
+appuyant sur Entrée en cours de saisie, avant d'avoir rempli le solde initial — le profil se créait
+alors silencieusement sans solde (`soldeInitDate` vide → aucun `soldes_initiaux` créé, sans erreur ni
+confirmation).
+
+**Touche Entrée** — `UtilisateurFichePage.tsx`, composant `Formulaire` (création ET édition, même
+`<form>`). Rien ne bloquait le submit-on-Enter natif du navigateur : tout `<input>` à l'intérieur du
+formulaire déclenchait `handleSubmit` dès qu'un `<button type="submit">` existait dans le DOM. Ajout
+de `handleFormKeyDown` (`onKeyDown` sur le `<form>`) — `preventDefault()` sur `Enter`, sauf si la
+cible est un `<textarea>` (retour à la ligne, pas de submit de toute façon) ou le bouton submit
+lui-même (clic explicite, comportement voulu). Seul un clic sur "Créer le profil"/"Enregistrer"
+déclenche désormais la soumission.
+
+**Solde initial obligatoire** — le bloc était marqué "(facultatif)" : si le mois de référence était
+laissé vide, `soldeInitialInput` valait `undefined` et aucun solde n'était créé, sans avertissement.
+Rendu obligatoire à la création (`!id` dans `handleSubmit`) : mois de référence + CP/RTT/CPA doivent
+tous être renseignés, `handleSubmit` bloque avec un message dédié sinon. Point d'attention retenu de
+l'agent d'investigation : les 3 champs CP/RTT/CPA sont initialisés à `"0"` (string) par défaut — la
+validation teste `.trim() === ""` plutôt que `!Number(...)`, pour ne pas confondre "non rempli" et "0
+saisi volontairement" (0 doit rester une valeur valide, demande explicite). Libellé de la card passé
+de "Solde initial (facultatif)" à "Solde initial".
+
+Vérifié en direct sur acme : Entrée en cours de saisie ne soumet plus rien (modal reste ouvert),
+soumission bloquée avec message si le mois de référence n'est pas choisi, création réussie une fois
+CP/RTT/CPA renseignés à 0. `app/admin/nouveau/page.tsx`/`UtilisateurFichePage.tsx` avaient par
+ailleurs déjà un correctif en cours (`.replace(",", ".")` sur la saisie décimale — "18,5" lu comme
+`NaN` puis silencieusement ramené à 0, `Number("18,5")` sans normalisation) : conservé tel quel,
+antérieur à cette session.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

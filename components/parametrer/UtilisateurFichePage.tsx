@@ -17,7 +17,7 @@
  * création).
  */
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, Pencil, Plus, X } from "lucide-react";
@@ -764,10 +764,7 @@ function ModalModifierIdentite({
           />
         </div>
         <div>
-          <label
-            htmlFor="identite-prenom"
-            className="text-ink-900 mb-1.5 block text-sm font-bold"
-          >
+          <label htmlFor="identite-prenom" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Prénom
           </label>
           <Input
@@ -778,10 +775,7 @@ function ModalModifierIdentite({
           />
         </div>
         <div>
-          <label
-            htmlFor="identite-email"
-            className="text-ink-900 mb-1.5 block text-sm font-bold"
-          >
+          <label htmlFor="identite-email" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Email
           </label>
           <Input
@@ -956,10 +950,7 @@ function ModalFinContrat({ dernierAdmin, onValider, onClose }: ModalFinContratPr
     <Modal onClose={onClose} header={<EnTeteModalNavy titre="Fin de contrat" onClose={onClose} />}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
-          <label
-            htmlFor="fin-contrat-date"
-            className="text-ink-900 mb-1.5 block text-sm font-bold"
-          >
+          <label htmlFor="fin-contrat-date" className="text-ink-900 mb-1.5 block text-sm font-bold">
             Date de fin de contrat
           </label>
           <Input
@@ -1138,6 +1129,23 @@ function Formulaire({
       .catch(() => setMoisMinimumChangement(null));
   }, []);
 
+  // Neutralise le submit-on-Enter du navigateur (24/09/2026, bug réel vécu
+  // par Delphine — une touche Entrée pressée trop tôt dans un champ, avant
+  // d'avoir rempli le solde initial, validait déjà toute la fiche). Seul le
+  // clic explicite sur le bouton "Créer le profil"/"Enregistrer" déclenche
+  // désormais la soumission ; Entrée dans un `<textarea>` reste inchangée
+  // (retour à la ligne, pas de submit natif de toute façon).
+  function handleFormKeyDown(e: KeyboardEvent<HTMLFormElement>) {
+    const cible = e.target as HTMLElement;
+    if (
+      e.key === "Enter" &&
+      cible.tagName !== "TEXTAREA" &&
+      cible.getAttribute("type") !== "submit"
+    ) {
+      e.preventDefault();
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -1151,6 +1159,25 @@ function Formulaire({
       return;
     }
 
+    // Solde initial obligatoire à la création (24/09/2026, demande explicite
+    // de Vincent — suite à un profil créé sans solde par une soumission
+    // accidentelle à l'Entrée) : la date de référence ET les 3 champs
+    // CP/RTT/CPA doivent être renseignés — `0` est une valeur valide, seule
+    // une chaîne VIDE (`.trim() === ""`) est rejetée, pour ne pas confondre
+    // "non rempli" et "rempli à zéro".
+    if (
+      !id &&
+      (!soldeInitDate ||
+        soldeInitCp.trim() === "" ||
+        soldeInitRtt.trim() === "" ||
+        soldeInitCpa.trim() === "")
+    ) {
+      setErreur(
+        "Merci de renseigner le solde initial (mois de référence, CP, RTT et CPA — 0 est une valeur valide).",
+      );
+      return;
+    }
+
     setErreur("");
     setEnvoi(true);
     try {
@@ -1158,12 +1185,18 @@ function Formulaire({
         const resultat = await modifier(champs);
         router.push(`/parametrer/utilisateurs/${resultat.id}`);
       } else {
+        // `.replace(",", ".")` (23/09/2026, bug réel trouvé par Vincent sur
+        // le formulaire équivalent de création de tenant — "on a renseigné
+        // 18,5... elle a 0 comme solde") : `Number("18,5")` renvoie `NaN`,
+        // silencieusement ramené à 0 par `|| 0`, sans la moindre erreur
+        // affichée. Même correctif déjà en place ailleurs pour un champ
+        // jours (`SoldeDetailPanel.tsx`, "Ajuster le solde").
         const soldeInitialInput: SoldeInitial | undefined = soldeInitDate
           ? {
               dateReference: soldeInitDate,
-              cp: Number(soldeInitCp) || 0,
-              rtt: Number(soldeInitRtt) || 0,
-              cpa: Number(soldeInitCpa) || 0,
+              cp: Number(soldeInitCp.replace(",", ".")) || 0,
+              rtt: Number(soldeInitRtt.replace(",", ".")) || 0,
+              cpa: Number(soldeInitCpa.replace(",", ".")) || 0,
             }
           : undefined;
         const resultat = await creer(
@@ -1321,7 +1354,11 @@ function Formulaire({
               Un seul `<form>` porte toujours l'ensemble (validation + soumission
               globales), les cards ne sont que des groupes visuels à l'intérieur.
               Coins carrés (02/09/2026, même refonte). */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-[5px]">
+          <form
+            onSubmit={handleSubmit}
+            onKeyDown={handleFormKeyDown}
+            className="flex flex-col gap-[5px]"
+          >
             <div className={modeEdition ? "flex flex-col gap-0" : ""}>
               <div className="bg-surface-card border-ink-300/60 relative flex flex-col gap-2 border p-5">
                 {/* Lien "Modifier" dans le coin haut droit de la card identité
@@ -1751,8 +1788,12 @@ function Formulaire({
              l'app : remplace le report/accrual automatique tant que la
              période en cours est celle de cette date de référence, voir
              `resolverReportCp`/`resolverPointDepartAccrual` dans
-             `soldes.repository.ts`. Facultatif — si la date est laissée
-             vide, aucun solde initial n'est créé (comportement inchangé). */
+             `soldes.repository.ts`. Obligatoire depuis le 24/09/2026 (demande
+             explicite de Vincent, suite à un profil créé sans solde par une
+             soumission accidentelle à l'Entrée avant remplissage — voir
+             `handleFormKeyDown`) : mois de référence + CP/RTT/CPA doivent
+             tous être renseignés (0 accepté comme valeur valide), sinon
+             `handleSubmit` bloque avec un message dédié. */
               <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
                 {/* Titre en carte navy + gras (04/09/2026, "unifier les
                 intitulés") — même traitement que "Nature du contrat"/"Durée
@@ -1762,18 +1803,17 @@ function Formulaire({
                 "trop de texte d'aide" — fusion des deux phrases précédentes),
                 et plus de sous-titre "Jours restants à cette date" : les
                 labels CP/RTT/CPA suffisent, la card + son titre donnent déjà
-                le contexte. */}
-                <div className="text-ink-900 text-sm font-bold">Solde initial (facultatif)</div>
+                le contexte. "(facultatif)" retiré du titre le 24/09/2026,
+                devenu obligatoire. */}
+                <div className="text-ink-900 text-sm font-bold">Solde initial</div>
                 <div className="mt-2">
                   {/* Sélecteurs mois + année (05/09/2026, demande explicite :
                   "Sélecteur mois puis sélecteur années") — même pattern que
                   "Date d'effet" dans `ModalModifierChamp` (deux `<Select>`
                   plutôt qu'un `<input type="month">`), pour rester cohérent
-                  avec le reste de la fiche. Le mois "—" (non choisi) est ce
-                  qui fait de ce report un champ facultatif : tant qu'aucun
-                  mois n'est choisi, `soldeInitDate` reste vide et aucun solde
-                  initial n'est créé (comportement inchangé, voir
-                  `handleSubmit`). */}
+                  avec le reste de la fiche. Champ obligatoire depuis le
+                  24/09/2026 (voir `handleSubmit`) — auparavant, le mois "—"
+                  (non choisi) rendait ce report facultatif. */}
                   <p className="text-ink-900 mb-[9px] text-xs font-semibold">Au début du mois</p>
                   {/* `SelectPille` (05/09/2026, demande explicite : "c'est
                   des pills aussi") — même traitement que Nature du
@@ -1887,7 +1927,7 @@ function Formulaire({
                   type="checkbox"
                   checked={envoyerInvitationEmail}
                   onChange={(e) => setEnvoyerInvitationEmail(e.target.checked)}
-                  className="border-slate h-4 w-4 accent-brand-primary"
+                  className="border-slate accent-brand-primary h-4 w-4"
                 />
                 <span className="text-ink-900 text-sm font-bold">
                   Envoyer l&apos;invitation par email
