@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
@@ -10,6 +9,7 @@ import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
+import type { ModePeriode } from "@/components/suivre/SelectPeriodeAdmin";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import {
@@ -76,38 +76,6 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
   FERIE: "--color-ferie",
 };
 
-type ModePeriode = "aujourdhui" | "il_y_a_3_mois" | "periode_reference" | "annee_civile";
-
-/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois / Période de
- * référence / Année civile" — variante ADMIN de `SelectCommence`
- * (24/09/2026, demande de Delphine — voir même commentaire détaillé dans
- * `CalendrierGlobal.tsx`). `DashboardPage.tsx` (vue collaborateur) garde son
- * `SelectCommence` à 2 options d'origine, hors scope de cette demande. */
-function SelectCommence({
-  mode,
-  onChange,
-}: {
-  mode: ModePeriode;
-  onChange: (v: ModePeriode) => void;
-}) {
-  return (
-    <div className="relative inline-flex w-fit items-center gap-1.5">
-      <span className="text-ink-500 text-xs">Commence :</span>
-      <select
-        value={mode}
-        onChange={(e) => onChange(e.target.value as ModePeriode)}
-        className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-      >
-        <option value="aujourdhui">Aujourd&apos;hui</option>
-        <option value="il_y_a_3_mois">Il y a 3 mois</option>
-        <option value="periode_reference">Période de référence</option>
-        <option value="annee_civile">Année civile</option>
-      </select>
-      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
-    </div>
-  );
-}
-
 /**
  * Calendrier d'un collaborateur, pour `/suivre/calendrier` (24/08/2026,
  * manager/admin — refondu le 15/09/2026 pour reprendre le gabarit "nouvelle
@@ -138,7 +106,13 @@ function SelectCommence({
  * refuser. Pas de `onRegulariser` ici (abandonné, même changement appliqué
  * à `SuivreDemandesPage.tsx`).
  */
-export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: string }) {
+export function CalendrierCollaborateur({
+  utilisateurId,
+  modePeriode,
+}: {
+  utilisateurId: string;
+  modePeriode: ModePeriode;
+}) {
   const { utilisateur: viewer } = useUtilisateur();
   const { demandes: demandesEquipe, valider, refuser, retirer } = useDemandesEquipe();
   const estManager = viewer?.role === "manager";
@@ -149,10 +123,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     null,
   );
   const [demandeSelectionnee, setDemandeSelectionnee] = useState<DemandeEquipe | null>(null);
-  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
-    null,
-  );
-  const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
+  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(null);
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   // Statut de transmission paie par demande (15/09/2026, demande explicite de
   // Vincent — "il faut le faire", même mécanisme que `SuivreDemandesPage.tsx`)
@@ -239,7 +210,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
     return annees.filter((a) => !anneeVisiblePourCommuns(a));
   })();
 
-  const joursFeriesToutesAnnees = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries];
+  const joursFeriesToutesAnnees = [
+    ...calendrierAnneeA.joursFeries,
+    ...calendrierAnneeB.joursFeries,
+  ];
   const congesImposesVisibles = [
     ...calendrierAnneeA.congesImposes,
     ...calendrierAnneeB.congesImposes,
@@ -327,8 +301,16 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
         // laisserait croire à tort.
         return {
           partage: matinCouvert
-            ? { gauche: couleurDemande, droite: "var(--color-dji)", couleurContourGauche: couleurContour }
-            : { gauche: "var(--color-dji)", droite: couleurDemande, couleurContourDroite: couleurContour },
+            ? {
+                gauche: couleurDemande,
+                droite: "var(--color-dji)",
+                couleurContourGauche: couleurContour,
+              }
+            : {
+                gauche: "var(--color-dji)",
+                droite: couleurDemande,
+                couleurContourDroite: couleurContour,
+              },
         };
       }
       return {
@@ -395,10 +377,6 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1 px-1">
-        <SelectCommence mode={modePeriode} onChange={setModePeriode} />
-      </div>
-
       <div className="min-w-0 flex-1">
         <div className="flex flex-col gap-6">
           {anneesNonParametrees.length > 0 && (
@@ -437,13 +415,24 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
               ))}
             </div>
             <div className="flex flex-col gap-4">
-              {/* `hidden sm:block` (22/09/2026, demande explicite de Vincent —
-                  "appliquer ce principe aux éléments similaires de Suivre") :
-                  sous `sm:`, ce panneau s'ouvre en popin (voir plus bas)
-                  plutôt que de s'empiler sous la grille des mois — même
-                  traitement que `DashboardPage.tsx`. */}
+              {/* `hidden xl:block` (22/09/2026, demande explicite de Vincent —
+                  "appliquer ce principe aux éléments similaires de Suivre" ;
+                  seuil corrigé le 24/09/2026, était `sm:block` — désaligné
+                  du `xl:sticky` intégré à `DetailCongePanel`/
+                  `DetailJourCommunPanel` : entre `sm:` et `xl:` le panneau
+                  était visible mais pas sticky, simplement empilé sous la
+                  grille des mois — invisible sans scroller abondamment. Le
+                  popin (voir plus bas) couvre désormais cette zone). `flex-1`
+                  ajouté le 24/09/2026 (4ᵉ cause du bug "panneau sticky qui
+                  sort de l'écran", jamais couverte par l'audit du 23/09 —
+                  voir CONTEXTE.md et `DashboardPage.tsx` pour le détail
+                  complet) : ce wrapper vit dans une colonne `flex flex-col`
+                  (pour empiler panneau+légende), qui ne stretch pas ses
+                  enfants sur l'axe vertical par défaut — sans `flex-1`, il
+                  retombait à la hauteur de son propre contenu, laissant à
+                  `xl:sticky` aucune marge pour "coller". */}
               {demandeSelectionnee && (
-                <div className="hidden sm:block">
+                <div className="hidden xl:block xl:flex-1">
                   <DetailCongePanel
                     key={demandeSelectionnee.id}
                     selection={demandeSelectionnee}
@@ -472,12 +461,14 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
                   />
                 </div>
               )}
-              {/* `hidden sm:block` (23/09/2026, demande explicite de
-                  Vincent) : même traitement que `DetailCongePanel`
+              {/* `hidden xl:block` (23/09/2026, demande explicite de
+                  Vincent, seuil corrigé le 24/09/2026 — voir commentaire
+                  ci-dessus) : même traitement que `DetailCongePanel`
                   ci-dessus, resté oublié sur ce panneau-ci lors du 1er
-                  passage. */}
+                  passage. `flex-1` ajouté le 24/09/2026, voir commentaire
+                  ci-dessus. */}
               {jourCommunSelectionne && (
-                <div className="hidden sm:block">
+                <div className="hidden xl:block xl:flex-1">
                   <DetailJourCommunPanel
                     jour={jourCommunSelectionne}
                     onClose={() => setJourCommunSelectionne(null)}
@@ -492,13 +483,15 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
         </div>
       </div>
 
-      {/* Popin mobile (22/09/2026) — portail vers `document.body`, `sm:hidden`
-          sur le backdrop uniquement : toujours monté, invisible dès `sm:`. */}
+      {/* Popin (22/09/2026) — portail vers `document.body`, `xl:hidden` sur
+          le backdrop uniquement (seuil relevé de `sm:` à `xl:` le
+          24/09/2026, voir commentaire plus haut) : toujours monté, invisible
+          dès `xl:`. */}
       {demandeSelectionnee &&
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 xl:hidden"
             onClick={() => setDemandeSelectionnee(null)}
           >
             <div className="w-full" onClick={(e) => e.stopPropagation()}>
@@ -507,10 +500,14 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
                 selection={demandeSelectionnee}
                 onClose={() => setDemandeSelectionnee(null)}
                 onValider={
-                  estManager ? (commentaire) => valider(demandeSelectionnee.id, commentaire) : undefined
+                  estManager
+                    ? (commentaire) => valider(demandeSelectionnee.id, commentaire)
+                    : undefined
                 }
                 onRefuser={
-                  estManager ? (commentaire) => refuser(demandeSelectionnee.id, commentaire) : undefined
+                  estManager
+                    ? (commentaire) => refuser(demandeSelectionnee.id, commentaire)
+                    : undefined
                 }
                 onRetirer={
                   estManager || estAdmin
@@ -530,12 +527,13 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
           document.body,
         )}
 
-      {/* Popin mobile — jour commun (CPI/DJI/Férié, 23/09/2026). */}
+      {/* Popin — jour commun (CPI/DJI/Férié, 23/09/2026 ; seuil `sm:`→`xl:`
+          le 24/09/2026, voir commentaire plus haut). */}
       {jourCommunSelectionne &&
         typeof document !== "undefined" &&
         createPortal(
           <div
-            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+            className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 xl:hidden"
             onClick={() => setJourCommunSelectionne(null)}
           >
             <div className="w-full" onClick={(e) => e.stopPropagation()}>

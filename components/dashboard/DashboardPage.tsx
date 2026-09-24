@@ -26,7 +26,10 @@ import { ProchainsJoursOffCard } from "@/components/dashboard/ProchainsJoursOffC
 import { PoserDemandeModal } from "@/components/nouvelle-demande/PoserDemandeModal";
 import { SoldeDetailPanel } from "@/components/suivre/SoldeDetailPanel";
 import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
-import { DetailJourCommunPanel, type JourCommunClique } from "@/components/demandes/DetailJourCommunPanel";
+import {
+  DetailJourCommunPanel,
+  type JourCommunClique,
+} from "@/components/demandes/DetailJourCommunPanel";
 import type { Demande } from "@/lib/types";
 
 type CodeSoldeDetail = "CP" | "RTT" | "CPA";
@@ -40,7 +43,6 @@ function ajouterJoursIso(dateIso: string, n: number): string {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-
 
 /** Tous les mois (année + index) couverts par une plage de dates ISO,
  * bornes incluses — remplace l'ancien rolling 12 mois par une plage dont la
@@ -180,9 +182,7 @@ export function DashboardPage() {
   // Pour le moment tu ne remplaces pas les over") : même emplacement colonne
   // 4 que `DetailCongePanel`, lecture seule (non modifiable par le
   // collaborateur), le popover au survol/clic reste déclenché en parallèle.
-  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
-    null,
-  );
+  const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(null);
   // "Commence : Aujourd'hui / Il y a 3 mois" (15/09/2026, demande explicite
   // de Vincent, point 3 du Backlog "Calendrier simplifié") — décale le DÉBUT
   // de la fenêtre glissante de 3 mois en arrière, sans changer sa largeur (9
@@ -275,7 +275,10 @@ export function DashboardPage() {
   // du calendrier, `anneeVisiblePourCommuns` — les fériés restent toujours
   // visibles) — alimente le compteur par typologie (`compterTypologies`) sur
   // la période active.
-  const joursFeriesToutesAnnees = [...calendrierAnneeA.joursFeries, ...calendrierAnneeB.joursFeries];
+  const joursFeriesToutesAnnees = [
+    ...calendrierAnneeA.joursFeries,
+    ...calendrierAnneeB.joursFeries,
+  ];
   const congesImposesVisibles = [
     ...calendrierAnneeA.congesImposes,
     ...calendrierAnneeB.congesImposes,
@@ -428,8 +431,16 @@ export function DashboardPage() {
         // laisserait croire à tort.
         return {
           partage: matinCouvert
-            ? { gauche: couleurDemande, droite: "var(--color-dji)", couleurContourGauche: couleurContour }
-            : { gauche: "var(--color-dji)", droite: couleurDemande, couleurContourDroite: couleurContour },
+            ? {
+                gauche: couleurDemande,
+                droite: "var(--color-dji)",
+                couleurContourGauche: couleurContour,
+              }
+            : {
+                gauche: "var(--color-dji)",
+                droite: couleurDemande,
+                couleurContourDroite: couleurContour,
+              },
         };
       }
       return {
@@ -569,7 +580,6 @@ export function DashboardPage() {
       setJournalFermetureEnCours(false);
     }, DUREE_FONDU_MS);
   }
-
 
   return (
     <div className="flex w-full max-w-md flex-col gap-6 pb-4 md:max-w-none md:pt-0">
@@ -834,9 +844,20 @@ export function DashboardPage() {
                     Vincent — "gérer une exception sur mobile") : sous `sm:`,
                     ce panneau s'ouvre désormais en popin (voir plus bas)
                     plutôt que de s'empiler dans le flux sous la grille des
-                    mois. */}
+                    mois. `flex-1` ajouté le 24/09/2026 (4ᵉ cause du bug
+                    "panneau sticky qui sort de l'écran", jamais couverte par
+                    l'audit du 23/09/2026 — voir CONTEXTE.md) : ce wrapper vit
+                    dans une colonne `flex flex-col` (pour empiler
+                    panneau+légende), qui NE stretch PAS ses enfants sur l'axe
+                    principal (vertical) par défaut — contrairement à la
+                    grille parente, bien étirée par `xl:items-stretch`. Sans
+                    `flex-1`, ce wrapper retombait à la hauteur de son propre
+                    contenu (~215px) au lieu des ~900px de la colonne,
+                    laissant à `xl:sticky` aucune marge pour "coller" — le
+                    panneau restait figé en haut de la grille, invisible dès
+                    qu'on scrollait au-delà. */}
                 {demandeSelectionnee && (
-                  <div className="hidden sm:block">
+                  <div className="hidden sm:block sm:flex-1">
                     <DetailCongePanel
                       key={demandeSelectionnee.id}
                       selection={demandeSelectionnee}
@@ -853,9 +874,10 @@ export function DashboardPage() {
                     Vincent — "les Congés imposés et FE n'ouvrent pas le
                     template de suivi congé en popin sur mobile", même bug
                     que `DetailCongePanel` ci-dessus mais resté sur ce
-                    panneau-ci) : même traitement, popin plus bas. */}
+                    panneau-ci) : même traitement, popin plus bas. `flex-1`
+                    ajouté le 24/09/2026, voir commentaire ci-dessus. */}
                 {jourCommunSelectionne && (
-                  <div className="hidden sm:block">
+                  <div className="hidden sm:block sm:flex-1">
                     <DetailJourCommunPanel
                       jour={jourCommunSelectionne}
                       onClose={() => setJourCommunSelectionne(null)}

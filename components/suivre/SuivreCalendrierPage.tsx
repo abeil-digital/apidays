@@ -1,32 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
+import { SelectPille } from "@/components/ui/SelectPille";
 import { CalendrierCollaborateur } from "@/components/suivre/CalendrierCollaborateur";
 import { CalendrierGlobal } from "@/components/suivre/CalendrierGlobal";
+import { SelectPeriodeAdmin, type ModePeriode } from "@/components/suivre/SelectPeriodeAdmin";
 
 /**
- * "Calendrier" (`/suivre/calendrier`, 24/08/2026, refonte du 28/08/2026 —
- * Backlog "Calendrier des employés : vue globale", priorité Urgente) permet
- * au manager/admin de consulter soit une heatmap globale de l'équipe
- * (`CalendrierGlobal`, vue par défaut), soit le calendrier détaillé d'un
- * collaborateur précis (`CalendrierCollaborateur`, sur sélection explicite —
- * mêmes conventions que `SuivreSoldesPage`/`SuivreDemandesPage`, liste
- * dérivée des utilisateurs actifs, triée alphabétiquement). Pas d'état vide
- * invitant à choisir : la heatmap est toujours affichable, avec ou sans
- * collaborateur sélectionné.
+ * "Calendriers des absences" (`/suivre/calendrier`, 24/08/2026, refonte du
+ * 28/08/2026 — Backlog "Calendrier des employés : vue globale", priorité
+ * Urgente ; titre de page/section renommé le 24/09/2026, demande explicite
+ * de Vincent — "Calendrier" seul prêtait à confusion avec le calendrier
+ * personnel du collaborateur) permet au manager/admin de consulter soit une
+ * heatmap globale de l'équipe (`CalendrierGlobal`, vue par défaut), soit le
+ * calendrier détaillé d'un collaborateur précis (`CalendrierCollaborateur`,
+ * sur sélection explicite — mêmes conventions que
+ * `SuivreSoldesPage`/`SuivreDemandesPage`, liste dérivée des utilisateurs
+ * actifs, triée alphabétiquement). Pas d'état vide invitant à choisir : la
+ * heatmap est toujours affichable, avec ou sans collaborateur sélectionné.
+ * Titre de page statique (avant : dynamique "Calendrier consolidé"/
+ * "Calendrier de {prénom}") — l'information de sélection vit désormais dans
+ * les pills elles-mêmes, pas doublée dans le titre.
  *
- * Sélecteur intégré au titre (29/08/2026, demande explicite) — un simple
- * chevron à côté du `h1` plutôt qu'une pill séparée en dessous : le `<select>`
- * natif reste la seule interaction (accessible, pas de popover custom à
- * gérer), juste rendu invisible et superposé au chevron (même principe que
- * `SelectFiltrePill`). Le titre lui-même reflète la sélection ("Calendrier
- * consolidé" / "Calendrier de {prénom}").
+ * 2 sélecteurs visibles côte à côte sous le titre (24/09/2026, demande
+ * explicite) : "Collaborateur :" (`SelectPille`, remplace le `<select>`
+ * natif rendu invisible/superposé à un simple chevron — retour de Delphine,
+ * pas assez visible/découvrable) et "Commence :" (`SelectPeriodeAdmin`,
+ * remonté ici depuis `CalendrierGlobal`/`CalendrierCollaborateur` pour
+ * cohabiter sur la même ligne — bonus : la période sélectionnée persiste
+ * désormais en changeant de collaborateur, avant elle se réinitialisait à
+ * chaque sélection).
  */
 export function SuivreCalendrierPage() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
   const [collaborateurId, setCollaborateurId] = useState("");
+  const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
 
   const actifs = utilisateurs.filter((u) => u.statut === "actif");
   const collaborateurs = [...actifs]
@@ -36,19 +45,17 @@ export function SuivreCalendrierPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <div className="animate-stagger-in flex items-center gap-1 px-1">
-        <h1 className="text-ink-900 text-2xl font-semibold">
-          {collaborateurSelectionne
-            ? `Calendrier de ${collaborateurSelectionne.prenom} ${collaborateurSelectionne.nom.charAt(0)}.`
-            : "Calendrier consolidé"}
-        </h1>
-        <div className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center">
-          <select
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
+        Calendriers des absences
+      </h1>
+
+      <div className="flex flex-col gap-2">
+        <div className="animate-stagger-in flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1">
+          <SelectPille
             value={collaborateurId}
             onChange={(e) => setCollaborateurId(e.target.value)}
             disabled={loading}
             aria-label="Sélectionner un collaborateur"
-            className="absolute inset-0 cursor-pointer appearance-none opacity-0"
           >
             <option value="">Vue consolidée</option>
             {collaborateurs.map(([id, nom]) => (
@@ -56,25 +63,26 @@ export function SuivreCalendrierPage() {
                 {nom}
               </option>
             ))}
-          </select>
-          <ChevronDown size={20} className="text-slate pointer-events-none" />
+          </SelectPille>
+          <SelectPeriodeAdmin mode={modePeriode} onChange={setModePeriode} />
         </div>
+
+        {error && (
+          <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
+            {error}
+          </div>
+        )}
+
+        {collaborateurSelectionne ? (
+          <CalendrierCollaborateur
+            key={collaborateurSelectionne.id}
+            utilisateurId={collaborateurSelectionne.id}
+            modePeriode={modePeriode}
+          />
+        ) : (
+          !loading && <CalendrierGlobal modePeriode={modePeriode} />
+        )}
       </div>
-
-      {error && (
-        <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
-          {error}
-        </div>
-      )}
-
-      {collaborateurSelectionne ? (
-        <CalendrierCollaborateur
-          key={collaborateurSelectionne.id}
-          utilisateurId={collaborateurSelectionne.id}
-        />
-      ) : (
-        !loading && <CalendrierGlobal />
-      )}
     </div>
   );
 }

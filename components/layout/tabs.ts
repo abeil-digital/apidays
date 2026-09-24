@@ -32,7 +32,7 @@ const PARAMETRER_TABS: NavTab[] = [
 ];
 
 const SUIVRE_TABS: NavTab[] = [
-  { href: "/suivre/calendrier", label: "Calendrier", Icon: CalendarDays },
+  { href: "/suivre/calendrier", label: "Calendriers des absences", Icon: CalendarDays },
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   // Ex-duplication expérimentale (27/08/2026) devenue l'unique écran
   // (28/08/2026, "Suivre les soldes" V1 supprimé). Libellé renommé le

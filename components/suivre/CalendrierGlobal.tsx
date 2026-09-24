@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, X } from "lucide-react";
+import { X } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { formatPeriodePillNumerique, nomJourSemaine, todayISO } from "@/lib/format";
 import { couleurHeatmap } from "@/lib/heatmap";
@@ -15,46 +15,8 @@ import { EmptyRow } from "@/components/ui/EmptyRow";
 import { JourBadge } from "@/components/ui/JourBadge";
 import { classeBordureTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
+import type { ModePeriode } from "@/components/suivre/SelectPeriodeAdmin";
 import type { DemandeEquipe } from "@/lib/types";
-
-type ModePeriode = "aujourdhui" | "il_y_a_3_mois" | "periode_reference" | "annee_civile";
-
-/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois / Période de
- * référence / Année civile" — variante ADMIN de `SelectCommence`
- * (24/09/2026, demande de Delphine — les critères d'affichage côté admin
- * doivent être plus précis qu'une simple fenêtre glissante relative à
- * "aujourd'hui"). Le 3ᵉ mode cale la fenêtre sur la vraie période de
- * référence CP (`periodeReferenceCp`, même calcul que Historique/
- * `SoldeDetailPanel`), le 4ᵉ sur l'année civile en cours (1er janvier → 31
- * décembre, indépendant de la période CP configurée — les deux peuvent
- * diverger, ex. une période CP juin→mai) — plutôt qu'une largeur fixe de 9
- * mois. Seule cette variante expose ces 2 modes, `DashboardPage.tsx` (vue
- * collaborateur) garde son `SelectCommence` à 2 options d'origine, hors
- * scope de cette demande. */
-function SelectCommence({
-  mode,
-  onChange,
-}: {
-  mode: ModePeriode;
-  onChange: (v: ModePeriode) => void;
-}) {
-  return (
-    <div className="relative inline-flex w-fit items-center gap-1.5">
-      <span className="text-ink-500 text-xs">Commence :</span>
-      <select
-        value={mode}
-        onChange={(e) => onChange(e.target.value as ModePeriode)}
-        className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
-      >
-        <option value="aujourdhui">Aujourd&apos;hui</option>
-        <option value="il_y_a_3_mois">Il y a 3 mois</option>
-        <option value="periode_reference">Période de référence</option>
-        <option value="annee_civile">Année civile</option>
-      </select>
-      <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
-    </div>
-  );
-}
 
 function isoDate(annee: number, moisIndex: number, jour: number): string {
   return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
@@ -168,16 +130,10 @@ const SECTIONS_JOURNEE: { cle: SectionJournee; libelle: string }[] = [
  * colonne de droite listant les collaborateurs absents ce jour (typologie de
  * congé) et un bandeau dédié si le jour est férié/CPI/DJI.
  */
-export function CalendrierGlobal() {
+export function CalendrierGlobal({ modePeriode }: { modePeriode: ModePeriode }) {
   const { demandes, loading: loadingDemandes } = useDemandesEquipe();
   const { utilisateurs, loading: loadingUtilisateurs } = useUtilisateursAdmin();
   const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
-  // "Commence : Aujourd'hui / Il y a 3 mois / Période de référence"
-  // (17/09/2026 puis 24/09/2026, demande explicite de Vincent/Delphine) :
-  // les 2 premiers modes reprennent la fenêtre glissante de 9 mois de
-  // `DashboardPage.tsx`/`CalendrierCollaborateur.tsx` (formule reprise à
-  // l'identique) ; le 3ᵉ cale la fenêtre sur la période de référence CP.
-  const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
   // Jour du panneau détail ouvert par défaut au chargement (29/08/2026) —
   // "aujourd'hui" plutôt qu'aucune sélection, cohérent avec `estMisEnAvant`/
   // `estAujourdhui` déjà mis en avant sur la grille dès l'ouverture.
@@ -388,10 +344,6 @@ export function CalendrierGlobal() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="px-1">
-        <SelectCommence mode={modePeriode} onChange={setModePeriode} />
-      </div>
-
       {/* `minmax(0,797px)` plutôt que `max-content` (11/09/2026, bug signalé
       — "les calendriers se compressent, c'est laid" avec seulement 3 mois
       affichés) : les mini-calendriers ci-dessous ont des largeurs en
@@ -556,20 +508,28 @@ export function CalendrierGlobal() {
                 {/* Largeur/position identiques à `DetailCongePanel` (`xl:w-64
                     xl:shrink-0 xl:sticky xl:top-4`) — même gabarit que le
                     panneau de détail d'un congé (28/08/2026, demande
-                    explicite). `hidden sm:flex` (22/09/2026) : sous `sm:`, ce
-                    panneau s'ouvre en popin (voir plus bas) plutôt que de
-                    s'empiler sous la grille des mois. */}
-                <div className="hidden w-full flex-col gap-[3px] sm:flex xl:sticky xl:top-4 xl:w-64 xl:shrink-0">
+                    explicite). `hidden xl:flex` (22/09/2026, seuil corrigé
+                    le 24/09/2026 — était `sm:flex`, désaligné du seuil
+                    `xl:sticky` juste en dessous : entre `sm:` et `xl:` le
+                    panneau était visible mais PAS sticky, simplement empilé
+                    sous une grille de mois haute — invisible sans scroller
+                    abondamment, bug remonté par Delphine en testant "Année
+                    civile"/"Période de référence", qui allongent la grille
+                    à 12 mois. Le popin (voir plus bas) couvre désormais
+                    toute cette zone au lieu de s'arrêter à `sm:`.) */}
+                <div className="hidden w-full flex-col gap-[3px] xl:sticky xl:top-4 xl:flex xl:w-64 xl:shrink-0">
                   {detailJourJsx}
                 </div>
 
-                {/* Popin mobile — portail vers `document.body`, `sm:hidden`
-                    sur le backdrop uniquement : toujours monté, invisible dès
-                    `sm:`. */}
+                {/* Popin — portail vers `document.body`, `xl:hidden` sur le
+                    backdrop uniquement (24/09/2026, seuil relevé de `sm:` à
+                    `xl:` — voir commentaire ci-dessus) : toujours monté,
+                    invisible dès `xl:` (où le panneau sticky prend le
+                    relais). */}
                 {typeof document !== "undefined" &&
                   createPortal(
                     <div
-                      className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 sm:hidden"
+                      className="bg-ink-900/50 fixed inset-0 z-50 flex items-center justify-center overflow-y-auto px-4 py-8 xl:hidden"
                       onClick={() => setDateSelectionnee(null)}
                     >
                       <div

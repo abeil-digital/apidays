@@ -7824,6 +7824,73 @@ congé déjà transmis puisque tout ce qui apparaît sur cet écran l'est par co
 direct : un manager voit "contactez l'administrateur pour modifier ce congé" (comportement inchangé
 pour ce rôle), un admin verrait "Annuler cette demande" à la place.
 
+## "Suivre > Calendriers" — visibilité, critères d'affichage, 4ᵉ cause du bug sticky (24/09/2026)
+
+Retour direct de Delphine en session de test du 23/09/2026 (2 points, voir Backlog) : l'accès au
+calendrier d'un collaborateur n'était pas assez visible/découvrable, et les critères d'affichage
+(fenêtre glissante relative à "aujourd'hui" uniquement) pas assez précis pour un usage admin.
+
+**Visibilité** — `SuivreCalendrierPage.tsx` : le sélecteur "Collaborateur" était un `<select>` natif
+rendu invisible (`opacity-0`) superposé à une simple icône chevron de 20px à côté du titre, sans
+autre affordance (29/08/2026 à l'origine, "même principe que `SelectFiltrePill`" — mais sans le
+libellé qui l'accompagnait). Remplacé par un `SelectPille` (même composant que le reste de l'app)
+avec le libellé retiré ensuite ("On vire le texte collaborateur", demande explicite) — juste la pill
+elle-même, alignée sur la même ligne que "Commence :". Titre de page et de section (nav
+`SideNav`/`BottomNav`, `components/layout/tabs.ts`) renommés **"Calendriers des absences"** (au lieu
+de "Calendrier" seul, ambigu avec "Mon Calendrier" côté collaborateur) — titre de page rendu statique
+(avant : dynamique "Calendrier consolidé"/"Calendrier de {prénom}", l'info de sélection vit
+désormais uniquement dans la pill).
+
+**Critères d'affichage** — sélecteur "Commence :" (dupliqué dans `CalendrierGlobal.tsx` et
+`CalendrierCollaborateur.tsx`, extrait dans un fichier partagé `SelectPeriodeAdmin.tsx` au passage)
+passé de 2 à 4 options : "Aujourd'hui"/"Il y a 3 mois" (fenêtre glissante 9 mois, inchangées) +
+**"Période de référence"** (cale la fenêtre sur `periodeReferenceCp`, déjà utilisé par
+Historique/`SoldeDetailPanel` — période CP réelle du tenant, ex. juin→mai) + **"Année civile"** (1er
+janvier → 31 décembre, indépendant de la période CP configurée — les deux peuvent diverger). L'état
+"Commence :" remonté dans `SuivreCalendrierPage` (partagé entre vue consolidée/individuelle, persiste
+désormais au changement de collaborateur — avant il se réinitialisait). `DashboardPage.tsx` (vue
+collaborateur) volontairement non touché, hors scope de cette demande admin — garde son
+`SelectCommence` à 2 options d'origine.
+
+**Chevron mal positionné** (trouvé en testant "Année civile"/"Période de référence", options plus
+longues) : un `<select>` natif stylé se dimensionne sur son option la plus LONGUE, pas celle
+affichée — avec seulement 2 options de longueur proche l'écart passait inaperçu, mais dès qu'une
+option beaucoup plus longue a été ajoutée, le chevron (collé au bord droit de la boîte) se
+retrouvait loin du texte visible pour une option courte. Corrigé en rendant texte + chevron
+séparément de la vraie interaction (`<select>` invisible superposé, dimensionné sur son propre
+contenu) dans `SelectPeriodeAdmin.tsx`.
+
+**4ᵉ cause du bug "panneau sticky qui sort de l'écran"** (les 3 premières causes documentées le
+23/09/2026 ci-dessus) : signalé par Vincent sur la home (`DashboardPage.tsx`) — cliquer une RTT loin
+dans le calendrier, en desktop large (xl), affichait le détail collé en haut de la grille plutôt
+qu'accroché à l'écran pendant le scroll. Root cause distincte des 3 précédentes : le panneau vit dans
+une colonne `flex flex-col` (pour empiler panneau + légende `CompteurTypologies`) — contrairement à
+une grille CSS, un conteneur flex en colonne ne stretch PAS ses enfants sur l'axe principal (vertical)
+par défaut. Le wrapper `hidden sm:block` (visibilité conditionnelle du panneau) retombait donc à la
+hauteur de son propre contenu (~215px) au lieu de remplir toute la colonne (~900px, elle bien
+stretchée par la grille parente `xl:items-stretch`), ne laissant à `xl:sticky` aucune marge pour
+"coller". Diagnostiqué en inspectant `getBoundingClientRect()`/`getComputedStyle()` en direct dans le
+navigateur (confirmé par un test live : ajouter `flex-1` au wrapper corrige immédiatement le
+`rect.top`). Corrigé sur `DashboardPage.tsx` ET `CalendrierCollaborateur.tsx` (même structure) en
+ajoutant `flex-1` aux wrappers concernés. `CalendrierGlobal.tsx` n'est pas concerné (son panneau
+sticky est un enfant DIRECT de la grille, pas de colonne flex intermédiaire).
+
+**Seuils popin/sticky désalignés** (bug initial signalé, distinct du précédent) : sur
+`CalendrierGlobal.tsx`/`CalendrierCollaborateur.tsx`, le panneau devenait visible dès `sm:` (640px)
+mais n'était sticky qu'à partir de `xl:` (1280px) — le popin mobile s'arrêtant lui aussi à `sm:`,
+laissant une zone morte entre 640px et 1280px où le panneau était simplement empilé en flux normal
+sous une grille de mois haute, donc hors écran sans scroll manuel important (aggravé par les fenêtres
+"Année civile"/"Période de référence", plus hautes que les 9 mois d'origine). Corrigé en relevant le
+seuil du popin de `sm:` à `xl:` sur les deux écrans, pour qu'il couvre exactement la zone où le
+panneau n'est pas encore sticky.
+
+**Espacement** (finitions demandées par Vincent) : sélecteurs "Collaborateur"/"Commence :" sur la même
+ligne (`flex-wrap`) ; espacement titre→contenu recalé sur la convention standard de l'app (`gap-5` au
+niveau du conteneur racine, h1 comme premier enfant direct — même gabarit que
+`SuivreDemandesPage.tsx`/`SuivreSoldesPage2.tsx`/`HistoriquePage.tsx`) ; espacement
+sélecteurs→calendriers resserré séparément via un conteneur imbriqué (`gap-2`), pour ne pas hériter
+du `gap-5` du conteneur racine sur cette paire précise.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
