@@ -8018,6 +8018,18 @@ exister pour lui — contournant complètement l'objectif du flag. `/historique`
 `/mentions-legales` (page neutre, accessible à tout profil). Vérifié en session réelle : les 3 pages
 redirigent bien vers `/suivre/calendrier`, `/mentions-legales` reste accessible sans redirection.
 
+**Titre conditionnel "Accueil Manager"/"Accueil Administrateur"** (même jour, demande explicite de
+Vincent — "en conséquence la page calendrier devient la page d'accueil" pour un profil sans suivi de
+solde) : `SuivreCalendrierPage.tsx` lit désormais `useUtilisateur()` (utilisateur de la session
+courante, pas la liste admin) pour distinguer 2 cas. **Profil `sansSolde`** (pour qui cette page est
+effectivement son accueil, via la redirection `proxy.ts` ci-dessus) : H1 devient "Accueil Manager" ou
+"Accueil Administrateur" selon `role`, avec un H2 "Calendriers des absences" réinséré juste après le
+bloc "Demandes à étudier" pour garder le repère visuel sur le contenu qui suit. **Manager/admin
+normal** visitant cette même page via Suivre > Calendriers (cas très majoritaire) : titre inchangé,
+un seul "Calendriers des absences" en H1, pas de doublon. Vérifié en session réelle dans les deux cas
+(bascule temporaire du flag sur un compte de test) : hiérarchie H1/H2 correcte pour un profil
+`sansSolde`, titre unique inchangé pour un manager normal.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

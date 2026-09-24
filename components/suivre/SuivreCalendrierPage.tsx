@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { SelectPille } from "@/components/ui/SelectPille";
 import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
@@ -40,11 +41,27 @@ import { SelectPeriodeAdmin, type ModePeriode } from "@/components/suivre/Select
  * l'Accueil). Affichée inconditionnellement pour tout manager/admin visitant
  * cette page (déjà réservée à ces rôles par `proxy.ts`), pas seulement pour
  * les profils "sans suivi de solde" — composant autonome, aucune prop.
+ *
+ * Titre conditionnel (24/09/2026, demande explicite — "la page calendrier
+ * devient la page d'accueil" pour un profil sans suivi de solde) : pour CE
+ * profil précis (pas pour un manager/admin normal visitant cette page via
+ * Suivre > Calendriers), le H1 devient "Accueil Manager"/"Accueil
+ * Administrateur" plutôt que "Calendriers des absences" — avec un H2
+ * "Calendriers des absences" réinséré juste après le bloc "Demandes à
+ * étudier", pour ne pas perdre le repère visuel sur le contenu qui suit.
  */
 export function SuivreCalendrierPage() {
+  const { utilisateur: utilisateurCourant } = useUtilisateur();
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
   const [collaborateurId, setCollaborateurId] = useState("");
   const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
+
+  const estSansSolde = Boolean(utilisateurCourant?.sansSolde);
+  const titre = estSansSolde
+    ? utilisateurCourant?.role === "admin"
+      ? "Accueil Administrateur"
+      : "Accueil Manager"
+    : "Calendriers des absences";
 
   // `!u.sansSolde` (24/09/2026) : un manager/admin "sans suivi de solde"
   // n'a pas de calendrier de congés à consulter ici.
@@ -56,13 +73,17 @@ export function SuivreCalendrierPage() {
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
-        Calendriers des absences
-      </h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">{titre}</h1>
 
       <div className="animate-stagger-in px-1">
         <DemandesAEtudierCard />
       </div>
+
+      {estSansSolde && (
+        <h2 className="text-ink-900 animate-stagger-in px-1 text-lg font-semibold">
+          Calendriers des absences
+        </h2>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="animate-stagger-in flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1">
