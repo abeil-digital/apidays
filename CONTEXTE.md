@@ -8037,6 +8037,41 @@ et lui) — interlignage volontairement plus serré après le H2 qu'avant, deman
 Manager` (`vincentmayol+acme-manager@gmail.com`, tenant acme, déjà utilisé comme compte de test tout
 au long de cette session) basculé en `sans_solde = true` de façon définitive à la demande de Vincent.
 
+## Icônes d'écran d'accueil — iOS et Android (24/09/2026)
+
+Le projet n'avait qu'un `app/icon.svg` (favicon) — rien de dédié à "Ajouter à l'écran d'accueil"
+sur mobile. `app/icon.svg` est dessiné pour un fond clair (`cls-2`, la forme principale, est en
+`#001c32` — la même couleur que le bleu nuit de marque) : un premier essai d'icône sur fond marine
+(cohérent avec le header) a donc produit une icône quasi invisible, seul le point jaune ressortait.
+Toutes les icônes ci-dessous utilisent finalement un **fond blanc**, cohérent avec les couleurs du
+SVG source plutôt qu'avec la charte du header.
+
+**iOS** (`app/apple-icon.png`, convention Next.js `apple-icon`) : PNG 180×180 généré depuis
+`app/icon.svg` via `sharp` (svg → resize → composite sur fond blanc), pas de source PNG plus grande
+disponible dans le projet pour repartir d'autre chose. Servi automatiquement par Next.js comme
+`apple-touch-icon`.
+
+**Android** (`app/manifest.ts` + `public/icon-192.png`/`icon-512.png`/`icon-maskable-512.png`) :
+Safari lit `apple-touch-icon` mais Chrome/Android lit le Web App Manifest — absent jusqu'ici, ce qui
+fait qu'"Ajouter à l'écran d'accueil" serait retombé sur une capture d'écran de la page plutôt que le
+logo. `app/manifest.ts` (convention Next.js `MetadataRoute.Manifest`, servi sur
+`/manifest.webmanifest`) déclare 3 icônes : `icon-192`/`icon-512` (`purpose: "any"`, même marge que
+l'icône iOS) + `icon-maskable-512` (`purpose: "maskable"`, marge de sécurité plus large — ~28% de
+chaque côté au lieu de ~16% — pour rester lisible une fois recadrée en cercle/squircle par le
+launcher Android). `theme_color`/`background_color` repris de `--color-brand-primary` (`#001e32`,
+`app/globals.css`) et blanc.
+
+**Bug trouvé et corrigé en vérifiant** : le matcher de `proxy.ts` (routes publiques sans session)
+excluait déjà `favicon.ico`/`icon.svg`/les images statiques par extension, mais pas
+`manifest.webmanifest` — un visiteur non connecté sur `/connexion` (le moment où Android proposerait
+justement "Ajouter à l'écran d'accueil") se le voyait rediriger vers `/connexion` en boucle. Ajouté à
+l'exclusion du matcher, même pattern que le bug équivalent déjà corrigé le 07/09/2026 pour le logo.
+
+Vérifié en session réelle (navigateur intégré, pas de build) : `/manifest.webmanifest` accessible
+sans session, `<link rel="manifest">` bien injecté en tête de page, les 4 PNG (apple-icon + 3
+manifest) s'affichent correctement (logo marine + point jaune lisible sur fond blanc, marge de
+sécurité "maskable" visuellement correcte).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -201,7 +201,10 @@ export const config = {
   // (07/09/2026, corrige un bug latent — le logo sur la page de connexion
   // était redirigé vers /connexion comme n'importe quelle route protégée,
   // faute d'être authentifié) plutôt que de lister chaque fichier un par un.
+  // `manifest.webmanifest` (24/09/2026) : même bug — un visiteur non connecté
+  // sur /connexion doit pouvoir déclencher "Ajouter à l'écran d'accueil"
+  // (Android), qui lit ce fichier avant toute authentification.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpe?g|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|.*\\.(?:svg|png|jpe?g|gif|webp|ico)$).*)",
   ],
 };
