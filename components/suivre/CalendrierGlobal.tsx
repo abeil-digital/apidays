@@ -6,8 +6,10 @@ import { ChevronDown, X } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { formatPeriodePillNumerique, nomJourSemaine, todayISO } from "@/lib/format";
 import { couleurHeatmap } from "@/lib/heatmap";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
+import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { EmptyRow } from "@/components/ui/EmptyRow";
 import { JourBadge } from "@/components/ui/JourBadge";
@@ -15,20 +17,39 @@ import { classeBordureTypeBadge, type TypeBadgeCode } from "@/components/demande
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import type { DemandeEquipe } from "@/lib/types";
 
-/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois" — même composant que
- * `SelectCommence` de `DashboardPage.tsx`/`CalendrierCollaborateur.tsx`
- * (duplication assumée, même convention). */
-function SelectCommence({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+type ModePeriode = "aujourdhui" | "il_y_a_3_mois" | "periode_reference" | "annee_civile";
+
+/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois / Période de
+ * référence / Année civile" — variante ADMIN de `SelectCommence`
+ * (24/09/2026, demande de Delphine — les critères d'affichage côté admin
+ * doivent être plus précis qu'une simple fenêtre glissante relative à
+ * "aujourd'hui"). Le 3ᵉ mode cale la fenêtre sur la vraie période de
+ * référence CP (`periodeReferenceCp`, même calcul que Historique/
+ * `SoldeDetailPanel`), le 4ᵉ sur l'année civile en cours (1er janvier → 31
+ * décembre, indépendant de la période CP configurée — les deux peuvent
+ * diverger, ex. une période CP juin→mai) — plutôt qu'une largeur fixe de 9
+ * mois. Seule cette variante expose ces 2 modes, `DashboardPage.tsx` (vue
+ * collaborateur) garde son `SelectCommence` à 2 options d'origine, hors
+ * scope de cette demande. */
+function SelectCommence({
+  mode,
+  onChange,
+}: {
+  mode: ModePeriode;
+  onChange: (v: ModePeriode) => void;
+}) {
   return (
     <div className="relative inline-flex w-fit items-center gap-1.5">
       <span className="text-ink-500 text-xs">Commence :</span>
       <select
-        value={actif ? "il_y_a_3_mois" : "aujourdhui"}
-        onChange={(e) => onChange(e.target.value === "il_y_a_3_mois")}
+        value={mode}
+        onChange={(e) => onChange(e.target.value as ModePeriode)}
         className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
       >
         <option value="aujourdhui">Aujourd&apos;hui</option>
         <option value="il_y_a_3_mois">Il y a 3 mois</option>
+        <option value="periode_reference">Période de référence</option>
+        <option value="annee_civile">Année civile</option>
       </select>
       <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
     </div>
@@ -150,13 +171,13 @@ const SECTIONS_JOURNEE: { cle: SectionJournee; libelle: string }[] = [
 export function CalendrierGlobal() {
   const { demandes, loading: loadingDemandes } = useDemandesEquipe();
   const { utilisateurs, loading: loadingUtilisateurs } = useUtilisateursAdmin();
-  // "Commence : Aujourd'hui / Il y a 3 mois" (17/09/2026, demande explicite
-  // de Vincent — "appliquer le même système d'affichage que les calendriers
-  // collaborateurs plutôt que les anciens filtres") : remplace les 3 onglets
-  // En cours/Période CP/Année suivante par la même fenêtre glissante de 9
-  // mois que `DashboardPage.tsx`/`CalendrierCollaborateur.tsx`, formule
-  // reprise à l'identique (voir le commentaire détaillé là-bas).
-  const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
+  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
+  // "Commence : Aujourd'hui / Il y a 3 mois / Période de référence"
+  // (17/09/2026 puis 24/09/2026, demande explicite de Vincent/Delphine) :
+  // les 2 premiers modes reprennent la fenêtre glissante de 9 mois de
+  // `DashboardPage.tsx`/`CalendrierCollaborateur.tsx` (formule reprise à
+  // l'identique) ; le 3ᵉ cale la fenêtre sur la période de référence CP.
+  const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
   // Jour du panneau détail ouvert par défaut au chargement (29/08/2026) —
   // "aujourd'hui" plutôt qu'aucune sélection, cohérent avec `estMisEnAvant`/
   // `estAujourdhui` déjà mis en avant sur la grille dès l'ouverture.
@@ -175,6 +196,7 @@ export function CalendrierGlobal() {
   const loading =
     loadingDemandes ||
     loadingUtilisateurs ||
+    loadingRegles ||
     calendrierAnneePrecedente.loading ||
     calendrierAnneeA.loading ||
     calendrierAnneeB.loading;
@@ -191,8 +213,10 @@ export function CalendrierGlobal() {
   // Fenêtre glissante de 9 mois (17/09/2026, formule identique à
   // `DashboardPage.tsx`) — `moisIndexDebutBrut` peut être négatif (ex. mois
   // en cours = janvier, décalage -3 → octobre de l'année PRÉCÉDENTE), le
-  // modulo est reconstruit à la main pour rester positif.
-  const decalageMoisDebut = commenceIlYA3Mois ? -3 : 0;
+  // modulo est reconstruit à la main pour rester positif. Ignorée si le mode
+  // "Période de référence" est actif (24/09/2026, voir `SelectCommence`
+  // ci-dessus).
+  const decalageMoisDebut = modePeriode === "il_y_a_3_mois" ? -3 : 0;
   const moisIndexDebutBrut = getAujourdhui().getMonth() + decalageMoisDebut;
   const moisIndexDebut = ((moisIndexDebutBrut % 12) + 12) % 12;
   const anneeDebutFenetre = anneeActuelle + Math.floor(moisIndexDebutBrut / 12);
@@ -201,7 +225,13 @@ export function CalendrierGlobal() {
   const moisIndexFin = ((moisIndexFinBrut % 12) + 12) % 12;
   const anneeFinFenetre = anneeActuelle + Math.floor(moisIndexFinBrut / 12);
   const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
-  const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const rangeActive =
+    modePeriode === "periode_reference"
+      ? periodeReferenceCp(regleCp, getAujourdhui())
+      : modePeriode === "annee_civile"
+        ? { debut: isoDate(anneeActuelle, 0, 1), fin: isoDate(anneeActuelle, 11, 31) }
+        : { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function occupantsDuJour(iso: string): DemandeEquipe[] {
@@ -359,7 +389,7 @@ export function CalendrierGlobal() {
   return (
     <div className="flex flex-col gap-6">
       <div className="px-1">
-        <SelectCommence actif={commenceIlYA3Mois} onChange={setCommenceIlYA3Mois} />
+        <SelectCommence mode={modePeriode} onChange={setModePeriode} />
       </div>
 
       {/* `minmax(0,797px)` plutôt que `max-content` (11/09/2026, bug signalé

@@ -5,8 +5,10 @@ import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { todayISO } from "@/lib/format";
+import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
+import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { classeFondTypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
@@ -74,19 +76,32 @@ const VAR_COULEUR_TYPE: Record<TypeBadgeCode, string> = {
   FERIE: "--color-ferie",
 };
 
-/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois" — même composant que
- * `SelectCommence` de `DashboardPage.tsx` (duplication assumée). */
-function SelectCommence({ actif, onChange }: { actif: boolean; onChange: (v: boolean) => void }) {
+type ModePeriode = "aujourdhui" | "il_y_a_3_mois" | "periode_reference" | "annee_civile";
+
+/** Sélecteur "Commence : Aujourd'hui / Il y a 3 mois / Période de
+ * référence / Année civile" — variante ADMIN de `SelectCommence`
+ * (24/09/2026, demande de Delphine — voir même commentaire détaillé dans
+ * `CalendrierGlobal.tsx`). `DashboardPage.tsx` (vue collaborateur) garde son
+ * `SelectCommence` à 2 options d'origine, hors scope de cette demande. */
+function SelectCommence({
+  mode,
+  onChange,
+}: {
+  mode: ModePeriode;
+  onChange: (v: ModePeriode) => void;
+}) {
   return (
     <div className="relative inline-flex w-fit items-center gap-1.5">
       <span className="text-ink-500 text-xs">Commence :</span>
       <select
-        value={actif ? "il_y_a_3_mois" : "aujourdhui"}
-        onChange={(e) => onChange(e.target.value === "il_y_a_3_mois")}
+        value={mode}
+        onChange={(e) => onChange(e.target.value as ModePeriode)}
         className="text-mint relative appearance-none pr-4 text-xs font-normal underline underline-offset-2 outline-none"
       >
         <option value="aujourdhui">Aujourd&apos;hui</option>
         <option value="il_y_a_3_mois">Il y a 3 mois</option>
+        <option value="periode_reference">Période de référence</option>
+        <option value="annee_civile">Année civile</option>
       </select>
       <ChevronDown size={11} className="text-mint pointer-events-none absolute right-0" />
     </div>
@@ -137,7 +152,8 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   const [jourCommunSelectionne, setJourCommunSelectionne] = useState<JourCommunClique | null>(
     null,
   );
-  const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
+  const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
+  const { reglesAcquisition, loading: loadingRegles } = useReglesConges();
   // Statut de transmission paie par demande (15/09/2026, demande explicite de
   // Vincent — "il faut le faire", même mécanisme que `SuivreDemandesPage.tsx`)
   // : seules les demandes validées/annulées peuvent avoir des lignes
@@ -173,7 +189,10 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   const calendrierAnneeB = useCalendrier(anneeSuivante);
 
   const loading =
-    calendrierAnneePrecedente.loading || calendrierAnneeA.loading || calendrierAnneeB.loading;
+    loadingRegles ||
+    calendrierAnneePrecedente.loading ||
+    calendrierAnneeA.loading ||
+    calendrierAnneeB.loading;
 
   if (loading) {
     return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
@@ -182,7 +201,9 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   const todayIso = todayISO();
   // Fenêtre glissante de 9 mois, décalable de 3 mois en arrière — voir
   // DashboardPage.tsx pour le détail du calcul (duplication assumée).
-  const decalageMoisDebut = commenceIlYA3Mois ? -3 : 0;
+  // Ignorée si le mode "Période de référence" est actif (24/09/2026, voir
+  // `SelectCommence` ci-dessus).
+  const decalageMoisDebut = modePeriode === "il_y_a_3_mois" ? -3 : 0;
   const moisIndexDebutBrut = getAujourdhui().getMonth() + decalageMoisDebut;
   const moisIndexDebut = ((moisIndexDebutBrut % 12) + 12) % 12;
   const anneeDebutFenetre = anneeActuelle + Math.floor(moisIndexDebutBrut / 12);
@@ -191,7 +212,13 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   const moisIndexFin = ((moisIndexFinBrut % 12) + 12) % 12;
   const anneeFinFenetre = anneeActuelle + Math.floor(moisIndexFinBrut / 12);
   const finFenetre9Mois = ajouterJoursIso(isoDate(anneeFinFenetre, moisIndexFin + 1, 1), -1);
-  const rangeActive = { debut: debutMoisActuel, fin: finFenetre9Mois };
+  const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+  const rangeActive =
+    modePeriode === "periode_reference"
+      ? periodeReferenceCp(regleCp, getAujourdhui())
+      : modePeriode === "annee_civile"
+        ? { debut: isoDate(anneeActuelle, 0, 1), fin: isoDate(anneeActuelle, 11, 31) }
+        : { debut: debutMoisActuel, fin: finFenetre9Mois };
   const moisActifs = moisEntre(rangeActive.debut, rangeActive.fin);
 
   function calendrierPourAnnee(annee: number) {
@@ -369,7 +396,7 @@ export function CalendrierCollaborateur({ utilisateurId }: { utilisateurId: stri
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1 px-1">
-        <SelectCommence actif={commenceIlYA3Mois} onChange={setCommenceIlYA3Mois} />
+        <SelectCommence mode={modePeriode} onChange={setModePeriode} />
       </div>
 
       <div className="min-w-0 flex-1">
