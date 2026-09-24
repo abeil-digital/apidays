@@ -7988,6 +7988,17 @@ désormais. **Badge "Sans solde" ajouté aussi sur la fiche elle-même** (`carte
 `UtilisateurFichePage.tsx`) à la suite de cette bascule — jusque-là visible seulement dans la liste
 Paramétrer > Utilisateurs, pas sur la fiche détaillée d'un profil déjà créé.
 
+**Entrée "Poser" masquée de la nav niveau 1** (même jour, demande explicite de Vincent) : un
+manager/admin `sans_solde` était déjà redirigé de `/` vers `/suivre/calendrier` (`proxy.ts`), mais
+l'onglet "Poser" restait visible dans le header (`HeaderBar.tsx`/`niveau1.ts`), pointant vers une
+page qu'il ne devait jamais voir. `getNiveau1Items(role, sansSolde)` prend désormais un 2ᵉ paramètre
+et omet l'entrée "poser" quand `sansSolde && (role === "manager" || role === "admin")`. Le flag
+`sansSolde` a dû être propagé jusqu'à `useUtilisateur()`/`Utilisateur` (type distinct
+d'`UtilisateurAdmin`, utilisé pour la session courante) — `lib/data/utilisateur.repository.ts`
+sélectionne désormais `sans_solde` en plus de `role`. Vérifié en session réelle (mot de passe test
+posé via l'API admin sur un compte manager existant, basculé temporairement en `sans_solde`) : nav
+réduite à "Suivre | Paramétrer", flag et mot de passe de test retirés après vérification.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

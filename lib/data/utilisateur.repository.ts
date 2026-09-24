@@ -31,7 +31,7 @@ export async function fetchUtilisateurCourant(): Promise<Utilisateur> {
 
   const { data, error } = await supabase
     .from("utilisateurs")
-    .select("id, prenom, nom, role")
+    .select("id, prenom, nom, role, sans_solde")
     .eq("auth_id", authUser.id)
     .single();
 
@@ -46,5 +46,6 @@ export async function fetchUtilisateurCourant(): Promise<Utilisateur> {
     poste: POSTE_PAR_ROLE[data.role] ?? data.role,
     initiales: `${data.prenom.charAt(0)}${data.nom.charAt(0)}`.toUpperCase(),
     role: data.role,
+    sansSolde: data.sans_solde,
   };
 }

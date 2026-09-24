@@ -196,6 +196,9 @@ export interface Utilisateur {
   poste: string;
   initiales: string;
   role: RoleUtilisateur;
+  /** Voir `UtilisateurAdmin.sansSolde` (24/09/2026) — utilisé pour masquer
+   * l'entrée "Poser" de la navigation niveau 1 (`niveau1.ts`). */
+  sansSolde: boolean;
 }
 
 // --- Espace Paramétrer > Gestion des utilisateurs ---

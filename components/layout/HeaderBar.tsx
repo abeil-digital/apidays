@@ -19,7 +19,15 @@ import { logout } from "@/app/connexion/actions";
  * que `SnippetConge`/`DatePicker`) — le header a `overflow-x-auto`, un menu
  * `absolute` risquerait d'y être rogné.
  */
-function MenuProfil({ prenom, nom, initiales }: { prenom: string; nom: string; initiales: string }) {
+function MenuProfil({
+  prenom,
+  nom,
+  initiales,
+}: {
+  prenom: string;
+  nom: string;
+  initiales: string;
+}) {
   const [ouvert, setOuvert] = useState(false);
   const declencheurRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -66,7 +74,11 @@ function MenuProfil({ prenom, nom, initiales }: { prenom: string; nom: string; i
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: "fixed", top: ancre.bottom + 8, right: window.innerWidth - ancre.right }}
+            style={{
+              position: "fixed",
+              top: ancre.bottom + 8,
+              right: window.innerWidth - ancre.right,
+            }}
             className="bg-surface-card border-ink-300/60 z-50 w-48 rounded-xl border py-1.5 shadow-lg"
           >
             <form action={logout}>
@@ -110,7 +122,7 @@ interface HeaderBarProps {
 export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
   const { utilisateur } = useUtilisateur();
   const pathname = usePathname();
-  const niveau1Items = getNiveau1Items(utilisateur?.role);
+  const niveau1Items = getNiveau1Items(utilisateur?.role, utilisateur?.sansSolde);
 
   return (
     <header className="bg-brand-primary relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
