@@ -35,7 +35,11 @@ export function CollaborateursEnCongeCard() {
   const { utilisateurs } = useUtilisateursAdmin();
 
   const aujourdhui = todayISO();
-  const actifsIds = new Set(utilisateurs.filter((u) => u.statut === "actif").map((u) => u.id));
+  // `!u.sansSolde` (24/09/2026) : exclut aussi `occupants` plus bas, qui
+  // réutilise `actifsIds` — voir CalendrierGlobal.tsx pour le même correctif.
+  const actifsIds = new Set(
+    utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde).map((u) => u.id),
+  );
   const totalActifs = actifsIds.size;
 
   const vues = new Set<string>();
@@ -53,7 +57,8 @@ export function CollaborateursEnCongeCard() {
     0,
   );
   const ratio = totalActifs === 0 ? 0 : poidsTotal / totalActifs;
-  const couleur = ratio === 0 ? "#ffffff" : couleurHeatmap(Math.min(100, Math.max(15, Math.round(ratio * 100))));
+  const couleur =
+    ratio === 0 ? "#ffffff" : couleurHeatmap(Math.min(100, Math.max(15, Math.round(ratio * 100))));
   const texteSombre = ratio === 0 || Math.round(ratio * 100) < 55;
 
   return (

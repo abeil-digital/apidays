@@ -211,7 +211,9 @@ export function SuivreSoldesPage2() {
   const cardsRef = useRef<HTMLDivElement>(null);
   const [panelTop, setPanelTop] = useState(0);
 
-  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+  // `!u.sansSolde` (24/09/2026) : un manager/admin "sans suivi de solde"
+  // n'a pas de congés à suivre ici — voir Backlog/CONTEXTE.md.
+  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde);
 
   // Extrait en fonction nommée (28/08/2026, "Annuler cette demande" pour
   // admin) — relancée après une annulation, pas seulement au montage.

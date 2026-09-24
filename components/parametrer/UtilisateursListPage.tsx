@@ -222,7 +222,17 @@ export function UtilisateursListPage() {
                         {u.natureContrat ? NATURE_CONTRAT_LABEL[u.natureContrat] : "Non précisé"} ·{" "}
                         {formatTauxActivite(u.tauxActivite)}
                       </td>
-                      <td className="px-4 py-3">{ROLE_LABEL[u.role]}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {ROLE_LABEL[u.role]}
+                          {/* Badge "Sans solde" (24/09/2026) — évite la
+                          confusion pour l'admin : un manager/admin sans ce
+                          badge mais sans solde visible pourrait sembler avoir
+                          un bug plutôt qu'une exclusion volontaire décidée à
+                          la création. */}
+                          {u.sansSolde && <Badge tone="neutral">Sans solde</Badge>}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <Badge tone={u.statut === "actif" ? "success" : "neutral"}>
                           {u.statut === "actif" ? "Actif" : "Archivé"}

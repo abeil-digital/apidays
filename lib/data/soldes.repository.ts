@@ -413,11 +413,14 @@ export async function geleAcquisitionsPourExport(
 ): Promise<void> {
   const [reglesAcquisition, { data: utilisateurs, error }] = await Promise.all([
     fetchReglesAcquisition(),
+    // `.eq("sans_solde", false)` (24/09/2026) : rien à figer pour un
+    // manager/admin "sans suivi de solde", pas de comptage CP/RTT/CPA.
     supabase
       .from("utilisateurs")
       .select("id, taux_activite, date_fin_contrat")
       .eq("entreprise_id", entrepriseId)
-      .eq("statut", "actif"),
+      .eq("statut", "actif")
+      .eq("sans_solde", false),
   ]);
   if (error) throw new Error("Impossible de figer l'acquisition du mois.");
 

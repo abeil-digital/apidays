@@ -28,7 +28,6 @@ import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
  * deux périodes de paie, voir `genererExportPaie`).
  */
 
-
 interface LigneExportPaieRow {
   jours_inclus: number;
 }
@@ -263,10 +262,7 @@ export async function calculerJoursATransmettreMaintenant(
  * bouton "Transmettre" doit être désactivé et pour alimenter l'onglet
  * "Vérifier les fiches de paie" (qui a besoin de l'id de l'export).
  */
-export async function fetchExportPaie(periode: {
-  debut: string;
-  fin: string;
-}): Promise<{
+export async function fetchExportPaie(periode: { debut: string; fin: string }): Promise<{
   id: string;
   genereLe: string;
   prisEnCompte: boolean;
@@ -533,7 +529,9 @@ export async function fetchCheckFichesPaie(
   const prisEnCompteUtilisateur = Array.isArray(exportPaie.pris_en_compte_utilisateur)
     ? exportPaie.pris_en_compte_utilisateur[0]
     : exportPaie.pris_en_compte_utilisateur;
-  const prisEnComptePar = exportPaie.pris_en_compte ? (prisEnCompteUtilisateur?.prenom ?? "") : null;
+  const prisEnComptePar = exportPaie.pris_en_compte
+    ? (prisEnCompteUtilisateur?.prenom ?? "")
+    : null;
   const prisEnCompteLe = exportPaie.pris_en_compte ? exportPaie.pris_en_compte_le : null;
 
   const { data, error } = await supabase
@@ -830,7 +828,10 @@ export async function fetchComparaisonSoldes(
       ? fetchMouvementsExport(exportId)
       : Promise.resolve<Record<string, { cp: number; rtt: number; cpa: number }>>({}),
   ]);
-  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+  // `!u.sansSolde` (24/09/2026) : évite d'appeler `fetchSoldes` ci-dessous
+  // pour un manager/admin "sans suivi de solde" — son solde serait de toute
+  // façon dénué de sens (aucune règle d'acquisition pertinente pour lui).
+  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde);
 
   return Promise.all(
     actifs.map(async (u) => {
@@ -843,9 +844,7 @@ export async function fetchComparaisonSoldes(
       // (`fetchSoldes(...).valeur` l'inclut déjà, voir doc ci-dessus) — reste
       // affiché tel quel côté détail ("effet de CET export"), seul
       // `moisEnCours` change de formule selon l'état de validation.
-      const ajoutApercu = exportPrisEnCompte
-        ? { cp: 0, rtt: 0, cpa: 0 }
-        : mouvements;
+      const ajoutApercu = exportPrisEnCompte ? { cp: 0, rtt: 0, cpa: 0 } : mouvements;
 
       // `moisEnCours` est un aperçu post-export (14/09/2026, "oui option 1") :
       // tant que cet export n'est pas encore validé (`pris_en_compte`),

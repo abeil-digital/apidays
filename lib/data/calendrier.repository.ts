@@ -384,7 +384,12 @@ async function genererDemandesCongeImpose(
   }
 
   const idsDejaGeneres = new Set((dejaGenerees ?? []).map((d) => d.utilisateur_id));
-  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !idsDejaGeneres.has(u.id));
+  // `!u.sansSolde` (24/09/2026, décidé avec Vincent) : un congé imposé
+  // génère une demande décomptée d'un solde — un manager/admin "sans suivi
+  // de solde" en est exclu, pas de demande orpheline sans solde à décompter.
+  const actifs = utilisateurs.filter(
+    (u) => u.statut === "actif" && !u.sansSolde && !idsDejaGeneres.has(u.id),
+  );
   if (actifs.length === 0) return;
 
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");

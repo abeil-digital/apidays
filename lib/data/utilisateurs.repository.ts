@@ -35,6 +35,7 @@ interface UtilisateurRow {
   taux_activite: number | string;
   anciennete_date_reference: string | null;
   role: UtilisateurAdmin["role"];
+  sans_solde: boolean;
   statut: UtilisateurAdmin["statut"];
   date_archivage: string | null;
   date_fin_contrat: string | null;
@@ -57,7 +58,7 @@ interface UtilisateurRow {
  * (`fetchNomUtilisateur`), uniquement là où affiché (fiche détail).
  */
 const SELECT_UTILISATEUR =
-  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, statut, date_archivage, date_fin_contrat, cree_par_id, created_at, auth_id";
+  "id, prenom, nom, email, date_entree, nature_contrat, taux_activite, anciennete_date_reference, role, sans_solde, statut, date_archivage, date_fin_contrat, cree_par_id, created_at, auth_id";
 
 function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
   return {
@@ -70,6 +71,7 @@ function mapUtilisateurDepuisDb(row: UtilisateurRow): UtilisateurAdmin {
     tauxActivite: Number(row.taux_activite),
     ancienneteDateReference: row.anciennete_date_reference,
     role: row.role,
+    sansSolde: row.sans_solde,
     statut: row.statut,
     dateArchivage: row.date_archivage,
     dateFinContrat: row.date_fin_contrat,
@@ -111,6 +113,7 @@ function paramsDepuisInput(input: UtilisateurAdminInput) {
     taux_activite: input.tauxActivite,
     anciennete_date_reference: input.ancienneteDateReference || null,
     role: input.role,
+    sans_solde: input.sansSolde,
   };
 }
 

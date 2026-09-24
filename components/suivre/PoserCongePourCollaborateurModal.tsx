@@ -136,7 +136,9 @@ export function PoserCongePourCollaborateurModal({
   const regleCp = reglesAcquisition.find((r) => r.typeAbsence === "CP");
   const [collaborateurId, setCollaborateurId] = useState("");
 
-  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+  // `!u.sansSolde` (24/09/2026) : pas de solde à décompter pour un
+  // manager/admin "sans suivi de solde", exclu du sélecteur.
+  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde);
   const collaborateurs = [...actifs]
     .map((u) => [u.id, `${u.prenom} ${u.nom}`] as const)
     .sort((a, b) => a[1].localeCompare(b[1]));
@@ -168,7 +170,9 @@ export function PoserCongePourCollaborateurModal({
   function jourDejaOccupe(iso: string): boolean {
     return (
       congesImposes.some((c) => iso >= c.debut && iso <= c.fin) ||
-      demandes.some((d) => d.statut !== "refusé" && d.statut !== "annulé" && iso >= d.debut && iso <= d.fin)
+      demandes.some(
+        (d) => d.statut !== "refusé" && d.statut !== "annulé" && iso >= d.debut && iso <= d.fin,
+      )
     );
   }
 
@@ -275,9 +279,7 @@ export function PoserCongePourCollaborateurModal({
   // deux demandes distinctes à la pose (pas de blocage de date ici, cette
   // popin n'en a jamais eu, mais le même trou de répartition existe si on
   // laisse une seule demande traverser la bascule).
-  const periodeCpDebut = debut
-    ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`))
-    : null;
+  const periodeCpDebut = debut ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`)) : null;
   const periodeCpFin = finPourCalcul
     ? periodeReferenceCp(regleCp, new Date(`${finPourCalcul}T00:00:00Z`))
     : periodeCpDebut;

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useUtilisateursAdmin } from "@/hooks/useUtilisateursAdmin";
 import { SelectPille } from "@/components/ui/SelectPille";
+import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
 import { CalendrierCollaborateur } from "@/components/suivre/CalendrierCollaborateur";
 import { CalendrierGlobal } from "@/components/suivre/CalendrierGlobal";
 import { SelectPeriodeAdmin, type ModePeriode } from "@/components/suivre/SelectPeriodeAdmin";
@@ -31,13 +32,23 @@ import { SelectPeriodeAdmin, type ModePeriode } from "@/components/suivre/Select
  * cohabiter sur la même ligne — bonus : la période sélectionnée persiste
  * désormais en changeant de collaborateur, avant elle se réinitialisait à
  * chaque sélection).
+ *
+ * `DemandesAEtudierCard` intégrée sous le titre (24/09/2026, règle métier
+ * "profils manager/admin sans suivi de solde" — ces profils n'ont pas accès
+ * à "Poser"/Accueil, voir `proxy.ts`, et atterrissent ici : ce bloc leur
+ * donne un accès direct aux demandes en attente sans repasser par
+ * l'Accueil). Affichée inconditionnellement pour tout manager/admin visitant
+ * cette page (déjà réservée à ces rôles par `proxy.ts`), pas seulement pour
+ * les profils "sans suivi de solde" — composant autonome, aucune prop.
  */
 export function SuivreCalendrierPage() {
   const { utilisateurs, loading, error } = useUtilisateursAdmin();
   const [collaborateurId, setCollaborateurId] = useState("");
   const [modePeriode, setModePeriode] = useState<ModePeriode>("aujourdhui");
 
-  const actifs = utilisateurs.filter((u) => u.statut === "actif");
+  // `!u.sansSolde` (24/09/2026) : un manager/admin "sans suivi de solde"
+  // n'a pas de calendrier de congés à consulter ici.
+  const actifs = utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde);
   const collaborateurs = [...actifs]
     .map((u) => [u.id, `${u.prenom} ${u.nom}`] as const)
     .sort((a, b) => a[1].localeCompare(b[1]));
@@ -48,6 +59,10 @@ export function SuivreCalendrierPage() {
       <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
         Calendriers des absences
       </h1>
+
+      <div className="animate-stagger-in px-1">
+        <DemandesAEtudierCard />
+      </div>
 
       <div className="flex flex-col gap-2">
         <div className="animate-stagger-in flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1">

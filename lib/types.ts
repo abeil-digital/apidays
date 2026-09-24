@@ -214,6 +214,10 @@ export interface UtilisateurAdmin {
   tauxActivite: number; // pourcentage, 100 = temps plein (ex. 80, 50, 33.33)
   ancienneteDateReference: string | null; // date ISO, si différente de dateEntree
   role: RoleUtilisateur;
+  /** Profil manager/admin exclu de tout comptage de solde (CP/RTT/CPA), des
+   * listes de suivi/effectifs et des exports paie (24/09/2026) — décidé une
+   * fois pour toutes à la création, jamais éditable ensuite en V1. */
+  sansSolde: boolean;
   statut: StatutUtilisateur;
   dateArchivage: string | null; // date ISO, renseignée si statut = "archive"
   /** Date de fin de contrat définie via "Fin de contrat" sur la fiche
@@ -242,6 +246,7 @@ export interface UtilisateurAdminInput {
   tauxActivite: number;
   ancienneteDateReference: string | null;
   role: RoleUtilisateur;
+  sansSolde: boolean;
 }
 
 // --- Historique "durée de travail" / "nature du contrat" (21/08/2026) ---

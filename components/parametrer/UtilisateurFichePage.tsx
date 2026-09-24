@@ -61,6 +61,7 @@ const CHAMPS_VIDES: UtilisateurAdminInput = {
   tauxActivite: 100,
   ancienneteDateReference: null,
   role: "salarie",
+  sansSolde: false,
 };
 
 const PRESETS_DUREE: { value: string; label: string }[] = [
@@ -1164,9 +1165,12 @@ function Formulaire({
     // accidentelle à l'Entrée) : la date de référence ET les 3 champs
     // CP/RTT/CPA doivent être renseignés — `0` est une valeur valide, seule
     // une chaîne VIDE (`.trim() === ""`) est rejetée, pour ne pas confondre
-    // "non rempli" et "rempli à zéro".
+    // "non rempli" et "rempli à zéro". Section masquée et validation
+    // neutralisée pour un profil "sans suivi de solde" (24/09/2026) — pas de
+    // sens de demander un solde initial à quelqu'un qui n'en a pas.
     if (
       !id &&
+      !champs.sansSolde &&
       (!soldeInitDate ||
         soldeInitCp.trim() === "" ||
         soldeInitRtt.trim() === "" ||
@@ -1326,7 +1330,19 @@ function Formulaire({
       <SelectPille
         id="role"
         value={champs.role}
-        onChange={(e) => setChamps({ ...champs, role: e.target.value as RoleUtilisateur })}
+        onChange={(e) => {
+          const role = e.target.value as RoleUtilisateur;
+          setChamps({
+            ...champs,
+            role,
+            // Reset défensif (24/09/2026) : "sans suivi de solde" n'a de sens
+            // que pour manager/admin — repasser à Collaborateur·rice décoche
+            // l'option plutôt que de laisser un salarié incohérent avec la
+            // règle produit (l'option n'est proposée qu'à la création pour
+            // manager/admin, voir la case à cocher ci-dessous).
+            sansSolde: role === "salarie" ? false : champs.sansSolde,
+          });
+        }}
         borderClassName="border-slate"
         chevronClassName="text-ink-900"
         hoverClassName="enabled:hover:bg-surface-app"
@@ -1336,6 +1352,24 @@ function Formulaire({
         <option value="manager">Manager</option>
         <option value="admin">Admin</option>
       </SelectPille>
+      {/* "Sans suivi de solde" (24/09/2026, règle métier remontée par
+      Vincent) — option à la création uniquement, pour un manager/admin qui
+      n'a pas vocation à être suivi comme un salarié normal (pas de
+      comptage CP/RTT/CPA, absent des listes de suivi/effectifs/export
+      paie). Figée à la création (pas de case équivalente en mode édition,
+      voir `carteRole` ci-dessus) — même traitement que nature du
+      contrat/taux d'activité, gérés via un flux dédié plutôt qu'une
+      édition directe. */}
+      {(champs.role === "manager" || champs.role === "admin") && (
+        <label className="text-ink-900 mt-1 flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={champs.sansSolde}
+            onChange={(e) => setChamps({ ...champs, sansSolde: e.target.checked })}
+          />
+          Profil sans suivi de solde (pas de congés à décompter)
+        </label>
+      )}
     </div>
   );
 
@@ -1782,7 +1816,7 @@ function Formulaire({
               </div>
             )}
 
-            {!modeEdition && (
+            {!modeEdition && !champs.sansSolde && (
               /* Soldes actuels (21/08/2026, lancement en prod) — report de la
              dernière fiche de paie pour un salarié déjà en poste avant
              l'app : remplace le report/accrual automatique tant que la
@@ -1793,7 +1827,11 @@ function Formulaire({
              soumission accidentelle à l'Entrée avant remplissage — voir
              `handleFormKeyDown`) : mois de référence + CP/RTT/CPA doivent
              tous être renseignés (0 accepté comme valeur valide), sinon
-             `handleSubmit` bloque avec un message dédié. */
+             `handleSubmit` bloque avec un message dédié. Section masquée
+             pour un profil "sans suivi de solde" (`champs.sansSolde`,
+             24/09/2026) : pas de sens de demander un solde initial à
+             quelqu'un qui n'en a pas, validation neutralisée en parallèle
+             dans `handleSubmit`. */
               <div className="bg-surface-card border-ink-300/60 flex flex-col gap-3 border p-5">
                 {/* Titre en carte navy + gras (04/09/2026, "unifier les
                 intitulés") — même traitement que "Nature du contrat"/"Durée
@@ -2116,6 +2154,7 @@ export function UtilisateurFichePage({ id }: UtilisateurFichePageProps) {
         tauxActivite: utilisateur.tauxActivite,
         ancienneteDateReference: utilisateur.ancienneteDateReference,
         role: utilisateur.role,
+        sansSolde: utilisateur.sansSolde,
       }
     : CHAMPS_VIDES;
 

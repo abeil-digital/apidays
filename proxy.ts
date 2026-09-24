@@ -108,7 +108,7 @@ export async function proxy(request: NextRequest) {
     // deux allers-retours par requête.
     const { data } = await supabase
       .from("utilisateurs")
-      .select("role, statut, date_fin_contrat")
+      .select("role, statut, date_fin_contrat, sans_solde")
       .eq("auth_id", user.id)
       .single();
 
@@ -143,6 +143,24 @@ export async function proxy(request: NextRequest) {
     ) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/";
+      redirectUrl.search = "";
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Profil manager/admin "sans suivi de solde" (24/09/2026) : pas de solde
+    // à consommer, donc pas d'accès à "Poser" (Accueil) — repli sur Suivre >
+    // Calendriers des absences, qui héberge aussi le bloc "Demandes à
+    // étudier" pour ce profil (voir SuivreCalendrierPage.tsx). Le check
+    // `role` est redondant en théorie (l'option n'est proposée qu'à la
+    // création pour manager/admin) mais défensif si `sans_solde` était un
+    // jour modifié directement en base.
+    if (
+      request.nextUrl.pathname === "/" &&
+      data?.sans_solde &&
+      (data?.role === "manager" || data?.role === "admin")
+    ) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/suivre/calendrier";
       redirectUrl.search = "";
       return NextResponse.redirect(redirectUrl);
     }

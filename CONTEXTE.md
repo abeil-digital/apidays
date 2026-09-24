@@ -7922,6 +7922,61 @@ ailleurs déjà un correctif en cours (`.replace(",", ".")` sur la saisie décim
 `NaN` puis silencieusement ramené à 0, `Number("18,5")` sans normalisation) : conservé tel quel,
 antérieur à cette session.
 
+## Profils manager/admin "sans suivi de solde" (24/09/2026)
+
+Règle métier remontée par Vincent le 23/09/2026 : certains profils manager/admin ne doivent avoir
+aucun comptage de jours de congés, ne doivent pas apparaître dans les listes/écrans de suivi ni dans
+l'export paie. Cadré le 23/09/2026, implémenté et vérifié le 24/09/2026 (session dédiée avec 3
+agents d'exploration + 1 agent de conception, plan détaillé écrit avant codage — voir
+`/Users/vincentmayol/.claude/plans/quirky-crunching-stroustrup.md`).
+
+**Architecture** : flag `sans_solde boolean not null default false` sur `utilisateurs`
+(`supabase/schema.sql`) — PAS une table séparée, contrairement au futur "Admin visiteur" (qui lui
+n'aura jamais de ligne `utilisateurs`). Ces profils restent de vrais comptes avec une vraie fiche,
+juste exclus du comptage de solde. **Figé à la création** (pas d'édition en V1, décidé avec Vincent)
+— même traitement que `natureContrat`/`tauxActivite`, gérés via des flux dédiés plutôt qu'une
+édition directe, pour éviter la classe de bugs de transition d'état (jours déjà acquis si bascule en
+cours d'année).
+
+**Filtrage par consommateur**, pas centralisé dans `useUtilisateursAdmin()` (délibérément une liste
+brute non filtrée — Paramétrer > Utilisateurs doit continuer à voir/gérer ces profils). Convention
+`u.statut === "actif" && !u.sansSolde` répliquée à chaque écran, cohérente avec le pattern déjà en
+place (`statut === "actif"` était déjà dupliqué partout, pas de refactor transversal) :
+- `CalendrierGlobal.tsx` (effectif heatmap), `CollaborateursEnCongeCard.tsx` (effectif + occupants),
+  `SuivreSoldesPage2.tsx`, `SuivreCalendrierPage.tsx`, `PoserCongePourCollaborateurModal.tsx`
+  (sélecteurs).
+- `exportsPaie.repository.ts::fetchComparaisonSoldes` — évite d'appeler `fetchSoldes(u.id,...)` pour
+  un profil sans solde (aurait produit un chiffre dénué de sens).
+- `soldes.repository.ts::geleAcquisitionsPourExport` — requête Supabase, `.eq("sans_solde", false)`.
+- `calendrier.repository.ts` (génération de demandes pour congé imposé collectif) — décidé avec
+  Vincent : exclu aussi (pas de solde à décompter, pas de demande orpheline).
+- `lib/resend/destinataires.ts` (notifications email) — **volontairement pas touché** : le flag
+  porte sur le solde du profil, pas sur son autorité de validation en tant que manager.
+
+**Formulaire de création** (`UtilisateurFichePage.tsx`) : case à cocher "Profil sans suivi de solde"
+sous le sélecteur de rôle, visible seulement si `role` = manager ou admin (reset automatique si le
+rôle repasse à `salarie`). La section "Solde initial" (rendue obligatoire plus tôt dans la journée,
+voir item juste au-dessus) est masquée et sa validation neutralisée quand la case est cochée — pas de
+sens de demander un solde initial à quelqu'un qui n'en a pas.
+
+**Badge visuel** sur `UtilisateursListPage.tsx` — pastille "Sans solde" (`Badge tone="neutral"`) à
+côté du rôle, décidé avec Vincent pour éviter la confusion (un manager sans badge mais sans solde
+visible pourrait sembler avoir un bug plutôt qu'une exclusion volontaire).
+
+**Navigation** (`proxy.ts`) : `select` existant étendu avec `sans_solde`, nouvelle garde sur `/` —
+un manager/admin `sans_solde` y est redirigé vers `/suivre/calendrier` (pas d'accès à "Poser", pas de
+solde à consommer). `SuivreCalendrierPage.tsx` héberge désormais `<DemandesAEtudierCard />`
+(composant autonome, déjà utilisé sur l'Accueil, réutilisé tel quel sans prop) juste sous le titre,
+affichée pour tout manager/admin visitant cette page (pas seulement les profils `sans_solde`).
+
+**Vérifié en session réelle sur acme** (pas de bypass) : création d'un manager avec la case cochée →
+`sans_solde = true` en base, section solde initial absente du formulaire ; badge "Sans solde" visible
+dans Paramétrer > Utilisateurs ; absent de "Suivre les soldes" et du sélecteur "Suivre >
+Calendriers" ; connexion avec ce compte (mot de passe posé via l'API admin pour le test) →
+redirection automatique `/` → `/suivre/calendrier`, bloc "Demandes à étudier" visible. Compte et
+profil de test supprimés après vérification. `npm run build` complet passé sans erreur (changement
+structurel touchant ~12 fichiers).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

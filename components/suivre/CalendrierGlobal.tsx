@@ -161,7 +161,12 @@ export function CalendrierGlobal({ modePeriode }: { modePeriode: ModePeriode }) 
     return <div className="text-ink-500 py-20 text-center text-sm">Chargement…</div>;
   }
 
-  const actifsIds = new Set(utilisateurs.filter((u) => u.statut === "actif").map((u) => u.id));
+  // `!u.sansSolde` (24/09/2026) : un manager/admin "sans suivi de solde"
+  // n'a pas de congés à compter, exclu de l'effectif (dénominateur de la
+  // heatmap) comme de toute liste de suivi — voir Backlog/CONTEXTE.md.
+  const actifsIds = new Set(
+    utilisateurs.filter((u) => u.statut === "actif" && !u.sansSolde).map((u) => u.id),
+  );
   const totalActifs = actifsIds.size;
 
   const todayIso = todayISO();

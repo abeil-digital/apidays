@@ -97,6 +97,14 @@ create table utilisateurs (
   nom text not null,
   email text unique not null,
   role user_role not null default 'salarie',
+  -- Exclut ce profil manager/admin de tout comptage de solde (CP/RTT/CPA),
+  -- des listes de suivi/effectifs et des exports paie — décidé une fois
+  -- pour toutes à la création du profil (24/09/2026, règle métier remontée
+  -- par Vincent). Reste un compte utilisateur normal (ligne `utilisateurs`
+  -- complète), contrairement au futur "Admin visiteur" qui n'aura jamais de
+  -- ligne ici. Figé à la création, pas de mécanisme d'édition en V1 (voir
+  -- `paramsModificationDepuisInput`, utilisateurs.repository.ts).
+  sans_solde boolean not null default false,
   date_entree date not null,
   -- type_contrat / taux_temps_partiel : dépréciés au profit de nature_contrat /
   -- taux_activite ci-dessous (24/07/2026). Gardés en base pour l'instant, migration
