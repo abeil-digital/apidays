@@ -10,6 +10,7 @@ import { useParametrageNotifications } from "@/hooks/useParametrageNotifications
 import { Button } from "@/components/ui/Button";
 import { ListCard } from "@/components/ui/ListCard";
 import { SelectPille } from "@/components/ui/SelectPille";
+import { FluxCalendrierCard } from "@/components/parametrer/FluxCalendrierCard";
 
 const JOURS_SEMAINE: { valeur: number; label: string }[] = [
   { valeur: 1, label: "Lundi" },
@@ -110,9 +111,7 @@ function FormulaireNotifications({
 
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-2xl md:pt-0">
-      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">
-        Notifications
-      </h1>
+      <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold">Notifications</h1>
 
       <ListCard className="flex flex-col gap-4 p-4">
         <div>
@@ -227,6 +226,8 @@ function FormulaireNotifications({
       >
         Enregistrer
       </Button>
+
+      <FluxCalendrierCard />
     </div>
   );
 }

@@ -450,6 +450,12 @@ create table parametrage_notifications (
   -- validée/refusée (08/09/2026, deuxième volet Paramétrer > Notifications).
   notif_decision_collaborateur notif_decision_collaborateur not null default 'aucune',
   dernier_envoi_digest timestamptz,
+  -- Flux ICS des absences (25/09/2026, abonnement Proton/Google/Outlook) :
+  -- l'URL publique `/api/flux-calendrier/<token>` sert les absences validées
+  -- ET en attente de toute l'entreprise, sans session — le token est le seul
+  -- secret. Régénérer le token invalide l'ancienne adresse.
+  flux_calendrier_actif boolean not null default false,
+  flux_calendrier_token text unique,
   updated_at timestamptz not null default now(),
   constraint jour_recap_valide check (jour_recap between 1 and 7),
   constraint heure_recap_valide check (heure_recap between 0 and 23)

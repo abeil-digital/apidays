@@ -8164,6 +8164,38 @@ application du SQL) : durée de travail/nature de contrat sur une fiche OK, "Aju
 "Valider" un export **non testé** (pas d'occasion sur acme), "Renvoyer l'invitation" à tester. Rendu
 de l'enveloppe non vérifié à l'écran (navigateur intégré déconnecté).
 
+## Flux ICS des absences pour Proton Calendar (25/09/2026)
+
+Backlog "Export des absences vers le calendrier Proton d'Abeil" (Haute). Proton n'a pas d'API
+d'écriture publique mais s'abonne à un flux ICS par URL (comme Google/Outlook/Apple). **Décisions de
+Vincent** : tous les types d'absence **avec leur libellé** (pas de titre neutre), gestion par
+**manager et admin**, demandes en attente distinguées par un **préfixe de titre** (`[À valider]`).
+
+**Architecture** : deux colonnes ajoutées à `parametrage_notifications` (une ligne par entreprise,
+RLS manager/admin déjà en place, pas de nouvelle table) — `flux_calendrier_actif`,
+`flux_calendrier_token` (unique) ; **SQL appliqué à la main dans Supabase** (`alter table … add
+column`). Route publique `app/api/flux-calendrier/[token]/route.ts` (`GET`, `.ics` optionnel), exclue de
+l'authentification dans `proxy.ts` (`estRoutePublique`) : le token de l'URL est le seul secret. Lecture
+en `service_role`, donc **filtre explicite par `entreprise_id`** (déduit du token). Token inconnu, mal
+formé ou flux désactivé : même 404. Générateur ICS pur dans `lib/calendrier/ics.ts` (RFC 5545, CRLF,
+pliage à 75 octets, échappement). Token : 32 octets aléatoires en base64url, généré côté navigateur
+(`crypto.getRandomValues`) dans `lib/data/fluxCalendrier.repository.ts` ; désactiver garde le token,
+seule la régénération invalide l'ancienne adresse. UI : `components/parametrer/FluxCalendrierCard.tsx`
+sous Paramétrer > Notifications (actions immédiates, sans le bouton "Enregistrer" de la page).
+
+**Contenu du flux** : demandes `validee` + `en_attente`, fenêtre 90 jours passés → 18 mois à venir ;
+**exclus** : `CP_IMPOSE` et `DJ_IMPOSEE` (jours collectifs — un évènement par collaborateur
+encombrerait le calendrier). Journées entières en évènements "toute la journée" (`DTEND` exclusif),
+demi-journées en heures flottantes sans fuseau (matin 08:00-12:00, après-midi 13:00-18:00), `STATUS`
+`TENTATIVE`/`CONFIRMED`. Titre : "[À valider] Prénom Nom — Libellé du type".
+
+**Vérifié en local sur acme** (navigateur intégré + `curl` sans cookie) : activation/copie de
+l'adresse, 32 évènements servis = 32 attendus en base (dont 1 en attente avec préfixe), aucun jour
+collectif, aucun évènement d'un autre tenant, 404 sur token inconnu/invalide/désactivé, régénération
+qui invalide l'ancien token (404) et active le nouveau, `npm run build` passé. **Non vérifié** :
+abonnement réel dans Proton (rendu des demi-journées, du préfixe, fréquence de rafraîchissement).
+Flux laissé désactivé sur acme après les tests.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

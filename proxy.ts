@@ -37,6 +37,8 @@ const PAGES_POSER = ["/", "/historique", "/nouvelle-demande"];
 // lui-même (pose justement cette session avant de rediriger).
 // /api/cron/* (08/09/2026) : appelé par le cron Vercel, sans cookie de
 // session — l'authentification s'y fait via `CRON_SECRET`, pas Supabase.
+// /api/flux-calendrier/<token> (25/09/2026) : flux ICS des absences, abonné
+// par Proton/Google/Outlook sans session — le token de l'URL est le seul secret.
 // /api/branding-public (09/09/2026) : appelé depuis la page de connexion
 // elle-même, avant toute session — voir
 // `app/api/branding-public/route.ts`.
@@ -49,6 +51,7 @@ function estRoutePublique(pathname: string): boolean {
     pathname.startsWith(`${ROUTE_CONNEXION}/`) ||
     pathname === ROUTE_ADMIN_CONNEXION ||
     pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/flux-calendrier/") ||
     pathname === "/api/branding-public" ||
     pathname.startsWith("/t/")
   );
