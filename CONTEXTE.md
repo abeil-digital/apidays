@@ -8184,14 +8184,19 @@ seule la régénération invalide l'ancienne adresse. UI : `components/parametre
 sous Paramétrer > Notifications (actions immédiates, sans le bouton "Enregistrer" de la page).
 
 **Contenu du flux** : demandes `validee` + `en_attente`, fenêtre 90 jours passés → 18 mois à venir ;
-**exclus** : `CP_IMPOSE` et `DJ_IMPOSEE` (jours collectifs — un évènement par collaborateur
-encombrerait le calendrier). Journées entières en évènements "toute la journée" (`DTEND` exclusif),
+**demandes individuelles exclues** : `CP_IMPOSE` et `DJ_IMPOSEE` (un évènement par collaborateur
+encombrerait le calendrier). **Jours collectifs ajoutés le même jour (demande de Vincent)** : jours
+fériés (`jours_feries`, table commune à toutes les entreprises, sans `entreprise_id`), congés imposés
+(`conges_imposes`) et demi-journées imposées (`demi_journees_imposees`), en **un seul évènement par
+jour pour toute l'entreprise** ("Jour férié — libellé", "Congé imposé", "Demi-journée imposée (matin |
+après-midi)"), lus dans les réglages et filtrés par `entreprise_id` (sauf les fériés). Journées entières en évènements "toute la journée" (`DTEND` exclusif),
 demi-journées en heures flottantes sans fuseau (matin 08:00-12:00, après-midi 13:00-18:00), `STATUS`
 `TENTATIVE`/`CONFIRMED`. Titre : "[À valider] Prénom Nom — Libellé du type".
 
 **Vérifié en local sur acme** (navigateur intégré + `curl` sans cookie) : activation/copie de
-l'adresse, 32 évènements servis = 32 attendus en base (dont 1 en attente avec préfixe), aucun jour
-collectif, aucun évènement d'un autre tenant, 404 sur token inconnu/invalide/désactivé, régénération
+l'adresse, 32 absences servies = 32 attendues en base (dont 1 en attente avec préfixe), puis après ajout des
+jours collectifs 60 évènements = 32 + 17 fériés + 11 demi-journées imposées + 0 congé imposé (acme n'en
+a aucun : cas non vérifié sur données réelles), UID tous uniques, aucun évènement d'un autre tenant, 404 sur token inconnu/invalide/désactivé, régénération
 qui invalide l'ancien token (404) et active le nouveau, `npm run build` passé. **Non vérifié** :
 abonnement réel dans Proton (rendu des demi-journées, du préfixe, fréquence de rafraîchissement).
 Flux laissé désactivé sur acme après les tests.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { genererFluxIcs, type AbsenceIcs } from "@/lib/calendrier/ics";
+import { genererFluxIcs, type AbsenceIcs, type JourCollectifIcs } from "@/lib/calendrier/ics";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 
 /**
@@ -13,10 +13,13 @@ import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge"
  * flux désactivé renvoie le même 404, sans rien révéler.
  *
  * Absences validées ET en attente, tous types avec leur libellé (décision de
- * Vincent, 25/09/2026) ; les jours collectifs (congé imposé, demi-journée
- * imposée) sont exclus — un évènement par collaborateur encombrerait le
- * calendrier pour un jour où tout le monde est absent. Fenêtre : 90 jours
- * passés à 18 mois à venir.
+ * Vincent, 25/09/2026). Les jours collectifs (fériés, congés imposés,
+ * demi-journées imposées) sont ajoutés en UN évènement par jour pour toute
+ * l'entreprise, lus dans les réglages (`jours_feries`, `conges_imposes`,
+ * `demi_journees_imposees`) — leurs demandes individuelles (`CP_IMPOSE`,
+ * `DJ_IMPOSEE`) sont exclues, un évènement par collaborateur encombrerait le
+ * calendrier. `jours_feries` est commune à toutes les entreprises (pas
+ * d'`entreprise_id`). Fenêtre : 90 jours passés à 18 mois à venir.
  */
 const TYPES_COLLECTIFS = ["DJ_IMPOSEE", "CP_IMPOSE"];
 
@@ -45,7 +48,16 @@ export async function GET(
     .maybeSingle();
   if (!flux || !flux.flux_calendrier_actif) return introuvable();
 
-  const [{ data: entreprise }, { data: demandes, error }] = await Promise.all([
+  const debutFenetre = decaler(-90);
+  const finFenetre = decaler(548);
+
+  const [
+    { data: entreprise },
+    { data: demandes, error },
+    { data: feries },
+    { data: congesImposes },
+    { data: demiJourneesImposees },
+  ] = await Promise.all([
     admin.from("entreprises").select("nom").eq("id", flux.entreprise_id).single(),
     admin
       .from("demandes_conges")
@@ -54,11 +66,55 @@ export async function GET(
       )
       .eq("entreprise_id", flux.entreprise_id)
       .in("statut", ["validee", "en_attente"])
-      .gte("date_fin", decaler(-90))
-      .lte("date_debut", decaler(548))
+      .gte("date_fin", debutFenetre)
+      .lte("date_debut", finFenetre)
       .order("date_debut"),
+    admin
+      .from("jours_feries")
+      .select("id, date, libelle")
+      .gte("date", debutFenetre)
+      .lte("date", finFenetre),
+    admin
+      .from("conges_imposes")
+      .select("id, date_debut, demi_debut, date_fin, demi_fin")
+      .eq("entreprise_id", flux.entreprise_id)
+      .gte("date_fin", debutFenetre)
+      .lte("date_debut", finFenetre),
+    admin
+      .from("demi_journees_imposees")
+      .select("id, date, demi_journee")
+      .eq("entreprise_id", flux.entreprise_id)
+      .gte("date", debutFenetre)
+      .lte("date", finFenetre),
   ]);
   if (error) return new NextResponse("Erreur", { status: 500 });
+
+  const joursCollectifs: JourCollectifIcs[] = [
+    ...(feries ?? []).map((f) => ({
+      id: `ferie-${f.id}`,
+      titre: `Jour férié — ${f.libelle}`,
+      dateDebut: f.date,
+      demiDebut: "matin" as const,
+      dateFin: f.date,
+      demiFin: "apres_midi" as const,
+    })),
+    ...(congesImposes ?? []).map((c) => ({
+      id: `cpi-${c.id}`,
+      titre: "Congé imposé",
+      dateDebut: c.date_debut,
+      demiDebut: c.demi_debut,
+      dateFin: c.date_fin,
+      demiFin: c.demi_fin,
+    })),
+    ...(demiJourneesImposees ?? []).map((d) => ({
+      id: `dji-${d.id}`,
+      titre: `Demi-journée imposée (${d.demi_journee === "matin" ? "matin" : "après-midi"})`,
+      dateDebut: d.date,
+      demiDebut: d.demi_journee,
+      dateFin: d.date,
+      demiFin: d.demi_journee,
+    })),
+  ];
 
   const absences: AbsenceIcs[] = [];
   for (const d of demandes ?? []) {
@@ -79,7 +135,7 @@ export async function GET(
     });
   }
 
-  const corps = genererFluxIcs(absences, {
+  const corps = genererFluxIcs(absences, joursCollectifs, {
     nomCalendrier: `Absences ${entreprise?.nom ?? ""}`.trim(),
     domaine: new URL(request.url).hostname,
   });
