@@ -1214,11 +1214,7 @@ function Formulaire({
           // un échec réseau de l'action serveur ne doit pas retomber dans le
           // `catch` général ("Impossible de créer ce profil"), trompeur (un
           // 2e essai échoue alors sur l'email déjà utilisé).
-          const invite = await inviterUtilisateur(
-            resultat.id,
-            resultat.email,
-            resultat.prenom,
-          ).catch(() => ({ ok: false }));
+          const invite = await inviterUtilisateur(resultat.id).catch(() => ({ ok: false }));
           if (!invite.ok) {
             setErreur(
               "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
@@ -1533,11 +1529,7 @@ function Formulaire({
                         setInvitationEnvoi(true);
                         setInvitationErreur(false);
                         try {
-                          const resultat = await inviterUtilisateur(
-                            id,
-                            champs.email,
-                            champs.prenom,
-                          );
+                          const resultat = await inviterUtilisateur(id);
                           if (resultat.ok) {
                             setInvitationRenvoyee(true);
                           } else {

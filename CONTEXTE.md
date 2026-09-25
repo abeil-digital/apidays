@@ -8135,6 +8135,25 @@ Vincent (option 1 sur 3) : **ouvrir l'écriture aux managers**, bornée comme le
 **à appliquer manuellement dans l'éditeur SQL Supabase** (pas de migration automatisée). La cause
 "lenteur d'envoi" évoquée plus haut reste un point distinct (le "Renvoyer" depuis la fiche, très lent).
 
+**Audit des droits manager (25/09/2026)** — après le bug `soldes_initiaux`, revue des ~76 policies RLS
+croisée avec les écrans ouverts au manager (lecture du code et du schéma, **pas de test avec un vrai
+compte manager**). 3 écrans accessibles au manager mais dont l'écriture était réservée aux admins
+(erreur à l'enregistrement) : changement de durée de travail/nature de contrat sur la fiche
+(`historique_utilisateur`), "Ajuster le solde" (`ajustements_solde`), "Valider" l'export paie
+(`exports_paie`, `validerExportPaie`). Décision de Vincent : **ouvrir l'écriture aux managers pour les
+3**, bornée comme les profils (jamais sur un profil `role = 'admin'`) — 4 policies ajoutées à
+`supabase/schema.sql`, **à appliquer manuellement dans l'éditeur SQL Supabase**. `exports_paie` n'a
+pas la borne "hors admin" (pas de lien direct avec un profil) et ne peut pas être limité par colonne.
+**Faille corrigée** : `inviterUtilisateur` (action serveur, service_role) n'avait aucun contrôle — un
+salarié connecté pouvait déclencher une invitation pour une adresse arbitraire. Désormais : appelant
+= manager/admin, cible lue via le client de session (donc bornée à l'entreprise par la RLS), sans
+compte de connexion, jamais un admin pour un manager ; `email`/`prenom` lus en base, plus passés par
+le navigateur (signature réduite à `inviterUtilisateur(utilisateurId)`). Vérifié : les actions
+`app/admin/actions.ts` sont déjà protégées (`assertSuperAdmin`). **Restent connus, non traités** :
+la règle `demandes: manager valide/refuse` n'a pas de limite de colonnes (la "dévalidation" réservée
+à l'admin n'est respectée que côté interface) ; un manager peut modifier les règles d'acquisition, le
+calendrier, la FAQ et les notifications (cohérent avec "manager = directeur", à confirmer).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

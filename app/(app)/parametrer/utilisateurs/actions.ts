@@ -27,11 +27,7 @@ export interface InviterUtilisateurState {
  * entreprise — l'admin est forcément membre du tenant du collaborateur
  * qu'il invite) — remplace le template Supabase unique pour tout le projet.
  */
-export async function inviterUtilisateur(
-  utilisateurId: string,
-  email: string,
-  prenom: string,
-): Promise<InviterUtilisateurState> {
+export async function inviterUtilisateur(utilisateurId: string): Promise<InviterUtilisateurState> {
   // Ne jamais laisser une exception remonter jusqu'à l'appelant (07/09/2026,
   // corrigé le 08/09/2026 après un cas réel en prod) — le profil
   // `utilisateurs` est déjà créé au moment où cette fonction est appelée
@@ -42,6 +38,38 @@ export async function inviterUtilisateur(
   // croire à un échec total de la création.
   try {
     const supabase = await createClient();
+
+    // Contrôle d'accès (25/09/2026, audit des droits manager) : cette action
+    // serveur utilise le service_role et est appelable directement par
+    // n'importe quel utilisateur connecté — sans ce contrôle, un salarié
+    // pouvait déclencher une invitation pour une adresse arbitraire. Le
+    // client `supabase` de session est soumis à la RLS : la lecture de la
+    // cible ne renvoie rien hors de l'entreprise de l'appelant. `email` et
+    // `prenom` viennent de la base, jamais du navigateur.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, erreur: "non_autorise" };
+
+    const { data: appelant } = await supabase
+      .from("utilisateurs")
+      .select("role")
+      .eq("auth_id", user.id)
+      .single();
+    if (!appelant || (appelant.role !== "manager" && appelant.role !== "admin")) {
+      return { ok: false, erreur: "non_autorise" };
+    }
+
+    const { data: cible } = await supabase
+      .from("utilisateurs")
+      .select("email, prenom, role, auth_id")
+      .eq("id", utilisateurId)
+      .single();
+    if (!cible || cible.auth_id || (appelant.role === "manager" && cible.role === "admin")) {
+      return { ok: false, erreur: "non_autorise" };
+    }
+    const { email, prenom } = cible;
+
     const branding = await fetchBrandingCourant();
 
     const admin = createAdminClient();

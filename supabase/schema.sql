@@ -1218,6 +1218,20 @@ create policy "ajustements_solde: admin gère tout"
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
+-- Ouvert au manager le 25/09/2026 (audit des droits manager, même cause que
+-- soldes_initiaux ci-dessus : écran accessible au manager mais écriture
+-- refusée en base). Même borne que les profils : jamais sur un profil admin.
+create policy "ajustements_solde: manager crée (hors profils admin)"
+  on ajustements_solde for insert
+  with check (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = ajustements_solde.utilisateur_id and u.role <> 'admin'
+    )
+  );
+
 -- ------------------------------------------------------------
 -- POLICIES — historique_utilisateur (durée de travail / nature du contrat)
 -- ------------------------------------------------------------
@@ -1232,6 +1246,39 @@ create policy "historique_utilisateur: admin gère tout"
   on historique_utilisateur for all
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+
+-- Ouvert au manager le 25/09/2026 (audit des droits manager, même cause que
+-- soldes_initiaux ci-dessus : écran accessible au manager mais écriture
+-- refusée en base). Même borne que les profils : jamais sur un profil admin.
+create policy "historique_utilisateur: manager crée (hors profils admin)"
+  on historique_utilisateur for insert
+  with check (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = historique_utilisateur.utilisateur_id and u.role <> 'admin'
+    )
+  );
+
+create policy "historique_utilisateur: manager modifie (hors profils admin)"
+  on historique_utilisateur for update
+  using (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = historique_utilisateur.utilisateur_id and u.role <> 'admin'
+    )
+  )
+  with check (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = historique_utilisateur.utilisateur_id and u.role <> 'admin'
+    )
+  );
 
 -- ------------------------------------------------------------
 -- POLICIES — soldes_initiaux (report fiche de paie, lancement en prod)
@@ -1362,6 +1409,14 @@ create policy "exports_paie: admin gère tout"
   on exports_paie for all
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
+
+-- Ouvert au manager le 25/09/2026 : bouton "Valider" de "Vérifier les fiches
+-- de paie" (`validerExportPaie`, passe `pris_en_compte` à true) accessible au
+-- manager mais refusé en base.
+create policy "exports_paie: manager valide"
+  on exports_paie for update
+  using (my_role() = 'manager' and entreprise_id = my_entreprise_id())
+  with check (my_role() = 'manager' and entreprise_id = my_entreprise_id());
 
 create policy "export_paie_lignes: manager et admin lisent tout"
   on export_paie_lignes for select
