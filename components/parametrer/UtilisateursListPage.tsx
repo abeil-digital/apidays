@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, Mail, UserPlus } from "lucide-react";
 import type {
   NatureContrat,
   RoleUtilisateur,
@@ -216,7 +216,24 @@ export function UtilisateursListPage() {
                     >
                       <td className="text-ink-900 px-4 py-3 font-semibold">{u.nom}</td>
                       <td className="px-4 py-3">{u.prenom}</td>
-                      <td className="text-ink-500 px-4 py-3">{u.email}</td>
+                      <td className="text-ink-500 px-4 py-3">
+                        {u.email}
+                        {/* Invitation non envoyée (25/09/2026, demande de Vincent) :
+                            `authId` vide tant que l'invitation n'a pas abouti — voir
+                            `inviterUtilisateur`. Profils actifs seulement. */}
+                        {u.statut === "actif" && !u.authId && (
+                          <span
+                            title="Invitation à envoyer"
+                            className="ml-1.5 inline-block align-middle"
+                          >
+                            <Mail
+                              size={15}
+                              className="text-status-warning-fg"
+                              aria-label="Invitation à envoyer"
+                            />
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{formatDate(u.dateEntree)}</td>
                       <td className="px-4 py-3">
                         {u.natureContrat ? NATURE_CONTRAT_LABEL[u.natureContrat] : "Non précisé"} ·{" "}

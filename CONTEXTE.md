@@ -8154,6 +8154,16 @@ la règle `demandes: manager valide/refuse` n'a pas de limite de colonnes (la "d
 à l'admin n'est respectée que côté interface) ; un manager peut modifier les règles d'acquisition, le
 calendrier, la FAQ et les notifications (cohérent avec "manager = directeur", à confirmer).
 
+**Enveloppe "Invitation à envoyer" sur la liste des utilisateurs (25/09/2026, demande de Vincent)** —
+Paramétrer > Utilisateurs (`UtilisateursListPage.tsx`) : une enveloppe orange (`Mail`, couleur
+`status-warning-fg`) après l'adresse e-mail des profils **actifs** sans compte de connexion
+(`authId` vide), infobulle "Invitation à envoyer" au survol. Un premier essai en point d'exclamation
+a été remplacé par l'enveloppe à la demande de Vincent. Au moment de l'ajout, 9 profils actifs
+concernés (dont 8 du tenant Abeil jamais invités). **Tests manager de Vincent en prod** (après
+application du SQL) : durée de travail/nature de contrat sur une fiche OK, "Ajuster le solde" OK ;
+"Valider" un export **non testé** (pas d'occasion sur acme), "Renvoyer l'invitation" à tester. Rendu
+de l'enveloppe non vérifié à l'écran (navigateur intégré déconnecté).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
