@@ -1210,7 +1210,15 @@ function Formulaire({
           champs.natureContrat === "cdd" && dateSortieCdd ? dateSortieCdd : undefined,
         );
         if (envoyerInvitationEmail) {
-          const invite = await inviterUtilisateur(resultat.id, resultat.email, resultat.prenom);
+          // `catch` dédié (25/09/2026) : le profil est déjà créé à ce stade —
+          // un échec réseau de l'action serveur ne doit pas retomber dans le
+          // `catch` général ("Impossible de créer ce profil"), trompeur (un
+          // 2e essai échoue alors sur l'email déjà utilisé).
+          const invite = await inviterUtilisateur(
+            resultat.id,
+            resultat.email,
+            resultat.prenom,
+          ).catch(() => ({ ok: false }));
           if (!invite.ok) {
             setErreur(
               "Le profil a été créé, mais l'email d'invitation n'a pas pu être envoyé. " +
@@ -1524,12 +1532,21 @@ function Formulaire({
                         if (!id) return;
                         setInvitationEnvoi(true);
                         setInvitationErreur(false);
-                        const resultat = await inviterUtilisateur(id, champs.email, champs.prenom);
-                        setInvitationEnvoi(false);
-                        if (resultat.ok) {
-                          setInvitationRenvoyee(true);
-                        } else {
+                        try {
+                          const resultat = await inviterUtilisateur(
+                            id,
+                            champs.email,
+                            champs.prenom,
+                          );
+                          if (resultat.ok) {
+                            setInvitationRenvoyee(true);
+                          } else {
+                            setInvitationErreur(true);
+                          }
+                        } catch {
                           setInvitationErreur(true);
+                        } finally {
+                          setInvitationEnvoi(false);
                         }
                       }}
                       className="shrink-0 underline disabled:opacity-50"

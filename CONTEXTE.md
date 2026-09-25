@@ -8113,6 +8113,18 @@ prénoms désormais échappés (`echapperHtml`). **Modèle Supabase "Reset Passw
 pas dans le dépôt) : texte aligné proposé, mais Vincent a préféré garder l'actuel. Vérifié :
 typecheck + lint ; **pas d'envoi réel testé**.
 
+**Invitation en prod : messages trompeurs corrigés, cause de l'échec non élucidée (25/09/2026)** —
+test de création d'un profil sur acme en prod : le profil se créait mais aucun e-mail ne partait, et
+l'écran affichait "Impossible de créer ce profil" (un 2e essai échouait ensuite sur l'e-mail déjà
+utilisé). Cause du message : l'appel à `inviterUtilisateur` (action serveur) levait une exception
+réseau, interceptée par le `catch` général de `handleSubmit` alors que le profil était déjà créé —
+corrigé par un `.catch` dédié ("Le profil a été créé, mais l'email d'invitation n'a pas pu être
+envoyé"). Le bouton "Renvoyer l'invitation" ne se bloque plus sur "Envoi…" (`try/finally` +
+"Échec de l'envoi"). **Cause de fond non trouvée** : aucun compte `auth` n'était créé lors de
+l'échec, alors que `generateLink` mesuré à ~1 s ; "Renvoyer" a fini par fonctionner, très lent.
+Pistes : `fetch` Resend sans délai maximum, ou redéploiement Vercel/démarrage à froid — à trancher
+avec les logs Vercel de la fonction. Profils de test supprimés après vérification.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
