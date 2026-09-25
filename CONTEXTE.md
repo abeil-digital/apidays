@@ -8125,6 +8125,16 @@ l'échec, alors que `generateLink` mesuré à ~1 s ; "Renvoyer" a fini par fonct
 Pistes : `fetch` Resend sans délai maximum, ou redéploiement Vercel/démarrage à froid — à trancher
 avec les logs Vercel de la fonction. Profils de test supprimés après vérification.
 
+**Cause réelle trouvée : droits du manager sur `soldes_initiaux` (25/09/2026)** — la création d'un
+profil par un **manager** échouait en prod ("Impossible de créer ce profil") : le manager peut créer
+le profil (RLS ouverte le 21/09) mais l'écriture du solde initial, obligatoire depuis le 24/09, était
+réservée aux admins (`"soldes_initiaux: admin gère tout"`) — erreur remontée par `creer`, profil laissé
+créé sans solde et sans tentative d'invitation (d'où aucun compte `auth`, aucun e-mail). Décision de
+Vincent (option 1 sur 3) : **ouvrir l'écriture aux managers**, bornée comme les profils
+(`role <> 'admin'` du profil cible) — 2 policies `insert`/`update` ajoutées à `supabase/schema.sql`,
+**à appliquer manuellement dans l'éditeur SQL Supabase** (pas de migration automatisée). La cause
+"lenteur d'envoi" évoquée plus haut reste un point distinct (le "Renvoyer" depuis la fiche, très lent).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

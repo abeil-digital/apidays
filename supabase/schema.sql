@@ -1248,6 +1248,41 @@ create policy "soldes_initiaux: admin gère tout"
   using (my_role() = 'admin' and entreprise_id = my_entreprise_id())
   with check (my_role() = 'admin' and entreprise_id = my_entreprise_id());
 
+-- Ouvert au manager le 25/09/2026 (bug trouvé en prod sur acme : un manager
+-- crée un profil — permis depuis le 21/09/2026 — puis l'écriture du solde
+-- initial, obligatoire à la création depuis le 24/09/2026, était refusée :
+-- "Impossible de créer ce profil", profil créé sans solde ni invitation).
+-- Même borne que les profils : jamais sur un profil admin.
+create policy "soldes_initiaux: manager crée (hors profils admin)"
+  on soldes_initiaux for insert
+  with check (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = soldes_initiaux.utilisateur_id and u.role <> 'admin'
+    )
+  );
+
+create policy "soldes_initiaux: manager modifie (hors profils admin)"
+  on soldes_initiaux for update
+  using (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = soldes_initiaux.utilisateur_id and u.role <> 'admin'
+    )
+  )
+  with check (
+    my_role() = 'manager'
+    and entreprise_id = my_entreprise_id()
+    and exists (
+      select 1 from utilisateurs u
+      where u.id = soldes_initiaux.utilisateur_id and u.role <> 'admin'
+    )
+  );
+
 -- ------------------------------------------------------------
 -- POLICIES — soldes_periode (gel du capital d'ouverture CP)
 -- ------------------------------------------------------------
