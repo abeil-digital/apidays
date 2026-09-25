@@ -8201,6 +8201,16 @@ qui invalide l'ancien token (404) et active le nouveau, `npm run build` passé. 
 abonnement réel dans Proton (rendu des demi-journées, du préfixe, fréquence de rafraîchissement).
 Flux laissé désactivé sur acme après les tests.
 
+**Confirmation forte avant de réinitialiser l'adresse** (même jour, demande de Vincent — "il faut une
+confirmation haute là-dessus, popin et prévenir") : le lien "Générer une nouvelle adresse" (qui ouvrait
+un simple `window.confirm`) devient "Réinitialiser le flux" et ouvre une popin `Modal` à en-tête rouge
+(même pattern que `SupprimerTenantButton`), texte rédigé par Vincent : le flux actuel cessera de
+fonctionner, les calendriers abonnés n'afficheront plus les absences tant que la nouvelle adresse n'est
+pas renseignée, à utiliser si l'adresse a été partagée par erreur ou si quelqu'un ne doit plus voir les
+absences, action irréversible. Boutons Annuler / Réinitialiser le flux. Vérifié en direct : Annuler ferme
+sans changer l'adresse, la confirmation change l'adresse et ferme la popin. Pas de saisie obligatoire
+(proposée, non retenue).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
