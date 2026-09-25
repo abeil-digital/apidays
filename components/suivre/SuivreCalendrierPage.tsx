@@ -65,7 +65,7 @@ export function SuivreCalendrierPage() {
     ? utilisateurCourant?.role === "admin"
       ? "Accueil Administrateur"
       : "Accueil Manager"
-    : "Calendriers des absences";
+    : "Calendriers absences";
 
   // `!u.sansSolde` (24/09/2026) : un manager/admin "sans suivi de solde"
   // n'a pas de calendrier de congés à consulter ici.
@@ -126,7 +126,7 @@ export function SuivreCalendrierPage() {
         return (
           <div className="flex flex-col gap-2">
             <h2 className="text-ink-900 animate-stagger-in px-1 text-lg font-semibold">
-              Calendriers des absences
+              Calendriers absences
             </h2>
             {contenu}
           </div>

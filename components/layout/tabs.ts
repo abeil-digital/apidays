@@ -32,7 +32,7 @@ const PARAMETRER_TABS: NavTab[] = [
 ];
 
 const SUIVRE_TABS: NavTab[] = [
-  { href: "/suivre/calendrier", label: "Calendriers des absences", Icon: CalendarDays },
+  { href: "/suivre/calendrier", label: "Calendriers absences", Icon: CalendarDays },
   { href: "/suivre/demandes", label: "Suivre les demandes", Icon: ListChecks },
   // Ex-duplication expérimentale (27/08/2026) devenue l'unique écran
   // (28/08/2026, "Suivre les soldes" V1 supprimé). Libellé renommé le
@@ -46,10 +46,26 @@ const SUIVRE_TABS: NavTab[] = [
 /**
  * Sous-navigation (SideNav/BottomNav) dépendante de la section niveau 1
  * active — déduite du chemin courant, pas d'un état séparé à synchroniser.
+ *
+ * `utilisateurCourant` (24/09/2026, demande explicite de Vincent) : pour un
+ * manager/admin "sans suivi de solde", `/suivre/calendrier` EST son accueil
+ * (voir `SuivreCalendrierPage.tsx`) — l'onglet reprend le libellé de son H1
+ * ("Accueil Manager"/"Accueil Administrateur").
  */
-export function getNavTabs(pathname: string): NavTab[] {
+export function getNavTabs(
+  pathname: string,
+  utilisateurCourant?: { role?: string; sansSolde?: boolean } | null,
+): NavTab[] {
   if (pathname.startsWith("/parametrer")) return PARAMETRER_TABS;
-  if (pathname.startsWith("/suivre")) return SUIVRE_TABS;
+  if (pathname.startsWith("/suivre")) {
+    const estSansSolde =
+      utilisateurCourant?.sansSolde &&
+      (utilisateurCourant.role === "manager" || utilisateurCourant.role === "admin");
+    if (!estSansSolde) return SUIVRE_TABS;
+    const label =
+      utilisateurCourant.role === "admin" ? "Accueil Administrateur" : "Accueil Manager";
+    return SUIVRE_TABS.map((tab) => (tab.href === "/suivre/calendrier" ? { ...tab, label } : tab));
+  }
   return POSER_TABS;
 }
 

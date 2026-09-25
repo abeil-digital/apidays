@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 
 /**
  * Rail rétractable (18/08/2026) — remplace l'ancien SideNav pleine largeur
@@ -56,7 +57,8 @@ interface SideNavProps {
 
 export function SideNav({ logoUrlSigne }: SideNavProps = {}) {
   const pathname = usePathname();
-  const navTabs = getNavTabs(pathname);
+  const { utilisateur } = useUtilisateur();
+  const navTabs = getNavTabs(pathname, utilisateur);
   const activeHref = getActiveHref(pathname, navTabs);
 
   return (

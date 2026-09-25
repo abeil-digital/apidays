@@ -521,9 +521,18 @@ export function CalendrierGlobal({ modePeriode }: { modePeriode: ModePeriode }) 
                     abondamment, bug remonté par Delphine en testant "Année
                     civile"/"Période de référence", qui allongent la grille
                     à 12 mois. Le popin (voir plus bas) couvre désormais
-                    toute cette zone au lieu de s'arrêter à `sm:`.) */}
-                <div className="hidden w-full flex-col gap-[3px] xl:sticky xl:top-4 xl:flex xl:w-64 xl:shrink-0">
-                  {detailJourJsx}
+                    toute cette zone au lieu de s'arrêter à `sm:`.)
+                    Deux `<div>` imbriqués (25/09/2026, "détail card qui ne
+                    s'affiche pas quand on scrolle vers le bas") : l'extérieur
+                    est l'item de grille, étiré sur toute la hauteur par
+                    `xl:items-stretch` ; l'intérieur, à hauteur naturelle,
+                    porte seul le `xl:sticky` — sticky + étirement sur le même
+                    élément le laisse sans marge pour coller (même cause que
+                    la vue Kanban de `SuivreDemandesPage.tsx`, CONTEXTE.md). */}
+                <div className="hidden xl:block xl:w-64 xl:shrink-0">
+                  <div className="flex w-full flex-col gap-[3px] xl:sticky xl:top-4">
+                    {detailJourJsx}
+                  </div>
                 </div>
 
                 {/* Popin — portail vers `document.body`, `xl:hidden` sur le

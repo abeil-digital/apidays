@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getActiveHref, getNavTabs } from "@/components/layout/tabs";
+import { useUtilisateur } from "@/hooks/useUtilisateur";
 
 export function BottomNav() {
   const pathname = usePathname();
-  const navTabs = getNavTabs(pathname);
+  const { utilisateur } = useUtilisateur();
+  const navTabs = getNavTabs(pathname, utilisateur);
   const activeHref = getActiveHref(pathname, navTabs);
 
   return (

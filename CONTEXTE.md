@@ -8072,6 +8072,24 @@ sans session, `<link rel="manifest">` bien injecté en tête de page, les 4 PNG 
 manifest) s'affichent correctement (logo marine + point jaune lisible sur fond blanc, marge de
 sécurité "maskable" visuellement correcte).
 
+## Détail du calendrier consolidé, libellés "Calendriers absences" et "Accueil Manager" (25/09/2026)
+
+**Bug "détail card qui ne s'affiche pas quand on scrolle"** (Backlog, priorité Haute) sur le
+calendrier consolidé (`CalendrierGlobal.tsx`, desktop `xl:`) : le panneau de détail d'un jour ne
+restait pas à l'écran en scrollant. Cause : la "cause 3" déjà documentée pour le Kanban
+(`SuivreDemandesPage.tsx`, 23/09/2026) — `xl:sticky` sur l'élément de grille lui-même, étiré sur
+toute la hauteur par `xl:items-stretch` (ajouté le 23/09/2026) : une boîte aussi haute que son
+conteneur n'a nulle part où "coller". Corrigé par deux `<div>` imbriqués (l'extérieur s'étire,
+l'intérieur, à hauteur naturelle, porte seul `xl:sticky xl:top-4`). Vérifié en direct à 1440×800 :
+colonne extérieure ~890px, panneau ~223px, position mesurée à `top: 16px` après scroll (page à 1266px
+avec "Aujourd'hui", 1566px avec "Année civile") et confirmé sur capture. Mobile non concerné (popin).
+
+**Libellés** (demande de Vincent) : "Calendriers des absences" renommé "Calendriers absences" (onglet
+de nav secondaire `tabs.ts`, titre de page et H2 de `SuivreCalendrierPage.tsx`). Pour un
+manager/admin "sans suivi de solde", l'onglet `/suivre/calendrier` s'appelle "Accueil Manager"/
+"Accueil Administrateur" (comme son H1) : `getNavTabs(pathname, utilisateurCourant)` prend
+désormais l'utilisateur, passé par `SideNav.tsx` et `BottomNav.tsx` via `useUtilisateur()`.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
