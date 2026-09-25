@@ -64,12 +64,13 @@ export async function notifierNouvelleDemande(demandeId: string): Promise<void> 
 
     await envoyerEmail({
       destinataires,
-      sujet: `Nouvelle demande de congé — ${nomRequerant}`,
+      sujet: `Apidays : Nouvelle demande de ${requerant.prenom}`,
       html: `
-        <p>${nomRequerant} a posé une nouvelle demande de congé.</p>
-        <p><strong>${libelleType}</strong><br>${periode}</p>
+        <p>Bonjour,</p>
+        <p>${echapperHtml(nomRequerant)} a posé une demande en attente de votre validation :</p>
+        <p><strong>${libelleType}</strong> - ${periode}</p>
         ${commentaire ? `<p>&laquo;&nbsp;${echapperHtml(commentaire)}&nbsp;&raquo;</p>` : ""}
-        <p><a href="${siteUrl}/suivre/demandes?statut=en_attente">Voir la demande</a></p>
+        <p><a href="${siteUrl}/suivre/demandes?statut=en_attente">Étudier la demande</a></p>
       `,
     });
   } catch {
@@ -131,11 +132,11 @@ export async function notifierDecisionDemande(
       destinataires: [requerant.email],
       sujet: estValidee ? "Votre demande de congé a été validée" : "Votre demande de congé a été refusée",
       html: `
-        <p>Bonjour ${requerant.prenom},</p>
-        <p>Votre demande <strong>${libelleType}</strong> (${periode}) a été
+        <p>Bonjour ${echapperHtml(requerant.prenom)},</p>
+        <p>Votre demande de ${libelleType} (${periode}) a été
         ${estValidee ? "<strong>validée</strong>" : "<strong>refusée</strong>"}.</p>
-        ${commentaire ? `<p>&laquo;&nbsp;${echapperHtml(commentaire)}&nbsp;&raquo;</p>` : ""}
-        <p><a href="${siteUrl}/">Voir sur Apidays</a></p>
+        ${commentaire ? `<p>Commentaire de votre manager : &laquo;&nbsp;${echapperHtml(commentaire)}&nbsp;&raquo;</p>` : ""}
+        <p><a href="${siteUrl}/">Voir mes congés</a></p>
       `,
     });
   } catch {

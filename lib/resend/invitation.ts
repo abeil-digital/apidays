@@ -1,6 +1,7 @@
 import "server-only";
 import { envoyerEmail } from "@/lib/resend/notifications";
 import { getSiteUrl } from "@/lib/siteUrl";
+import { echapperHtml } from "@/lib/html";
 
 const DOMAINE_PLATEFORME = "apidays.citizen-d.fr";
 
@@ -50,7 +51,7 @@ export async function envoyerInvitation(input: EnvoyerInvitationInput): Promise<
 
   return envoyerEmail({
     destinataires: [input.email],
-    sujet: `Bienvenue sur Apidays, ${input.prenom}`,
+    sujet: `Apidays : Votre accès à l'Espace Salarié ${nomExpediteur}`,
     expediteur,
     // Clé dédiée, restreinte à ce domaine sur Resend (09/09/2026, correctif
     // — voir doc de `envoyerEmail`) : `RESEND_API_KEY` par défaut est
@@ -59,9 +60,11 @@ export async function envoyerInvitation(input: EnvoyerInvitationInput): Promise<
     apiKeyEnvVar: "RESEND_API_KEY_INVITATIONS",
     html: `
       ${logoHtml}
-      <p>Bonjour ${input.prenom},</p>
-      <p>Un compte vous a été créé sur l'Espace Salarié de <strong>${nomExpediteur}</strong>.</p>
-      <p><a href="${input.lienAction}">Créer votre mot de passe</a></p>
+      <p>Bonjour ${echapperHtml(input.prenom)},</p>
+      <p>Votre compte sur l'Espace Salarié de <strong>${echapperHtml(nomExpediteur)}</strong> vient d'être créé. Vous pourrez y poser vos congés et suivre vos soldes.</p>
+      <p>Pour commencer, définissez votre mot de passe : <a href="${input.lienAction}">Créer mon mot de passe</a></p>
+      <p>Ce lien est personnel et à usage unique. S'il a expiré, demandez à votre administrateur de vous en renvoyer un.</p>
+      <p>L'équipe ${echapperHtml(nomExpediteur)}</p>
     `,
   });
 }

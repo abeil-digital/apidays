@@ -8090,6 +8090,29 @@ manager/admin "sans suivi de solde", l'onglet `/suivre/calendrier` s'appelle "Ac
 "Accueil Administrateur" (comme son H1) : `getNavTabs(pathname, utilisateurCourant)` prend
 désormais l'utilisateur, passé par `SideNav.tsx` et `BottomNav.tsx` via `useUtilisateur()`.
 
+## Réécriture du texte des e-mails de notification (25/09/2026)
+
+Backlog "Relecture et écriture des e-mails de notification" (priorité Haute), périmètre tranché par
+Vincent : **texte seulement**, pas de mise en forme HTML. Constats de départ : nom de marque
+incohérent ("Apidays" dans le corps, expéditeur "Abeil Congés"), prénoms/noms injectés sans
+échappement HTML (seuls les commentaires l'étaient), contenu très minimal. Textes proposés puis
+ajustés par Vincent, vouvoiement conservé :
+
+- **Invitation** (`lib/resend/invitation.ts`) : objet "Apidays : Votre accès à l'Espace Salarié
+  {Entreprise}", corps avec explication, mention "lien personnel et à usage unique", signature
+  "L'équipe {Entreprise}".
+- **Nouvelle demande** (`notifierNouvelleDemande`) : objet "Apidays : Nouvelle demande de {Prénom}",
+  lien "Étudier la demande".
+- **Décision** (`notifierDecisionDemande`) : "Commentaire de votre manager : «…»", lien "Voir mes
+  congés".
+- **Récap hebdomadaire** (`app/api/cron/notifications-digest/route.ts`) : objet "{N} demande(s) de
+  congé en attente cette semaine", lien "Étudier les demandes".
+
+Le préfixe "Apidays :" n'est volontairement que sur les 2 premiers objets (texte de Vincent). Noms et
+prénoms désormais échappés (`echapperHtml`). **Modèle Supabase "Reset Password"** (dans le dashboard,
+pas dans le dépôt) : texte aligné proposé, mais Vincent a préféré garder l'actuel. Vérifié :
+typecheck + lint ; **pas d'envoi réel testé**.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

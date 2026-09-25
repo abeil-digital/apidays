@@ -84,15 +84,15 @@ async function traiterDigestEntreprise(
         const libelleType = LABEL_LONG[typeAbsence.code as TypeBadgeCode] ?? typeAbsence.code;
         const periode = formatPeriodeDemande(demande.date_debut, demande.date_fin);
         const commentaire = demande.commentaire_salarie?.trim();
-        return `<li>${requerant.prenom} ${requerant.nom} — <strong>${libelleType}</strong> — ${periode}${commentaire ? ` — «&nbsp;${echapperHtml(commentaire)}&nbsp;»` : ""}</li>`;
+        return `<li>${echapperHtml(`${requerant.prenom} ${requerant.nom}`)} — <strong>${libelleType}</strong> — ${periode}${commentaire ? ` — «&nbsp;${echapperHtml(commentaire)}&nbsp;»` : ""}</li>`;
       })
       .join("");
 
     const lienSuivi = `${origin}/suivre/demandes?statut=en_attente`;
     await envoyerEmail({
       destinataires,
-      sujet: `Récap hebdomadaire — ${demandes.length} demande(s) de congé en attente`,
-      html: `<p>Demandes de congé posées cette semaine :</p><ul>${lignes}</ul><p><a href="${lienSuivi}">Voir les demandes</a></p>`,
+      sujet: `${demandes.length} demande(s) de congé en attente cette semaine`,
+      html: `<p>Bonjour,</p><p>Voici les demandes posées cette semaine et toujours en attente :</p><ul>${lignes}</ul><p><a href="${lienSuivi}">Étudier les demandes</a></p>`,
     });
   }
 
