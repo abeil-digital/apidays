@@ -147,14 +147,54 @@ export async function envoyerLienReinitialisation(email: string): Promise<{ ok: 
  * Ne throw jamais (service_role/API Auth peuvent échouer) — l'appelant doit
  * bloquer l'enregistrement de la fiche si `ok` est faux, pour ne jamais
  * laisser `utilisateurs.email` diverger de `auth.users.email`.
+ *
+ * Contrôle d'accès (28/09/2026, revue de sécurité) : cette action prenait
+ * jusqu'ici directement l'`auth_id` de `auth.users` en paramètre, fourni par
+ * le navigateur, et le service_role l'appliquait sans aucune vérification —
+ * n'importe quel appelant pouvait changer l'email de connexion de N'IMPORTE
+ * QUEL compte (y compris un admin d'un autre tenant, ou le super-admin) et
+ * en prendre le contrôle via "mot de passe oublié". Reprend le même principe
+ * que `inviterUtilisateur` ci-dessus : reçoit l'id de la fiche `utilisateurs`
+ * (pas l'`auth_id`), vérifie le rôle de l'appelant et lit la cible via le
+ * client de session (RLS — bornée à son entreprise), et ne résout l'`auth_id`
+ * réel qu'après ces contrôles — jamais celui fourni par le navigateur.
+ * Volontairement PAS de restriction "manager ne peut pas viser un admin" ici
+ * (décision explicite de Vincent, 28/09/2026) — contrairement à la règle
+ * appliquée à la fiche elle-même (rôle, archivage...) : un manager doit
+ * pouvoir corriger l'email de connexion d'un admin.
  */
 export async function synchroniserEmailAuth(
-  authId: string,
+  utilisateurId: string,
   nouvelEmail: string,
 ): Promise<{ ok: boolean }> {
   try {
+    const supabase = await createClient();
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false };
+
+    const { data: appelant } = await supabase
+      .from("utilisateurs")
+      .select("role")
+      .eq("auth_id", user.id)
+      .single();
+    if (!appelant || (appelant.role !== "manager" && appelant.role !== "admin")) {
+      return { ok: false };
+    }
+
+    const { data: cible } = await supabase
+      .from("utilisateurs")
+      .select("auth_id")
+      .eq("id", utilisateurId)
+      .single();
+    if (!cible || !cible.auth_id) {
+      return { ok: false };
+    }
+
     const admin = createAdminClient();
-    const { error } = await admin.auth.admin.updateUserById(authId, {
+    const { error } = await admin.auth.admin.updateUserById(cible.auth_id, {
       email: nouvelEmail,
       email_confirm: true,
     });

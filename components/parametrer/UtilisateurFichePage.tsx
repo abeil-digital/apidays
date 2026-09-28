@@ -1272,8 +1272,8 @@ function Formulaire({
     // bloqué à la connexion après un changement d'email non répercuté).
     // Uniquement si `authId` existe (compte déjà activé) et que l'email a
     // vraiment changé.
-    if (authId && valeurs.email !== champs.email) {
-      const sync = await synchroniserEmailAuth(authId, valeurs.email);
+    if (authId && id && valeurs.email !== champs.email) {
+      const sync = await synchroniserEmailAuth(id, valeurs.email);
       if (!sync.ok) {
         throw new Error("Impossible de mettre à jour l'email de connexion.");
       }

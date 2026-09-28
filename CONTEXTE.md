@@ -8211,6 +8211,40 @@ absences, action irréversible. Boutons Annuler / Réinitialiser le flux. Vérif
 sans changer l'adresse, la confirmation change l'adresse et ferme la popin. Pas de saisie obligatoire
 (proposée, non retenue).
 
+## Revue de sécurité ciblée — 2 failles corrigées (28/09/2026)
+
+Demande de Vincent ("contrôle qualité du code"), périmètre "zones sensibles" (auth, RLS, argent,
+multi-tenant) : 5 agents de relecture en parallèle sur `proxy.ts`, les RLS de `schema.sql`, les
+actions serveur en `service_role`, `soldes.repository.ts` et le flux ICS/e-mails. 8 problèmes
+confirmés en relisant le code moi-même (pas seulement les agents). Décisions de Vincent : corriger
+les 2 plus critiques maintenant, abandonner le point "jours fériés" (partage entre tenants
+volontaire, voir MULTI-TENANT.md — resserrer aurait cassé le toggle réel "Lundi de Pentecôte"),
+reporter le point "auto-validation d'une demande" en Backlog ("Post-lancement Abeil" — pas de risque
+tant qu'un seul vrai tenant existe). Les 4 autres points (report CP à la bascule, manager pouvant
+toucher au congé d'un admin, échappement ICS, solde figé arbitrairement) restent ouverts, non traités.
+
+**Corrigé 1 — prise de contrôle de n'importe quel compte** (`synchroniserEmailAuth`,
+`app/(app)/parametrer/utilisateurs/actions.ts`) : cette action (service_role) prenait l'`auth_id`
+directement du navigateur, sans aucune vérification — n'importe quel appelant pouvait changer l'email
+de connexion de n'importe quel compte (y compris un admin d'un autre tenant, ou le super-admin) et le
+prendre via "mot de passe oublié". Reprend le principe déjà appliqué à `inviterUtilisateur` (audit du
+25/09) : reçoit l'id de la fiche `utilisateurs` (pas l'`auth_id`), vérifie le rôle de l'appelant,
+lit la cible via le client de session (RLS — bornée à l'entreprise). **Correction avec Vincent** :
+pas de restriction "manager ne peut pas viser un admin" ici (contrairement à la règle posée sur la
+fiche elle-même le 21/09) — un manager doit pouvoir corriger l'email de connexion d'un admin, décision
+volontaire. Vérifié en session réelle (compte manager Olivier) : email d'un profil non-admin modifié
+avec succès, tentative sur un compte admin (Vincent Mayol) bloquée proprement sans rien changer côté
+base ni côté compte de connexion.
+
+**Corrigé 2 — redirection ouverte après connexion** (`lib/redirectSur.ts`, nouveau, utilisé par
+`proxy.ts` et `app/connexion/actions.ts`) : le contrôle `next.startsWith("/") && !next.startsWith("//")`
+ne bloquait pas `/\evil.com` — `new URL()` traite le backslash comme un slash (spec WHATWG) et résout
+vers `https://evil.com`. Un lien avec le vrai domaine de l'app pouvait donc rediriger vers un site de
+phishing juste après une connexion réelle. Corrigé en laissant `URL` elle-même résoudre l'adresse et
+en vérifiant que le résultat reste sur la même origine, plutôt que d'énumérer les caractères à bannir.
+Fonction unique partagée entre les deux endroits identiques du bug. Vérifié : les 3 variantes
+d'attaque (`\`, `//`, `http://`) neutralisées, le cas légitime (lien avec un chemin réel) inchangé.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

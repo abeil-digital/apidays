@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { cibleRedirectSure } from "@/lib/redirectSur";
 
 /**
  * Next.js 16 : ce fichier remplace l'ancien middleware.ts (renommé "Proxy").
@@ -135,12 +136,13 @@ export async function proxy(request: NextRequest) {
     }
 
     if (isPageDeConnexion) {
-      // Honore `next` si présent et sûr (chemin relatif, pas de
-      // `//host-externe` — un utilisateur authentifié peut arriver ici via
-      // un lien avec `?next=...` déjà consommé par la page de connexion,
-      // ou en visitant directement l'URL).
+      // Honore `next` si présent et sûr — même origine uniquement, voir
+      // `cibleRedirectSure` (28/09/2026, corrige une redirection ouverte :
+      // un utilisateur authentifié peut arriver ici via un lien avec
+      // `?next=...` déjà consommé par la page de connexion, ou en visitant
+      // directement l'URL).
       const next = request.nextUrl.searchParams.get("next");
-      const cible = next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+      const cible = cibleRedirectSure(next, request.nextUrl.origin);
       return NextResponse.redirect(new URL(cible, request.nextUrl.origin));
     }
 

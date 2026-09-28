@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/siteUrl";
+import { cibleRedirectSure } from "@/lib/redirectSur";
 
 export interface LoginState {
   error?: string;
@@ -41,10 +43,11 @@ export async function login(
 
   // `next` (08/09/2026) : renvoie vers la destination d'origine (ex. lien de
   // notification email) plutôt que toujours l'Accueil — voir `proxy.ts`.
-  // Revalidé ici (chemin relatif uniquement) même si `proxy.ts` l'a déjà
-  // posé, `next` restant un champ de formulaire modifiable côté client.
+  // Revalidé ici, même origine uniquement (`cibleRedirectSure`, 28/09/2026 —
+  // corrige une redirection ouverte, `next` restant un champ de formulaire
+  // modifiable côté client) même si `proxy.ts` l'a déjà posé.
   const next = String(formData.get("next") ?? "");
-  redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/");
+  redirect(cibleRedirectSure(next, await getSiteUrl()));
 }
 
 export async function logout() {
