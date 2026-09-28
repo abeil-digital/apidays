@@ -45,7 +45,7 @@ export function TableauAjustements({
           <tr
             key={a.id}
             onClick={() => onSelect(a.id)}
-            className={`border-ink-300/60 cursor-pointer border-b transition-colors duration-150 last:border-b-0 hover:bg-surface-app ${
+            className={`border-ink-300/60 hover:bg-surface-app cursor-pointer border-b transition-colors duration-150 last:border-b-0 ${
               selectionId === a.id ? "bg-surface-app" : ""
             }`}
           >

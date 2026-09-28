@@ -244,7 +244,7 @@ export function SoldeDetailPanel({
           <CircleHelp size={13} />
         </button>
         {aideCpDirectId === id && (
-          <div className="bg-ink-900 absolute left-1/2 top-full z-20 mt-1 w-56 -translate-x-1/2 rounded-control px-2.5 py-2 text-left text-xs font-normal text-white shadow-lg">
+          <div className="bg-ink-900 rounded-control absolute top-full left-1/2 z-20 mt-1 w-56 -translate-x-1/2 px-2.5 py-2 text-left text-xs font-normal text-white shadow-lg">
             {messageCpDirect(dateIso)}
           </div>
         )}
@@ -489,7 +489,7 @@ export function SoldeDetailPanel({
         <div className="text-ink-500 py-8 text-center text-sm">Chargement…</div>
       ) : (
         <>
-        {/* Hauteur plafonnée + scroll interne (20/08/2026) — un historique
+          {/* Hauteur plafonnée + scroll interne (20/08/2026) — un historique
             avec beaucoup d'entrées ne doit pas faire grandir la popin à
             l'infini. En `vh` plutôt qu'un px fixe (20/08/2026, demande
             explicite) — proportionnel à la hauteur d'écran plutôt qu'une
@@ -497,310 +497,310 @@ export function SoldeDetailPanel({
             En-tête de colonnes ET colonne "Solde" `sticky` (le reste du
             tableau défile dessous/derrière) pour toujours garder le nom des
             colonnes et le solde courant visibles pendant le scroll. */}
-        <div className="max-h-[45vh] overflow-x-auto overflow-y-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
-                <th className="bg-surface-card sticky top-0 z-10 px-4 py-3">Événement</th>
-                <th className="bg-surface-card sticky top-0 z-10 px-4 py-3 text-center"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                // "Solde N-1"/"Solde initial" cliquable quand un détail existe
-                // (14/09/2026, "rendre tangible" la bascule — demande
-                // explicite de Vincent, revue après un premier essai en
-                // lignes éclatées directement ici, écarté : "je ne voyais pas
-                // ça comme ça" — reste UNE ligne opaque, mais cliquable,
-                // ouvre `DetailSoldeDepartPanel` sur le côté comme un
-                // ajustement) : bords carrés, fond plein couleur du type, pas
-                // de bordure — contre le style contour arrondi des jours de
-                // congé eux-mêmes juste en dessous. Sans détail (RTT/CPA, ou
-                // solde initial saisi à la main), reste un badge
-                // d'information pur, pas de survol/clic (affordance à tort
-                // sinon).
-                const decomposition = historique.decompositionDepart;
-                const cliquable = Boolean(decomposition && decomposition.length > 0);
-                const actif = departOuvert;
-                return (
-                  <>
+          <div className="max-h-[45vh] overflow-x-auto overflow-y-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">
+                  <th className="bg-surface-card sticky top-0 z-10 px-4 py-3">Événement</th>
+                  <th className="bg-surface-card sticky top-0 z-10 px-4 py-3 text-center"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  // "Solde N-1"/"Solde initial" cliquable quand un détail existe
+                  // (14/09/2026, "rendre tangible" la bascule — demande
+                  // explicite de Vincent, revue après un premier essai en
+                  // lignes éclatées directement ici, écarté : "je ne voyais pas
+                  // ça comme ça" — reste UNE ligne opaque, mais cliquable,
+                  // ouvre `DetailSoldeDepartPanel` sur le côté comme un
+                  // ajustement) : bords carrés, fond plein couleur du type, pas
+                  // de bordure — contre le style contour arrondi des jours de
+                  // congé eux-mêmes juste en dessous. Sans détail (RTT/CPA, ou
+                  // solde initial saisi à la main), reste un badge
+                  // d'information pur, pas de survol/clic (affordance à tort
+                  // sinon).
+                  const decomposition = historique.decompositionDepart;
+                  const cliquable = Boolean(decomposition && decomposition.length > 0);
+                  const actif = departOuvert;
+                  return (
+                    <>
+                      <tr
+                        style={
+                          actif
+                            ? {
+                                backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`,
+                              }
+                            : undefined
+                        }
+                      >
+                        <td className="px-4 py-3">
+                          {cliquable ? (
+                            <button type="button" onClick={ouvrirDetailDepart}>
+                              <span
+                                className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white transition-[scale] duration-200 hover:scale-105 ${classeFondTypeBadge(code)}`}
+                              >
+                                {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
+                              </span>
+                            </button>
+                          ) : (
+                            <span
+                              className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white ${classeFondTypeBadge(code)}`}
+                            >
+                              {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-ink-900 px-4 py-3 text-center font-semibold">
+                          {formatJours(historique.soldeDepart)} j
+                        </td>
+                      </tr>
+                      {departOuvert && decomposition && (
+                        <tr key="depart-detail-mobile" className="sm:hidden">
+                          <td colSpan={2} className="bg-surface-app px-3 py-3">
+                            <div className="animate-detail-fade-in">
+                              <DetailSoldeDepartPanel
+                                code={code}
+                                nomComplet={nomComplet}
+                                date={historique.soldeDepartDate}
+                                total={historique.soldeDepart}
+                                decomposition={decomposition}
+                                onClose={fermerDetail}
+                                pleineLargeur
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })()}
+                {evenements.map((m) => {
+                  const ajustementCliquable = avecAjustement && m.type === "ajustement";
+                  // `m.demandeId` (27/08/2026) — en mode réel, `m.id` est l'id
+                  // de la ligne `export_paie_lignes` (pas la demande, pour
+                  // éviter les collisions quand une demande génère plusieurs
+                  // lignes de transmission) : `fetchDemandeParId` a besoin de
+                  // l'id demande, pas de celui de la ligne — sans ce champ, le
+                  // détail d'un congé ne s'ouvrait jamais en mode réel (bug
+                  // remonté par Vincent : "la card de détail d'un congé ne
+                  // s'affiche pas").
+                  const idDemande = m.demandeId ?? m.id;
+                  const active =
+                    (avecDetailConge && m.type === "demande" && idSelectionne === idDemande) ||
+                    (ajustementCliquable && idSelectionne === m.id);
+                  // Acquisition (accrual mensuel RTT/CPA) dissociée comme
+                  // "Solde N-1" (20/08/2026, même affordance) : bords carrés,
+                  // fond plein couleur du type, pas de bordure, jamais
+                  // cliquable — un badge d'information, pas une pill. Ajustement
+                  // manuel (27/08/2026, "Pills regul = coins carré" — repris de
+                  // `PanelJoursMouvement`, "Vérifier les fiches de paie") :
+                  // contour + coins carrés (PAS `rounded-full` comme la pill
+                  // congé), cliquable + hover/état "on" quand `avecAjustement`.
+                  const carre = m.type === "acquisition" || m.type === "ajustement";
+                  // CPI (10/09/2026) — seule une "demande" CP peut être une
+                  // consommation auto-générée par un congé imposé (jamais une
+                  // acquisition/ajustement) : code couleur dédié plutôt que le
+                  // CP générique du panneau, `classeBordure`/`classeTexte`
+                  // (calculés une fois sur `code`) restent inchangés pour tout
+                  // le reste du panneau (en-tête, "Solde N-1", etc.).
+                  const codeAffichage = codeAffichageMouvement(code, m);
+                  const estCpi = codeAffichage === "CPI";
+                  // "Parcours B" (16/09/2026) — un CP direct affiché
+                  // exceptionnellement dans le feed CPA reprend la couleur CP
+                  // (pas CPA) sur toute la ligne, même logique que CPI juste
+                  // au-dessus.
+                  const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
+                  const classeBordureLigne = estCpi
+                    ? classeBordureTypeBadge("CPI")
+                    : estCpDirectLigne
+                      ? classeBordureTypeBadge("CP")
+                      : classeBordure;
+                  const classeTexteLigne = estCpi
+                    ? classeTexteTypeBadge("CPI")
+                    : estCpDirectLigne
+                      ? classeTexteTypeBadge("CP")
+                      : classeTexte;
+                  const hoverBgLigne = estCpi
+                    ? HOVER_BG_CPI
+                    : estCpDirectLigne
+                      ? HOVER_BG_CONGE.CP
+                      : HOVER_BG_CONGE[code];
+                  const varCouleurLigne = estCpi
+                    ? VAR_COULEUR_CPI
+                    : estCpDirectLigne
+                      ? VAR_COULEUR.CP
+                      : VAR_COULEUR[code];
+                  const pill = (
+                    <span
+                      className={`flex w-fit items-center gap-1 px-2.5 py-1 font-semibold ${
+                        m.type === "acquisition"
+                          ? `text-sm ${classeFondTypeBadge(code)} text-white`
+                          : m.type === "ajustement"
+                            ? `border text-xs transition-[scale,background-color,filter] duration-200 ${
+                                ajustementCliquable ? "hover:scale-105" : ""
+                              } ${
+                                active
+                                  ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
+                                  : `bg-surface-card ${classeBordure} ${classeTexte}`
+                              }`
+                            : `rounded-full border text-xs transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
+                                active
+                                  ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
+                                  : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
+                              }`
+                      } ${m.annule ? "opacity-60" : ""}`}
+                    >
+                      {m.type === "acquisition" ? (
+                        <Plus size={10} className="shrink-0 text-white" />
+                      ) : estCpDirectLigne ? (
+                        // Icône d'avertissement (16/09/2026, demande explicite
+                        // de Vincent) — signale qu'il s'agit exceptionnellement
+                        // d'un CP (Parcours B) et non d'un vrai CPA.
+                        <TriangleAlert
+                          size={11}
+                          className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
+                        />
+                      ) : !carre ? (
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
+                        />
+                      ) : null}
+                      <span className={m.annule ? "line-through" : undefined}>
+                        {libelleEvenement(m)}
+                      </span>
+                    </span>
+                  );
+                  return (
                     <tr
+                      key={m.id}
                       style={
-                        actif
+                        active
                           ? {
-                              backgroundColor: `color-mix(in srgb, var(${VAR_COULEUR[code]}) 12%, white)`,
+                              backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
                             }
                           : undefined
                       }
                     >
                       <td className="px-4 py-3">
-                        {cliquable ? (
-                          <button type="button" onClick={ouvrirDetailDepart}>
-                            <span
-                              className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white transition-[scale] duration-200 hover:scale-105 ${classeFondTypeBadge(code)}`}
+                        <div className="flex items-center gap-1.5">
+                          {avecDetailConge && m.type === "demande" ? (
+                            <button type="button" onClick={() => ouvrirDetail(idDemande)}>
+                              {pill}
+                            </button>
+                          ) : ajustementCliquable ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                ouvrirDetailAjustement({
+                                  id: m.id,
+                                  date: m.date,
+                                  jours: m.jours,
+                                  motif: m.motif,
+                                  auteurNom: m.auteurNom,
+                                })
+                              }
                             >
-                              {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
-                            </span>
-                          </button>
-                        ) : (
-                          <span
-                            className={`flex w-fit items-center px-2.5 py-1 text-sm font-semibold text-white ${classeFondTypeBadge(code)}`}
-                          >
-                            {`${libelleDepart} - ${formatJjMmAa(historique.soldeDepartDate)}`}
-                          </span>
-                        )}
+                              {pill}
+                            </button>
+                          ) : (
+                            pill
+                          )}
+                          {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
+                        </div>
                       </td>
-                      <td className="text-ink-900 px-4 py-3 text-center font-semibold">
-                        {formatJours(historique.soldeDepart)} j
+                      <td
+                        className={`px-4 py-3 text-center font-semibold ${
+                          m.annule
+                            ? "text-ink-500 line-through"
+                            : m.jours < 0 || m.type === "acquisition"
+                              ? classeTexteLigne
+                              : "text-status-success-fg"
+                        }`}
+                      >
+                        {m.jours > 0 ? "+" : ""}
+                        {formatJours(m.jours)} j
                       </td>
                     </tr>
-                    {departOuvert && decomposition && (
-                      <tr key="depart-detail-mobile" className="sm:hidden">
-                        <td colSpan={2} className="bg-surface-app px-3 py-3">
-                          <div className="animate-detail-fade-in">
-                            <DetailSoldeDepartPanel
-                              code={code}
-                              nomComplet={nomComplet}
-                              date={historique.soldeDepartDate}
-                              total={historique.soldeDepart}
-                              decomposition={decomposition}
-                              onClose={fermerDetail}
-                              pleineLargeur
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
-                );
-              })()}
-              {evenements.map((m) => {
-                const ajustementCliquable = avecAjustement && m.type === "ajustement";
-                // `m.demandeId` (27/08/2026) — en mode réel, `m.id` est l'id
-                // de la ligne `export_paie_lignes` (pas la demande, pour
-                // éviter les collisions quand une demande génère plusieurs
-                // lignes de transmission) : `fetchDemandeParId` a besoin de
-                // l'id demande, pas de celui de la ligne — sans ce champ, le
-                // détail d'un congé ne s'ouvrait jamais en mode réel (bug
-                // remonté par Vincent : "la card de détail d'un congé ne
-                // s'affiche pas").
-                const idDemande = m.demandeId ?? m.id;
-                const active =
-                  (avecDetailConge && m.type === "demande" && idSelectionne === idDemande) ||
-                  (ajustementCliquable && idSelectionne === m.id);
-                // Acquisition (accrual mensuel RTT/CPA) dissociée comme
-                // "Solde N-1" (20/08/2026, même affordance) : bords carrés,
-                // fond plein couleur du type, pas de bordure, jamais
-                // cliquable — un badge d'information, pas une pill. Ajustement
-                // manuel (27/08/2026, "Pills regul = coins carré" — repris de
-                // `PanelJoursMouvement`, "Vérifier les fiches de paie") :
-                // contour + coins carrés (PAS `rounded-full` comme la pill
-                // congé), cliquable + hover/état "on" quand `avecAjustement`.
-                const carre = m.type === "acquisition" || m.type === "ajustement";
-                // CPI (10/09/2026) — seule une "demande" CP peut être une
-                // consommation auto-générée par un congé imposé (jamais une
-                // acquisition/ajustement) : code couleur dédié plutôt que le
-                // CP générique du panneau, `classeBordure`/`classeTexte`
-                // (calculés une fois sur `code`) restent inchangés pour tout
-                // le reste du panneau (en-tête, "Solde N-1", etc.).
-                const codeAffichage = codeAffichageMouvement(code, m);
-                const estCpi = codeAffichage === "CPI";
-                // "Parcours B" (16/09/2026) — un CP direct affiché
-                // exceptionnellement dans le feed CPA reprend la couleur CP
-                // (pas CPA) sur toute la ligne, même logique que CPI juste
-                // au-dessus.
-                const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
-                const classeBordureLigne = estCpi
-                  ? classeBordureTypeBadge("CPI")
-                  : estCpDirectLigne
-                    ? classeBordureTypeBadge("CP")
-                    : classeBordure;
-                const classeTexteLigne = estCpi
-                  ? classeTexteTypeBadge("CPI")
-                  : estCpDirectLigne
-                    ? classeTexteTypeBadge("CP")
-                    : classeTexte;
-                const hoverBgLigne = estCpi
-                  ? HOVER_BG_CPI
-                  : estCpDirectLigne
-                    ? HOVER_BG_CONGE.CP
-                    : HOVER_BG_CONGE[code];
-                const varCouleurLigne = estCpi
-                  ? VAR_COULEUR_CPI
-                  : estCpDirectLigne
-                    ? VAR_COULEUR.CP
-                    : VAR_COULEUR[code];
-                const pill = (
-                  <span
-                    className={`flex w-fit items-center gap-1 px-2.5 py-1 font-semibold ${
-                      m.type === "acquisition"
-                        ? `text-sm ${classeFondTypeBadge(code)} text-white`
-                        : m.type === "ajustement"
-                          ? `border text-xs transition-[scale,background-color,filter] duration-200 ${
-                              ajustementCliquable ? "hover:scale-105" : ""
-                            } ${
-                              active
-                                ? `${classeFondTypeBadge(code)} border-transparent text-white hover:brightness-[0.85]`
-                                : `bg-surface-card ${classeBordure} ${classeTexte}`
-                            }`
-                          : `rounded-full border text-xs transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
-                              active
-                                ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
-                                : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
-                            }`
-                    } ${m.annule ? "opacity-60" : ""}`}
-                  >
-                    {m.type === "acquisition" ? (
-                      <Plus size={10} className="shrink-0 text-white" />
-                    ) : estCpDirectLigne ? (
-                      // Icône d'avertissement (16/09/2026, demande explicite
-                      // de Vincent) — signale qu'il s'agit exceptionnellement
-                      // d'un CP (Parcours B) et non d'un vrai CPA.
-                      <TriangleAlert
-                        size={11}
-                        className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
-                      />
-                    ) : !carre ? (
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-success-fg"}`}
-                      />
-                    ) : null}
-                    <span className={m.annule ? "line-through" : undefined}>
-                      {libelleEvenement(m)}
-                    </span>
-                  </span>
-                );
-                return (
-                  <tr
-                    key={m.id}
-                    style={
-                      active
-                        ? {
-                            backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
-                          }
-                        : undefined
-                    }
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {avecDetailConge && m.type === "demande" ? (
-                          <button type="button" onClick={() => ouvrirDetail(idDemande)}>
-                            {pill}
-                          </button>
-                        ) : ajustementCliquable ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              ouvrirDetailAjustement({
-                                id: m.id,
-                                date: m.date,
-                                jours: m.jours,
-                                motif: m.motif,
-                                auteurNom: m.auteurNom,
-                              })
-                            }
-                          >
-                            {pill}
-                          </button>
-                        ) : (
-                          pill
-                        )}
-                        {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
-                      </div>
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-center font-semibold ${
-                        m.annule
-                          ? "text-ink-500 line-through"
-                          : m.jours < 0 || m.type === "acquisition"
-                            ? classeTexteLigne
-                            : "text-status-success-fg"
+                  );
+                })}
+                {enAttente.map((m) => {
+                  const active = avecDetailConge && idSelectionne === m.id;
+                  // Même distinction CPI/CP direct que la liste validée
+                  // ci-dessus — une demande "Parcours B" peut tout à fait être
+                  // encore en attente de décision.
+                  const codeAffichage = codeAffichageMouvement(code, m);
+                  const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
+                  const classeBordureLigne =
+                    codeAffichage === "CPI"
+                      ? classeBordureTypeBadge("CPI")
+                      : estCpDirectLigne
+                        ? classeBordureTypeBadge("CP")
+                        : classeBordure;
+                  const hoverBgLigne =
+                    codeAffichage === "CPI"
+                      ? HOVER_BG_CPI
+                      : estCpDirectLigne
+                        ? HOVER_BG_CONGE.CP
+                        : HOVER_BG_CONGE[code];
+                  const varCouleurLigne =
+                    codeAffichage === "CPI"
+                      ? VAR_COULEUR_CPI
+                      : estCpDirectLigne
+                        ? VAR_COULEUR.CP
+                        : VAR_COULEUR[code];
+                  const pill = (
+                    <span
+                      className={`flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
+                        active
+                          ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
+                          : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
                       }`}
                     >
-                      {m.jours > 0 ? "+" : ""}
-                      {formatJours(m.jours)} j
-                    </td>
-                  </tr>
-                );
-              })}
-              {enAttente.map((m) => {
-                const active = avecDetailConge && idSelectionne === m.id;
-                // Même distinction CPI/CP direct que la liste validée
-                // ci-dessus — une demande "Parcours B" peut tout à fait être
-                // encore en attente de décision.
-                const codeAffichage = codeAffichageMouvement(code, m);
-                const estCpDirectLigne = codeAffichage === "CP" && code === "CPA";
-                const classeBordureLigne =
-                  codeAffichage === "CPI"
-                    ? classeBordureTypeBadge("CPI")
-                    : estCpDirectLigne
-                      ? classeBordureTypeBadge("CP")
-                      : classeBordure;
-                const hoverBgLigne =
-                  codeAffichage === "CPI"
-                    ? HOVER_BG_CPI
-                    : estCpDirectLigne
-                      ? HOVER_BG_CONGE.CP
-                      : HOVER_BG_CONGE[code];
-                const varCouleurLigne =
-                  codeAffichage === "CPI"
-                    ? VAR_COULEUR_CPI
-                    : estCpDirectLigne
-                      ? VAR_COULEUR.CP
-                      : VAR_COULEUR[code];
-                const pill = (
-                  <span
-                    className={`flex w-fit items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-[scale,background-color,filter] duration-200 hover:scale-105 ${
-                      active
-                        ? `${classeFondTypeBadge(codeAffichage)} border-transparent text-white hover:brightness-[0.85]`
-                        : `bg-surface-app text-ink-900 ${classeBordureLigne} ${hoverBgLigne}`
-                    }`}
-                  >
-                    {estCpDirectLigne ? (
-                      <TriangleAlert
-                        size={11}
-                        className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
-                      />
-                    ) : (
-                      <span
-                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-warning-fg"}`}
-                      />
-                    )}
-                    {libelleEvenement(m)}
-                  </span>
-                );
-                return (
-                  <tr
-                    key={m.id}
-                    style={
-                      active
-                        ? {
-                            backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
-                          }
-                        : undefined
-                    }
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        {avecDetailConge ? (
-                          <button type="button" onClick={() => ouvrirDetail(m.id)}>
-                            {pill}
-                          </button>
-                        ) : (
-                          pill
-                        )}
-                        {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
-                      </div>
-                    </td>
-                    <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
-                      {formatJours(m.jours)} j
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      {estCpDirectLigne ? (
+                        <TriangleAlert
+                          size={11}
+                          className={`shrink-0 ${active ? "text-white" : "text-status-warning-fg"}`}
+                        />
+                      ) : (
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-white" : "bg-status-warning-fg"}`}
+                        />
+                      )}
+                      {libelleEvenement(m)}
+                    </span>
+                  );
+                  return (
+                    <tr
+                      key={m.id}
+                      style={
+                        active
+                          ? {
+                              backgroundColor: `color-mix(in srgb, var(${varCouleurLigne}) 12%, white)`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {avecDetailConge ? (
+                            <button type="button" onClick={() => ouvrirDetail(m.id)}>
+                              {pill}
+                            </button>
+                          ) : (
+                            pill
+                          )}
+                          {estCpDirectLigne && iconAidePeriodeSuivante(m.id, m.date, active)}
+                        </div>
+                      </td>
+                      <td className={`px-4 py-3 text-center font-semibold ${classeTexte}`}>
+                        {formatJours(m.jours)} j
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 

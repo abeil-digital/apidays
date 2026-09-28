@@ -17,7 +17,9 @@ interface UseCapitalPeriodeFutureResult {
  * `null` en paramètre (date pas encore choisie, ou date dans la période en
  * cours) désactive le hook.
  */
-export function useCapitalPeriodeFuture(dateReference: string | null): UseCapitalPeriodeFutureResult {
+export function useCapitalPeriodeFuture(
+  dateReference: string | null,
+): UseCapitalPeriodeFutureResult {
   const actif = Boolean(dateReference);
   const [capital, setCapital] = useState<number | null>(null);
   const [cleResolue, setCleResolue] = useState<string | null>(null);

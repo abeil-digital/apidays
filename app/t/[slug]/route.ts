@@ -14,10 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
  * résolution (et le fallback Abeil si le slug est inconnu) reste
  * entièrement dans `branding-public/route.ts`, pas dupliquée ici.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> },
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const url = request.nextUrl.clone();
   url.pathname = "/connexion";

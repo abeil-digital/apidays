@@ -116,7 +116,7 @@ function BadgeTransmission({
     return (
       <Badge
         tone={regulPriseEnCompte ? "info" : "warning"}
-        className={regulPriseEnCompte ? "" : "border border-status-warning-fg"}
+        className={regulPriseEnCompte ? "" : "border-status-warning-fg border"}
       >
         <span>{regulPriseEnCompte ? "Régul en paie" : "Régul transmise"}</span>
       </Badge>
@@ -128,7 +128,7 @@ function BadgeTransmission({
   return (
     <Badge
       tone={toutesConfirmees ? "info" : "warning"}
-      className={toutesConfirmees ? "" : "border border-status-warning-fg"}
+      className={toutesConfirmees ? "" : "border-status-warning-fg border"}
     >
       <span>{partiel ? `${libelle} ${lignes.length}/${totalPeriodes}` : libelle}</span>
     </Badge>

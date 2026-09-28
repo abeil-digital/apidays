@@ -403,9 +403,7 @@ export function PoserDemandeModal({
   // demande porte entièrement sur une période future (`cpPeriodeFuture`).
   // Les deux ne concernent que l'option "CP" — "Congés anticipés" (Parcours
   // A) garde son fonctionnement propre, inchangé.
-  const periodeCpDebut = debut
-    ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`))
-    : null;
+  const periodeCpDebut = debut ? periodeReferenceCp(regleCp, new Date(`${debut}T00:00:00Z`)) : null;
   const periodeCpFin = finPourCalcul
     ? periodeReferenceCp(regleCp, new Date(`${finPourCalcul}T00:00:00Z`))
     : periodeCpDebut;
@@ -493,10 +491,8 @@ export function PoserDemandeModal({
 
   // Chevauchement : deux soldes "après" distincts (un par période), le
   // bouton reste désactivé si l'un des deux est négatif.
-  const soldeApresAvantBascule =
-    soldeActuel !== null ? soldeActuel - joursAvantBascule : null;
-  const soldeApresApresBascule =
-    capitalFuture !== null ? capitalFuture - joursApresBascule : null;
+  const soldeApresAvantBascule = soldeActuel !== null ? soldeActuel - joursAvantBascule : null;
+  const soldeApresApresBascule = capitalFuture !== null ? capitalFuture - joursApresBascule : null;
 
   const soldeNegatif = cpACheval
     ? (soldeApresAvantBascule !== null && soldeApresAvantBascule < 0) ||

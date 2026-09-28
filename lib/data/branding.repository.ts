@@ -40,7 +40,9 @@ export async function fetchBrandingCourant(): Promise<Branding> {
 
   const { data } = await supabase
     .from("entreprises")
-    .select("nom, slug, couleur_navy, couleur_yellow, logo_url, logo_url_fond_clair, logo_url_signe")
+    .select(
+      "nom, slug, couleur_navy, couleur_yellow, logo_url, logo_url_fond_clair, logo_url_signe",
+    )
     .single();
 
   if (!data) return DEFAULT_BRANDING;

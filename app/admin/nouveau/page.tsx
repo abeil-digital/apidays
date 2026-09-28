@@ -258,10 +258,7 @@ export default function NouveauTenantPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="logoUrlSigne"
-                className="text-ink-900 mb-1.5 block text-sm font-bold"
-              >
+              <label htmlFor="logoUrlSigne" className="text-ink-900 mb-1.5 block text-sm font-bold">
                 Signe SideNav
               </label>
               <Input
@@ -296,10 +293,7 @@ export default function NouveauTenantPage() {
                 />
               </div>
               <div>
-                <label
-                  htmlFor="nomAdmin"
-                  className="text-ink-900 mb-1.5 block text-sm font-bold"
-                >
+                <label htmlFor="nomAdmin" className="text-ink-900 mb-1.5 block text-sm font-bold">
                   Nom *
                 </label>
                 <Input
@@ -313,10 +307,7 @@ export default function NouveauTenantPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="emailAdmin"
-                className="text-ink-900 mb-1.5 block text-sm font-bold"
-              >
+              <label htmlFor="emailAdmin" className="text-ink-900 mb-1.5 block text-sm font-bold">
                 Email *
               </label>
               <Input

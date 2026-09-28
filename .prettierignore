@@ -1,3 +1,8 @@
 .next
 node_modules
 package-lock.json
+
+# Documentation narrative, rédigée et maintenue à la main (retours à la
+# ligne manuels ~95 caractères, voir CLAUDE.md) — pas du code, Prettier
+# réécrirait des tableaux/paragraphes entiers pour aucun bénéfice réel.
+*.md

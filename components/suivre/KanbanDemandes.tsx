@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import type { DemandeEquipe, LigneExportPaie } from "@/lib/types";
-import { formatDateActionCourte, formatJours, formatPeriodePillNumerique, todayISO } from "@/lib/format";
+import {
+  formatDateActionCourte,
+  formatJours,
+  formatPeriodePillNumerique,
+  todayISO,
+} from "@/lib/format";
 import {
   classeBordureTypeBadge,
   classeFondTypeBadge,
@@ -109,7 +114,8 @@ function classer(
       // Archive (22/09/2026, demande explicite de Vincent) : bornée sur la
       // date du CONGÉ lui-même (pas la date d'annulation) — pertinent tant
       // que le congé concerné tombe dans le mois en cours.
-      if (demande.debut >= bornes.debut && demande.debut <= bornes.fin) return { colonne: "archive" };
+      if (demande.debut >= bornes.debut && demande.debut <= bornes.fin)
+        return { colonne: "archive" };
       return null;
     }
     return { colonne: "prochain_export", sousGroupe: "annules" };
@@ -119,7 +125,11 @@ function classer(
     // pas la date du congé — les deux dates n'ont pas le même sens ici : un
     // refus reste pertinent tant qu'il est récent, peu importe quand le
     // congé refusé aurait eu lieu.
-    if (demande.dateDecision && demande.dateDecision >= bornes.debut && demande.dateDecision <= bornes.fin) {
+    if (
+      demande.dateDecision &&
+      demande.dateDecision >= bornes.debut &&
+      demande.dateDecision <= bornes.fin
+    ) {
       return { colonne: "archive" };
     }
     return null;
@@ -197,7 +207,11 @@ function statutPill(
   };
 }
 
-function dateLabel(sousGroupe: SousGroupe | undefined, colonne: Colonne, demande: DemandeEquipe): string {
+function dateLabel(
+  sousGroupe: SousGroupe | undefined,
+  colonne: Colonne,
+  demande: DemandeEquipe,
+): string {
   if (colonne === "en_attente") return `Posé le ${formatDateActionCourte(demande.datePose)}`;
   if (!demande.dateDecision) return "";
   if (colonne === "archive") {
@@ -261,7 +275,9 @@ function CardKanban({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-ink-500 pl-1 text-[11px]">{dateLabel(sousGroupe, colonne, demande)}</span>
+      <span className="text-ink-500 pl-1 text-[11px]">
+        {dateLabel(sousGroupe, colonne, demande)}
+      </span>
       <button
         type="button"
         onClick={onClick}
@@ -400,7 +416,9 @@ export function KanbanDemandes({
   const itemsExportsFuturs =
     moisExportFutur === "tous"
       ? parColonne.pas_encore_due
-      : parColonne.pas_encore_due.filter(({ demande }) => demande.debut.slice(0, 7) === moisExportFutur);
+      : parColonne.pas_encore_due.filter(
+          ({ demande }) => demande.debut.slice(0, 7) === moisExportFutur,
+        );
 
   // "Exports futurs" trié croissant (le plus proche en premier, 22/09/2026 —
   // revue de code, confirmé par Vincent) : seule colonne qui regarde vers
@@ -455,7 +473,9 @@ export function KanbanDemandes({
             key={colonne}
             className={`flex w-[240px] shrink-0 flex-col gap-2 rounded-xl ${FOND_COLONNE[colonne]} p-3`}
           >
-            <h3 className={`flex items-center justify-between text-sm font-bold ${TITRE_COLONNE[colonne]}`}>
+            <h3
+              className={`flex items-center justify-between text-sm font-bold ${TITRE_COLONNE[colonne]}`}
+            >
               {colonne === "archive" && (
                 <button
                   type="button"
@@ -514,7 +534,8 @@ export function KanbanDemandes({
                 )}
                 {(colonne === "pas_encore_due" ? itemsExportsFuturs : items).length > 15 && (
                   <p className="text-ink-500 text-center text-[11px]">
-                    + {(colonne === "pas_encore_due" ? itemsExportsFuturs : items).length - 15} autres
+                    + {(colonne === "pas_encore_due" ? itemsExportsFuturs : items).length - 15}{" "}
+                    autres
                   </p>
                 )}
               </div>
@@ -526,19 +547,21 @@ export function KanbanDemandes({
                   // "Congés du mois" ne se nomme que s'il faut le distinguer
                   // d'un autre sous-groupe présent (demande explicite).
                   if (sg === "mois" && !aDesExceptions) {
-                    return sousItems.slice(0, 15).map(({ demande, lignes, joursRestants }) => (
-                      <CardKanban
-                        key={demande.id}
-                        demande={demande}
-                        sousGroupe={sg}
-                        colonne={colonne}
-                        joursRestants={joursRestants}
-                        lignes={lignes}
-                        justArrivee={justArrivees.has(demande.id)}
-                        onClick={() => onCardClick(demande.id)}
-                        selectionnee={demande.id === selectionId}
-                      />
-                    ));
+                    return sousItems
+                      .slice(0, 15)
+                      .map(({ demande, lignes, joursRestants }) => (
+                        <CardKanban
+                          key={demande.id}
+                          demande={demande}
+                          sousGroupe={sg}
+                          colonne={colonne}
+                          joursRestants={joursRestants}
+                          lignes={lignes}
+                          justArrivee={justArrivees.has(demande.id)}
+                          onClick={() => onCardClick(demande.id)}
+                          selectionnee={demande.id === selectionId}
+                        />
+                      ));
                   }
                   const visibles = sousItems.slice(0, 15);
                   return (
@@ -567,7 +590,9 @@ export function KanbanDemandes({
                     </div>
                   );
                 })}
-                {items.length === 0 && <p className="text-ink-500 py-6 text-center text-xs">Aucune</p>}
+                {items.length === 0 && (
+                  <p className="text-ink-500 py-6 text-center text-xs">Aucune</p>
+                )}
               </div>
             )}
           </div>

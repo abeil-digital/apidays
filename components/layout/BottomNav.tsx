@@ -41,9 +41,7 @@ export function BottomNav() {
                   soit la taille (colonne ~90-100px) — resserré et centré
                   pour que ça reste propre plutôt que juste réduit au hasard,
                   cohérent que le libellé tienne sur 1 ou 2 lignes. */}
-              <span className="text-center text-[11px] leading-tight font-semibold">
-                {label}
-              </span>
+              <span className="text-center text-[11px] leading-tight font-semibold">{label}</span>
             </Link>
           );
         })}

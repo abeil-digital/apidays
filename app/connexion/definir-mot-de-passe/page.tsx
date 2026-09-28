@@ -69,7 +69,9 @@ function FormulaireDefinirMotDePasse() {
   const [branding, setBranding] = useState(BRANDING_DEFAUT);
   useEffect(() => {
     let cancelled = false;
-    const url = slug ? `/api/branding-public?slug=${encodeURIComponent(slug)}` : "/api/branding-public";
+    const url = slug
+      ? `/api/branding-public?slug=${encodeURIComponent(slug)}`
+      : "/api/branding-public";
     fetch(url)
       .then((r) => r.json())
       .then((data) => {

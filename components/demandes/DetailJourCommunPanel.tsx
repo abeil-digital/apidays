@@ -2,7 +2,11 @@
 
 import { X } from "lucide-react";
 import type { CongeImpose, DemiJournee, DjImposee, JourFerie } from "@/lib/types";
-import { classeFondTypeBadge, TypeBadge, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import {
+  classeFondTypeBadge,
+  TypeBadge,
+  type TypeBadgeCode,
+} from "@/components/demandes/TypeBadge";
 import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
 
 /** Jour "commun" cliqué — congé imposé (CPI, période), demi-journée imposée

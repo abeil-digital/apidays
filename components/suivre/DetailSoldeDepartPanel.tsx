@@ -85,7 +85,9 @@ export function DetailSoldeDepartPanel({
           {decomposition.map((c) => (
             <div key={c.libelle} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`} />
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${classeFondTypeBadge(code)}`}
+                />
                 <span className="text-ink-500 truncate text-[11px]">{c.libelle}</span>
               </div>
               <span className="text-ink-900 shrink-0 text-[11px] font-semibold">

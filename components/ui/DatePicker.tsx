@@ -63,12 +63,7 @@ function construireJourBouton(joursTypes: Record<string, JourTypeInfo>) {
       : {};
 
     return (
-      <button
-        ref={ref}
-        className={className}
-        style={{ ...style, ...styleFond }}
-        {...buttonProps}
-      />
+      <button ref={ref} className={className} style={{ ...style, ...styleFond }} {...buttonProps} />
     );
   };
 }

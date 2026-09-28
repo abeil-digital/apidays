@@ -74,7 +74,9 @@ export function SupprimerTenantButton({
       {ouvert && (
         <Modal
           onClose={() => setOuvert(false)}
-          header={<EnTeteModalDanger titre="Supprimer ce tenant" onClose={() => setOuvert(false)} />}
+          header={
+            <EnTeteModalDanger titre="Supprimer ce tenant" onClose={() => setOuvert(false)} />
+          }
         >
           <div className="flex flex-col gap-4">
             <p className="text-ink-900 text-sm">
@@ -83,7 +85,10 @@ export function SupprimerTenantButton({
             </p>
 
             <div>
-              <label htmlFor="confirmation-slug" className="text-ink-900 mb-1.5 block text-sm font-bold">
+              <label
+                htmlFor="confirmation-slug"
+                className="text-ink-900 mb-1.5 block text-sm font-bold"
+              >
                 Tape <code className="bg-surface-app rounded px-1">{slug}</code> pour confirmer
               </label>
               <Input
@@ -106,7 +111,7 @@ export function SupprimerTenantButton({
               variant="secondary"
               onClick={handleConfirmer}
               disabled={saisie !== slug || enCours}
-              className="rounded-card !bg-status-danger-bg !text-status-danger-fg !border-transparent w-fit self-start px-6 py-3 enabled:hover:opacity-90"
+              className="rounded-card !bg-status-danger-bg !text-status-danger-fg w-fit self-start !border-transparent px-6 py-3 enabled:hover:opacity-90"
             >
               {enCours ? "Suppression…" : "Supprimer définitivement"}
             </Button>

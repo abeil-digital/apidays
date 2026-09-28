@@ -82,7 +82,9 @@ export default async function AdminPage({
               <tr key={tenant.id} className="border-ink-300 border-b last:border-0">
                 <td className="text-ink-900 px-4 py-3 font-medium">{tenant.nom}</td>
                 <td className="text-ink-500 px-4 py-3">{tenant.slug}</td>
-                <td className="text-ink-500 px-4 py-3">{formatDateAction(tenant.createdAt.slice(0, 10))}</td>
+                <td className="text-ink-500 px-4 py-3">
+                  {formatDateAction(tenant.createdAt.slice(0, 10))}
+                </td>
                 <td className="text-ink-500 px-4 py-3">{tenant.nbUtilisateurs}</td>
                 <td className="px-4 py-3 text-right">
                   {tenant.id !== ID_ABEIL && (

@@ -386,9 +386,7 @@ function JourPastille({
         }
       >
         <span
-          className={
-            onJourVideClick ? "transition-opacity duration-150 group-hover:opacity-0" : ""
-          }
+          className={onJourVideClick ? "transition-opacity duration-150 group-hover:opacity-0" : ""}
         >
           {chiffreAujourdhui("ring-ink-900")}
         </span>
@@ -499,7 +497,9 @@ function JourPastille({
           className={`absolute inset-y-0 right-0 w-1/2 ${arrondiDroite}`}
           style={{ background: droite, ...ombreDroite }}
         />
-        <span className={`relative z-10 flex h-full w-full items-center justify-center ${texte} font-bold`}>
+        <span
+          className={`relative z-10 flex h-full w-full items-center justify-center ${texte} font-bold`}
+        >
           {contenuJour("ring-white")}
         </span>
       </span>
@@ -656,7 +656,12 @@ function PeriodeSegment({
   const texte = texteJour ?? (agrandi ? "text-sm" : "text-xs");
   // Contour "en attente" partiel (15/09/2026) — jamais sur un bord qui
   // continue vers un jour voisin de même statut (voir `ombreContour`).
-  const ombre = ombreContour(couleurContour, { haut: true, bas: true, gauche: isStart, droite: isEnd });
+  const ombre = ombreContour(couleurContour, {
+    haut: true,
+    bas: true,
+    gauche: isStart,
+    droite: isEnd,
+  });
 
   const classeTexte = texteSombre ? "text-ink-900" : "text-white";
 

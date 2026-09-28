@@ -116,7 +116,10 @@ function comptePhrase(jours: number): string {
 
 /** Un événement "posé" (toujours) + un événement "décision" (si tranchée) par
  * demande — même logique de regroupement chronologique qu'un fil d'activité. */
-function evenementsDeDemande(demande: Demande, utilisateurCourantId: string | null): EvenementFeed[] {
+function evenementsDeDemande(
+  demande: Demande,
+  utilisateurCourantId: string | null,
+): EvenementFeed[] {
   const jours = demande.nbDemiJournees / 2;
   const code = codeBadgeDemande(demande);
   const evenements: EvenementFeed[] = [
@@ -141,8 +144,7 @@ function evenementsDeDemande(demande: Demande, utilisateurCourantId: string | nu
     demande.dateDecision &&
     (demande.statut === "validé" || demande.statut === "refusé" || demande.statut === "annulé")
   ) {
-    const parMoi =
-      utilisateurCourantId != null && demande.validateur?.id === utilisateurCourantId;
+    const parMoi = utilisateurCourantId != null && demande.validateur?.id === utilisateurCourantId;
     const prenom = demande.validateur?.prenom ?? "Le manager";
     const possessif =
       jours === 1 || jours === 0.5

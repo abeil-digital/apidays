@@ -119,9 +119,7 @@ export function ModalPoserJourImpose({
   const modesDisponibles = (Object.keys(LABEL_MODE) as Mode[]).filter(
     (m) => m !== "CPI" || cpiActif,
   );
-  const [mode, setMode] = useState<Mode>(
-    modeInitial === "CPI" && !cpiActif ? "DJI" : modeInitial,
-  );
+  const [mode, setMode] = useState<Mode>(modeInitial === "CPI" && !cpiActif ? "DJI" : modeInitial);
   const [debut, setDebut] = useState(dateInitiale ?? "");
   const [fin, setFin] = useState("");
   const [demiDebut, setDemiDebut] = useState<DemiJournee>(() =>

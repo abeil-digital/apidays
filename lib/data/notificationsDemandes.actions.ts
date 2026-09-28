@@ -130,7 +130,9 @@ export async function notifierDecisionDemande(
 
     await envoyerEmail({
       destinataires: [requerant.email],
-      sujet: estValidee ? "Votre demande de congé a été validée" : "Votre demande de congé a été refusée",
+      sujet: estValidee
+        ? "Votre demande de congé a été validée"
+        : "Votre demande de congé a été refusée",
       html: `
         <p>Bonjour ${echapperHtml(requerant.prenom)},</p>
         <p>Votre demande de ${libelleType} (${periode}) a été

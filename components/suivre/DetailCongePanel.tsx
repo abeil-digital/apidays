@@ -892,8 +892,9 @@ export function DetailCongePanel({
                   // non encore transmises — d'où l'écart disproportionné
                   // constaté par Vincent (10/09/2026) entre "Actuel" et "Après"
                   // pour une seule demande.
-                  const apres = soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"]
-                    .valeurApresAttente;
+                  const apres =
+                    soldesDemandeur[codeSolde.toLowerCase() as "cp" | "rtt" | "cpa"]
+                      .valeurApresAttente;
                   const actuel = apres + jours;
                   return (
                     <div className="mt-3 mb-3 flex items-center justify-center gap-3 text-xs">
