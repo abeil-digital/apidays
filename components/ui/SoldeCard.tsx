@@ -9,6 +9,17 @@ const TONE_CODE: Record<SoldeCardTone, TypeBadgeCode> = {
   cpa: "CPA",
 };
 
+// Libellé affiché à côté du badge, mobile ET desktop (29/09/2026, essai
+// Claude Design) — CPA abrégé ("C. en acquisition") pour tenir sur une
+// ligne à côté du badge et de la condition, contrairement à `LABEL_LONG`
+// (TypeBadge.tsx, "Congés en acquisition") pensé pour des contextes plus
+// larges.
+const LABEL_BADGE: Record<SoldeCardTone, string> = {
+  cp: "Congés payés",
+  rtt: "RTT",
+  cpa: "C. en acquisition",
+};
+
 // Nom de la variable CSS du token couleur du type — même valeur que
 // l'accent du sélecteur de date dans la popin "Nouvelle demande"
 // (`PoserDemandeModal.tsx`, `VAR_COULEUR_TYPE`), pour teinter le fond de la
@@ -72,15 +83,47 @@ export function SoldeCard({
         } as React.CSSProperties
       }
     >
-      <TypeBadge code={code} />
-      <span
-        className={`inline-block origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.2] ${classeValeur ?? "text-ink-900"}`}
-      >
-        {formatJours(valeur)} j
-      </span>
-      <span className="text-ink-500 text-xs leading-snug">
-        {conditionPrefixe} <span className="text-ink-900 font-bold">{conditionAccent}</span>
-      </span>
+      {/* Mobile (29/09/2026, essai suite au brief Claude Design — corrigé le
+          29/09/2026, "À poser avant le"/la date restent groupés ensemble à
+          droite dans la maquette, pas répartis sur les deux lignes de la
+          grille) : colonne de gauche (badge carré + libellé, puis chiffre en
+          dessous) / colonne de droite (condition + date ensemble) —
+          remplace la disposition verticale seulement en dessous de `sm:`,
+          où la card retrouve son rendu d'origine (couleur de fond et
+          position du badge inchangées), à ceci près que le badge lui-même
+          (carré, fond plein, texte blanc) + son libellé sont désormais
+          repris sur les deux tailles (même 2ᵉ correctif du 29/09/2026 —
+          "on retrouve ce nouveau badge également sur la card en desktop"). */}
+      <div className="flex items-start justify-between gap-2 sm:hidden">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5">
+            <TypeBadge code={code} variant="carre" />
+            <span className="text-ink-900 text-xs font-semibold">{LABEL_BADGE[tone]}</span>
+          </div>
+          <span className={`text-[1.725rem] font-bold ${classeValeur ?? "text-ink-900"}`}>
+            {formatJours(valeur)} j
+          </span>
+        </div>
+        <div className="flex flex-col items-end text-right">
+          <span className="text-ink-500 text-[11px] leading-snug">{conditionPrefixe}</span>
+          <span className="text-ink-900 text-xs font-bold">{conditionAccent}</span>
+        </div>
+      </div>
+
+      <div className="hidden sm:flex sm:flex-col sm:gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <TypeBadge code={code} variant="carre" />
+          <span className="text-ink-900 text-xs font-semibold">{LABEL_BADGE[tone]}</span>
+        </div>
+        <span
+          className={`inline-block origin-left text-[1.725rem] font-bold transition-transform duration-200 group-hover:scale-[1.2] ${classeValeur ?? "text-ink-900"}`}
+        >
+          {formatJours(valeur)} j
+        </span>
+        <span className="text-ink-500 text-xs leading-snug">
+          {conditionPrefixe} <span className="text-ink-900 font-bold">{conditionAccent}</span>
+        </span>
+      </div>
     </div>
   );
 }

@@ -8272,6 +8272,43 @@ les captures) : commenté, pas supprimé, à réactiver d'une ligne quand il red
 redémarrage précédent du serveur de dev, bloquait `tsc` avec une erreur sans rapport avec le code —
 nettoyé (`rm -rf .next/dev`, serveur arrêté d'abord cette fois, pas comme l'incident du 25/09).
 
+## Cards de solde + TypeBadge "rechallengé" (29/09/2026, suite au brief Claude Design)
+
+Poursuite de la nav mobile (voir section précédente) : le bloc "Suivre mes soldes" (Accueil, mobile
+ET desktop — l'unique autre demande explicite de Vincent était le placement de la nav, pas les
+cards, mais ces changements-ci étendent aussi le rendu jusqu'au desktop après validation successive
+de chaque essai).
+
+**`TypeBadge.tsx`** : nouvelle variante `carre` (additive, n'affecte aucun usage existant) — fond
+plein dans la couleur du type (réutilise `CODE_STYLES`, mêmes couleurs que la variante `pill`) + texte
+blanc, coins arrondis en carré plutôt qu'en pilule complète. Deux itérations avant validation : premier
+essai en fond pâle 15%/texte coloré, refusé ("fond = couleur du congé / typo blanche").
+
+**`SoldeCard.tsx`** : 
+- En dessous de `sm:` : colonne de gauche (badge `carre` + libellé, puis le chiffre en dessous) / colonne
+  de droite ("À poser avant le" + date, groupés ensemble) — remplace l'ancienne pile verticale. Un
+  premier essai en grille 2×2 (condition sur la même ligne que le badge, date sur la même ligne que le
+  chiffre) a été refusé : "À poser avant le"/la date doivent rester groupés ensemble dans la maquette,
+  pas répartis sur les deux lignes.
+- À partir de `sm:` : le badge `circle` solo est remplacé par le même combo badge `carre` + libellé
+  (2ᵉ demande de Vincent, après le rendu mobile validé — "on retrouve ce nouveau badge également sur
+  la card en desktop"). Couleur de fond pleine de la card (12% de mélange) et sa position inchangées.
+- **Bug trouvé et corrigé en cours de route** : un `justify-center` ajouté sur le conteneur (pensé pour
+  le rendu mobile) s'appliquait aussi au desktop, sans breakpoint — les 3 cards ayant une hauteur de
+  grille identique mais un contenu de hauteur différente (libellés qui wrappent différemment), le
+  centrage vertical décalait le chiffre d'une card à l'autre. Repéré par Vincent ("les 3 cards ne sont
+  pas identiques"), confirmé en mesurant les positions via `getBoundingClientRect` (chiffres à des
+  `top` différents), corrigé en retirant simplement la classe (l'original n'en avait pas besoin).
+
+**`DashboardPage.tsx`** : grille `grid-cols-1` en dessous de `sm:` (cards empilées pleine largeur) au
+lieu de `grid-cols-2`, inchangé à partir de `sm:`/`md:`. Bouton "Poser un congé" : bandeau vert plein
+largeur ("bouton normal") en dessous de `sm:`, tuile carrée icône seule inchangée à partir de `sm:` —
+deux rendus distincts plutôt qu'un seul stylé en responsive (formes trop différentes).
+
+Vérifié à chaque itération en session réelle (comptes de test acme, mots de passe temporaires
+neutralisés après coup) : mobile 375px et desktop 1280px, alignement des 3 chiffres confirmé
+numériquement après le correctif `justify-center`. `npm run build` complet passé.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

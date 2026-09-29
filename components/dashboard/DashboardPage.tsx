@@ -663,7 +663,10 @@ export function DashboardPage() {
           <h2 className="text-ink-900 text-base font-semibold">Suivre mes soldes</h2>
         </div>
 
-        <div className="grid max-w-[900px] grid-cols-2 gap-3 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
+        {/* `grid-cols-1` en dessous de `sm:` (29/09/2026, essai Claude
+            Design) : les 3 cards empilées pleine largeur plutôt qu'en grille
+            2×2 — `sm:grid-cols-2`/`md:grid-cols-[...]` inchangés au-delà. */}
+        <div className="grid max-w-[900px] grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-[minmax(0,200px)_minmax(0,200px)_minmax(0,200px)_160px]">
           <SoldeCard
             valeur={soldes.cp.valeurApresAttente}
             conditionPrefixe={soldes.cp.conditionPrefixe}
@@ -688,10 +691,23 @@ export function DashboardPage() {
             onClick={() => setSoldeDetailOuvert("CPA")}
             classeValeur="text-ink-900"
           />
+          {/* Bouton "normal" pleine largeur en mobile (29/09/2026, essai
+              Claude Design — "celui-ci devient un bouton normal sur
+              mobile"), tuile carrée d'origine inchangée à partir de `sm:`
+              (deux rendus distincts plutôt qu'un seul stylé en responsive :
+              formes trop différentes pour un simple reflow de classes). */}
           <button
             type="button"
             onClick={() => setNouvelleDemandeOuverte(true)}
-            className="text-slate hover:text-slate/80 flex h-full w-full flex-col items-center justify-center gap-2 p-4 transition-[transform,color] hover:scale-110"
+            className="bg-mint hover:bg-mint-hover flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-white shadow-sm transition-colors duration-150 sm:hidden"
+          >
+            <PlusCircle size={20} />
+            <span className="text-sm font-semibold">Poser un congé</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setNouvelleDemandeOuverte(true)}
+            className="text-slate hover:text-slate/80 hidden h-full w-full flex-col items-center justify-center gap-2 p-4 transition-[transform,color] hover:scale-110 sm:flex"
           >
             <PlusCircle size={56} />
             <span className="text-sm font-semibold">Poser un congé</span>

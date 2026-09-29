@@ -14,6 +14,15 @@ const CODE_STYLES: Record<TypeBadgeCode, string> = {
   FERIE: "bg-ferie",
 };
 
+// Variante "carré" (29/09/2026, essai suite au brief Claude Design — "on
+// rechallenge le typebadge" ; corrigé le 29/09/2026, fond plein demandé
+// plutôt que le premier essai en 15% pâle) : fond plein dans la couleur du
+// type + texte blanc, coins arrondis mais pas une pilule complète — reprend
+// `CODE_STYLES` (mêmes couleurs pleines que la variante "pill"), juste avec
+// une forme différente. Utilisée pour l'instant seulement par `SoldeCard`
+// (mobile et desktop), pas encore généralisée ailleurs le temps de voir si
+// l'essai est concluant.
+
 // Variante "outline" (liséré coloré, fond transparent, texte coloré) — utilisée
 // pour les pastilles de sous-catégorie (ex. Matin/A. Midi sur une DJ imposée).
 const CODE_STYLES_OUTLINE: Record<TypeBadgeCode, string> = {
@@ -204,12 +213,22 @@ export function classeFondActifTypeBadge(code: TypeBadgeCode): string {
 
 interface TypeBadgeProps {
   code: TypeBadgeCode;
-  variant?: "circle" | "outline" | "pill";
+  variant?: "circle" | "outline" | "pill" | "carre";
   /** Texte affiché à la place du libellé court par défaut (ex. "Matin" au lieu de "DJI"). */
   label?: string;
 }
 
 export function TypeBadge({ code, variant = "circle", label }: TypeBadgeProps) {
+  if (variant === "carre") {
+    return (
+      <span
+        className={`rounded-lg px-2.5 py-1 text-xs font-bold whitespace-nowrap text-white ${CODE_STYLES[code]}`}
+      >
+        {label ?? LABEL_COURT[code]}
+      </span>
+    );
+  }
+
   if (variant === "outline") {
     return (
       <span
