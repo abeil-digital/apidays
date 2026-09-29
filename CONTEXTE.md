@@ -8245,6 +8245,33 @@ en vérifiant que le résultat reste sur la même origine, plutôt que d'énumé
 Fonction unique partagée entre les deux endroits identiques du bug. Vérifié : les 3 variantes
 d'attaque (`\`, `//`, `http://`) neutralisées, le cas légitime (lien avec un chemin réel) inchangé.
 
+## Nav mobile en 2 lignes, essai suite au brief Claude Design (29/09/2026)
+
+Vincent a briefé Claude Design pour un rafraîchissement graphique léger (mêmes écrans, même
+architecture — voir le brief complet transmis dans la conversation, pas dans ce fichier). En
+comparant les premières maquettes reçues au code réel, plusieurs propositions se sont révélées être
+des changements de STRUCTURE (pas juste d'habillage) : header mobile en 2 lignes plutôt qu'1
+scrollable, cards de solde réorganisées en horizontal plutôt qu'empilées verticalement, calendrier
+replié par défaut avec un "Voir janvier-mai 2027". Décision de Vincent : "on tente la mise à jour de
+la nav" — seul le placement logo/profil/onglets a été implémenté, pas le traitement visuel (coins
+arrondis, carte flottante) ni les autres propositions (cards de solde, calendrier replié).
+
+**`HeaderBar.tsx`** : 2 lignes en dessous de `md:` (logo + profil sur la 1ʳᵉ, nav Poser/Suivre/
+Paramétrer sur la 2ᵉ) au lieu de l'ancienne ligne unique qui défilait horizontalement. Obtenu via
+`md:contents` sur les 2 groupes mobile plutôt qu'une réécriture complète : ce display fait
+disparaître leur boîte à partir de `md:`, leurs enfants rejoignent alors directement le flex du
+`<header>` et retrouvent la ligne unique d'origine, strictement inchangée (vérifié à 1280px après
+coup). Le profil est dupliqué (une instance par ligne visible selon le point de rupture) plutôt que
+déplacé via `contents`, plus simple qu'un 3ᵉ groupe rien que pour lui. Vérifié à 375px (2 lignes),
+678px (2 lignes — sous le seuil `md:` 768px) et 1280px (1 ligne, identique à avant).
+
+**Bandeau `DateOverrideBanner`** masqué temporairement (`AppShell.tsx`, demande explicite — gênait
+les captures) : commenté, pas supprimé, à réactiver d'une ligne quand il redevient utile.
+
+**En chemin** : `.next/dev/types/validator.ts` (généré par Next.js) trouvé corrompu après un
+redémarrage précédent du serveur de dev, bloquait `tsc` avec une erreur sans rapport avec le code —
+nettoyé (`rm -rf .next/dev`, serveur arrêté d'abord cette fois, pas comme l'incident du 25/09).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

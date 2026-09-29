@@ -3,7 +3,7 @@ import { HeaderBar } from "@/components/layout/HeaderBar";
 import { SideNav } from "@/components/layout/SideNav";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Footer } from "@/components/layout/Footer";
-import { DateOverrideBanner } from "@/components/layout/DateOverrideBanner";
+// `DateOverrideBanner` masqué momentanément — voir le commentaire plus bas.
 import type { Branding } from "@/lib/data/branding.repository";
 
 interface AppShellProps {
@@ -29,7 +29,9 @@ export function AppShell({ children, branding }: AppShellProps) {
         } as CSSProperties
       }
     >
-      <DateOverrideBanner />
+      {/* Masqué momentanément (29/09/2026, demande de Vincent — gêne les
+          captures pendant les essais de nav) : remettre `<DateOverrideBanner />`
+          dès que le bandeau redevient utile, rien d'autre n'a changé. */}
       <HeaderBar logoUrl={branding.logoUrl} />
 
       {/* `bg-surface-app` portée ici (pas sur `body`) — le canvas gris

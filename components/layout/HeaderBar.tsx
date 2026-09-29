@@ -112,6 +112,20 @@ function MenuProfil({
  * z-40`, remonté jusqu'en haut de l'écran) tant que ce header est visible à
  * l'écran (page non défilée) ; une fois défilé hors du viewport, le rail
  * n'a plus rien à recouvrir et occupe le haut de l'écran.
+ *
+ * Deux lignes sur mobile, une seule à partir de `md:` (29/09/2026, essai
+ * suite à une maquette Claude Design jugée bonne sur le placement — "le
+ * positionnement logo et nav est pas mal") : logo + profil sur la première
+ * ligne, nav de niveau 1 sur la seconde, plutôt que tout sur une ligne qui
+ * défile horizontalement. Obtenu via `md:contents` sur les deux groupes
+ * mobile (logo+profil / nav) — ce display fait disparaître leur propre boîte
+ * à partir de `md:`, si bien que leurs enfants rejoignent directement le flex
+ * du `<header>` et retrouvent la ligne unique d'origine, inchangée. Seul le
+ * profil est dupliqué (une instance par ligne, visible selon le point de
+ * rupture) plutôt que déplacé via `contents` — plus simple qu'un troisième
+ * groupe `contents` juste pour lui. N'inclut PAS le traitement visuel de la
+ * maquette (coins arrondis, carte flottante) — décision volontairement
+ * limitée au placement, à revoir une fois la direction graphique validée.
  */
 interface HeaderBarProps {
   // Logo du tenant (09/09/2026, phase logo) — `null`/absent ⇒ fallback sur
@@ -125,18 +139,34 @@ export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
   const niveau1Items = getNiveau1Items(utilisateur?.role, utilisateur?.sansSolde);
 
   return (
-    <header className="bg-brand-primary relative z-50 mx-auto flex h-14 w-full shrink-0 items-center gap-4 overflow-x-auto pr-4 pl-0 shadow-sm md:max-w-[1180px] md:gap-6 md:pr-8 print:hidden">
-      <Link href="/" className="ml-[25px] shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
-            l'optimisation next/image n'apporte rien ici */}
-        <img
-          src={logoUrl ?? "/logo-abeil.svg"}
-          alt="Abeil"
-          className="h-[25.6px] w-auto origin-left scale-x-[1.21]"
-        />
-      </Link>
+    <header className="bg-brand-primary relative z-50 mx-auto flex w-full shrink-0 flex-col shadow-sm md:h-14 md:max-w-[1180px] md:flex-row md:items-center md:gap-6 md:overflow-x-auto md:pr-8 md:pl-0 print:hidden">
+      {/* Ligne 1 mobile (logo + profil) — `md:contents` la fait disparaître à
+          partir de `md:`, ses deux enfants rejoignent alors directement la
+          ligne unique du `<header>`, comme avant ce changement. */}
+      <div className="flex h-14 shrink-0 items-center justify-between px-4 md:contents">
+        <Link href="/" className="shrink-0 md:ml-[25px]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- SVG statique,
+              l'optimisation next/image n'apporte rien ici */}
+          <img
+            src={logoUrl ?? "/logo-abeil.svg"}
+            alt="Abeil"
+            className="h-[22px] w-auto md:h-[25.6px] md:origin-left md:scale-x-[1.21]"
+          />
+        </Link>
+        {utilisateur && (
+          <div className="md:hidden">
+            <MenuProfil
+              prenom={utilisateur.prenom}
+              nom={utilisateur.nom}
+              initiales={utilisateur.initiales}
+            />
+          </div>
+        )}
+      </div>
 
-      <nav className="flex h-full shrink-0 items-stretch gap-1">
+      {/* Ligne 2 mobile (nav niveau 1) — même principe `md:contents` : les
+          `<Link>` rejoignent la ligne unique du header à partir de `md:`. */}
+      <nav className="flex shrink-0 items-stretch gap-1 overflow-x-auto px-4 pb-2 md:contents md:h-full md:px-0 md:pb-0">
         {niveau1Items
           .filter(({ href }) => href !== null)
           .map(({ key, label, href }) => (
@@ -154,7 +184,9 @@ export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
           ))}
       </nav>
 
-      <div className="ml-auto flex shrink-0 items-center gap-3">
+      {/* Profil desktop uniquement — dupliqué plutôt que déplacé via
+          `contents` (voir doc du composant), même position qu'avant. */}
+      <div className="hidden shrink-0 items-center gap-3 md:ml-auto md:flex">
         {utilisateur && (
           <MenuProfil
             prenom={utilisateur.prenom}
@@ -165,11 +197,11 @@ export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
       </div>
       {/* Espaceur explicite (22/09/2026, badge utilisateur collé au bord sur
           mobile réel — Safari iOS) : le `padding-right` d'un conteneur flex
-          en scroll horizontal (`overflow-x-auto`, ce `<header>`) n'est pas
-          respecté en fin de scroll dans Safari — `pr-4`/`md:pr-8` ci-dessus
-          ne suffisent pas. Un vrai élément de contenu, lui, est toujours
-          honoré. */}
-      <div className="w-4 shrink-0 md:w-8" />
+          en scroll horizontal (`overflow-x-auto`) n'est pas respecté en fin
+          de scroll dans Safari — `md:pr-8` seul ne suffit pas. Un vrai
+          élément de contenu, lui, est toujours honoré. Ne concerne plus que
+          `md:` : le profil mobile a sa propre ligne, non scrollable. */}
+      <div className="hidden w-4 shrink-0 md:block md:w-8" />
     </header>
   );
 }
