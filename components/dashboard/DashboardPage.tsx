@@ -17,7 +17,7 @@ import {
 } from "@/components/demandes/SnippetJourCalendrier";
 import { CompteurTypologies } from "@/components/demandes/CompteurTypologies";
 import { compterTypologies } from "@/components/demandes/compterTypologies";
-import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
+import { MiniCalendrier, MOIS_FR, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import { ActiviteRecenteFeed } from "@/components/dashboard/ActiviteRecenteFeed";
 import { DemandesAEtudierCard } from "@/components/dashboard/DemandesAEtudierCard";
 import { CollaborateursEnCongeCard } from "@/components/dashboard/CollaborateursEnCongeCard";
@@ -65,6 +65,21 @@ function moisEntre(debutIso: string, finIso: string): { annee: number; moisIndex
   }
 
   return mois;
+}
+
+/** Libellé du bouton "Voir la suite" du calendrier mobile (29/09/2026) —
+ * "janvier – mai 2027" (même année, affichée une seule fois) ou "décembre
+ * 2026 – mai 2027" (à cheval sur deux années, chacune précisée pour éviter
+ * toute ambiguïté). `mois` toujours non vide ici (bouton masqué sinon). */
+function libelleMoisMasques(mois: { annee: number; moisIndex: number }[]): string {
+  const premier = mois[0];
+  const dernier = mois[mois.length - 1];
+  const nomPremier = MOIS_FR[premier.moisIndex].toLowerCase();
+  const nomDernier = MOIS_FR[dernier.moisIndex].toLowerCase();
+  if (premier.annee === dernier.annee) {
+    return `${nomPremier} – ${nomDernier} ${dernier.annee}`;
+  }
+  return `${nomPremier} ${premier.annee} – ${nomDernier} ${dernier.annee}`;
 }
 
 function codeBadgeDemande(demande: Demande): TypeBadgeCode {
@@ -189,6 +204,13 @@ export function DashboardPage() {
   // mois). `SelectAffichage` (composant repris de `CalendrierCollaborateur.tsx`,
   // duplication assumée) juste sous le titre "Mon Calendrier".
   const [commenceIlYA3Mois, setCommenceIlYA3Mois] = useState(false);
+  // Repli du calendrier sur mobile (29/09/2026, essai Claude Design —
+  // "limiter l'affichage à 4 mois, ajouter une action pour afficher la
+  // suite") : les mois au-delà du 4ᵉ restent dans le DOM (`hidden sm:block`)
+  // plutôt que non rendus — simple à révéler sans recalculer `moisActifs`,
+  // et de toute façon toujours affichés tels quels à partir de `sm:`, où
+  // cette limite ne s'applique pas.
+  const [calendrierEtendu, setCalendrierEtendu] = useState(false);
   // `getAujourdhui()` plutôt que `new Date()` (10/09/2026, demande explicite
   // de Vincent) — pour que le bandeau de date simulée locale entraîne bien la
   // fenêtre de 12 mois glissants ci-dessous.
@@ -828,26 +850,51 @@ export function DashboardPage() {
                 calendrier consulté. */}
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-4">
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:col-span-3 xl:grid-cols-3">
-                {moisActifs.map(({ annee, moisIndex }) => (
-                  <MiniCalendrier
+                {moisActifs.map(({ annee, moisIndex }, index) => (
+                  <div
                     key={`${annee}-${moisIndex}`}
-                    annee={annee}
-                    moisIndex={moisIndex}
-                    tipoDuJour={tipoDuJour}
-                    estEnGroupe={estEnGroupe}
-                    onJourClick={handleJourClick}
-                    onJourVideClick={handleJourVideClick}
-                    estAujourdhui={(iso) => iso === todayIso}
-                    // Exception (15/09/2026, demande explicite de Vincent) —
-                    // un jour déjà posé (congé perso) garde son chiffre à
-                    // pleine opacité, seuls les jours vides passés s'atténuent.
-                    estPasse={(iso) => iso < todayIso && !demandeDuJour(iso)}
-                    className="h-[290px] w-full"
-                    texteJour="text-base"
-                    paddingClassName="p-6"
-                    classeTitreMois="text-ink-900 text-base"
-                  />
+                    // Repli mobile (voir `calendrierEtendu` ci-dessus) — les
+                    // mois au-delà du 4ᵉ restent dans le DOM, juste masqués
+                    // en dessous de `sm:` tant que non étendu.
+                    className={index >= 4 && !calendrierEtendu ? "hidden sm:block" : undefined}
+                  >
+                    <MiniCalendrier
+                      annee={annee}
+                      moisIndex={moisIndex}
+                      tipoDuJour={tipoDuJour}
+                      estEnGroupe={estEnGroupe}
+                      onJourClick={handleJourClick}
+                      onJourVideClick={handleJourVideClick}
+                      estAujourdhui={(iso) => iso === todayIso}
+                      // Exception (15/09/2026, demande explicite de Vincent) —
+                      // un jour déjà posé (congé perso) garde son chiffre à
+                      // pleine opacité, seuls les jours vides passés s'atténuent.
+                      estPasse={(iso) => iso < todayIso && !demandeDuJour(iso)}
+                      className="h-[290px] w-full"
+                      texteJour="text-base"
+                      paddingClassName="p-6"
+                      classeTitreMois="text-ink-900 text-base"
+                    />
+                  </div>
                 ))}
+                {/* Bouton "Voir la suite" (29/09/2026, essai Claude Design)
+                    — mobile uniquement (`sm:hidden`), n'apparaît que s'il y
+                    a effectivement des mois masqués à révéler. Libellé
+                    calculé sur les mois RESTANTS (`moisActifs.slice(4)`),
+                    pas sur tout `moisActifs` — même année affichée une
+                    seule fois si le premier et le dernier mois masqué
+                    coïncident, sinon une par mois pour éviter toute
+                    ambiguïté à cheval sur une bascule d'année. */}
+                {!calendrierEtendu && moisActifs.length > 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setCalendrierEtendu(true)}
+                    className="bg-surface-card border-ink-300/60 text-ink-900 flex w-full items-center justify-center gap-1.5 rounded-2xl border px-4 py-3.5 text-sm font-semibold shadow-sm sm:hidden"
+                  >
+                    Voir {libelleMoisMasques(moisActifs.slice(4))}
+                    <ChevronDown size={16} />
+                  </button>
+                )}
               </div>
               {/* 4ᵉ colonne (14/09/2026, 3e itération — "le composant congé
                   détail doit se positionner au-dessus de la légende") :

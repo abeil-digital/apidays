@@ -8309,6 +8309,35 @@ Vérifié à chaque itération en session réelle (comptes de test acme, mots de
 neutralisés après coup) : mobile 375px et desktop 1280px, alignement des 3 chiffres confirmé
 numériquement après le correctif `justify-center`. `npm run build` complet passé.
 
+## Calendrier replié à 4 mois sur mobile (29/09/2026, suite au brief Claude Design)
+
+Dernier volet de la maquette mobile de "Poser" (après la nav 2 lignes et les cards de solde) : "limiter
+l'affichage du calendrier à 4 mois, ajouter une action pour afficher la suite". Première vraie
+évolution COMPORTEMENTALE du brief (pas juste visuelle) — signalée comme telle à Vincent avant
+implémentation, validée.
+
+**`DashboardPage.tsx`** : nouvel état `calendrierEtendu` (faux par défaut). Chaque `MiniCalendrier` est
+enveloppé dans un `<div>` qui porte `hidden sm:block` dès le 5ᵉ mois (`index >= 4`) tant que non étendu :
+en dessous de `sm:` ces mois restent dans le DOM mais masqués, à partir de `sm:` la classe `sm:block`
+les réaffiche systématiquement — le desktop n'est donc jamais concerné, sans détection de breakpoint
+en JS (pas de risque d'hydratation). Bouton "Voir janvier – mai 2027" (`sm:hidden`, chevron) sous la
+grille, visible seulement s'il y a des mois masqués (`moisActifs.length > 4`) et jusqu'au premier clic :
+un clic révèle tout et le bouton disparaît (pas de re-repli, non demandé). Libellé calculé par
+`libelleMoisMasques` sur les mois restants uniquement (`moisActifs.slice(4)`), noms via `MOIS_FR`
+(exporté par `MiniCalendrier.tsx`, mis en minuscules) — année affichée une seule fois si le premier et
+le dernier mois masqué partagent la même année, sinon précisée pour chacun ("décembre 2026 – mai 2027").
+
+Vérifié en session réelle (compte de test acme, mot de passe temporaire neutralisé après coup) :
+mobile 375px — 4 mois visibles (septembre-décembre) + bouton, 9 mois visibles et bouton disparu après
+clic ; desktop 1280px — les 9 mois visibles d'emblée, bouton présent dans le DOM mais caché
+(`offsetParent === null`). `npm run build` complet passé.
+
+**Piège de test rencontré, sans rapport avec le code** : plusieurs connexions de test ont échoué en
+silence (clic sans effet) pendant ces vérifications — cause : "Server Action … was not found" (Next.js
+dev), les actions serveur reçoivent un nouvel id à chaque recompilation, une page déjà ouverte garde
+l'ancien. Vincent a rencontré la même erreur de son côté. Remède : recharger complètement la page
+avant de retenter, n'arrive jamais en prod (pas de recompilation en cours de session).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
