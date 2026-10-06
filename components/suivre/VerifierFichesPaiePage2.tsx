@@ -74,6 +74,11 @@ function nomMois(dateIso: string): string {
   return new Intl.DateTimeFormat("fr-FR", { month: "long" }).format(date);
 }
 
+function formatJjMmAaCourt(dateIso: string): string {
+  const [annee, mois, jour] = dateIso.split("-");
+  return `${jour}/${mois}/${annee.slice(2)}`;
+}
+
 function moisPrecedentIso(periodeDebutIso: string): string {
   const d = new Date(`${periodeDebutIso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - 1);
@@ -154,7 +159,9 @@ function CardSoldeCollaborateur({
   // visibles même à 0).
   autres: { code: TypeBadgeCode; jours: number }[];
 }) {
-  const libelleMoisPrecedent = nomMois(moisPrecedentIso(periode.debut));
+  // Premier mois suivi (06/10/2026) : le point de départ est le solde initial,
+  // il n'y a pas de "mois précédent" dont parler.
+  const libelleMoisPrecedent = c.premierMois ? "Initial" : nomMois(moisPrecedentIso(periode.debut));
   const libelleMoisEnCours = nomMois(periode.debut);
 
   // Lignes CP/RTT/CPA + congés "sans solde" présents sur cet export
@@ -274,6 +281,7 @@ function PanelJoursMouvement({
   code,
   periode,
   soldeDepart,
+  premierMois,
   mouvementTotal,
   lignes,
   topOffset,
@@ -286,6 +294,8 @@ function PanelJoursMouvement({
   code: TypeBadgeCode;
   periode: { debut: string; fin: string };
   soldeDepart: number;
+  /** Mois du solde initial : le départ s'appelle "Solde initial", pas "Solde {mois précédent}". */
+  premierMois: boolean;
   mouvementTotal: number;
   lignes: { ligne: LigneExportPaie; demande: DemandeEquipe }[];
   topOffset: number;
@@ -332,7 +342,9 @@ function PanelJoursMouvement({
     date: string;
     auteurNom: string;
   } | null>(null);
-  const libelleMoisPrecedent = `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
+  const libelleMoisPrecedent = premierMois
+    ? `Solde initial au ${formatJjMmAaCourt(periode.debut)}`
+    : `Solde ${nomMois(moisPrecedentIso(periode.debut))}`;
   // Solde du mois FDP en bas de la popin (17/09/2026, PTP Vincent) — même
   // valeur que la pill "mois en cours" de la card collaborateur, calculée
   // ici par simple somme plutôt que reprise séparément (`soldeDepart +
@@ -909,6 +921,7 @@ export function VerifierFichesPaiePage2({
                 code={selectionMouvement.code}
                 periode={periode}
                 soldeDepart={categorieSelection.moisPrecedent}
+                premierMois={comparaisonSelection?.premierMois ?? false}
                 mouvementTotal={categorieSelection.moisEnCours - categorieSelection.moisPrecedent}
                 lignes={lignesSelection}
                 topOffset={panelTop}

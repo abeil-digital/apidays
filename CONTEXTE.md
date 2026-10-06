@@ -8347,6 +8347,37 @@ dans `TransmissionsPaiePage.tsx`, et `nomCollaborateur` dans `HistoriqueTable.ts
 "Collaborateur" trie aussi par nom de famille dans l'Historique et Suivre les demandes (même
 composant). `tsc`/`eslint` clean.
 
+**Vérifier les fiches de paie — acquisition du mois et premier mois suivi (06/10/2026)** : trouvé en
+testant les exports de juin 2026 sur Abeil (soldes initiaux au 01/06/2026, CPA saisi à 0 partout).
+Trois constats, de Vincent :
+
+- **Le solde "fin de mois" ignorait l'acquisition du mois.** Le moteur ne crédite RTT/CPA qu'au 1er du
+  mois suivant, donc la photo du 30/06 n'a jamais l'acquisition de juin, alors que la fiche de paie la
+  montre. Nouvelle `fetchAcquisitionsDuMois(utilisateurId, "AAAA-MM")` (`soldes.repository.ts`) : même
+  montant que celui que le moteur créditera ensuite (`montantAcquisitionMois` — gelé si export validé,
+  sinon taux paramétré × taux d'activité du mois ; jamais une seconde formule), 0 avant le mois du solde
+  initial et après la fin de contrat. `fetchComparaisonSoldes` (`exportsPaie.repository.ts`) l'ajoute
+  aux DEUX photos (précédent ET en cours) pour RTT/CPA — un seul côté ferait compter deux acquisitions
+  dans le mouvement du mois suivant. Le moteur et les soldes de l'accueil ne changent pas.
+- **Le premier mois suivi ne parle pas de "mois précédent".** Un solde initial daté du 01/06 est le
+  point de départ de l'app. `fetchComparaisonSoldes` lit alors directement le solde initial pour la
+  colonne de départ (nouveau champ `premierMois`) ; avant, il interrogeait le moteur au 31/05, qui
+  recalculait pour le CPA une acquisition théorique de 11 mois sur la période précédente (22,88 j au
+  lieu des 0 saisis). Libellés : colonne "Initial" et ligne "Solde initial au 01/06/26" dans la popin
+  (`VerifierFichesPaiePage2.tsx`), plus de "Solde mai".
+- **"Acquisition" fantôme sur le CP** (déjà connue, voir plus haut) : confirmée sur Abeil — les exports
+  de test ayant été générés le 06/10, le moteur ne les comptait pas dans le solde de fin juin
+  (`genere_le` > 30/06), d'où mouvement 0 et un résidu inventé. Contournement pour le test : `genere_le`
+  et `pris_en_compte_le` de l'export de juin d'Abeil antidatés au 30/06/2026 en base (aucun changement
+  de code, lignes et congés inchangés).
+
+Points laissés en l'état : pour un tenant qui traverserait un 1er juin entièrement sur l'app (hors
+Abeil), le transfert CPA → CP au 1er juin est calculé sur 11 mois d'acquisition (photo du 31/05) —
+à comparer avec une fiche de paie de mai avant toute décision. Le fantôme CP ne disparaît pas en
+production pour un export généré après la fin de sa période (cas de rattrapage) : option "corriger
+l'affichage" ou "ancrer sur la période" non tranchée. `tsc`/`eslint`/`prettier` clean, écran non
+revérifié en navigateur par l'agent (pas de session) — vérifié par Vincent.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

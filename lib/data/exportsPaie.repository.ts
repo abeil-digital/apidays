@@ -16,8 +16,12 @@ import {
   TYPES_TRANSMISSIBLES_PAIE,
   type DemandeEquipeRow,
 } from "@/lib/data/demandes.repository";
-import { fetchSoldes, geleAcquisitionsPourExport } from "@/lib/data/soldes.repository";
-import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
+import {
+  fetchAcquisitionsDuMois,
+  fetchSoldes,
+  geleAcquisitionsPourExport,
+} from "@/lib/data/soldes.repository";
+import { fetchSoldeInitial, fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 import { fetchEntrepriseCourante } from "@/lib/data/entreprise.repository";
 
 /**
@@ -721,6 +725,10 @@ export interface ComparaisonSoldeCollaborateur {
   cp: SoldeComparaisonCategorie;
   rtt: SoldeComparaisonCategorie;
   cpa: SoldeComparaisonCategorie;
+  /** Vrai quand la période affichée est le mois même du solde initial du
+   * collaborateur (06/10/2026) : il n'y a alors pas de "mois précédent" à
+   * montrer, le point de départ est le solde initial lui-même. */
+  premierMois: boolean;
 }
 
 /** Somme signée des `export_paie_lignes` d'un export, par collaborateur et par
@@ -807,6 +815,13 @@ async function fetchMouvementsExport(
  * n'est pas encore pris en compte ; une fois validé, `fetchSoldes(...).valeur`
  * seul est déjà le nombre à jour, aucun aperçu à construire.
  *
+ * **Acquisition du mois incluse dans la photo de fin de mois (06/10/2026)** :
+ * le moteur ne crédite RTT/CPA qu'au 1er du mois suivant, donc `fetchSoldes`
+ * au 30/06 ignore l'acquisition de juin alors que la fiche de paie la montre.
+ * `fetchAcquisitionsDuMois` l'ajoute aux DEUX photos (précédent ET en cours) —
+ * un seul côté ferait compter deux acquisitions dans le mouvement du mois
+ * suivant. Rien n'est ajouté avant le mois du solde initial.
+ *
  * Tous les collaborateurs ACTIFS sont inclus, pas seulement ceux qui ont des
  * lignes transmises sur cet export — "le 0 mouvement est important" (Vincent) :
  * un collaborateur sans aucun mouvement doit apparaître avec 0 explicite,
@@ -835,10 +850,32 @@ export async function fetchComparaisonSoldes(
 
   return Promise.all(
     actifs.map(async (u) => {
-      const [soldesPrecedent, soldesEnCours] = await Promise.all([
-        fetchSoldes(u.id, finMoisPrecedent),
+      const soldeInitial = await fetchSoldeInitial(u.id);
+      const premierMois = soldeInitial?.dateReference.slice(0, 7) === periode.debut.slice(0, 7);
+      // Premier mois suivi (06/10/2026, bug remonté par Vincent — un CPA
+      // "initial" à 22,88 j alors que le solde initial saisi est 0) : le
+      // moteur, interrogé AVANT la date du solde initial, recalcule une
+      // acquisition théorique sur la période précédente au lieu de lire la
+      // valeur saisie. Le point de départ est donc le solde initial lui-même,
+      // sans appel au moteur ni acquisition du mois précédent.
+      const [soldesEnCours, acqEnCours] = await Promise.all([
         fetchSoldes(u.id, finMoisEnCours),
+        fetchAcquisitionsDuMois(u.id, finMoisEnCours.toISOString().slice(0, 7)),
       ]);
+      const [soldesPrecedent, acqPrecedent] =
+        premierMois && soldeInitial
+          ? [
+              {
+                cp: { valeur: soldeInitial.cp },
+                rtt: { valeur: soldeInitial.rtt },
+                cpa: { valeur: soldeInitial.cpa },
+              },
+              { rtt: 0, cpa: 0 },
+            ]
+          : await Promise.all([
+              fetchSoldes(u.id, finMoisPrecedent),
+              fetchAcquisitionsDuMois(u.id, finMoisPrecedent.toISOString().slice(0, 7)),
+            ]);
       const mouvements = mouvementsParUtilisateur[u.id] ?? { cp: 0, rtt: 0, cpa: 0 };
       // `mouvement` de l'export : 0 une fois cet export déjà pris en compte
       // (`fetchSoldes(...).valeur` l'inclut déjà, voir doc ci-dessus) — reste
@@ -854,19 +891,20 @@ export async function fetchComparaisonSoldes(
       // le réel actuel encore inchangé.
       return {
         utilisateur: { id: u.id, prenom: u.prenom, nom: u.nom },
+        premierMois,
         cp: {
           moisPrecedent: soldesPrecedent.cp.valeur,
           moisEnCours: soldesEnCours.cp.valeur + ajoutApercu.cp,
           mouvement: mouvements.cp,
         },
         rtt: {
-          moisPrecedent: soldesPrecedent.rtt.valeur,
-          moisEnCours: soldesEnCours.rtt.valeur + ajoutApercu.rtt,
+          moisPrecedent: soldesPrecedent.rtt.valeur + acqPrecedent.rtt,
+          moisEnCours: soldesEnCours.rtt.valeur + acqEnCours.rtt + ajoutApercu.rtt,
           mouvement: mouvements.rtt,
         },
         cpa: {
-          moisPrecedent: soldesPrecedent.cpa.valeur,
-          moisEnCours: soldesEnCours.cpa.valeur + ajoutApercu.cpa,
+          moisPrecedent: soldesPrecedent.cpa.valeur + acqPrecedent.cpa,
+          moisEnCours: soldesEnCours.cpa.valeur + acqEnCours.cpa + ajoutApercu.cpa,
           mouvement: mouvements.cpa,
         },
       };

@@ -346,6 +346,78 @@ function montantAcquisitionMois(
   );
 }
 
+/**
+ * Acquisition RTT/CPA d'UN mois calendaire donné (`moisIso` = "AAAA-MM"), pour
+ * l'écran "Vérifier les fiches de paie" (06/10/2026, demande de Vincent — la
+ * fiche de paie de juin affiche déjà ce qui a été acquis EN juin, alors que
+ * le moteur ne crédite un mois qu'au 1er du mois suivant, donc jamais dans la
+ * photo "fin de mois" du 30/06). Même montant que celui que le moteur
+ * créditera ensuite (`montantAcquisitionMois` : gelé si l'export est validé,
+ * sinon au taux d'activité en vigueur ce mois-là) — jamais une seconde
+ * formule. 0 pour un mois antérieur à celui du solde initial : la valeur
+ * saisie est le solde constaté à la FIN du mois précédent, elle contient donc
+ * déjà ces mois-là (et au-delà de la date de fin de contrat).
+ */
+export async function fetchAcquisitionsDuMois(
+  utilisateurId: string,
+  moisIso: string,
+): Promise<{ rtt: number; cpa: number }> {
+  const supabase = createClient();
+  const [{ data: utilisateurRow }, reglesAcquisition, historiqueTaux, soldeInitial] =
+    await Promise.all([
+      supabase
+        .from("utilisateurs")
+        .select("taux_activite, date_fin_contrat")
+        .eq("id", utilisateurId)
+        .single(),
+      fetchReglesAcquisition(),
+      fetchHistoriqueTauxActivite(utilisateurId),
+      fetchSoldeInitial(utilisateurId),
+    ]);
+  if (!utilisateurRow) return { rtt: 0, cpa: 0 };
+
+  const moisLimite: string | null = utilisateurRow.date_fin_contrat
+    ? utilisateurRow.date_fin_contrat.slice(0, 7)
+    : null;
+  if (moisLimite && moisIso > moisLimite) return { rtt: 0, cpa: 0 };
+  if (soldeInitial && moisIso < soldeInitial.dateReference.slice(0, 7)) return { rtt: 0, cpa: 0 };
+
+  const tauxActuel = Number(utilisateurRow.taux_activite ?? 100);
+  const regleRTT = reglesAcquisition.find((r) => r.typeAbsence === "RTT");
+  const regleCP = reglesAcquisition.find((r) => r.typeAbsence === "CP");
+
+  async function acquisition(
+    regle: typeof regleRTT,
+    type: "RTT" | "CP",
+    isAnticipation: boolean,
+  ): Promise<number> {
+    if (!regle) return 0;
+    const typeAbsenceId = await getTypeAbsenceId(supabase, type);
+    const gelees = await fetchAcquisitionsGelees(
+      supabase,
+      utilisateurId,
+      typeAbsenceId,
+      isAnticipation,
+      moisIso,
+      moisIso,
+    );
+    return montantAcquisitionMois(
+      gelees,
+      regle.tauxAcquisitionMensuel,
+      historiqueTaux,
+      tauxActuel,
+      moisIso,
+      moisLimite,
+    );
+  }
+
+  const [rtt, cpa] = await Promise.all([
+    acquisition(regleRTT, "RTT", false),
+    acquisition(regleCP, "CP", true),
+  ]);
+  return { rtt, cpa };
+}
+
 /** Même somme que l'ancien `accrualMensuelSomme`, mais un mois déjà figé
  * renvoie son montant gelé au lieu d'être recalculé au taux d'acquisition
  * ACTUEL — remplace tous les usages de `accrualMensuelSomme` (11/09/2026). */
