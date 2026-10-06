@@ -104,8 +104,8 @@ function ordreType(demande: DemandeEquipe): number {
 // live que sur les `DemandeEquipe[]` figées d'un export déjà transmis.
 function trierParCollaborateurPuisType<T extends DemandeEquipe>(demandes: T[]): T[] {
   return [...demandes].sort((a, b) => {
-    const nomA = `${a.demandeur.prenom} ${a.demandeur.nom}`;
-    const nomB = `${b.demandeur.prenom} ${b.demandeur.nom}`;
+    const nomA = `${a.demandeur.nom} ${a.demandeur.prenom}`;
+    const nomB = `${b.demandeur.nom} ${b.demandeur.prenom}`;
     const cmpNom = nomA.localeCompare(nomB);
     if (cmpNom !== 0) return cmpNom;
     return ordreType(a) - ordreType(b);
@@ -183,6 +183,7 @@ function grouperParCollaborateur(
   ignorerStatutLive = false,
 ): LigneCollab[] {
   const parId = new Map<string, LigneCollab>();
+  const cleTri = new Map<string, string>();
 
   for (const d of demandes) {
     const bucket: TypeConsomme =
@@ -191,6 +192,7 @@ function grouperParCollaborateur(
 
     if (!parId.has(id)) {
       parId.set(id, { nom: `${d.demandeur.prenom} ${d.demandeur.nom}`, parType: ligneVide() });
+      cleTri.set(id, `${d.demandeur.nom} ${d.demandeur.prenom}`);
     }
 
     const ligne = parId.get(id)!;
@@ -207,7 +209,9 @@ function grouperParCollaborateur(
     });
   }
 
-  return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom));
+  return [...parId.entries()]
+    .sort(([idA], [idB]) => cleTri.get(idA)!.localeCompare(cleTri.get(idB)!))
+    .map(([, ligne]) => ligne);
 }
 
 function csvLigne(champs: string[]): string {

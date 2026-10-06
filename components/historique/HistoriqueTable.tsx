@@ -257,13 +257,13 @@ const STATUT_ORDRE: Record<StatutDemande, number> = {
   annulé: 3,
 };
 
-// Nom complet du collaborateur — uniquement appelée quand `tri.colonne ===
+// Clé de tri "NOM Prénom" (06/10/2026, tri alphabétique sur le nom de famille) — uniquement appelée quand `tri.colonne ===
 // "collaborateur"`, ce qui n'arrive que via l'en-tête `avecCollaborateur`
 // (voir plus bas), donc `demandes` est garanti `DemandeEquipe[]` à ce
 // moment malgré la contrainte générique `T extends Demande` de la fonction.
 function nomCollaborateur(demande: Demande): string {
   const equipe = demande as unknown as DemandeEquipe;
-  return `${equipe.demandeur.prenom} ${equipe.demandeur.nom}`;
+  return `${equipe.demandeur.nom} ${equipe.demandeur.prenom}`;
 }
 
 function trierDemandes<T extends Demande>(demandes: T[], tri: TriTable | null): T[] {

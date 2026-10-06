@@ -8338,6 +8338,15 @@ dev), les actions serveur reçoivent un nouvel id à chaque recompilation, une p
 l'ancien. Vincent a rencontré la même erreur de son côté. Remède : recharger complètement la page
 avant de retenter, n'arrive jamais en prod (pas de recompilation en cours de session).
 
+**Tri des collaborateurs par nom de famille (06/10/2026)** : demande de Vincent pendant les tests
+des exports paie — dans "Quels congés transmettre", l'ordre par défaut des collaborateurs passe de
+l'ordre alphabétique du prénom à celui du nom. `trierParCollaborateurPuisType` et le récapitulatif
+par collaborateur du CSV (`grouperParCollaborateur`, via une clé de tri séparée du libellé affiché)
+dans `TransmissionsPaiePage.tsx`, et `nomCollaborateur` dans `HistoriqueTable.tsx` (clé de tri
+"NOM Prénom"). L'affichage reste "Prénom NOM". Effet de bord assumé : le clic sur l'en-tête
+"Collaborateur" trie aussi par nom de famille dans l'Historique et Suivre les demandes (même
+composant). `tsc`/`eslint` clean.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
