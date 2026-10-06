@@ -724,6 +724,82 @@ export interface SoldeComparaisonCategorie {
   moisPrecedent: number;
   moisEnCours: number;
   mouvement: number;
+  /** Acquisition du mois lue directement (RTT/CPA ; toujours 0 pour le CP,
+   * qui n'a pas d'acquisition mensuelle) — plus déduite par résidu. */
+  acquisition: number;
+  /** Variation du solde que ni les lignes de l'export, ni l'acquisition du
+   * mois, ni les régularisations manuelles n'expliquent (garde-fou du
+   * 06/10/2026) — 0 quand tout s'explique (tolérance 0,01 j). Peut être
+   * légitime (bascule de période, jour d'ancienneté) ou signaler une
+   * anomalie : l'écran la montre telle quelle plutôt que de la déguiser en
+   * « Acquisition ». */
+  ecartNonExplique: number;
+}
+
+const TOLERANCE_ECART_JOURS = 0.01;
+
+function ecartNonExplique(params: {
+  moisPrecedent: number;
+  moisEnCours: number;
+  mouvement: number;
+  acquisition: number;
+  ajustements: number;
+}): number {
+  const attendu = params.moisPrecedent + params.mouvement + params.acquisition + params.ajustements;
+  const ecart = Math.round((params.moisEnCours - attendu) * 100) / 100;
+  return Math.abs(ecart) < TOLERANCE_ECART_JOURS ? 0 : ecart;
+}
+
+function categorie(
+  moisPrecedent: number,
+  moisEnCours: number,
+  mouvement: number,
+  acquisition: number,
+  ajustements: number,
+): SoldeComparaisonCategorie {
+  return {
+    moisPrecedent,
+    moisEnCours,
+    mouvement,
+    acquisition,
+    ecartNonExplique: ecartNonExplique({
+      moisPrecedent,
+      moisEnCours,
+      mouvement,
+      acquisition,
+      ajustements,
+    }),
+  };
+}
+
+/** Somme des régularisations manuelles (`ajustements_solde`) créées sur la
+ * période affichée, par `"<utilisateurId>:<CP|RTT|CPA>"` — même fenêtre
+ * (`created_at` dans la période) que `fetchAjustementsSolde`, qui alimente
+ * les lignes « Régul » de la popin. Une seule requête pour tout le tenant
+ * (la RLS restreint déjà aux manager/admin). */
+async function fetchAjustementsPeriodeParCle(periode: {
+  debut: string;
+  fin: string;
+}): Promise<Record<string, number>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("ajustements_solde")
+    .select("utilisateur_id, delta_jours, is_anticipation, types_absences!type_absence_id(code)")
+    .gte("created_at", `${periode.debut}T00:00:00.000Z`)
+    .lte("created_at", `${periode.fin}T23:59:59.999Z`);
+  if (error) {
+    throw new Error("Impossible de charger les ajustements de la période.");
+  }
+  const parCle: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const typeAbsence = Array.isArray(row.types_absences)
+      ? row.types_absences[0]
+      : row.types_absences;
+    const code = typeAbsence?.code === "RTT" ? "RTT" : row.is_anticipation ? "CPA" : "CP";
+    const cle = `${row.utilisateur_id}:${code}`;
+    parCle[cle] = (parCle[cle] ?? 0) + Number(row.delta_jours);
+  }
+  return parCle;
 }
 
 export interface ComparaisonSoldeCollaborateur {
@@ -853,11 +929,12 @@ export async function fetchComparaisonSoldes(
   const finMoisPrecedent = veilleDebut;
   const finMoisEnCours = new Date(`${periode.fin}T00:00:00Z`);
 
-  const [utilisateurs, mouvementsParUtilisateur] = await Promise.all([
+  const [utilisateurs, mouvementsParUtilisateur, ajustementsParCle] = await Promise.all([
     fetchUtilisateursAdmin(),
     exportId
       ? fetchMouvementsExport(exportId)
       : Promise.resolve<Record<string, { cp: number; rtt: number; cpa: number }>>({}),
+    fetchAjustementsPeriodeParCle(periode),
   ]);
   // `!u.sansSolde` (24/09/2026) : évite d'appeler `fetchSoldes` ci-dessous
   // pour un manager/admin "sans suivi de solde" — son solde serait de toute
@@ -908,21 +985,27 @@ export async function fetchComparaisonSoldes(
       return {
         utilisateur: { id: u.id, prenom: u.prenom, nom: u.nom },
         premierMois,
-        cp: {
-          moisPrecedent: soldesPrecedent.cp.valeur,
-          moisEnCours: soldesEnCours.cp.valeur + ajoutApercu.cp,
-          mouvement: mouvements.cp,
-        },
-        rtt: {
-          moisPrecedent: soldesPrecedent.rtt.valeur + acqPrecedent.rtt,
-          moisEnCours: soldesEnCours.rtt.valeur + acqEnCours.rtt + ajoutApercu.rtt,
-          mouvement: mouvements.rtt,
-        },
-        cpa: {
-          moisPrecedent: soldesPrecedent.cpa.valeur + acqPrecedent.cpa,
-          moisEnCours: soldesEnCours.cpa.valeur + acqEnCours.cpa + ajoutApercu.cpa,
-          mouvement: mouvements.cpa,
-        },
+        cp: categorie(
+          soldesPrecedent.cp.valeur,
+          soldesEnCours.cp.valeur + ajoutApercu.cp,
+          mouvements.cp,
+          0,
+          ajustementsParCle[`${u.id}:CP`] ?? 0,
+        ),
+        rtt: categorie(
+          soldesPrecedent.rtt.valeur + acqPrecedent.rtt,
+          soldesEnCours.rtt.valeur + acqEnCours.rtt + ajoutApercu.rtt,
+          mouvements.rtt,
+          acqEnCours.rtt,
+          ajustementsParCle[`${u.id}:RTT`] ?? 0,
+        ),
+        cpa: categorie(
+          soldesPrecedent.cpa.valeur + acqPrecedent.cpa,
+          soldesEnCours.cpa.valeur + acqEnCours.cpa + ajoutApercu.cpa,
+          mouvements.cpa,
+          acqEnCours.cpa,
+          ajustementsParCle[`${u.id}:CPA`] ?? 0,
+        ),
       };
     }),
   );

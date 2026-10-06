@@ -8439,8 +8439,43 @@ le tenant « Abeil (sandbox) »** avec un vrai cas tardif : export de septembre 
 l'export de septembre du sandbox est désormais généré et validé (acquisitions de septembre gelées).
 Pas de framework de tests dans le repo.
 
-**Pas fait (proposé)** : lire l'acquisition RTT/CPA directement via `fetchAcquisitionsDuMois` plutôt que par
-résidu, avec une ligne « écart non expliqué » si le résidu dépasse 0,01 j.
+### Garde-fou « Écart non expliqué » (06/10/2026, même jour)
+
+Pour qu'un défaut inconnu ne se déguise plus en « Acquisition » :
+- **Acquisition lue directement** : `fetchComparaisonSoldes` renvoie, par collaborateur et par type,
+  `acquisition` (`fetchAcquisitionsDuMois` pour RTT/CPA, 0 pour le CP) — la popin n'infère plus rien par résidu.
+- **`ecartNonExplique`** (même fonction) = solde fin de mois − (solde début + mouvement de l'export +
+  acquisition + régularisations manuelles de la période), 0 sous 0,01 j. Les régularisations sont lues en une
+  requête pour tout le tenant (`fetchAjustementsPeriodeParCle`, même fenêtre `created_at` que
+  `fetchAjustementsSolde`).
+- **Affichage** (`VerifierFichesPaiePage2.tsx`) : ligne orange « ⚠ Écart non expliqué ± X » dans la popin,
+  avant le pied « Solde {mois} » (infobulle explicative), et petit point orange à côté du « Mvt » dans la
+  card du collaborateur. Rien d'affiché quand l'écart est nul. Les types sans solde (CE/RECUP/EVT_FAM/CSS)
+  n'ont jamais d'écart.
+- **Faux positifs assumés** : une variation légitime que l'écran ne sait pas détailler (bascule de période :
+  transfert CPA → CP/report ; jour d'ancienneté) remonte désormais comme « écart non expliqué » au lieu d'une
+  « Acquisition » CP — honnête, à comparer à la fiche de paie, mais visible chaque année au mois de bascule.
+
+**Trouvaille du premier essai (vraie anomalie du moteur, pas un faux positif)** : sur août (sandbox), Delphine
+avait deux régularisations du 27/08 (+1,5 et +1,25) affichées dans la popin mais absentes de la variation des
+soldes — écart −2,75 j exactement. Cause : `sommeAjustements` prend les régularisations jusqu'à la **fin de la
+période** (pas jusqu'à la date demandée) : la photo du 31/07 contenait déjà une régul créée le 27/08. Invisible
+pour le solde du jour (rien n'est créé dans le futur) mais faux pour toute photo passée. L'ancien calcul par
+résidu masquait le défaut (les lignes de la popin ne s'additionnaient pas au pied, sans alerte). Corrigé pour
+l'écran seulement : en ancrage `"periode"`, `sommeAjustements` reçoit une borne haute `dateLimite` = date de la
+photo ; l'ancrage par défaut (moteur) est inchangé. **Non corrigé côté moteur** pour une consultation à date
+passée (bandeau de date simulée) : mêmes régul « futures » comptées — à traiter si ça gêne.
+
+**Vérifié en navigateur (sandbox)** : août (écart −2,75 → 0 après correction : 30 − 1 + 1,5 + 1,25 = 31,75),
+juin, juillet et septembre sans aucun point orange.
+
+**Faux positif de bascule constaté, repoussé au Backlog** : sur le sandbox, juin 2027 (début de période CP)
+affiche un point orange sur le CP et le CPA de chaque collaborateur (Delphine : CP 16,25 → 42,5 = +26,25 j,
+CPA 30 → 2,5 = −27,5 j) — c'est le transfert CPA → CP, que l'écran ne sait pas encore détailler. Piste de
+correction (exposer report/transfert/bonus de `resolverCapitalOuvertureCp` en lignes dédiées, garder visible
+l'écart validé/transmis) décrite dans Backlog.md, « Écart non expliqué : expliquer les mouvements de bascule ».
+Décision de Vincent : laisser tel quel pour l'instant.
+
 
 ## À faire
 

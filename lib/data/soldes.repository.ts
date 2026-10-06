@@ -84,7 +84,9 @@ interface Periode {
  *   (`periode_fin <= date`), même s'il a été généré plus tard. Sert à comparer
  *   deux photos de fin de mois cohérentes entre elles avec la fiche de paie
  *   du mois, sans qu'un export tardif ne décale son mouvement sur le mois
- *   suivant.
+ *   suivant. Borne aussi les régularisations manuelles à `dateReference`
+ *   (le moteur les prend jusqu'à la fin de la période, donc une régul datée
+ *   après la photo y entrait quand même).
  */
 export type AncrageTransmission = "generation" | "periode";
 
@@ -1257,8 +1259,17 @@ async function sommeAjustements(
   type: TypeDemande,
   periode: Periode,
   isAnticipation: boolean,
+  // Borne haute "photo à une date" (06/10/2026, ancrage "periode" seulement) :
+  // sans elle, une régularisation datée APRÈS `dateReference` mais dans la
+  // période entrait quand même dans le solde d'une date passée (la fenêtre va
+  // jusqu'à la fin de la période). Invisible pour le solde du jour (rien
+  // n'est créé dans le futur) ; faussait en revanche la photo de fin de mois
+  // de l'écran « Vérifier les fiches de paie ».
+  dateLimite?: Date,
 ): Promise<number> {
   const typeAbsenceId = await getTypeAbsenceId(supabase, type);
+  const finFenetre =
+    dateLimite && dateIso(dateLimite) < dateIso(periode.fin) ? dateLimite : periode.fin;
 
   const { data, error } = await supabase
     .from("ajustements_solde")
@@ -1267,7 +1278,7 @@ async function sommeAjustements(
     .eq("type_absence_id", typeAbsenceId)
     .eq("is_anticipation", isAnticipation)
     .gte("created_at", periode.debut.toISOString())
-    .lte("created_at", `${dateIso(periode.fin)}T23:59:59.999Z`);
+    .lte("created_at", `${dateIso(finFenetre)}T23:59:59.999Z`);
 
   if (error) {
     throw new Error("Impossible de charger les ajustements.");
@@ -1413,7 +1424,14 @@ export async function fetchSoldes(
         periodeConsoCp,
         aujourdhui,
       );
-      const ajustementsEnCours = await sommeAjustements(supabase, id, "CP", periodeConsoCp, false);
+      const ajustementsEnCours = await sommeAjustements(
+        supabase,
+        id,
+        "CP",
+        periodeConsoCp,
+        false,
+        ancrageTransmission === "periode" ? aujourdhui : undefined,
+      );
       const transmisEnCours = await sommeTransmis(
         supabase,
         id,
@@ -1545,7 +1563,14 @@ export async function fetchSoldes(
         aujourdhui,
         ancrageTransmission,
       ));
-    const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
+    const ajustementsCpa = await sommeAjustements(
+      supabase,
+      id,
+      "CP",
+      periodeEnCours,
+      true,
+      ancrageTransmission === "periode" ? aujourdhui : undefined,
+    );
     const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
     const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
 
@@ -1633,7 +1658,14 @@ export async function fetchSoldes(
       aujourdhui,
       ancrageTransmission,
     );
-    const ajustementsRtt = await sommeAjustements(supabase, id, "RTT", periodeConsoRtt, false);
+    const ajustementsRtt = await sommeAjustements(
+      supabase,
+      id,
+      "RTT",
+      periodeConsoRtt,
+      false,
+      ancrageTransmission === "periode" ? aujourdhui : undefined,
+    );
     // Pas de `Math.max(0, ...)` ici (10/09/2026, correctif) — contrairement à
     // CP, qui ne plafonne jamais ses soldes intermédiaires. Un plafond à 0
     // posé sur `soldeValidee` AVANT de soustraire `enAttente` masque un

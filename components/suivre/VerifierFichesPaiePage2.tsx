@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { retirerDemande } from "@/lib/data/demandes.repository";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
-import { Check, Plus, SquareSplitHorizontal } from "lucide-react";
+import { Check, Plus, SquareSplitHorizontal, TriangleAlert } from "lucide-react";
 import {
   fetchCheckFichesPaie,
   fetchComparaisonSoldes,
@@ -169,7 +169,10 @@ function CardSoldeCollaborateur({
   // tableau identique à CP/RTT/CPA") : même gabarit de ligne pour tous,
   // `moisPrecedent` toujours à 0 pour les seconds (pas de capital reporté
   // d'un mois sur l'autre pour un CE/RECUP/EVT_FAM/CSS).
-  const lignesTableau = [
+  const lignesTableau: {
+    code: TypeBadgeCode;
+    categorie: { moisPrecedent: number; moisEnCours: number; ecartNonExplique?: number };
+  }[] = [
     ...TYPES_SOLDE.map((code) => ({ code, categorie: categorieSolde(c, code) })),
     ...autres.map(({ code, jours }) => ({
       code,
@@ -230,6 +233,12 @@ function CardSoldeCollaborateur({
                   >
                     {formatMouvement(categorie.moisEnCours - categorie.moisPrecedent)} j
                   </span>
+                  {categorie.ecartNonExplique ? (
+                    <span
+                      title={`Écart non expliqué : ${formatMouvement(categorie.ecartNonExplique)} j — ouvrir le détail`}
+                      className="bg-status-warning-fg ml-1 inline-block h-2 w-2 rounded-full align-middle"
+                    />
+                  ) : null}
                 </div>
                 <div className="px-2 py-2.5 text-center">
                   {/* Reflète exports_paie.pris_en_compte (11/09/2026) —
@@ -274,8 +283,10 @@ function EnTeteSoldes() {
  *
  * "Jours" ET "événements" : les jours viennent de `export_paie_lignes` (déjà
  * fetchés par `fetchCheckFichesPaie`) ; l'acquisition RTT/CPA n'a pas de
- * ligne dédiée — déduite par résidu (`mouvementTotal` − somme des jours de
- * ligne).
+ * ligne dédiée — lue directement (`fetchAcquisitionsDuMois`, 0 pour le CP).
+ * Ce que ni les lignes, ni l'acquisition, ni les régularisations n'expliquent
+ * remonte en ligne « Écart non expliqué » (06/10/2026) au lieu de se déguiser
+ * en « Acquisition » comme avec l'ancien calcul par résidu.
  */
 function PanelJoursMouvement({
   code,
@@ -283,6 +294,8 @@ function PanelJoursMouvement({
   soldeDepart,
   premierMois,
   mouvementTotal,
+  acquisition,
+  ecartNonExplique,
   lignes,
   topOffset,
   utilisateurId,
@@ -297,6 +310,10 @@ function PanelJoursMouvement({
   /** Mois du solde initial : le départ s'appelle "Solde initial", pas "Solde {mois précédent}". */
   premierMois: boolean;
   mouvementTotal: number;
+  /** Acquisition du mois lue directement (RTT/CPA), 0 sinon — plus déduite par résidu. */
+  acquisition: number;
+  /** Variation que ni les lignes, ni l'acquisition, ni les régul n'expliquent. */
+  ecartNonExplique: number;
   lignes: { ligne: LigneExportPaie; demande: DemandeEquipe }[];
   topOffset: number;
   utilisateurId: string;
@@ -361,11 +378,6 @@ function PanelJoursMouvement({
   // incohérent (le calcul par résidu suppose `mouvementTotal` = accrual −
   // consommé, faux pour un type qui n'accrue jamais).
   const estTypeSolde = (TYPES_SOLDE as readonly string[]).includes(code);
-
-  const sommeJoursLignes = lignes.reduce((somme, { ligne }) => somme - ligne.joursInclus, 0);
-  const acquisition = estTypeSolde
-    ? Math.round((mouvementTotal - sommeJoursLignes) * 100) / 100
-    : 0;
 
   // Ajustements manuels (27/08/2026, "Ajuster le solde") — chargés à part
   // (pas dans `lignes`, propres à `export_paie_lignes`) : refetchés au
@@ -557,6 +569,23 @@ function PanelJoursMouvement({
                 </tr>
               );
             })}
+            {ecartNonExplique !== 0 && (
+              <tr
+                className="border-ink-300/60 bg-status-warning-bg border-b"
+                title="Variation du solde que les congés transmis, l'acquisition du mois et les régularisations n'expliquent pas (ex. bascule de période, jour d'ancienneté) — à comparer avec la fiche de paie."
+              >
+                <td className="text-status-warning-fg px-4 py-2.5">
+                  <span className="flex w-fit items-center gap-1 text-xs font-semibold">
+                    <TriangleAlert size={12} className="shrink-0" />
+                    Écart non expliqué
+                  </span>
+                </td>
+                <td className="text-status-warning-fg px-2 py-2.5 text-center font-semibold">
+                  {ecartNonExplique > 0 ? "+" : ""}
+                  {formatJours(ecartNonExplique)}
+                </td>
+              </tr>
+            )}
           </tbody>
           <tfoot>
             <tr className="border-ink-300 border-t">
@@ -857,6 +886,8 @@ export function VerifierFichesPaiePage2({
             (autresParUtilisateur.get(selectionMouvement.utilisateurId) ?? []).find(
               (a) => a.code === selectionMouvement.code,
             )?.jours ?? 0,
+          acquisition: 0,
+          ecartNonExplique: 0,
         }
     : null;
   const lignesSelection = selectionMouvement
@@ -923,6 +954,8 @@ export function VerifierFichesPaiePage2({
                 soldeDepart={categorieSelection.moisPrecedent}
                 premierMois={comparaisonSelection?.premierMois ?? false}
                 mouvementTotal={categorieSelection.moisEnCours - categorieSelection.moisPrecedent}
+                acquisition={categorieSelection.acquisition}
+                ecartNonExplique={categorieSelection.ecartNonExplique}
                 lignes={lignesSelection}
                 topOffset={panelTop}
                 utilisateurId={selectionMouvement.utilisateurId}
