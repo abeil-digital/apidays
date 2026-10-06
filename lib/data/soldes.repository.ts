@@ -803,8 +803,9 @@ async function resolverCapitalOuvertureCp(
   // MÊME formule que la CPA affichée en direct (`resolverPointDepartAccrual`
   // + `moisEntiersEcoules`, voir `fetchHistoriqueCpa`/`fetchSoldes`), mais
   // évaluée au dernier jour de la période précédente plutôt qu'à aujourd'hui
-  // : le transfert doit être LITTÉRALEMENT ce que la CPA affichait la veille
-  // de la bascule, pas une reconstruction indépendante ("12 mois à partir du
+  // : le transfert vaut ce que la CPA affichait la veille de la bascule PLUS
+  // l'acquisition du dernier mois (créditée le 1er jour de la nouvelle période,
+  // voir plus bas), pas une reconstruction indépendante ("12 mois à partir du
   // 1er jour de la NOUVELLE période" + base solde initial en plus) qui
   // double-comptait dès qu'un solde initial était en jeu (ex. 34j calculés
   // au lieu des 22j réellement affichés — écart de 14j entre CP(bascule) et
@@ -817,7 +818,13 @@ async function resolverCapitalOuvertureCp(
     ctx.soldeInitial,
     "cpa",
   );
-  const moisEcoulesCpaPrecedent = moisEntiersEcoules(debutCpaPrecedent, periodePrecedente.fin);
+  // Évalué au 1er jour de la NOUVELLE période (`periode.debut`), pas au
+  // dernier de la précédente (06/10/2026, règle confirmée par Vincent : "les
+  // congés acquis en mai sont transférés, c'est certain") : le mois de mai
+  // n'est "complet" que le 1er juin (règle du crédit au 1er du mois suivant),
+  // donc à `periodePrecedente.fin` (31/05) il n'était jamais compté — 11 mois
+  // transférés au lieu de 12, soit ~2 j perdus par collaborateur et par an.
+  const moisEcoulesCpaPrecedent = moisEntiersEcoules(debutCpaPrecedent, periode.debut);
   const typeCpIdPourGel = await getTypeAbsenceId(supabase, "CP");
   const accrualCpaComplet =
     baseCpaPrecedent +

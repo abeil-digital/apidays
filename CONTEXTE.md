@@ -8378,6 +8378,22 @@ production pour un export généré après la fin de sa période (cas de rattrap
 l'affichage" ou "ancrer sur la période" non tranchée. `tsc`/`eslint`/`prettier` clean, écran non
 revérifié en navigateur par l'agent (pas de session) — vérifié par Vincent.
 
+**Transfert CPA → CP à la bascule : 12 mois, pas 11 (06/10/2026)** : règle confirmée par Vincent ("les
+congés acquis en mai sont transférés, c'est certain"). `resolverCapitalOuvertureCp`
+(`soldes.repository.ts`) évaluait le transfert à `periodePrecedente.fin` (31/05), où mai n'est pas encore
+"complet" (crédit au 1er du mois suivant) : 11 mois transférés, ~2 j perdus par collaborateur et par
+an. Désormais évalué à `periode.debut` (1er jour de la nouvelle période) → 12 mois (ou moins si le solde
+initial tombe en cours de période : 01/10 → 8 mois). Le CPA affiché au 31/05 reste à 11 mois, il retombe
+à 0 au 01/06 ; le principe "CP(bascule) = CP(veille) + CPA(veille)" devient "+ l'acquisition du dernier
+mois". Le projeté "disponibilité théorique d'un CPA" (`fetchSoldeAnticipe`) n'a pas été touché.
+**Vérifié sur le vrai moteur** (banc d'essai Node hors navigateur, session de test lecture seule,
+écritures de gel neutralisées) : au 01/06/2027 Caillat CP 19,38 → 21,46 (report 0 + 12×2,08 − 3,5 CPA
+consommés) et Penfornis 33,38 → 35,46 ; sur acme +1 mois d'acquisition (+2,5 j, +2,0 j à 80 %). Abeil n'a
+aucune période figée (`soldes_periode` vide) ; 6 lignes figées existent sur acme (2020-2025, 11 mois),
+laissées en l'état. Écran "Vérifier les fiches de paie" vérifié sur Abeil pour juin et juillet :
+continuité "précédent = en cours du mois d'avant" pour CP/RTT/CPA, Touchet −8 j en juillet (5 j de
+débordement). À re-confirmer avec une fiche de paie de mai 2027 (Backlog).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
