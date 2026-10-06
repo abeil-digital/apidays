@@ -828,6 +828,16 @@ async function fetchMouvementsExport(
  * un seul côté ferait compter deux acquisitions dans le mouvement du mois
  * suivant. Rien n'est ajouté avant le mois du solde initial.
  *
+ * **Photos ancrées sur la période de l'export (06/10/2026)** : `fetchSoldes`
+ * est appelé avec `ancrageTransmission: "periode"` pour les deux photos. En
+ * ancrage "génération" (moteur, défaut), un export généré APRÈS la fin de sa
+ * période n'est pas dans la photo de fin de période : mouvement 0 et
+ * « Acquisition » fantôme dans la popin une fois l'export validé (le code
+ * suppose alors qu'il est déjà compté), puis delta du mois SUIVANT pollué
+ * par les jours de ce mois. Ancrés sur `periode_fin`, les deux photos sont
+ * continues (fin de juin = début de juillet) et cohérentes avec la fiche de
+ * paie du mois. Le moteur et les autres écrans ne changent pas.
+ *
  * Tous les collaborateurs ACTIFS sont inclus, pas seulement ceux qui ont des
  * lignes transmises sur cet export — "le 0 mouvement est important" (Vincent) :
  * un collaborateur sans aucun mouvement doit apparaître avec 0 explicite,
@@ -865,7 +875,7 @@ export async function fetchComparaisonSoldes(
       // valeur saisie. Le point de départ est donc le solde initial lui-même,
       // sans appel au moteur ni acquisition du mois précédent.
       const [soldesEnCours, acqEnCours] = await Promise.all([
-        fetchSoldes(u.id, finMoisEnCours),
+        fetchSoldes(u.id, finMoisEnCours, { ancrageTransmission: "periode" }),
         fetchAcquisitionsDuMois(u.id, finMoisEnCours.toISOString().slice(0, 7)),
       ]);
       const [soldesPrecedent, acqPrecedent] =
@@ -879,7 +889,7 @@ export async function fetchComparaisonSoldes(
               { rtt: 0, cpa: 0 },
             ]
           : await Promise.all([
-              fetchSoldes(u.id, finMoisPrecedent),
+              fetchSoldes(u.id, finMoisPrecedent, { ancrageTransmission: "periode" }),
               fetchAcquisitionsDuMois(u.id, finMoisPrecedent.toISOString().slice(0, 7)),
             ]);
       const mouvements = mouvementsParUtilisateur[u.id] ?? { cp: 0, rtt: 0, cpa: 0 };

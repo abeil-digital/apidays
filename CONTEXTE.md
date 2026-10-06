@@ -8403,6 +8403,45 @@ n'est pas validé) ; `ListeTransmissionsPaiePage.tsx` affiche un second statut v
 migration. `tsc`/`eslint`/`prettier` clean, écran non vérifié en navigateur par l'agent (pas de session).
 Note : la date de juin d'Abeil est celle antidatée en base (30/06) pour le test des exports.
 
+## « Acquisition » fantôme : photos ancrées sur la période (06/10/2026)
+
+Suite de l'item connu depuis le 28/08 (voir plus haut). **Diagnostic affiné après relecture du code** :
+- Le fantôme n'apparaît qu'**après validation** de l'export, pas avant : avant « Valider »,
+  `fetchComparaisonSoldes` ajoute lui-même les lignes de l'export (`ajoutApercu`), le résidu vaut 0.
+  Après validation il suppose que `fetchSoldes(fin de période)` les contient déjà — faux si
+  `genere_le` est après la fin de la période (le moteur ancre un export sur `genere_le`). Résultat :
+  mouvement 0, « Acquisition » = jours transmis, solde « mois en cours » trop haut de ces jours.
+- Le défaut est **symétrique** : un export de juin généré le 15/07 entre dans la photo du 31/07 mais pas
+  dans celle du 30/06 — le delta de juillet contient les jours de juin (acquisition négative fantôme).
+- Un correctif limité à la photo « mois en cours » aurait cassé la continuité entre mois (juin finit à 15,
+  juillet démarre à 16,5) — relevé par un avis complémentaire.
+
+**Correctif** : les deux photos de `fetchComparaisonSoldes` ancrent désormais les exports sur leur
+**période** et non sur leur génération. `sommeTransmis` (`soldes.repository.ts`) reçoit un paramètre
+optionnel `ancrage: AncrageTransmission` (`"generation"` par défaut = comportement moteur inchangé ;
+`"periode"` = `exports_paie.periode_fin <= date`, sans filtre `genere_le`/`periode_debut`), relayé par
+`fetchSoldes(..., { ancrageTransmission })`. Seul `fetchComparaisonSoldes` passe `"periode"`. Les
+photos deviennent continues et les deux fantômes disparaissent par construction ; l'aperçu pré-validation
+(`ajoutApercu`) est inchangé.
+
+**Impact** : aucun changement de comportement pour tout appel existant de `fetchSoldes`/`sommeTransmis`
+(accueil, Suivre mon solde, Suivre les soldes, plafond de pose, historiques) — le paramètre est absent
+donc le chemin d'origine s'exécute à l'identique. Seul l'écran « Vérifier les fiches de paie » change,
+et uniquement pour un export généré après la fin de sa période.
+
+**Vérification** : `tsc`/`eslint`/`prettier` propres ; filtre comparé en lecture seule sur tous les
+exports (acme, Abeil, Abeil sandbox) : 0 écart entre les deux modes sur les photos de l'écran (les exports de
+test existants sont antidatés, le cas tardif n'y existe pas). **Vérifié en navigateur le 06/10/2026 sur
+le tenant « Abeil (sandbox) »** avec un vrai cas tardif : export de septembre généré et validé le 06/10
+(6 jours après la fin de la période) — chiffres identiques avant et après « Valider » (CP Delphine 31,75 →
+16,25, mouvement −15,5), popin CP sans ligne « Acquisition » (31,75 −1 −5 +1 −0,5 −1 −1 −1 −5 −1 −1 =
+16,25), popin RTT avec la seule acquisition réelle (1,75 −0,5 −1 +0,25 = 0,5). **Effet de bord du test** :
+l'export de septembre du sandbox est désormais généré et validé (acquisitions de septembre gelées).
+Pas de framework de tests dans le repo.
+
+**Pas fait (proposé)** : lire l'acquisition RTT/CPA directement via `fetchAcquisitionsDuMois` plutôt que par
+résidu, avec une ligne « écart non expliqué » si le résidu dépasse 0,01 j.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

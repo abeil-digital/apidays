@@ -75,6 +75,19 @@ interface Periode {
   fin: Date;
 }
 
+/**
+ * Sur quoi `sommeTransmis` ancre un export pour le compter dans le solde réel
+ * à une date (06/10/2026, écran « Vérifier les fiches de paie » uniquement) :
+ * - `"generation"` (défaut, tout le moteur) : l'export compte à partir du jour
+ *   de sa génération (`genere_le`), voir la doc de `sommeTransmis`.
+ * - `"periode"` : l'export compte dès que SA période est terminée
+ *   (`periode_fin <= date`), même s'il a été généré plus tard. Sert à comparer
+ *   deux photos de fin de mois cohérentes entre elles avec la fiche de paie
+ *   du mois, sans qu'un export tardif ne décale son mouvement sur le mois
+ *   suivant.
+ */
+export type AncrageTransmission = "generation" | "periode";
+
 function dateIso(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -1130,24 +1143,34 @@ async function sommeTransmis(
   isAnticipation: boolean | null,
   periode: Periode,
   dateReference: Date,
+  ancrage: AncrageTransmission = "generation",
 ): Promise<number> {
   const typeAbsenceId = await getTypeAbsenceId(supabase, type);
 
   let query = supabase
     .from("export_paie_lignes")
     .select(
-      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le, periode_debut, pris_en_compte)",
+      "jours_inclus, demandes_conges!inner(utilisateur_id, type_absence_id, is_anticipation, date_debut), exports_paie!inner(genere_le, periode_debut, periode_fin, pris_en_compte)",
     )
     .eq("demandes_conges.utilisateur_id", utilisateurId)
     .eq("demandes_conges.type_absence_id", typeAbsenceId)
     .gte("demandes_conges.date_debut", dateIso(periode.debut))
     .lte("demandes_conges.date_debut", dateIso(periode.fin))
-    .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
-    .lte("exports_paie.periode_debut", dateIso(dateReference))
     // "Pris en compte" (11/09/2026) — un congé transmis mais pas encore
     // confirmé conforme à la fiche de paie ne se déduit pas (encore) du
     // solde réel, voir la doc en tête de fichier.
     .eq("exports_paie.pris_en_compte", true);
+
+  // Ancrage (06/10/2026) — voir `AncrageTransmission`. `"generation"` (défaut,
+  // moteur) = comportement historique ci-dessus ; `"periode"` ne retient que
+  // les exports dont la période est terminée à `dateReference`, quelle que
+  // soit leur date de génération.
+  query =
+    ancrage === "periode"
+      ? query.lte("exports_paie.periode_fin", dateIso(dateReference))
+      : query
+          .lte("exports_paie.genere_le", `${dateIso(dateReference)}T23:59:59.999Z`)
+          .lte("exports_paie.periode_debut", dateIso(dateReference));
 
   if (isAnticipation !== null) {
     query = query.eq("demandes_conges.is_anticipation", isAnticipation);
@@ -1279,7 +1302,12 @@ function formatMoisAnnee(d: Date): string {
  * `reference` en paramètre en interne — seul le point d'entrée figeait la
  * date sur `new Date()`.
  */
-export async function fetchSoldes(utilisateurId?: string, dateReference?: Date): Promise<Soldes> {
+export async function fetchSoldes(
+  utilisateurId?: string,
+  dateReference?: Date,
+  options?: { ancrageTransmission?: AncrageTransmission },
+): Promise<Soldes> {
+  const ancrageTransmission = options?.ancrageTransmission ?? "generation";
   const supabase = createClient();
   const id = utilisateurId ?? (await getUtilisateurIdCourant(supabase));
 
@@ -1393,6 +1421,7 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         false,
         periodeConsoCp,
         aujourdhui,
+        ancrageTransmission,
       );
       const soldeCpValidee = capitalCpTotal - consommeEnCours + ajustementsEnCours;
       const soldeCpTransmis = capitalCpTotal - transmisEnCours + ajustementsEnCours;
@@ -1498,8 +1527,24 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
         aujourdhui,
       ));
     const transmisCpa =
-      (await sommeTransmis(supabase, id, "CP", true, periodeConsoCpaSansPlafond, aujourdhui)) +
-      (await sommeTransmis(supabase, id, "CP", false, periodeCpDirectFuture, aujourdhui));
+      (await sommeTransmis(
+        supabase,
+        id,
+        "CP",
+        true,
+        periodeConsoCpaSansPlafond,
+        aujourdhui,
+        ancrageTransmission,
+      )) +
+      (await sommeTransmis(
+        supabase,
+        id,
+        "CP",
+        false,
+        periodeCpDirectFuture,
+        aujourdhui,
+        ancrageTransmission,
+      ));
     const ajustementsCpa = await sommeAjustements(supabase, id, "CP", periodeEnCours, true);
     const soldeCpaValidee = accrualCpa - consommeCpa + ajustementsCpa;
     const soldeCpaTransmis = accrualCpa - transmisCpa + ajustementsCpa;
@@ -1579,7 +1624,15 @@ export async function fetchSoldes(utilisateurId?: string, dateReference?: Date):
       periodeConsoRtt,
       aujourdhui,
     );
-    const transmis = await sommeTransmis(supabase, id, "RTT", null, periodeConsoRtt, aujourdhui);
+    const transmis = await sommeTransmis(
+      supabase,
+      id,
+      "RTT",
+      null,
+      periodeConsoRtt,
+      aujourdhui,
+      ancrageTransmission,
+    );
     const ajustementsRtt = await sommeAjustements(supabase, id, "RTT", periodeConsoRtt, false);
     // Pas de `Math.max(0, ...)` ici (10/09/2026, correctif) — contrairement à
     // CP, qui ne plafonne jamais ses soldes intermédiaires. Un plafond à 0
