@@ -8394,6 +8394,15 @@ laissées en l'état. Écran "Vérifier les fiches de paie" vérifié sur Abeil 
 continuité "précédent = en cours du mois d'avant" pour CP/RTT/CPA, Touchet −8 j en juillet (5 j de
 débordement). À re-confirmer avec une fiche de paie de mai 2027 (Backlog).
 
+**Liste "Transmissions paie" : statut "Vérifié le" (06/10/2026)** : demande de Vincent — à côté de
+"Transmis le …", afficher quand la vérification des fiches de paie a été faite. Source : la validation de
+"Vérifier les fiches de paie" (`exports_paie.pris_en_compte` / `pris_en_compte_le`), déjà en base.
+`fetchExportsPaie` (`exportsPaie.repository.ts`) renvoie un champ `verifieLe` (`null` tant que l'export
+n'est pas validé) ; `ListeTransmissionsPaiePage.tsx` affiche un second statut vert, icône `ShieldCheck`,
+"Vérifié le JJ/MM/AAAA" (empilé sous "Transmis le" en écran étroit, côte à côte dès `sm:`). Pas de
+migration. `tsc`/`eslint`/`prettier` clean, écran non vérifié en navigateur par l'agent (pas de session).
+Note : la date de juin d'Abeil est celle antidatée en base (30/06) pour le test des exports.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

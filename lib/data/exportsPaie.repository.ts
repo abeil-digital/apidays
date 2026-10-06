@@ -346,13 +346,13 @@ export async function validerExportPaie(exportId: string): Promise<void> {
  */
 export async function fetchExportsPaie(
   periodes: { debut: string; fin: string }[],
-): Promise<Record<string, { id: string; genereLe: string }>> {
+): Promise<Record<string, { id: string; genereLe: string; verifieLe: string | null }>> {
   if (periodes.length === 0) return {};
   const supabase = createClient();
 
   const { data, error } = await supabase
     .from("exports_paie")
-    .select("id, genere_le, periode_debut")
+    .select("id, genere_le, periode_debut, pris_en_compte, pris_en_compte_le")
     .in(
       "periode_debut",
       periodes.map((p) => p.debut),
@@ -362,9 +362,15 @@ export async function fetchExportsPaie(
     throw new Error("Impossible de vérifier les périodes déjà transmises.");
   }
 
-  const parPeriode: Record<string, { id: string; genereLe: string }> = {};
+  const parPeriode: Record<string, { id: string; genereLe: string; verifieLe: string | null }> = {};
   for (const row of data ?? []) {
-    parPeriode[row.periode_debut] = { id: row.id, genereLe: row.genere_le };
+    parPeriode[row.periode_debut] = {
+      id: row.id,
+      genereLe: row.genere_le,
+      // "Vérifié le" (06/10/2026) : la validation des fiches de paie dans
+      // "Vérifier les fiches de paie" (`pris_en_compte`), `null` tant que non faite.
+      verifieLe: row.pris_en_compte ? row.pris_en_compte_le : null,
+    };
   }
   return parPeriode;
 }

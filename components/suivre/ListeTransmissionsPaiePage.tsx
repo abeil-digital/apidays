@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Send } from "lucide-react";
+import { ChevronRight, ShieldCheck, Send } from "lucide-react";
 import { libellePeriode, periodePaieParDefaut, periodesPrecedentes } from "@/lib/periodePaie";
 import { fetchExportsPaie } from "@/lib/data/exportsPaie.repository";
 import { useEntreprise } from "@/hooks/useEntreprise";
@@ -20,7 +20,7 @@ function LignePeriode({
   /** Statut de transmission de cette période (25/08/2026, repasse technique
    * — voir doc du composant) — `undefined` tant que le chargement groupé
    * n'a pas répondu, `null` si la période n'a jamais été transmise. */
-  exportPaie: { id: string; genereLe: string } | null | undefined;
+  exportPaie: { id: string; genereLe: string; verifieLe: string | null } | null | undefined;
 }) {
   return (
     <Link
@@ -32,10 +32,18 @@ function LignePeriode({
         {sousTitre && <div className="text-ink-500 text-xs">{sousTitre}</div>}
       </div>
       {exportPaie && (
-        <span className="text-status-success-fg flex shrink-0 items-center gap-1 text-xs font-semibold">
-          <Send size={12} />
-          Transmis le {new Date(exportPaie.genereLe).toLocaleDateString("fr-FR")}
-        </span>
+        <div className="text-status-success-fg flex shrink-0 flex-col items-end gap-0.5 text-xs font-semibold sm:flex-row sm:items-center sm:gap-4">
+          <span className="flex items-center gap-1">
+            <Send size={12} />
+            Transmis le {new Date(exportPaie.genereLe).toLocaleDateString("fr-FR")}
+          </span>
+          {exportPaie.verifieLe && (
+            <span className="flex items-center gap-1">
+              <ShieldCheck size={12} />
+              Vérifié le {new Date(exportPaie.verifieLe).toLocaleDateString("fr-FR")}
+            </span>
+          )}
+        </div>
       )}
       <ChevronRight size={18} className="text-ink-500 shrink-0" />
     </Link>
@@ -81,7 +89,7 @@ export function ListeTransmissionsPaiePage() {
     dateDebutUtilisation ?? undefined,
   );
   const [exportsParPeriode, setExportsParPeriode] = useState<
-    Record<string, { id: string; genereLe: string }>
+    Record<string, { id: string; genereLe: string; verifieLe: string | null }>
   >({});
 
   useEffect(() => {
