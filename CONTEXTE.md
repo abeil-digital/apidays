@@ -8595,6 +8595,23 @@ Vincent. Modifications de **données** (production, tenant Abeil) et un changeme
   contrat). Restent à réécrire : n°1 (solde théorique/réel) et n°4 (jours imposés, à passer à « Repos Abeil »).
 `tsc`/`eslint`/`prettier` clean pour le libellé ; écran non vérifié en navigateur par l'agent.
 
+**Audit du moteur de solde : le bonus d'ancienneté manque dans une période pilotée par un solde initial (08/10/2026)** :
+signalé par Vincent (Rémy Randoing, 12 ans d'ancienneté, anniversaire le 01/09, « je ne vois pas de jours supp »). Cause :
+`resolverCapitalOuvertureCp`, branche `gouvernePar: "solde_initial"`, renvoie `bonus: 0` — le moteur prend le solde
+initial tel quel et saute report, transfert CPA et bonus ; or un anniversaire survenu APRÈS la date du solde est un
+événement nouveau que le chiffre saisi ne peut pas contenir. Les deux fonctionnalités (solde initial du 21/08, bonus et
+ses modes d'attribution du 10-18/09) ont été construites séparément et jamais testées ensemble ; la saisie des soldes
+initiaux d'Abeil (23/09) a rendu le cas réel pour tous. **Pas de correction de code à ce stade** (entrée Backlog,
+priorité haute, échéance 01/06/2027). **Audit** : calcul indépendant des règles (`scripts/moteur-solde/oracle.mjs`)
+comparé à `fetchSoldes` sur les 10 collaborateurs d'Abeil avec solde × 6 dates × CP/RTT/CPA : 27 écarts, tous sur le
+CP et tous des jours d'ancienneté (Randoing −2 j, Malloire −1, Lozac'h −1 aujourd'hui ; Dubosclard −1, Touchet −2,
+Fontaine −1 à venir) ; RTT et CPA concordent partout, bascule du 01/06/2027 comprise. L'écart se propage au report de la
+bascule. Deux risques latents repérés en lisant le code (consommation du report non bornée à la date du solde initial ;
+bonus non proratisé au temps partiel) — Backlog. **Nouvel outil** `scripts/moteur-solde/` (README inclus) : exécute le moteur
+hors navigateur, en lecture seule (écritures de gel neutralisées), via un lien de connexion généré pour un manager du
+tenant (rien n'est envoyé), et affiche tout écart moteur ≠ calcul indépendant. N'est ni compilé ni exécuté par
+l'application (vérifié : `tsc`, `eslint` sur tout le projet propres, aucune référence dans les configurations).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
