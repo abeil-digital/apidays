@@ -8,6 +8,7 @@ import { formatJourMois, formatJours, nombreJours } from "@/lib/format";
 import { getAujourdhui } from "@/lib/aujourdhui";
 import { dureeCongeImpose, joursFeriesLegaux } from "@/lib/joursFeries";
 import { fetchAnneesParametrage } from "@/lib/data/calendrier.repository";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
@@ -709,7 +710,7 @@ function VueCalendrierGrille({
           <div className="bg-surface-card flex w-full items-start gap-2.5 rounded-xl p-4 text-left shadow-sm">
             <TypeBadge code="DJI" />
             <div className="flex flex-1 flex-col">
-              <span className="text-ink-900 text-sm">Demi-journées imposées</span>
+              <span className="text-ink-900 text-sm">{LIBELLE_DJI}</span>
               <span
                 role="button"
                 tabIndex={0}

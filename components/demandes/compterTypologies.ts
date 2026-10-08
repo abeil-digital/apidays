@@ -1,6 +1,7 @@
 import { dureeCongeImpose } from "@/lib/joursFeries";
 import type { CongeImpose, Demande, DjImposee, JourFerie } from "@/lib/types";
 import type { TypeBadgeCode } from "@/components/demandes/TypeBadge";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 
 export interface TypologieCompteur {
   code: TypeBadgeCode;
@@ -8,9 +9,10 @@ export interface TypologieCompteur {
   jours: number;
 }
 
-// Congés imposés (CPI + DJI) fusionnés sous le code "CPI" — même convention
-// que la carte "CI" de `ProchainsJoursOffCard` (couleur CPI, DJI/CPI non
-// distingués côté collaborateur/manager). Ordre d'affichage fixe. "Congé(s)"
+// Congés imposés (CPI) et demi-journées imposées (DJI, « Repos Abeil ») : depuis le
+// 08/10/2026 (demande de Vincent — « on a toujours C. imposés dans la légende,
+// alors que ça devrait être du DJI ») la légende les distingue, deux entrées. La carte « CI »
+// de `ProchainsJoursOffCard` garde, elle, la fusion CPI + DJI. Ordre d'affichage fixe. "Congé(s)"
 // abrégé "C." et "Jours" abrégé "J." (24/08/2026, demande explicite) —
 // libellés sinon repris de `LABEL_LONG` (`TypeBadge.tsx`).
 const LABEL_TYPOLOGIE: Partial<Record<TypeBadgeCode, string>> = {
@@ -22,6 +24,7 @@ const LABEL_TYPOLOGIE: Partial<Record<TypeBadgeCode, string>> = {
   RECUP: "Récupération",
   EVT_FAM: "Événement familial",
   CPI: "C. imposés",
+  DJI: LIBELLE_DJI,
   FERIE: "J. fériés",
 };
 
@@ -30,6 +33,7 @@ const ORDRE: TypeBadgeCode[] = [
   "RTT",
   "CPA",
   "CPI",
+  "DJI",
   "FERIE",
   "CSS",
   "CE",
@@ -98,7 +102,7 @@ export function compterTypologies({
 
   djImposees
     .filter((d) => d.date >= rangeActive.debut && d.date <= rangeActive.fin)
-    .forEach(() => ajouter("CPI", 0.5));
+    .forEach(() => ajouter("DJI", 0.5));
 
   joursFeries
     .filter((f) => f.date >= rangeActive.debut && f.date <= rangeActive.fin)

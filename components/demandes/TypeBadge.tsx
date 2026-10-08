@@ -1,3 +1,4 @@
+import { LIBELLE_DJI, LIBELLE_DJI_COURT } from "@/lib/libellesClient";
 export type TypeBadgeCode =
   "CP" | "RTT" | "CPA" | "CSS" | "CE" | "RECUP" | "EVT_FAM" | "DJI" | "CPI" | "FERIE";
 
@@ -48,7 +49,7 @@ export const LABEL_COURT: Record<TypeBadgeCode, string> = {
   CE: "CE",
   RECUP: "RÉC",
   EVT_FAM: "ÉVT",
-  DJI: "DJI",
+  DJI: LIBELLE_DJI_COURT,
   CPI: "CPI",
   FERIE: "FE",
 };
@@ -63,7 +64,7 @@ export const LABEL_LONG: Record<TypeBadgeCode, string> = {
   CE: "Congé exceptionnel",
   RECUP: "Récupération",
   EVT_FAM: "Événement familial",
-  DJI: "Demi-journée imposée",
+  DJI: LIBELLE_DJI,
   CPI: "Congé imposé",
   FERIE: "Jour férié",
 };

@@ -8,6 +8,7 @@ import {
   type TypeBadgeCode,
 } from "@/components/demandes/TypeBadge";
 import { PeriodeAvecPastilles } from "@/components/ui/PeriodeAvecPastilles";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 
 /** Jour "commun" cliqué — congé imposé (CPI, période), demi-journée imposée
  * (DJI) ou jour férié. Sous-ensemble de `JourCalendrierClique` (exclut
@@ -37,7 +38,6 @@ export function DetailJourCommunPanel({
   onClose: () => void;
 }) {
   let code: TypeBadgeCode;
-  let label: string | undefined;
   let titre: string;
   let debut: string;
   let fin: string;
@@ -51,9 +51,10 @@ export function DetailJourCommunPanel({
     demiDebut = "matin";
     demiFin = "apres_midi";
   } else if (jour.kind === "dji") {
-    code = "CPI";
-    label = "CI";
-    titre = "Congé imposé";
+    // « Repos Abeil » (08/10/2026, demande de Vincent — « c'est pareil » : la
+    // DJI n'est plus présentée comme un congé imposé « CI »).
+    code = "DJI";
+    titre = LIBELLE_DJI;
     debut = jour.dji.date;
     fin = jour.dji.date;
     demiDebut = jour.dji.demiJournee === "apres_midi" ? "apres_midi" : "matin";
@@ -75,7 +76,7 @@ export function DetailJourCommunPanel({
         <div className={`flex items-center justify-between px-4 py-3 ${classeFondTypeBadge(code)}`}>
           <div className="flex items-center gap-2.5">
             <div className="rounded-full ring-2 ring-white">
-              <TypeBadge code={code} label={label} />
+              <TypeBadge code={code} />
             </div>
             <div className="text-sm font-bold text-white">{titre}</div>
           </div>

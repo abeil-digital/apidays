@@ -17,6 +17,7 @@ import { classeBordureTypeBadge, type TypeBadgeCode } from "@/components/demande
 import { MiniCalendrier, type PastilleJour } from "@/components/ui/MiniCalendrier";
 import type { ModePeriode } from "@/components/suivre/SelectPeriodeAdmin";
 import type { DemandeEquipe } from "@/lib/types";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 
 function isoDate(annee: number, moisIndex: number, jour: number): string {
   return new Date(Date.UTC(annee, moisIndex, jour)).toISOString().slice(0, 10);
@@ -497,7 +498,7 @@ export function CalendrierGlobal({ modePeriode }: { modePeriode: ModePeriode }) 
                         {section.dji && (
                           <div className="flex items-center pl-3">
                             <span className="bg-dji/15 text-dji w-fit rounded-sm px-1 text-xs font-semibold">
-                              Demi-journée imposée
+                              {LIBELLE_DJI}
                             </span>
                           </div>
                         )}

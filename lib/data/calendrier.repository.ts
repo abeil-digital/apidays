@@ -21,6 +21,7 @@ import { fetchUtilisateursAdmin } from "@/lib/data/utilisateurs.repository";
 import { fetchReglesAcquisition } from "@/lib/data/reglesConges.repository";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
 import { getAujourdhui } from "@/lib/aujourdhui";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 
 /**
  * Repository de l'écran Paramétrer > Calendrier (`parametrage_periode`,
@@ -247,7 +248,7 @@ export async function fetchDjImposees(parametragePeriodeId: string): Promise<DjI
     .order("date", { ascending: true });
 
   if (error) {
-    throw new Error("Impossible de charger les demi-journées imposées.");
+    throw new Error(`Impossible de charger les « ${LIBELLE_DJI} ».`);
   }
 
   return (data ?? []).map(mapDjImposeeDepuisDb);
@@ -272,7 +273,7 @@ export async function ajouterDjImposee(
     .single();
 
   if (error || !data) {
-    throw new Error("Impossible d'ajouter cette demi-journée imposée.");
+    throw new Error(`Impossible d'ajouter ce « ${LIBELLE_DJI} ».`);
   }
 
   return mapDjImposeeDepuisDb(data);
@@ -284,7 +285,7 @@ export async function supprimerDjImposee(id: string): Promise<void> {
   const { error } = await supabase.from("demi_journees_imposees").delete().eq("id", id);
 
   if (error) {
-    throw new Error("Impossible de supprimer cette demi-journée imposée.");
+    throw new Error(`Impossible de supprimer ce « ${LIBELLE_DJI} ».`);
   }
 }
 

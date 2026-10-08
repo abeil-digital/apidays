@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { genererFluxIcs, type AbsenceIcs, type JourCollectifIcs } from "@/lib/calendrier/ics";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 
 /**
@@ -108,7 +109,7 @@ export async function GET(
     })),
     ...(demiJourneesImposees ?? []).map((d) => ({
       id: `dji-${d.id}`,
-      titre: "Repos Abeil",
+      titre: LIBELLE_DJI,
       dateDebut: d.date,
       demiDebut: d.demi_journee,
       dateFin: d.date,

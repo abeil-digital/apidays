@@ -8553,6 +8553,26 @@ navigateur) : `SUMMARY:Repos Abeil`, `DTSTART:…T120000`/`DTEND:…T180000`, co
 plusieurs heures) : les évènements déjà reçus se mettent à jour d'eux-mêmes. Le reste de l'app garde son
 libellé « Demi-journée imposée » jusqu'à l'item « Uniformiser Repos Abeil ».
 
+**Uniformisation de « Repos Abeil » dans l'app (08/10/2026)** : suite du renommage du flux Proton, demande de
+Vincent. Option 1 retenue (libellé unique écrit dans le code, pour tous les tenants ; option 2, libellé par
+tenant, notée en V2 du Backlog). Nouveau `lib/libellesClient.ts` : `LIBELLE_DJI = "Repos Abeil"` et
+`LIBELLE_DJI_COURT = "RA"`. La demi-journée imposée (code « DJI », table `demi_journees_imposees`
+inchangés) s'affiche désormais :
+- **« Repos Abeil »** : libellé du type DJI (`TypeBadge.tsx`), légende de `CalendrierGlobal.tsx`, titres de
+  `parametrer/CalendrierPage.tsx` et `parametrer/CongesRttPage.tsx`, messages d'erreur de
+  `calendrier.repository.ts`, titre de l'évènement du flux Proton (`route.ts`).
+- **« RA »** : texte court de la pastille ronde (`LABEL_COURT` de `TypeBadge.tsx`).
+- **Légende par typologie** (`compterTypologies.ts`, Accueil et `/suivre/calendrier`) : les DJI ne sont plus
+  fusionnées dans « C. imposés », une entrée « Repos Abeil » séparée (0,5 j par DJI) — la puce garde la couleur
+  du CPI (même couleur `--color-dji`, décision du 07/09).
+- **Détail d'un jour** (`DetailJourCommunPanel.tsx`) et **bulle au clic** (`SnippetJourCalendrier.tsx`) : une DJI
+  affiche le code DJI / titre « Repos Abeil » au lieu de « CI / Congé imposé ».
+- **Non modifié** : la carte `ProchainsJoursOffCard` (désactivée sur l'Accueil par `AFFICHER_PROCHAINS_JOURS_OFF
+  = false`, mais toujours utilisée 3 fois dans Paramétrer > Calendrier avec `separerCpiDji`) ; quelques codes « DJI »
+  en dur dans cette carte et dans la modale de pose d'un jour imposé (`Mode = "CPI" | "DJI"`). **La FAQ d'Abeil**
+  (question 4, « CPI/DJI ») reste à réécrire, voir Backlog.
+`tsc`/`eslint`/`prettier` clean, écrans non vérifiés en navigateur par l'agent (pas de session).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

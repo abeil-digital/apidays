@@ -22,6 +22,7 @@ import type {
   TypeDemande,
 } from "@/lib/types";
 import { formatJours } from "@/lib/format";
+import { LIBELLE_DJI } from "@/lib/libellesClient";
 import { useObjectifsCalendrier } from "@/hooks/useObjectifsCalendrier";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { Button } from "@/components/ui/Button";
@@ -744,7 +745,7 @@ const BlocObjectifsCalendrier = forwardRef<
 
           <div>
             <label htmlFor="objectifs-dji" className="text-ink-900 mb-1.5 block text-sm font-bold">
-              Demi-journées imposées
+              {LIBELLE_DJI}
             </label>
             <div className="flex items-center gap-2">
               <Input

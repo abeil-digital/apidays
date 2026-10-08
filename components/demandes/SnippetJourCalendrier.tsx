@@ -43,7 +43,6 @@ export function SnippetJourCalendrier({
   onFermer: () => void;
 }) {
   let code: TypeBadgeCode;
-  let label: string | undefined;
   let periode: string;
   let duree: string;
   if (jour.kind === "demande") {
@@ -56,12 +55,9 @@ export function SnippetJourCalendrier({
     periode = formatPeriodeDemande(jour.cpi.debut, jour.cpi.fin);
     duree = `${formatJours(dureeCongeImpose(jour.cpi, joursFeries))} j`;
   } else if (jour.kind === "dji") {
-    // Couleur CPI + libellé "CI" (24/08/2026, demande explicite) — même
-    // convention de fusion CPI/DJI sous "Congés imposés" que
-    // `ProchainsJoursOffCard`/`compterTypologies`, plutôt que d'afficher
-    // "DJI" isolément ici.
-    code = "CPI";
-    label = "CI";
+    // « Repos Abeil » (08/10/2026) : la DJI a son propre code et son libellé,
+    // elle n'est plus présentée comme un congé imposé « CI ».
+    code = "DJI";
     periode = formatDate(jour.dji.date);
     duree = jour.dji.demiJournee === "matin" ? "Matin" : "Après-midi";
   } else {
@@ -86,7 +82,7 @@ export function SnippetJourCalendrier({
         className="bg-surface-card z-30 flex w-56 flex-col gap-2 rounded-xl p-3 shadow-lg"
       >
         <div className="flex items-center gap-2">
-          <TypeBadge code={code} label={label} />
+          <TypeBadge code={code} />
           <div className="text-ink-900 text-sm font-bold">{periode}</div>
         </div>
         <div className="text-ink-500 text-xs">{duree}</div>
