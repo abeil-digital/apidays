@@ -8491,6 +8491,36 @@ retirer un id inexistant renvoient le message « introuvable ou droit manquant �
 cas droit refusé, réseau coupé et autre erreur ont été vérifiés avec un client simulé. L'affichage dans le
 panneau n'a pas été observé en navigateur par l'agent. `tsc`/`eslint`/`prettier` clean.
 
+**Export paie : fichier Excel, plus de CSV dans l'interface (08/10/2026)** : demande de Vincent après le
+test des exports de juin à septembre sur Abeil. Le CSV (une ligne par type, dates toutes dans une cellule)
+est remplacé par un **fichier Excel (.xlsx)** mis en forme — un CSV est du texte brut, sans taille de
+police ni couleur ; le fichier d'exemple a été validé par Vincent.
+
+- **Contenu** (`lib/exportPaieCsv.ts` → `construireRangeesSection`, partagé) : par section (période,
+  rattrapage, annulés), tableau `Collaborateur · Type de congé · Congé · Total`, **une ligne par congé**
+  (cellule « Dates – Durée », durée = part transmise pour un congé à cheval), nom écrit une fois par
+  collaborateur, type et total une fois par groupe collaborateur+type, refusés et types sans jour exclus,
+  vrai signe moins (U+2212) pour une correction. Bloc « Régularisations » conservé
+  (`Collaborateur · Type · Date · Jours · Motif`).
+- **Mise en forme** (`lib/exportPaieXlsx.ts`, bibliothèque `write-excel-file`, licence MIT, chargée au clic
+  seulement) : titre 16 pt bleu marine, bandeau marine par section, en-têtes grisés, cellule de type colorée
+  (couleurs du calendrier éclaircies), corrections en rouge, filet entre collaborateurs, largeurs réglées,
+  grille masquée, paysage.
+- **Écran** (`TransmissionsPaiePage.tsx`) : lien « Exporter (Excel) » ; **lien « Exporter (CSV) » supprimé**.
+  La modale « Transmettre » propose **Excel (par défaut) ou « Ne pas télécharger »** : le fichier est préparé
+  AVANT la transmission à partir des données affichées (une erreur de génération arrête tout avant l'action
+  irréversible), puis téléchargé une fois `genererExportPaie` réussi. Avant cela, « Transmettre » ne produisait
+  aucun fichier.
+- **Code mort volontaire** : le générateur CSV (`genererCsvExportPaie`, branche `csv` de `preparerFichier`)
+  n'est plus appelé par l'interface ; conservé pour l'instant (le module partage les lignes avec l'Excel).
+- **Vérifié** : `tsc`/`eslint`/`prettier`/`npm run build` propres, fichier d'exemple généré et relu en
+  aperçu, structure du .xlsx contrôlée (couleurs, largeurs, fusions, paysage). Clic réel sur « Transmettre »
+  testé par Vincent sur le sandbox ; exports d'octobre de test annulés en base ensuite (sandbox seulement).
+- **Point de vigilance** : `npm audit` signale 14 failles (surtout `next@16.2.10`), sans lien avec cette
+  bibliothèque — voir Backlog « Mettre à jour Next.js ».
+- **Erratum doc** : les mentions « acme » plus haut pour le banc d'essai du moteur et les 6 lignes
+  `soldes_periode` de 2020-2025 concernent en fait le tenant **Abeil (sandbox)** (`c52b18b8…`), pas acme.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

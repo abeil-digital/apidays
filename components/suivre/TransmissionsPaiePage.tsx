@@ -17,7 +17,6 @@ import {
 } from "@/lib/data/exportsPaie.repository";
 import type { LigneExportPaie } from "@/lib/types";
 import {
-  formatDateAction,
   formatDateHeureAction,
   formatJours,
   formatPeriodePillNumerique,
@@ -37,6 +36,8 @@ import { DetailCongePanel } from "@/components/suivre/DetailCongePanel";
 import { DetailAjustementPanel } from "@/components/suivre/DetailAjustementPanel";
 import { TableauAjustements } from "@/components/suivre/TableauAjustements";
 import { fetchAjustementsEquipe, type AjustementEquipe } from "@/lib/data/soldes.repository";
+import { genererCsvExportPaie } from "@/lib/exportPaieCsv";
+import { genererXlsxExportPaie } from "@/lib/exportPaieXlsx";
 import { useEntreprise } from "@/hooks/useEntreprise";
 // "Poser pour un collaborateur" mise en suspens (28/08/2026, "simplifier la
 // partie admin") — créait une demande déjà `validee` directement, plus
@@ -67,7 +68,7 @@ const TYPES_PRINCIPAUX: TypeBadgeCode[] = ["CP", "RTT", "CPA"];
 // (`congeImposeId` non nul) — 10/09/2026, demande explicite de Vincent : ces
 // lignes comptent comme un CP normal pour le paiement (montant transmis
 // inchangé, le CSV exporté au comptable reste "CP" sans distinction — voir
-// `genererCsv`, typé `TypeConsomme`, ne connaît pas "CPI"), mais doivent
+// `genererCsvExportPaie`, typé `TypeConsomme`, ne connaît pas "CPI"), mais doivent
 // rester reconnaissables comme telles sur CET écran, en interne.
 function codeRecap(demande: DemandeEquipe): TypeBadgeCode {
   if (demande.type === "CP" && demande.congeImposeId) return "CPI";
@@ -146,6 +147,9 @@ interface DatePeriode {
   id: string;
   label: string;
   statut: StatutDemande;
+  /** Début ISO et jours pris en compte par cet export — pour une cellule "Dates – Durée" du CSV. */
+  debut: string;
+  jours: number;
 }
 
 interface LigneCollab {
@@ -206,6 +210,8 @@ function grouperParCollaborateur(
       id: d.id,
       label: libellePeriodeDemande(d),
       statut: d.statut,
+      debut: d.debut,
+      jours: joursPour(d),
     });
   }
 
@@ -214,88 +220,9 @@ function grouperParCollaborateur(
     .map(([, ligne]) => ligne);
 }
 
-function csvLigne(champs: string[]): string {
-  return champs.map((valeur) => `"${valeur.replace(/"/g, '""')}"`).join(";");
-}
-
-function nomMoisAnnee(iso: string): string {
-  return new Intl.DateTimeFormat("fr-FR", { month: "long", year: "numeric" }).format(
-    new Date(`${iso}T00:00:00`),
-  );
-}
-
 // Même ordre que `ORDRE_TYPE_TRANSMISSION` à l'écran (15/09/2026, étendu à
 // CE/RECUP/EVT_FAM en même temps que `TypeConsomme` ci-dessus).
 const ORDRE_TYPE_CSV: TypeConsomme[] = ["CP", "RTT", "CSS", "CPA", "CE", "RECUP", "EVT_FAM"];
-
-/**
- * Un bloc par collaborateur (28/08/2026, demande explicite — "un bloc par
- * collaborateur / liste des CP / liste des RTT / etc") : une ligne avec son
- * seul nom, puis une ligne par type qu'il a effectivement consommé sur cette
- * section (`jours !== 0` — pas de ligne "0" pour un type absent). Une ligne
- * vide sépare chaque collaborateur.
- */
-function genererBlocCollaborateurs(lignesCollab: LigneCollab[]): string[] {
-  const sortie: string[] = [];
-  for (const ligne of lignesCollab) {
-    const typesAvecJours = ORDRE_TYPE_CSV.filter((t) => ligne.parType[t].jours !== 0);
-    if (typesAvecJours.length === 0) continue;
-    sortie.push(csvLigne([ligne.nom]));
-    for (const t of typesAvecJours) {
-      const c = ligne.parType[t];
-      const dates = c.dates.filter((d) => d.statut !== "refusé");
-      sortie.push(
-        csvLigne([LABEL_TYPE[t], dates.map((d) => d.label).join(", "), formatJours(c.jours)]),
-      );
-    }
-    sortie.push("");
-  }
-  return sortie;
-}
-
-/**
- * CSV structuré en sections — reprend exactement les 3 tableaux de "Quels
- * congés transmettre", chacune en blocs par collaborateur
- * (`genererBlocCollaborateurs`). "Régularisations" garde des colonnes
- * dédiées (Collaborateur/Type/Date/Jours/Motif) — nature différente d'un
- * congé (pas de "dates consommées" à lister).
- */
-function genererCsv(
-  periode: { debut: string; fin: string },
-  sections: { titre: string; lignes: LigneCollab[] }[],
-  ajustements: AjustementEquipe[],
-): string {
-  const corps: string[] = [
-    csvLigne([`Export congés ${nomMoisAnnee(periode.debut)}`]),
-    csvLigne([
-      `Période de prise en compte : ${formatDateAction(periode.debut)} - ${formatDateAction(periode.fin)}`,
-    ]),
-    "",
-  ];
-
-  for (const section of sections) {
-    corps.push(csvLigne([section.titre]), "", ...genererBlocCollaborateurs(section.lignes));
-  }
-
-  corps.push(csvLigne(["Régularisations"]), "");
-  corps.push(csvLigne(["Collaborateur", "Type", "Date", "Jours", "Motif"]));
-  const ajustementsTries = [...ajustements].sort(
-    (a, b) => a.nomComplet.localeCompare(b.nomComplet) || a.date.localeCompare(b.date),
-  );
-  for (const a of ajustementsTries) {
-    corps.push(
-      csvLigne([
-        a.nomComplet,
-        a.code,
-        formatDateAction(a.date),
-        formatJours(a.deltaJours),
-        a.motif,
-      ]),
-    );
-  }
-
-  return corps.join("\n");
-}
 
 /**
  * Totaux "jours transmis par type" — somme, par type, les jours qui
@@ -427,6 +354,10 @@ function QuelsCongesTransmettre({
   const [modalOuverte, setModalOuverte] = useState(false);
   const [enCoursTransmission, setEnCoursTransmission] = useState(false);
   const [erreurTransmission, setErreurTransmission] = useState<string | null>(null);
+  // Fichier proposé à la confirmation (08/10/2026, "on le fait") : jusque-là
+  // "Transmettre" n'enregistrait que l'export en base, le fichier se
+  // téléchargeait à part via "Exporter". Excel par défaut, "aucun" possible.
+  const [formatTelechargement, setFormatTelechargement] = useState<"excel" | "aucun">("excel");
 
   // Transmet directement depuis cet écran (28/08/2026, "on va s'intéresser
   // au comportement de valider et générer l'export") — même action que le
@@ -436,7 +367,14 @@ function QuelsCongesTransmettre({
     setEnCoursTransmission(true);
     setErreurTransmission(null);
     try {
+      // Fichier préparé AVANT la transmission, à partir des données affichées
+      // à cet instant (la prévision "ce qui part maintenant") : une erreur de
+      // génération du fichier arrête tout avant l'action irréversible, et le
+      // contenu ne dépend pas du rafraîchissement qui suit la transmission.
+      const fichier =
+        formatTelechargement === "aucun" ? null : await preparerFichier(formatTelechargement);
       await genererExportPaie(periode);
+      if (fichier) telecharger(fichier.blob, fichier.extension);
       setModalOuverte(false);
       refetch();
       onTransmis();
@@ -594,10 +532,11 @@ function QuelsCongesTransmettre({
     return `${formatJours(joursParDemandeFigee[demandeId] ?? 0)} j`;
   }
 
-  function exporter() {
-    const csv = genererCsv(
-      { debut, fin },
-      [
+  // Données de l'export, communes au CSV et à l'Excel.
+  function donneesExport() {
+    return {
+      periode: { debut, fin },
+      sections: [
         {
           titre: "Congés consommés sur la période",
           lignes: grouperParCollaborateur(moisEnCours, joursPourCsv, false, estTransmis),
@@ -611,15 +550,39 @@ function QuelsCongesTransmettre({
           lignes: grouperParCollaborateur(corrections, joursPourCsv, true, estTransmis),
         },
       ],
-      ajustementsFiltres,
-    );
-    const blob = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8;" });
+      types: ORDRE_TYPE_CSV.map((code) => ({ code, libelle: LABEL_TYPE[code] })),
+    };
+  }
+
+  function telecharger(blob: Blob, extension: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `conges-paie_${debut}_${fin}.csv`;
+    a.download = `conges-paie_${debut}_${fin}.${extension}`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function preparerFichier(
+    format: "csv" | "excel",
+  ): Promise<{ blob: Blob; extension: string }> {
+    const { periode, sections, types } = donneesExport();
+    if (format === "csv") {
+      const csv = genererCsvExportPaie(periode, sections, ajustementsFiltres, types);
+      return {
+        blob: new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" }),
+        extension: "csv",
+      };
+    }
+    return {
+      blob: await genererXlsxExportPaie(periode, sections, ajustementsFiltres, types),
+      extension: "xlsx",
+    };
+  }
+
+  async function exporterExcel() {
+    const fichier = await preparerFichier("excel");
+    telecharger(fichier.blob, fichier.extension);
   }
 
   return (
@@ -916,10 +879,10 @@ function QuelsCongesTransmettre({
         <div className="flex items-center gap-4">
           <button
             type="button"
-            onClick={exporter}
+            onClick={exporterExcel}
             className="text-slate hover:text-slate/80 text-sm font-semibold underline"
           >
-            Exporter (CSV)
+            Exporter (Excel)
           </button>
           <Button
             onClick={() => setModalOuverte(true)}
@@ -939,6 +902,27 @@ function QuelsCongesTransmettre({
               Vous allez transmettre ces données en paie. Celles-ci ne seront plus modifiables dans
               cette rubrique.
             </p>
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="text-ink-900 mb-1 text-sm font-semibold">
+                Télécharger le fichier à la transmission
+              </legend>
+              {(
+                [
+                  ["excel", "Excel (.xlsx)"],
+                  ["aucun", "Ne pas télécharger"],
+                ] as const
+              ).map(([valeur, libelle]) => (
+                <label key={valeur} className="text-ink-700 flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="format-telechargement"
+                    checked={formatTelechargement === valeur}
+                    onChange={() => setFormatTelechargement(valeur)}
+                  />
+                  {libelle}
+                </label>
+              ))}
+            </fieldset>
             {erreurTransmission && (
               <div className="rounded-control bg-status-danger-bg text-status-danger-fg px-3 py-2.5 text-sm">
                 {erreurTransmission}
