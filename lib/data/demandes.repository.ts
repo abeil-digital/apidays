@@ -440,6 +440,27 @@ export async function fetchCongesConsommesPeriode(
     .filter((d) => (TYPES_TRANSMISSIBLES_PAIE as readonly string[]).includes(d.type));
 }
 
+// Message lisible selon la vraie cause d'un échec de décision (08/10/2026,
+// volet "messages d'erreur génériques" du Backlog) : jusque-là un seul texte
+// pour tous les cas. `PGRST116` = aucune ligne renvoyée par l'update, donc
+// demande introuvable OU invisible pour cet utilisateur (RLS) ; `42501` =
+// refus explicite de la policy. Aucune garde sur le statut courant n'existe
+// côté base (voir Backlog "Verrouiller le statut des demandes") : une demande
+// déjà traitée par quelqu'un d'autre n'échoue donc pas, elle est simplement
+// ré-écrite — ce cas ne peut pas être signalé ici.
+function messageErreurDecision(error: { code?: string; message?: string }): string {
+  if (error.code === "PGRST116") {
+    return "Demande introuvable, ou vous n'avez pas le droit de la modifier.";
+  }
+  if (error.code === "42501") {
+    return "Vous n'avez pas le droit de modifier cette demande.";
+  }
+  if (/failed to fetch|network|fetch/i.test(error.message ?? "")) {
+    return "Connexion impossible : vérifiez votre réseau puis réessayez.";
+  }
+  return "Impossible d'enregistrer la décision. Réessayez dans un instant.";
+}
+
 async function deciderDemande(
   id: string,
   statut: "validee" | "refusee" | "annulee",
@@ -467,7 +488,7 @@ async function deciderDemande(
     .single();
 
   if (error) {
-    throw new Error("Impossible d'enregistrer la décision (demande déjà traitée, ou introuvable).");
+    throw new Error(messageErreurDecision(error));
   }
 
   // Journal complet des décisions (25/08/2026, `decisions_demande`) — ne

@@ -8477,6 +8477,20 @@ l'écart validé/transmis) décrite dans Backlog.md, « Écart non expliqué : e
 Décision de Vincent : laisser tel quel pour l'instant.
 
 
+**Messages d'erreur des décisions sur une demande (08/10/2026)** : premier point restant du volet 1 du
+chantier « Validation des fiches de paie ». « Refuser », « Annuler cette demande » et « Valider »
+(`DetailCongePanel.tsx`) affichaient toujours un texte fixe, quelle que soit la cause de l'échec, et
+`deciderDemande` (`demandes.repository.ts`) levait lui-même un message unique. Désormais
+`messageErreurDecision` traduit la vraie cause (`PGRST116` : demande introuvable ou invisible pour cet
+utilisateur, donc droit manquant ; `42501` : droit refusé ; réseau coupé ; autre) et le panneau affiche
+`erreur.message` quand il existe (texte fixe en secours). **Limite connue** : l'update ne vérifie pas le
+statut courant, donc une demande déjà décidée par quelqu'un d'autre est simplement ré-écrite, sans
+erreur — impossible à signaler sans verrou côté base (Backlog « Verrouiller le statut des demandes »).
+Vérifié sur le sandbox (compte manager de test, session locale, aucune écriture) : refuser/valider/
+retirer un id inexistant renvoient le message « introuvable ou droit manquant » sur la vraie base ; les
+cas droit refusé, réseau coupé et autre erreur ont été vérifiés avec un client simulé. L'affichage dans le
+panneau n'a pas été observé en navigateur par l'agent. `tsc`/`eslint`/`prettier` clean.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

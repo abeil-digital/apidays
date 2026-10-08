@@ -378,8 +378,8 @@ export function DetailCongePanel({
       await action(commentaire.trim());
       setCommentaire("");
       await rafraichirHistorique();
-    } catch {
-      setErreurAction(messageErreur);
+    } catch (erreur) {
+      setErreurAction(erreur instanceof Error && erreur.message ? erreur.message : messageErreur);
     } finally {
       setEnCours(false);
       onEnCoursChange?.(false);
@@ -413,8 +413,12 @@ export function DetailCongePanel({
           window.setTimeout(onClose, DUREE_FONDU_RETRAIT_MS);
         }, DUREE_FONDU_RETRAIT_MS);
       }, DUREE_MAINTIEN_RETRAIT_MS);
-    } catch {
-      setErreurAction("Impossible de retirer cette demande.");
+    } catch (erreur) {
+      setErreurAction(
+        erreur instanceof Error && erreur.message
+          ? erreur.message
+          : "Impossible de retirer cette demande.",
+      );
     } finally {
       setEnCours(false);
       onEnCoursChange?.(false);
@@ -430,8 +434,12 @@ export function DetailCongePanel({
       await onValider(commentaire.trim());
       onValiderSucces?.(selection.id, `Vous avez validé le congé de ${resumeConge}`);
       onClose();
-    } catch {
-      setErreurAction("Impossible de valider cette demande.");
+    } catch (erreur) {
+      setErreurAction(
+        erreur instanceof Error && erreur.message
+          ? erreur.message
+          : "Impossible de valider cette demande.",
+      );
     } finally {
       setEnCours(false);
       onEnCoursChange?.(false);
