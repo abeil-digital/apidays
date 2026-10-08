@@ -47,6 +47,12 @@ function formatMouvement(valeur: number): string {
   return `${valeur > 0 ? "+" : ""}${formatJours(valeur)}`;
 }
 
+// Grille de la card (08/10/2026, colonnes Acquis/Consommés à la place de
+// "Mvt") : type · précédent · acquis · consommés · mois · en paie. Mêmes
+// largeurs pour l'en-tête et les lignes ; ≈ 544 px au total avec la colonne
+// du nom, soit moins que la largeur d'avant (559 px) malgré la colonne en plus.
+const GRILLE_CARD = "grid-cols-[3.5rem_70px_56px_64px_70px_88px]";
+
 function categorieSolde(c: ComparaisonSoldeCollaborateur, code: TypeBadgeCode) {
   if (code === "RTT") return c.rtt;
   if (code === "CPA") return c.cpa;
@@ -171,38 +177,48 @@ function CardSoldeCollaborateur({
   // d'un mois sur l'autre pour un CE/RECUP/EVT_FAM/CSS).
   const lignesTableau: {
     code: TypeBadgeCode;
-    categorie: { moisPrecedent: number; moisEnCours: number; ecartNonExplique?: number };
+    categorie: {
+      moisPrecedent: number;
+      moisEnCours: number;
+      mouvement?: number;
+      acquisition?: number;
+      ecartNonExplique?: number;
+    };
+    /** Congé sans solde (CSS/CE/RÉCUP/EVT_FAM) : pas de départ ni d'acquisition. */
+    sansSolde?: boolean;
   }[] = [
     ...TYPES_SOLDE.map((code) => ({ code, categorie: categorieSolde(c, code) })),
     ...autres.map(({ code, jours }) => ({
       code,
-      categorie: { moisPrecedent: 0, moisEnCours: jours },
+      categorie: { moisPrecedent: 0, moisEnCours: jours, mouvement: -jours },
+      sansSolde: true,
     })),
   ];
 
   return (
     <div className="flex w-fit flex-col">
       <div className="text-ink-500 flex w-fit items-stretch text-xs font-semibold tracking-wide uppercase">
-        <div className="w-[150px] shrink-0" />
-        <div className="grid flex-1 grid-cols-[4.5rem_75px_75px_75px_112px]">
-          <span className="px-4 py-2" />
-          <span className="px-2 py-2 text-center">{libelleMoisPrecedent}</span>
-          <span className="px-2 py-2 text-center">{libelleMoisEnCours}</span>
-          <span className="px-2 py-2 text-center">Mvt</span>
-          <span className="px-2 py-2 text-center">En paie</span>
+        <div className="w-[140px] shrink-0" />
+        <div className={`grid flex-1 ${GRILLE_CARD}`}>
+          <span className="px-2 py-2" />
+          <span className="px-1 py-2 text-center font-bold">{libelleMoisPrecedent}</span>
+          <span className="px-1 py-2 text-center font-medium">Acq.</span>
+          <span className="px-1 py-2 text-center font-medium">Conso</span>
+          <span className="px-1 py-2 text-center font-bold">{libelleMoisEnCours}</span>
+          <span className="px-1 py-2 text-center">En paie</span>
         </div>
       </div>
       <div
         data-carte-collaborateur={c.utilisateur.id}
         className="bg-surface-card flex w-fit items-stretch overflow-hidden shadow-sm"
       >
-        <div className="border-ink-300/60 flex w-[150px] shrink-0 flex-col items-start justify-center gap-1 border-r px-3 py-3 text-left">
+        <div className="border-ink-300/60 flex w-[140px] shrink-0 flex-col items-start justify-center gap-1 border-r px-3 py-3 text-left">
           <Avatar initiales={`${c.utilisateur.prenom[0]}${c.utilisateur.nom[0]}`.toUpperCase()} />
           <span className="text-ink-900 text-base font-semibold">{c.utilisateur.prenom}</span>
           <span className="text-ink-900 text-base font-semibold">{c.utilisateur.nom}</span>
         </div>
         <div className="flex-1">
-          {lignesTableau.map(({ code, categorie }) => {
+          {lignesTableau.map(({ code, categorie, sansSolde }) => {
             const active = selection?.utilisateurId === c.utilisateur.id && selection.code === code;
             return (
               <button
@@ -210,29 +226,32 @@ function CardSoldeCollaborateur({
                 key={code}
                 data-mouvement-row={`${c.utilisateur.id}:${code}`}
                 onClick={() => onSelect(c.utilisateur.id, code)}
-                className={`border-ink-300/60 grid w-full grid-cols-[4.5rem_75px_75px_75px_112px] items-center border-b text-left transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
+                className={`border-ink-300/60 grid w-full ${GRILLE_CARD} items-center border-b text-left transition-colors duration-150 last:border-b-0 ${active ? classeFondActifTypeBadge(code) : classeFondSurvolTypeBadge(code)}`}
               >
-                <div className={`px-4 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
+                <div className={`px-2 py-2.5 text-sm font-bold ${classeTexteTypeBadge(code)}`}>
                   {code}
                 </div>
                 <div
-                  className={`px-2 py-2.5 text-center text-sm font-bold ${classeTexteTypeBadge(code)}`}
+                  className={`px-1 py-2.5 text-center text-sm font-bold ${classeTexteTypeBadge(code)}`}
                 >
-                  {formatJours(categorie.moisPrecedent)} j
+                  {sansSolde ? "–" : `${formatJours(categorie.moisPrecedent)} j`}
                 </div>
-                <div className="px-2 py-2.5 text-center">
+                <div
+                  className={`px-1 py-2.5 text-center text-xs font-medium ${classeTexteTypeBadge(code)}`}
+                >
+                  {sansSolde ? "–" : `${formatMouvement(categorie.acquisition ?? 0)} j`}
+                </div>
+                <div
+                  className={`px-1 py-2.5 text-center text-xs font-medium ${classeTexteTypeBadge(code)}`}
+                >
+                  {formatMouvement(categorie.mouvement ?? 0)} j
+                </div>
+                <div className="px-1 py-2.5 text-center">
                   <TypeBadge
                     code={code}
                     variant="pill"
                     label={`${formatJours(categorie.moisEnCours)} j`}
                   />
-                </div>
-                <div className="px-2 py-2.5 text-center">
-                  <span
-                    className={`rounded-control text-xs font-bold underline decoration-dotted underline-offset-2 ${classeTexteTypeBadge(code)}`}
-                  >
-                    {formatMouvement(categorie.moisEnCours - categorie.moisPrecedent)} j
-                  </span>
                   {categorie.ecartNonExplique ? (
                     <span
                       title={`Écart non expliqué : ${formatMouvement(categorie.ecartNonExplique)} j — ouvrir le détail`}
@@ -240,7 +259,7 @@ function CardSoldeCollaborateur({
                     />
                   ) : null}
                 </div>
-                <div className="px-2 py-2.5 text-center">
+                <div className="px-1 py-2.5 text-center">
                   {/* Reflète exports_paie.pris_en_compte (11/09/2026) —
                   auparavant du JSX en dur ("✓ ok" sur toutes les lignes,
                   aucune donnée derrière), le bouton "Valider" plus bas
@@ -454,7 +473,7 @@ function PanelJoursMouvement({
       className="flex items-stretch transition-[gap] duration-300 ease-in-out xl:sticky xl:top-4 xl:shrink-0"
       style={{ gap: demandeOuverte ? "5px" : "0px", marginTop: topOffset }}
     >
-      <div className="bg-surface-card w-72 shrink-0 overflow-hidden shadow-sm">
+      <div className="bg-surface-card w-[245px] shrink-0 overflow-hidden shadow-sm">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-ink-300 text-ink-500 border-b text-xs font-semibold tracking-wide uppercase">

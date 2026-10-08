@@ -8521,6 +8521,27 @@ police ni couleur ; le fichier d'exemple a été validé par Vincent.
 - **Erratum doc** : les mentions « acme » plus haut pour le banc d'essai du moteur et les 6 lignes
   `soldes_periode` de 2020-2025 concernent en fait le tenant **Abeil (sandbox)** (`c52b18b8…`), pas acme.
 
+**« Vérifier les fiches de paie » : colonnes Acq. et Conso à la place de « Mvt » (08/10/2026)** : demande de
+Vincent après le test des exports de juin à septembre sur Abeil. Dans `CardSoldeCollaborateur`
+(`VerifierFichesPaiePage2.tsx`), la colonne « Mvt » (variation nette) est remplacée par deux colonnes
+**Acq.** (acquisition du mois, `categorie.acquisition`, toujours 0 pour le CP) et **Conso** (jours
+transmis sur l'export, `categorie.mouvement`, affichés avec leur signe, « -1,5 j »), de sorte que la ligne se
+lise comme une addition : précédent + acq. + conso = solde du mois. Ordre des colonnes : type · précédent (ou
+« Initial » au premier mois) · Acq. · Conso · mois · En paie. Les types sans solde (CSS/CE/RÉCUP/EVT_FAM)
+affichent « – » en précédent et en acquis, leur total en conso. Le point orange « Écart non expliqué »
+suit désormais la pastille du solde du mois.
+- **Largeurs** (grille `GRILLE_CARD`) : nom 150 → 140 px, type 72 → 56, précédent 70, Acq. 56, Conso 64,
+  mois 70, « En paie » 112 → 88 : ≈ 544 px au total, contre 559 avant la colonne en plus. Popin des
+  événements `w-72` (288 px) → **245 px** (-15 %). Les autres réglages envisagés (panneau de détail plus
+  étroit, repli sous la card en dessous de 1 280 px, « En paie » masqué quand un panneau est ouvert) ont été
+  **refusés** par Vincent.
+- **Essai de hiérarchie visuelle** : mois précédent et mois en cours en gras (en-têtes et valeurs), Acq. et
+  Conso en poids moyen. Peut être renforcé ou annulé.
+- **Colonne « En paie »** : état de l'export entier (`exports_paie.pris_en_compte`), identique sur toutes
+  les lignes ; redondante avec la liste des périodes (« Vérifié le ») et le bandeau du bas. Suppression
+  proposée (+88 px de marge), **non retenue pour l'instant** (« on s'arrête là sur ce point »).
+- `tsc`/`eslint`/`prettier` clean, écran non vérifié en navigateur par l'agent (pas de session).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
