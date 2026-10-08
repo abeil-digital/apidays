@@ -108,7 +108,7 @@ export async function GET(
     })),
     ...(demiJourneesImposees ?? []).map((d) => ({
       id: `dji-${d.id}`,
-      titre: `Demi-journée imposée (${d.demi_journee === "matin" ? "matin" : "après-midi"})`,
+      titre: "Repos Abeil",
       dateDebut: d.date,
       demiDebut: d.demi_journee,
       dateFin: d.date,

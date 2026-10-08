@@ -8542,6 +8542,17 @@ suit désormais la pastille du solde du mois.
   proposée (+88 px de marge), **non retenue pour l'instant** (« on s'arrête là sur ce point »).
 - `tsc`/`eslint`/`prettier` clean, écran non vérifié en navigateur par l'agent (pas de session).
 
+**Flux Proton : « Repos Abeil » et après-midi à 12h00 (08/10/2026)** : demande de Vincent (« on va unifier »).
+Dans le flux ICS (`app/api/flux-calendrier/[token]/route.ts`, `lib/calendrier/ics.ts`) : (1) toute demi-journée
+imposée (matin ou après-midi) a désormais pour titre **« Repos Abeil »** (avant : « Demi-journée imposée
+(après-midi) ») ; (2) `DEBUT_APRES_MIDI` passe de 13h00 à **12h00** pour **toute** demi-journée d'après-midi,
+congés des collaborateurs compris (fin à 18h00 conservée, matin 08h00-12h00 inchangé). Le début d'une
+après-midi et la fin d'une matinée coïncident donc à midi. Vérifié sur un flux d'exemple (génération hors
+navigateur) : `SUMMARY:Repos Abeil`, `DTSTART:…T120000`/`DTEND:…T180000`, congé du 20/08 après-midi au 21/08
+`DTSTART:20260820T120000`. `tsc`/`eslint`/`prettier` clean. Proton rafraîchit son flux à son rythme (souvent
+plusieurs heures) : les évènements déjà reçus se mettent à jour d'eux-mêmes. Le reste de l'app garde son
+libellé « Demi-journée imposée » jusqu'à l'item « Uniformiser Repos Abeil ».
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

@@ -67,7 +67,9 @@ function horodatageUtc(iso: string): string {
 
 const DEBUT_MATIN = "080000";
 const FIN_MATIN = "120000";
-const DEBUT_APRES_MIDI = "130000";
+// 12h00 (08/10/2026, demande de Vincent — "on va unifier") : toute demi-journée
+// d'après-midi commence à midi, congés des collaborateurs compris.
+const DEBUT_APRES_MIDI = "120000";
 const FIN_APRES_MIDI = "180000";
 
 type Demi = "matin" | "apres_midi";
