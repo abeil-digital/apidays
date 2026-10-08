@@ -453,7 +453,7 @@ function LigneFormulaireAnciennete({
           className="!border-slate w-16"
           aria-label="Jours de CP supplémentaires"
         />
-        <span className="text-ink-900 text-sm">jour(s) de CP supplémentaire tous les</span>
+        <span className="text-ink-900 text-sm">jour(s) de CP supplémentaire(s) à</span>
         <Input
           type="number"
           min={1}
@@ -495,7 +495,9 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
       <label className="text-ink-900 text-sm font-bold">Règles</label>
 
       <p className="text-ink-500 text-xs">
-        Jours de congés payés supplémentaires accordés selon l&rsquo;ancienneté.
+        Jours de congés payés supplémentaires accordés chaque année selon l&rsquo;ancienneté. Chaque
+        règle donne le total accordé à partir de cette ancienneté : elle remplace la précédente,
+        elle ne s&rsquo;y ajoute pas.
       </p>
 
       {regles.length > 0 && (
@@ -519,7 +521,7 @@ function BlocAnciennete({ regles, onAjouter, onModifier, onSupprimer }: BlocAnci
                   <span className="text-ink-900">
                     {formatJours(regle.joursSupplementaires)} jour
                     {regle.joursSupplementaires > 1 ? "s" : ""} de CP supplémentaire
-                    {regle.joursSupplementaires > 1 ? "s" : ""} tous les {regle.seuilAnnees} an
+                    {regle.joursSupplementaires > 1 ? "s" : ""} à {regle.seuilAnnees} an
                     {regle.seuilAnnees > 1 ? "s" : ""}
                   </span>
                   <div className="flex shrink-0 items-center gap-3">

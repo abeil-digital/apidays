@@ -8573,6 +8573,28 @@ inchangés) s'affiche désormais :
   (question 4, « CPI/DJI ») reste à réécrire, voir Backlog.
 `tsc`/`eslint`/`prettier` clean, écrans non vérifiés en navigateur par l'agent (pas de session).
 
+**Abeil : règles d'ancienneté, FAQ et intitulés (08/10/2026)** : suite d'une session de relecture de la FAQ avec
+Vincent. Modifications de **données** (production, tenant Abeil) et un changement de libellé :
+- **Règles d'ancienneté** (`regles_anciennete`) : un seul palier existait (5 ans → +1 j). Ajout de **10 ans → +2 j**
+  et **15 ans → +3 j** (règle d'Abeil : « tous les 5 ans un jour de CP en plus », supplément **annuel
+  permanent**). Rien au-delà de 15 ans (le plus ancien a 13,8 ans). Mode d'attribution déjà en place :
+  `jour_anniversaire` depuis le 01/06/2026. Impact : Rémy Randoing (12 ans) et Florent Touchet (10 ans)
+  passent de +1 à +2 j à la prochaine période ; soldes affichés aujourd'hui inchangés (période pilotée par les
+  soldes initiaux).
+- **Vérifié sur le vrai moteur** (banc d'essai Node, lecture seule) : chaque ligne de règle est un **total** à ce
+  niveau, le moteur retient la plus favorable atteinte (`bonusAnciennete`, `Math.max`, pas de cumul) — à 10 ans pile
+  (Malloire au 04/09/2027) : 2 j, pas 3 ; 6 ans : 1 j ; 9 ans : 1 j ; 12-13 ans : 2 j. Le bonus est attribué à
+  **chaque** anniversaire (annuel et permanent). Un « 2ᵉ jour à 10 ans » n'existe que parce que la ligne
+  « 10 ans → 2 » a été saisie.
+- **Intitulé des règles** (`CongesRttPage.tsx`) : « N jour(s) de CP supplémentaire(s) **à X ans** » au lieu de « tous
+  les X ans » (formulaire et liste) ; texte d'aide complété : « accordés chaque année… chaque règle donne le total
+  accordé à partir de cette ancienneté : elle remplace la précédente, elle ne s'y ajoute pas ».
+- **FAQ du vrai Abeil** (`faqs`) : question n°2 réécrite (« À quel moment je prends mes congés d'été ? » — semaine
+  du 15 août + deux autres semaines avant ou après, à saisir comme congés dans Apidays) ; question n°3
+  (« Les jours d'ancienneté… » — +1 j/an dès 5 ans, +2 dès 10, +3 dès 15, ajoutés le jour de l'anniversaire du début de
+  contrat). Restent à réécrire : n°1 (solde théorique/réel) et n°4 (jours imposés, à passer à « Repos Abeil »).
+`tsc`/`eslint`/`prettier` clean pour le libellé ; écran non vérifié en navigateur par l'agent.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
