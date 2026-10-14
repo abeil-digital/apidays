@@ -8632,6 +8632,24 @@ concernées (aucune chez Abeil).
 - **Restent ouverts** (Backlog) : (B) le report soustrait les congés de TOUTE la période précédente (erroné pour un solde initial
   daté en milieu de période) ; (D) bonus non proratisé au temps partiel.
 
+**Mise à jour de Next.js 16.2.10 → 16.4.0 (14/10/2026, branche `maj-nextjs-16-4`, en attente de validation avant fusion)** :
+traite l'entrée Backlog « Mettre à jour Next.js » (failles signalées par `npm audit`, découvertes en installant
+`write-excel-file`). `next` et `eslint-config-next` passent en version exacte 16.4.0 (`package.json`, `package-lock.json` ;
+React 19.2.4 inchangé, compatible). **Avant** : 14 failles (1 critique : exécution de code à distance, 12 hautes). **Après** :
+10 failles (0 critique) ; `next`, `sharp` et `postcss` ne sont plus listés. Restent des outils de développement
+(`eslint-config-next`/`fast-glob`/`micromatch`/`braces`, `js-yaml`, `browserslist`, `brace-expansion`, `source-map-js`,
+`baseline-browser-mapping`) : 5 se corrigent par `npm audit fix` (non breaking), les 5 autres dépendent d'`eslint-config-next`
+(l'outil propose de redescendre en v14, refusé).
+- **Notes de version lues** (16.3.0 et 16.4.0) : pas de breaking change annoncé ; changements à surveiller sans effet ici :
+  aucune configuration `next.config.ts`, `moduleResolution: bundler`, pas de runtime Edge, pas de `next/image`, pas de
+  `ImageResponse`, pas de `unstable_*`, `proxy.ts` déjà au nouveau nom. Comportements nouveaux par défaut : strict route
+  matching, cache de build Turbopack, `validateRSCRequestHeaders`, une Server Action inconnue renvoie une erreur côté client.
+- **Vérifié** : `tsc`, `eslint`, `npm run build` complets propres ; application lancée en mode production (`next start`) et
+  testée hors connexion : `/` et pages protégées → 307 vers `/connexion?next=…` (proxy intact), `/connexion` 200,
+  `manifest.webmanifest`/`icon.svg`/`apple-icon.png` 200, flux Proton avec jeton invalide 404, cron sans secret 401,
+  `/_next/image` refuse un SVG (400, voulu). **Non vérifié** : les parcours connectés (connexion, Server Actions, pose et
+  validation d'un congé, transmissions paie), à tester par Vincent sur l'aperçu de la branche avant fusion dans `main`.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
