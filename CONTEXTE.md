@@ -8632,7 +8632,7 @@ concernées (aucune chez Abeil).
 - **Restent ouverts** (Backlog) : (B) le report soustrait les congés de TOUTE la période précédente (erroné pour un solde initial
   daté en milieu de période) ; (D) bonus non proratisé au temps partiel.
 
-**Mise à jour de Next.js 16.2.10 → 16.4.0 (14/10/2026, branche `maj-nextjs-16-4`, en attente de validation avant fusion)** :
+**Mise à jour de Next.js 16.2.10 → 16.4.0 (14/10/2026, fusionnée dans `main` après validation des parcours)** :
 traite l'entrée Backlog « Mettre à jour Next.js » (failles signalées par `npm audit`, découvertes en installant
 `write-excel-file`). `next` et `eslint-config-next` passent en version exacte 16.4.0 (`package.json`, `package-lock.json` ;
 React 19.2.4 inchangé, compatible). **Avant** : 14 failles (1 critique : exécution de code à distance, 12 hautes). **Après** :
@@ -8647,8 +8647,7 @@ React 19.2.4 inchangé, compatible). **Avant** : 14 failles (1 critique : exécu
 - **Vérifié** : `tsc`, `eslint`, `npm run build` complets propres ; application lancée en mode production (`next start`) et
   testée hors connexion : `/` et pages protégées → 307 vers `/connexion?next=…` (proxy intact), `/connexion` 200,
   `manifest.webmanifest`/`icon.svg`/`apple-icon.png` 200, flux Proton avec jeton invalide 404, cron sans secret 401,
-  `/_next/image` refuse un SVG (400, voulu). **Non vérifié** : les parcours connectés (connexion, Server Actions, pose et
-  validation d'un congé, transmissions paie), à tester par Vincent sur l'aperçu de la branche avant fusion dans `main`.
+  `/_next/image` refuse un SVG (400, voulu). **Parcours connectés vérifiés ensuite en local sur le build de production** (tenant sandbox, comptes de test, aucun e-mail envoyé) : connexion avec mot de passe et déconnexion (Server Actions), pose d'un congé par un salarié, validation par un manager (statut et journal des décisions), transmission paie avec téléchargement de l'Excel, modification d'une règle d'ancienneté, pages Suivre et Paramétrer ; aucune erreur console. Données de test supprimées ensuite (demande, export d'octobre, règle restaurée, mot de passe temporaire neutralisé).
 
 ## À faire
 
