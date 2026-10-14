@@ -8612,6 +8612,26 @@ hors navigateur, en lecture seule (écritures de gel neutralisées), via un lien
 tenant (rien n'est envoyé), et affiche tout écart moteur ≠ calcul indépendant. N'est ni compilé ni exécuté par
 l'application (vérifié : `tsc`, `eslint` sur tout le projet propres, aucune référence dans les configurations).
 
+**Bonus d'ancienneté crédité dans une période pilotée par un solde initial (14/10/2026)** : correction du défaut trouvé
+par l'audit du 08/10 (voir plus haut). Dans `resolverCapitalOuvertureCp` (`lib/data/soldes.repository.ts`), la branche
+`gouvernePar: "solde_initial"` calcule désormais le bonus d'ancienneté au lieu de renvoyer `bonus: 0` : modes « événement »
+seulement (`jour_anniversaire`, `debut_mois_anniversaire`, `mois_suivant_anniversaire` ; en mode `periode_suivante` le
+bonus est considéré déjà inclus dans le chiffre saisi, qui est le capital d'ouverture), compté **à partir de sa date d'effet**
+et seulement si celle-ci est postérieure ou égale à `soldeInitial.dateReference` (le solde initial est le solde constaté
+AVANT cette date), montant selon l'ancienneté à cette date (paliers de Paramétrer > Congés & RTT, le plus favorable atteint,
+sans cumul), jamais d'évènement à 0 j. Le bonus entre dans `total` — donc dans le report de la bascule du 01/06/2027 — et reste
+affiché à part, à sa date, par `fetchHistoriqueCp` (« Jour supp. anniversaire <mois> »). Les périodes figées n'étaient pas
+concernées (aucune chez Abeil).
+- **Vérifié** : `scripts/moteur-solde` (calcul indépendant) — **0 écart** sur 10 collaborateurs × 6 dates × CP/RTT/CPA (27 écarts
+  avant) ; Delphine Dubosclard : 8,5 j le 10/04/2027, 9,5 j le 11/04/2027 avec « Jour supp. anniversaire avril 2027 : +1 j ».
+  `eslint`/`prettier` clean ; `tsc` ne signale que `.next/dev/types/validator.ts` (fichier généré par le serveur local en cours,
+  sans rapport avec le code).
+- **Soldes initiaux ajustés dans la foulée, à la demande de Vincent**, pour éviter un double comptage (les soldes saisis par Delphine
+  incluaient déjà le jour d'ancienneté du 01/09 ou du 04/09) : Rémy Randoing CP 27 → **25 j**, Anthony Malloire CP 29 → **28 j**. Léna
+  Lozac'h inchangée (28 j). Capital CP inchangé pour eux (25 + 2 pour Rémy, 28 + 1 pour Anthony).
+- **Restent ouverts** (Backlog) : (B) le report soustrait les congés de TOUTE la période précédente (erroné pour un solde initial
+  daté en milieu de période) ; (D) bonus non proratisé au temps partiel.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

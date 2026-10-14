@@ -728,12 +728,45 @@ async function resolverCapitalOuvertureCp(
   // possible (`gouvernePar: "solde_initial"`, affiché comme une ligne
   // opaque unique par l'appelant, voir `fetchHistoriqueCp`).
   if (ctx.soldeInitial && dateIso(periodePrecedente.fin) <= ctx.soldeInitial.dateReference) {
+    // Bonus d'ancienneté d'une période pilotée par un solde initial (08/10/2026,
+    // trouvé par Vincent — « Rémy a plus de 10 ans d'ancienneté, je ne vois pas de
+    // jours supp » : cette branche renvoyait `bonus: 0`, donc le bonus n'était jamais
+    // calculé tant que la période était gouvernée par la saisie). Le solde initial est
+    // le solde constaté AVANT la date de référence : un anniversaire survenu à cette
+    // date ou après est un événement nouveau qu'il ne peut pas contenir. Mêmes règles
+    // que la branche « calcul » ci-dessous : modes « événement » seulement (en mode
+    // `periode_suivante` le bonus est considéré déjà inclus dans le chiffre saisi), compté
+    // une fois sa date atteinte, montant selon l'ancienneté À CETTE DATE, jamais d'événement
+    // à 0 j. Le bonus entre dans `total` (donc dans le report à la bascule) et reste affiché
+    // à part, à sa date, par l'appelant (`bonusDateEffet`).
+    let bonusInitial = 0;
+    let bonusDateEffetInitial: string | null = null;
+    const { mode: modeBonusInitial, dateEffet: dateEffetBonusInitial } = resoudreAttributionBonus(
+      ctx.historiqueAttributionBonus,
+      periode,
+      ctx.dateReferenceAnciennete,
+    );
+    if (
+      modeBonusInitial !== "periode_suivante" &&
+      dateEffetBonusInitial &&
+      dateIso(dateEffetBonusInitial) >= ctx.soldeInitial.dateReference &&
+      dateIso(dateEffetBonusInitial) <= dateIso(ctx.aujourdhui)
+    ) {
+      const montantInitial = bonusAnciennete(
+        ctx.reglesAnciennete,
+        ansAnciennete(ctx.dateReferenceAnciennete, dateEffetBonusInitial),
+      );
+      if (montantInitial > 0) {
+        bonusInitial = montantInitial;
+        bonusDateEffetInitial = dateIso(dateEffetBonusInitial);
+      }
+    }
     return {
-      total: ctx.soldeInitial.cp,
+      total: ctx.soldeInitial.cp + bonusInitial,
       report: 0,
       transfertCpa: 0,
-      bonus: 0,
-      bonusDateEffet: null,
+      bonus: bonusInitial,
+      bonusDateEffet: bonusDateEffetInitial,
       gouvernePar: "solde_initial",
     };
   }
