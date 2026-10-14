@@ -8628,7 +8628,8 @@ concernées (aucune chez Abeil).
   sans rapport avec le code).
 - **Soldes initiaux ajustés dans la foulée, à la demande de Vincent**, pour éviter un double comptage (les soldes saisis par Delphine
   incluaient déjà le jour d'ancienneté du 01/09 ou du 04/09) : Rémy Randoing CP 27 → **25 j**, Anthony Malloire CP 29 → **28 j**. Léna
-  Lozac'h inchangée (28 j). Capital CP inchangé pour eux (25 + 2 pour Rémy, 28 + 1 pour Anthony).
+  Lozac'h inchangée (28 j). Capital CP inchangé pour eux (25 + 2 pour Rémy, 28 + 1 pour Anthony). **Retour de Delphine reçu et validé par
+  Vincent le 14/10/2026** : situation confirmée, rien d'autre à corriger sur ces trois soldes.
 - **Restent ouverts** (Backlog) : (B) le report soustrait les congés de TOUTE la période précédente (erroné pour un solde initial
   daté en milieu de période) ; (D) bonus non proratisé au temps partiel.
 
