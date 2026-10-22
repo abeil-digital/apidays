@@ -8736,6 +8736,11 @@ statut / période respectés, rappelés en en-tête), icône tableur comme sur S
 les demandes reste correct (66 demandes, colonne Collaborateur présente). `tsc`/`eslint`/`prettier` propres. Les classes `print:` restantes sur
 la page Historique ne servent plus (reliquat de l'impression, laissées en place).
 
+**Pied de page : « Mentions légales » masqué (22/10/2026)** : la page `/mentions-legales` n'étant pas rédigée (placeholder, voir Backlog), le lien
+est mis **en commentaire** dans `components/layout/Footer.tsx` (import `Link` compris) — le pied de page n'affiche plus que « © année Citizen D » et
+« Votre avis compte ». À réactiver (décommenter les deux blocs) une fois le contenu juridique fourni par Citizen D ; la route reste accessible par
+son adresse.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

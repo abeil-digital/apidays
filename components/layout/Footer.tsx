@@ -1,4 +1,4 @@
-import Link from "next/link";
+// import Link from "next/link"; // réactiver avec le lien « Mentions légales » (voir plus bas)
 import { FeedbackLien } from "@/components/feedback/FeedbackLien";
 
 /**
@@ -23,9 +23,11 @@ export function Footer() {
   return (
     <footer className="bg-brand-primary relative z-50 mx-auto mb-24 flex w-full shrink-0 flex-col items-center justify-center gap-1 px-4 py-4 text-xs text-white/70 md:mb-0 md:max-w-[1180px] md:flex-row md:gap-4 print:hidden">
       <span>© {new Date().getFullYear()} Citizen D</span>
+      {/* « Mentions légales » masqué (22/10/2026, page pas encore rédigée) —
+          à réactiver une fois `/mentions-legales` prête (voir Backlog) :
       <Link href="/mentions-legales" className="hover:text-white hover:underline">
         Mentions légales
-      </Link>
+      </Link> */}
       <FeedbackLien />
     </footer>
   );
