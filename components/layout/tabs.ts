@@ -7,6 +7,7 @@ import {
   History,
   Home,
   ListChecks,
+  MessageSquareText,
   Users,
   Wallet,
   type LucideIcon,
@@ -22,6 +23,9 @@ const POSER_TABS: NavTab[] = [
   { href: "/", label: "Accueil", Icon: Home },
   { href: "/historique", label: "Historique", Icon: History },
 ];
+
+// Section « Feedback » (niveau 1, manager/admin, 22/10/2026) : une seule page.
+const FEEDBACK_TABS: NavTab[] = [{ href: "/feedback", label: "Feedback", Icon: MessageSquareText }];
 
 const PARAMETRER_TABS: NavTab[] = [
   { href: "/parametrer/utilisateurs", label: "Utilisateurs", Icon: Users },
@@ -57,6 +61,7 @@ export function getNavTabs(
   utilisateurCourant?: { role?: string; sansSolde?: boolean } | null,
 ): NavTab[] {
   if (pathname.startsWith("/parametrer")) return PARAMETRER_TABS;
+  if (pathname.startsWith("/feedback")) return FEEDBACK_TABS;
   if (pathname.startsWith("/suivre")) {
     const estSansSolde =
       utilisateurCourant?.sansSolde &&

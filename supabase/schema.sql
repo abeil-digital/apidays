@@ -1452,6 +1452,39 @@ create policy "export_paie_lignes: salarié lit ses propres lignes"
     )
   );
 
+
+-- FEEDBACKS (22/10/2026) — retours des utilisateurs sur Apidays (formulaire du
+-- pied de page, `FeedbackLien.tsx`). Un utilisateur connecté écrit (insert) ses
+-- propres messages ; seuls manager/admin du tenant les lisent (page « Feedback »,
+-- navigation de niveau 1). `nom` est saisi dans le formulaire (pré-rempli, modifiable) :
+-- copie volontaire, indépendante du profil, pour garder ce que la personne a écrit.
+-- Envoi anonyme (case « Rester anonyme ») : `utilisateur_id` null et `nom` = « Anonyme »,
+-- aucune trace de l'auteur en base (seul le tenant reste renseigné).
+create table feedbacks (
+  id uuid primary key default gen_random_uuid(),
+  entreprise_id uuid not null references entreprises(id) default my_entreprise_id(),
+  utilisateur_id uuid references utilisateurs(id) default my_utilisateur_id(),
+  nom text not null check (char_length(btrim(nom)) between 1 and 120),
+  commentaire text not null check (char_length(btrim(commentaire)) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
+alter table feedbacks enable row level security;
+
+create policy "feedbacks: un utilisateur envoie son propre retour"
+  on feedbacks for insert
+  with check (
+    auth.role() = 'authenticated'
+    and entreprise_id = my_entreprise_id()
+    and (utilisateur_id = my_utilisateur_id() or utilisateur_id is null)
+  );
+
+create policy "feedbacks: manager et admin lisent"
+  on feedbacks for select
+  using (my_role() in ('manager', 'admin') and entreprise_id = my_entreprise_id());
+
+grant select, insert on feedbacks to authenticated;
+
 -- ------------------------------------------------------------
 -- GRANTS — nécessaires en complément de RLS : RLS filtre les
 -- LIGNES visibles, mais Postgres exige aussi les droits de base

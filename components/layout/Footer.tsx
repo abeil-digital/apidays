@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FeedbackLien } from "@/components/feedback/FeedbackLien";
 
 /**
  * Pied de page (10/09/2026) — même largeur/centrage que le header
@@ -25,6 +26,7 @@ export function Footer() {
       <Link href="/mentions-legales" className="hover:text-white hover:underline">
         Mentions légales
       </Link>
+      <FeedbackLien />
     </footer>
   );
 }

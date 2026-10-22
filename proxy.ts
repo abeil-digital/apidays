@@ -24,7 +24,7 @@ import { cibleRedirectSure } from "@/lib/redirectSur";
  */
 const ROUTE_CONNEXION = "/connexion";
 const ROUTE_ADMIN_CONNEXION = "/admin/connexion";
-const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre"];
+const PREFIXES_MANAGER_ADMIN = ["/parametrer", "/suivre", "/feedback"];
 const PREFIXE_SUPER_ADMIN = "/admin";
 // Section "Poser" — Accueil, Historique, Nouvelle demande (24/09/2026,
 // utilisée par le garde "sans suivi de solde" plus bas). Volontairement

@@ -134,9 +134,12 @@ interface HeaderBarProps {
 }
 
 export function HeaderBar({ logoUrl }: HeaderBarProps = {}) {
-  const { utilisateur } = useUtilisateur();
+  const { utilisateur, loading } = useUtilisateur();
   const pathname = usePathname();
-  const niveau1Items = getNiveau1Items(utilisateur?.role, utilisateur?.sansSolde);
+  // Tant que le profil charge, on n'affiche aucune entrée : sans le rôle, la
+  // nav montrait « Poser » seul puis se recomposait (flash visible quand
+  // Supabase est lent, 22/10/2026).
+  const niveau1Items = loading ? [] : getNiveau1Items(utilisateur?.role, utilisateur?.sansSolde);
 
   return (
     <header className="bg-brand-primary relative z-50 mx-auto flex w-full shrink-0 flex-col shadow-sm md:h-14 md:max-w-[1180px] md:flex-row md:items-center md:gap-6 md:overflow-x-auto md:pr-8 md:pl-0 print:hidden">

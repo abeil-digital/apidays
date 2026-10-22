@@ -26,6 +26,10 @@ interface ModalProps {
    * de se démarquer visuellement du corps. Défaut : activé (comportement
    * historique inchangé pour les appelants existants). */
   separateur?: boolean;
+  /** Fond du panneau — `"app"` (gris de page, `bg-surface-app`) pour une popin
+   * dont le contenu est posé sur une card blanche, comme « Suivre mon solde »
+   * (22/10/2026, « Votre avis compte »). Défaut : `"card"` (blanc, inchangé). `"faq"` : jaune de la FAQ (`FaqCard.tsx`, `#FCEFB3` à 50 % sur blanc, en couleur pleine). */
+  surface?: "card" | "app" | "faq";
 }
 
 export function Modal({
@@ -36,6 +40,7 @@ export function Modal({
   className = "max-w-md",
   align = "center",
   separateur = true,
+  surface = "card",
 }: ModalProps) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -66,7 +71,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className={`bg-surface-card flex max-h-[90vh] w-full flex-col shadow-lg ${className}`}
+        className={`${surface === "app" ? "bg-surface-app" : surface === "faq" ? "bg-[#FDF7D9]" : "bg-surface-card"} flex max-h-[90vh] w-full flex-col shadow-lg ${className}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className={header ? "shrink-0" : "shrink-0 px-6 pt-6"}>

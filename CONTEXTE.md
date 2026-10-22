@@ -8690,6 +8690,42 @@ insertion → relecture), avec deux ajouts :
   saisie : Penfornis CP 0 (CPA 8,4), Caillat CPA 2,82, Touchet CP 4,5, Malloire CP 13,5, Pettier CP 12, Fontaine CP 15, Lozac'h CP 11,
   Dubosclard RTT 0,5. L'outil de saisie reste dans le dossier de travail de la session (non versionné, il utilise la clé de service).
 
+**Feedback : formulaire du pied de page et page manager (22/10/2026)** : demande de Vincent (« On s'améliore, faites-nous part de vos
+remarques, questions ; formulaire nom-prénom + commentaire, intégré au pied de page, et une interface accessible aux managers,
+niveau 1 : feedback ») pour le lancement d'Apidays auprès des collaborateurs d'Abeil (2 novembre 2026). Choix validés : accessible aux
+personnes **connectées uniquement** (pas de lien public), interface manager en **liste simple, lecture seule**.
+- **Base** (`supabase/schema.sql`, table `feedbacks`, exécutée par Vincent dans Supabase le 22/10/2026) : `id`, `entreprise_id` (défaut
+  `my_entreprise_id()`), `utilisateur_id` (défaut `my_utilisateur_id()`), `nom` (1-120 car.), `commentaire` (1-2000 car.), `created_at`.
+  RLS : un utilisateur **insère** uniquement avec son propre `utilisateur_id` et son tenant ; **seuls manager/admin du tenant lisent** ;
+  `grant select, insert … to authenticated`. Aucune modification ni suppression côté application.
+- **Formulaire** : lien **« Votre avis compte »** (jaune de la charte `brand-accent`, 14 px semi-gras) ajouté au pied de page
+  (`components/layout/Footer.tsx` → `components/feedback/FeedbackLien.tsx`), fenêtre du même titre, « Nom - prénom » pré-rempli depuis le profil (modifiable), « Mon message / ma remarque » avec compteur, confirmation après envoi.
+  Dépôt : `lib/data/feedbacks.repository.ts` (`envoyerFeedback`, `fetchFeedbacks`) ; type `Feedback` dans `lib/types.ts`.
+- **Page manager** : route `/feedback` (`components/feedback/FeedbackListePage.tsx`), entrée **« Feedback » de niveau 1** dans le header pour
+  manager/admin (`niveau1.ts`, onglet unique `FEEDBACK_TABS` dans `tabs.ts`), route protégée par `proxy.ts` (`PREFIXES_MANAGER_ADMIN`) : un
+  collaborateur qui l'ouvre est renvoyé à l'accueil.
+- **Vérifié** (Chrome automatisé, sandbox, données de test supprimées ensuite) : envoi par un collaborateur via l'interface, message en base
+  (tenant `abeil-sandbox`, `utilisateur_id` renseigné), visible par le manager avec le compteur ; un collaborateur **ne lit aucun feedback** (0
+  ligne), **ne peut pas écrire au nom d'un autre** (refus RLS), nom vide refusé ; menu sans « Feedback » pour un collaborateur.
+  `tsc`/`eslint`/`prettier`/`npm run build` propres.
+- **Guide de prise en main (PDF, hors dépôt)** : légende réduite à 5 couleurs (bleu CP, vert RTT, bleu foncé Repos Abeil, bleu-gris clair
+  congés en acquisition, jaune fériés), contact Delphine, encart « On s'améliore ! » annonçant le lien Feedback.
+- **Rester anonyme (22/10/2026)** : case « Je préfère rester anonyme » sous « Nom - prénom » ; cochée, le champ nom est grisé et le message
+  est enregistré avec `utilisateur_id` **null** et `nom` = « Anonyme » (aucune trace de l'auteur en base, seul le tenant reste renseigné).
+  La politique d'insertion RLS accepte `utilisateur_id = my_utilisateur_id() OR utilisateur_id IS NULL` (SQL exécuté dans Supabase le
+  22/10/2026, voir `schema.sql`).
+- **Habillage de la fenêtre** : titre « Votre avis compte » à gauche (sans badge) avec croix, **fond jaune de la FAQ** (nouvelle option
+  `surface="faq"` du `Modal`, `#FDF7D9` = `#FCEFB3` à 50 % sur blanc ; `surface="app"` gris également disponible, défaut inchangé pour les
+  autres modales), texte d'introduction posé sur ce fond (« Apidays est en amélioration continue. » en semi-gras, puis l'invitation à
+  faire part de remarques, questions, bugs ou suggestions), formulaire sur **carte blanche**. Champ « Mon message / ma remarque » limité à
+  **1000 caractères** côté application (la base accepte jusqu'à 2000). Lien du pied de page « Votre avis compte » en jaune `brand-accent`.
+- **Test final (sandbox, Chrome automatisé, données supprimées ensuite)** : envoi anonyme et nominatif OK, base conforme, manager voit les
+  deux, collaborateur ne lit rien et ne peut pas écrire au nom d'un autre, `/feedback` renvoie un collaborateur à l'accueil, rendu mobile
+  (390 px) et bureau vérifiés, `tsc`/`eslint`/`prettier`/`build` propres.
+- **Correctif associé** : `HeaderBar.tsx` n'affiche plus aucune entrée de niveau 1 tant que le profil charge (flash « Poser » seul
+  visible quand Supabase était lent, y compris pour un manager sans solde).
+- **Pistes non faites** : statut « traité », compteur de messages non lus, notification e-mail à la réception.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,

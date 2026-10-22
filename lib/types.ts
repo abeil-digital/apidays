@@ -489,3 +489,12 @@ export interface CongeATransmettre extends DemandeEquipe {
   // Jours déjà transmis lors d'exports précédents — sert à l'affichage "X/Y".
   joursDejaTransmis: number;
 }
+
+// --- Feedback (pied de page, page manager « Feedback », 22/10/2026) ---
+
+export interface Feedback {
+  id: string;
+  nom: string;
+  commentaire: string;
+  creeLe: string; // timestamptz ISO
+}

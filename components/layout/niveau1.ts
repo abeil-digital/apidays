@@ -36,13 +36,25 @@ export function getNiveau1Items(
     },
   );
 
+  // « Feedback » (22/10/2026, demande de Vincent — « niveau 1 : feedback ») :
+  // retours des utilisateurs, lisibles par manager/admin seulement. Absent pour
+  // un collaborateur (pas de lien grisé, même règle que Suivre/Paramétrer).
+  if (peutParametrer) {
+    items.push({ key: "feedback", label: "Feedback", href: "/feedback" });
+  }
+
   return items;
 }
 
 export function isNiveau1Actif(key: string, pathname: string): boolean {
   if (key === "parametrer") return pathname.startsWith("/parametrer");
   if (key === "suivre") return pathname.startsWith("/suivre");
+  if (key === "feedback") return pathname.startsWith("/feedback");
   if (key === "poser")
-    return !pathname.startsWith("/parametrer") && !pathname.startsWith("/suivre");
+    return (
+      !pathname.startsWith("/parametrer") &&
+      !pathname.startsWith("/suivre") &&
+      !pathname.startsWith("/feedback")
+    );
   return false;
 }
