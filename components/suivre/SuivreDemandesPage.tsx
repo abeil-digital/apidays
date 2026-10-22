@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { FileSpreadsheet } from "lucide-react";
-import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
+import { formatDateAction } from "@/lib/format";
 import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
@@ -194,7 +194,7 @@ export function SuivreDemandesPage() {
   // Export Excel de la liste affichée (22/10/2026) : une ligne par demande de
   // `filtered`, filtres actifs rappelés en en-tête du fichier.
   async function exporterExcel() {
-    const [{ genererXlsxDemandes }, { LABEL_LONG }] = await Promise.all([
+    const [{ genererXlsxDemandes, ligneDemandeXlsx }, { LABEL_LONG }] = await Promise.all([
       import("@/lib/exportDemandesXlsx"),
       import("@/components/demandes/TypeBadge"),
     ]);
@@ -214,29 +214,13 @@ export function SuivreDemandesPage() {
         `Type : ${(LABEL_LONG as Record<string, string>)[typeFiltre] ?? regulSelectionne?.label ?? typeFiltre}`,
       );
     }
-    const lignes = filtered.map((d) => {
-      const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
-      const jours = d.nbDemiJournees / 2;
-      const precisions = [
-        d.demiDebut === "apres_midi" ? "début après-midi" : "",
-        d.demiFin === "matin" ? "fin matin" : "",
-      ].filter(Boolean);
-      return {
-        collaborateur: `${d.demandeur.prenom} ${d.demandeur.nom}`,
-        typeCode: code,
-        typeLibelle: (LABEL_LONG as Record<string, string>)[code] ?? code,
-        dates:
-          formatPeriodeDemande(d.debut, d.fin) +
-          (precisions.length > 0 ? ` (${precisions.join(", ")})` : ""),
-        duree: `${formatJours(jours)} j`,
-        statut: d.statut,
-        poseLe: formatDateAction(d.datePose),
-        decideLe: d.dateDecision ? formatDateAction(d.dateDecision) : "",
-        validePar: d.validateur ? `${d.validateur.prenom} ${d.validateur.nom}` : "",
-        message: d.note ?? "",
-        commentaire: d.commentaireManager ?? "",
-      };
-    });
+    const lignes = filtered.map((d) =>
+      ligneDemandeXlsx(
+        d,
+        `${d.demandeur.prenom} ${d.demandeur.nom}`,
+        LABEL_LONG as Record<string, string>,
+      ),
+    );
     const aujourdhui = new Date().toISOString().slice(0, 10);
     const blob = await genererXlsxDemandes(lignes, filtresActifs, formatDateAction(aujourdhui));
     const url = URL.createObjectURL(blob);

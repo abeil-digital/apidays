@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
 import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useDemandes } from "@/hooks/useDemandes";
 import { useReglesConges } from "@/hooks/useReglesConges";
 import { useUtilisateur } from "@/hooks/useUtilisateur";
 import { periodeReferenceCp } from "@/lib/periodeReferenceCp";
+import { formatDateAction } from "@/lib/format";
 import { fetchLignesTransmissionParDemande } from "@/lib/data/exportsPaie.repository";
 import { LABEL_LONG, type TypeBadgeCode } from "@/components/demandes/TypeBadge";
 import { InputFiltrePill, SelectFiltrePill } from "@/components/ui/FiltrePill";
@@ -140,6 +141,37 @@ export function HistoriquePage() {
     }
   }, [selection, marquerVue]);
 
+  // Export Excel de la liste affichée (22/10/2026, demande de Vincent — le
+  // bouton « Exporter » imprimait la page en PDF). Même fichier que
+  // « Suivre les demandes » (`exportDemandesXlsx.ts`), sans la colonne
+  // « Collaborateur » : l'Historique ne montre que les congés de la personne.
+  async function exporterExcel() {
+    const { genererXlsxDemandes, ligneDemandeXlsx } = await import("@/lib/exportDemandesXlsx");
+    const nomComplet = utilisateur ? `${utilisateur.prenom} ${utilisateur.nom}` : "";
+    const filtresActifs: string[] = [];
+    if (filtre !== "Tous les statuts") filtresActifs.push(`Statut : ${filtre}`);
+    if (periodeFiltre !== "toutes_dates" && (debut || fin)) {
+      filtresActifs.push(
+        `Période : ${debut ? formatDateAction(debut) : "…"} au ${fin ? formatDateAction(fin) : "…"}`,
+      );
+    }
+    if (typeFiltre !== "tous") filtresActifs.push(`Type : ${LABEL_LONG[typeFiltre]}`);
+    const lignes = filtered.map((d) =>
+      ligneDemandeXlsx(d, nomComplet, LABEL_LONG as Record<string, string>),
+    );
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    const blob = await genererXlsxDemandes(lignes, filtresActifs, formatDateAction(aujourdhui), {
+      titre: `Historique des congés — ${nomComplet}`,
+      avecCollaborateur: false,
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historique-conges_${aujourdhui}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="flex w-full max-w-md flex-col gap-5 pt-5 pb-4 md:max-w-none md:pt-0 print:pb-0">
       <h1 className="text-ink-900 animate-stagger-in px-1 text-2xl font-semibold print:hidden">
@@ -173,10 +205,10 @@ export function HistoriquePage() {
               demandes", PTP Vincent). */}
           <div className="flex justify-end px-1 print:hidden">
             <button
-              onClick={() => window.print()}
+              onClick={exporterExcel}
               className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
             >
-              <Printer size={13} />
+              <FileSpreadsheet size={13} />
               Exporter
             </button>
           </div>

@@ -8727,6 +8727,15 @@ personnes **connectées uniquement** (pas de lien public), interface manager en 
   visible quand Supabase était lent, y compris pour un manager sans solde).
 - **Pistes non faites** : statut « traité », compteur de messages non lus, notification e-mail à la réception.
 
+**Historique du collaborateur : export Excel au lieu du PDF (22/10/2026)** : le bouton « Exporter » de `/historique` (Poser > Historique)
+imprimait la page (PDF) ; il télécharge maintenant un fichier Excel `historique-conges_AAAA-MM-JJ.xlsx` de la liste **affichée** (filtres type /
+statut / période respectés, rappelés en en-tête), icône tableur comme sur Suivre les demandes. Même générateur que « Suivre les demandes »
+(`lib/exportDemandesXlsx.ts`, factorisé : `ligneDemandeXlsx` partagé, options `titre` et `avecCollaborateur`) ; ici **sans colonne
+« Collaborateur »** (toutes les lignes sont celles de la personne), titre « Historique des congés — Prénom Nom ». Test sur le sandbox
+(Chrome automatisé, vrai téléchargement) : fichier généré pour un collaborateur (20 demandes, sans la colonne Collaborateur) ; l'export de Suivre
+les demandes reste correct (66 demandes, colonne Collaborateur présente). `tsc`/`eslint`/`prettier` propres. Les classes `print:` restantes sur
+la page Historique ne servent plus (reliquat de l'impression, laissées en place).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
