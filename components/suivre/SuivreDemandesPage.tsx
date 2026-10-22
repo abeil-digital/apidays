@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { Printer } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
+import { formatDateAction, formatJours, formatPeriodeDemande } from "@/lib/format";
 import type { LigneExportPaie, StatutDemande } from "@/lib/types";
 import { useCalendrier } from "@/hooks/useCalendrier";
 import { useDemandesEquipe } from "@/hooks/useDemandesEquipe";
@@ -190,6 +191,62 @@ export function SuivreDemandesPage() {
     })
     .sort((a, b) => b.debut.localeCompare(a.debut));
 
+  // Export Excel de la liste affichée (22/10/2026) : une ligne par demande de
+  // `filtered`, filtres actifs rappelés en en-tête du fichier.
+  async function exporterExcel() {
+    const [{ genererXlsxDemandes }, { LABEL_LONG }] = await Promise.all([
+      import("@/lib/exportDemandesXlsx"),
+      import("@/components/demandes/TypeBadge"),
+    ]);
+    const filtresActifs: string[] = [];
+    if (filtre !== "Tous les statuts") filtresActifs.push(`Statut : ${filtre}`);
+    if (periodeFiltre !== "toutes_dates" && (debut || fin)) {
+      filtresActifs.push(
+        `Période : ${debut ? formatDateAction(debut) : "…"} au ${fin ? formatDateAction(fin) : "…"}`,
+      );
+    }
+    if (collaborateurFiltre !== "tous") {
+      const nom = collaborateurs.find(([id]) => id === collaborateurFiltre)?.[1];
+      if (nom) filtresActifs.push(`Collaborateur : ${nom}`);
+    }
+    if (typeFiltre !== "tous") {
+      filtresActifs.push(
+        `Type : ${(LABEL_LONG as Record<string, string>)[typeFiltre] ?? regulSelectionne?.label ?? typeFiltre}`,
+      );
+    }
+    const lignes = filtered.map((d) => {
+      const code = d.type === "CP" && d.isAnticipation ? "CPA" : d.type;
+      const jours = d.nbDemiJournees / 2;
+      const precisions = [
+        d.demiDebut === "apres_midi" ? "début après-midi" : "",
+        d.demiFin === "matin" ? "fin matin" : "",
+      ].filter(Boolean);
+      return {
+        collaborateur: `${d.demandeur.prenom} ${d.demandeur.nom}`,
+        typeCode: code,
+        typeLibelle: (LABEL_LONG as Record<string, string>)[code] ?? code,
+        dates:
+          formatPeriodeDemande(d.debut, d.fin) +
+          (precisions.length > 0 ? ` (${precisions.join(", ")})` : ""),
+        duree: `${formatJours(jours)} j`,
+        statut: d.statut,
+        poseLe: formatDateAction(d.datePose),
+        decideLe: d.dateDecision ? formatDateAction(d.dateDecision) : "",
+        validePar: d.validateur ? `${d.validateur.prenom} ${d.validateur.nom}` : "",
+        message: d.note ?? "",
+        commentaire: d.commentaireManager ?? "",
+      };
+    });
+    const aujourdhui = new Date().toISOString().slice(0, 10);
+    const blob = await genererXlsxDemandes(lignes, filtresActifs, formatDateAction(aujourdhui));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `demandes-conges_${aujourdhui}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Vue Kanban (21/09/2026, scope réduit à 3 colonnes le même jour — voir
   // CONTEXTE.md) : les filtres "période" et "statut" de la page n'ont plus
   // de sens ici — aucune des 3 colonnes retenues (En attente /
@@ -284,13 +341,17 @@ export function SuivreDemandesPage() {
                 Liste
               </button>
             </div>
-            <button
-              onClick={() => window.print()}
-              className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
-            >
-              <Printer size={13} />
-              Exporter
-            </button>
+            {/* Vue Liste seulement (22/10/2026, demande de Vincent) : télécharge un
+                fichier Excel des demandes affichées (avant : impression PDF). */}
+            {!vueKanban && (
+              <button
+                onClick={exporterExcel}
+                className="bg-slate hover:bg-slate/90 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-150"
+              >
+                <FileSpreadsheet size={13} />
+                Exporter
+              </button>
+            )}
           </div>
 
           <div className="bg-surface-card w-full min-w-0">

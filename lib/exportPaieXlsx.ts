@@ -16,14 +16,14 @@ import {
 // calendrier), tailles de police, largeurs de colonnes, bordures. La
 // bibliothèque (`write-excel-file`, MIT) n'est chargée qu'au clic.
 
-const MARINE = "#001e32"; // --color-brand-primary
-const GRIS_TEXTE = "#6b7280";
-const GRIS_FOND = "#e5e7eb";
-const GRIS_BORDURE = "#d1d5db";
+export const MARINE = "#001e32"; // --color-brand-primary
+export const GRIS_TEXTE = "#6b7280";
+export const GRIS_FOND = "#e5e7eb";
+export const GRIS_BORDURE = "#d1d5db";
 const ROUGE = "#b42318";
 
 // Couleurs de type de congé (app/globals.css), éclaircies pour garder le texte lisible.
-const COULEUR_TYPE: Record<string, string> = {
+export const COULEUR_TYPE: Record<string, string> = {
   CP: "#5b8def",
   RTT: "#7fbf8f",
   CPA: "#9db4c4",
@@ -33,7 +33,7 @@ const COULEUR_TYPE: Record<string, string> = {
   EVT_FAM: "#d98ca6",
 };
 
-function eclaircir(hex: string, part = 0.7): string {
+export function eclaircir(hex: string, part = 0.7): string {
   const n = parseInt(hex.slice(1), 16);
   const m = (c: number) => Math.round(c + (255 - c) * part);
   const r = m((n >> 16) & 255);

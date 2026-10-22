@@ -8650,6 +8650,27 @@ React 19.2.4 inchangé, compatible). **Avant** : 14 failles (1 critique : exécu
   `manifest.webmanifest`/`icon.svg`/`apple-icon.png` 200, flux Proton avec jeton invalide 404, cron sans secret 401,
   `/_next/image` refuse un SVG (400, voulu). **Parcours connectés vérifiés ensuite en local sur le build de production** (tenant sandbox, comptes de test, aucun e-mail envoyé) : connexion avec mot de passe et déconnexion (Server Actions), pose d'un congé par un salarié, validation par un manager (statut et journal des décisions), transmission paie avec téléchargement de l'Excel, modification d'une règle d'ancienneté, pages Suivre et Paramétrer ; aucune erreur console. Données de test supprimées ensuite (demande, export d'octobre, règle restaurée, mot de passe temporaire neutralisé).
 
+**Suivre les demandes : export Excel en vue Liste, bouton retiré du Kanban (22/10/2026)** : demandes de Vincent.
+- Le bouton « Exporter » (qui lançait `window.print()`, impression PDF) n'est plus affiché en vue **Kanban** ; en vue **Liste** il
+  télécharge un **fichier Excel** `demandes-conges_AAAA-MM-JJ.xlsx` (icône tableur à la place de l'imprimante).
+- Contenu (`lib/exportDemandesXlsx.ts`, module sans React, `write-excel-file` chargée au clic, même charte que l'export paie
+  dont il réutilise couleurs et `eclaircir`/`COULEUR_TYPE`, désormais exportés par `lib/exportPaieXlsx.ts`) : une ligne par demande de
+  la liste affichée (filtres actifs, même tri) — Collaborateur, Type, Dates (précision « début après-midi » / « fin matin »), Durée,
+  Statut (coloré : validé vert, en attente jaune, refusé rouge, annulé gris), Posé le, Décidé le, Décidé par, Message du
+  collaborateur, Commentaire du manager ; en-tête : titre, date d'export, nombre de demandes, rappel des filtres.
+  Construit dans `exporterExcel` de `SuivreDemandesPage.tsx`. `tsc`/`eslint`/`prettier` clean ; fichier d'exemple généré et relu en
+  aperçu ; bouton non cliqué en navigateur par l'agent.
+
+**Données Abeil : validations réattribuées à Olivier Mayol (22/10/2026)** : le compte manager sans solde « Olivier Mayol »
+(`vincentmayol+abeil-olivier@gmail.com`), qui servait de validateur fictif depuis le test des exports, a été renommé « Vincent Mayol » ;
+le vrai manager Olivier MAYOL (`olivier.mayol@abeil-bretagne.fr`, créé le 22/10) devient le validateur historique. **Réattribué en base
+(Abeil seulement, hors code)** : `demandes_conges.validateur_id` (43 lignes) et `decisions_demande.decide_par` (34 lignes) ; aucune autre
+table ne référençait l'ancien compte (exports, régularisations, soldes initiaux, gels : 0). Toutes ces décisions datent d'avant le 24/09
+(données saisies après coup). **Évalué avant d'agir** : aucun déclencheur en base, aucune règle de sécurité dépendante du validateur, les
+soldes ne lisent pas `decide_par`. **Vérifié après** : comptes 43/34 chez Olivier, 0 chez l'ancien compte dans 12 colonnes, identifiants
+identiques à la sauvegarde, outil `scripts/moteur-solde` à **0 écart**. Sauvegarde des lignes modifiées dans un fichier local de la
+session (non versionné) : retour arrière possible tant qu'elle existe.
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
