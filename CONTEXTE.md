@@ -8719,6 +8719,7 @@ personnes **connectées uniquement** (pas de lien public), interface manager en 
   autres modales), texte d'introduction posé sur ce fond (« Apidays est en amélioration continue. » en semi-gras, puis l'invitation à
   faire part de remarques, questions, bugs ou suggestions), formulaire sur **carte blanche**. Champ « Mon message / ma remarque » limité à
   **1000 caractères** côté application (la base accepte jusqu'à 2000). Lien du pied de page « Votre avis compte » en jaune `brand-accent`.
+- **Kit de lancement rangé dans le dépôt** (22/10/2026) : `docs/lancement/` (guide PDF, QR code PNG/SVG vers `https://apidays-seven.vercel.app`, README).
 - **Test final (sandbox, Chrome automatisé, données supprimées ensuite)** : envoi anonyme et nominatif OK, base conforme, manager voit les
   deux, collaborateur ne lit rien et ne peut pas écrire au nom d'un autre, `/feedback` renvoie un collaborateur à l'accueil, rendu mobile
   (390 px) et bureau vérifiés, `tsc`/`eslint`/`prettier`/`build` propres.
