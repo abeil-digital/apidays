@@ -8671,6 +8671,25 @@ soldes ne lisent pas `decide_par`. **Vérifié après** : comptes 43/34 chez Oli
 identiques à la sauvegarde, outil `scripts/moteur-solde` à **0 écart**. Sauvegarde des lignes modifiées dans un fichier local de la
 session (non versionné) : retour arrière possible tant qu'elle existe.
 
+**Saisie à la main de congés Abeil, octobre à décembre 2026 (22/10/2026)** : 16 congés insérés pour 9 collaborateurs à partir de la
+liste de Vincent, validés par **Olivier Mayol** (le vrai manager, `olivier.mayol@abeil-bretagne.fr`), avec leur entrée dans le journal des
+décisions. Données seules, aucun changement de code. Même méthode qu'aux sessions précédentes (liste → simulation → « oui insère » →
+insertion → relecture), avec deux ajouts :
+- **Dates « posé le » / « validé le » plafonnées à aujourd'hui** (jamais dans le futur) pour les congés proches ou à venir ; règle d'origine
+  conservée sinon (posé 5 à 25 jours ouvrés avant le début, jamais avant le 01/06/2026, validé 1 à 4 jours ouvrés après).
+- **Contrôle de solde dans la simulation** : calcul indépendant (`scripts/moteur-solde/oracle.mjs`) des soldes avant/après au jour du
+  dernier congé de chaque collaborateur, avec avertissement si un solde passe en négatif (ce qui avait obligé à convertir des CP de
+  Caillat en CPA lors d'une saisie précédente). Aucun solde négatif cette fois.
+- **Contrôle d'écart** entre le nombre de jours annoncé et celui décompté par l'app : Touchet du 21 au 23/10 annoncé 1,5 j, l'app décompte
+  2,5 j (vendredi 23 après-midi = Repos Abeil) ; Vincent confirme 2,5 j (erreur de la liste).
+- Contenu : Caillat 2 CPA (26-27/10) ; Fontaine 0,5 CP (09/10 matin) et 0,5 CSS (20/11 matin) ; Lozac'h 0,5 CP (09/10 matin) ; Penfornis 4 CP
+  (28/10-02/11) et 2 CPA (03-04/11) ; Randoing 4 × 0,5 CSS (23/10, 06/11, 20/11, 04/12, matins) ; Touchet 2,5 CP (21-23/10) ; Dubosclard 0,5 RTT
+  (20/11 matin) et 1 RTT (25/11) ; Malloire 1 CP (02/11) et 3,5 CP (05-10/11) ; Pettier 2 CP (09-10/11).
+- **Vérifié après insertion** : 59 demandes au total (43 + 16), 50 entrées de journal (34 + 16) toutes validées par Olivier, aucune date de
+  pose ou de décision dans le futur, `scripts/moteur-solde` à **0 écart** (10 collaborateurs × 4 dates × CP/RTT/CPA). Soldes théoriques après
+  saisie : Penfornis CP 0 (CPA 8,4), Caillat CPA 2,82, Touchet CP 4,5, Malloire CP 13,5, Pettier CP 12, Fontaine CP 15, Lozac'h CP 11,
+  Dubosclard RTT 0,5. L'outil de saisie reste dans le dossier de travail de la session (non versionné, il utilise la clé de service).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
