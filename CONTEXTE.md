@@ -8741,6 +8741,13 @@ est mis **en commentaire** dans `components/layout/Footer.tsx` (import `Link` co
 « Votre avis compte ». À réactiver (décommenter les deux blocs) une fois le contenu juridique fourni par Citizen D ; la route reste accessible par
 son adresse.
 
+**Next.js 16.4.0 → 16.4.5 (06/11/2026, faille de sécurité publiée)** : lancé via `next upgrade --agent=security`, mise à jour de même version majeure
+(pas de codemod). `next` et `eslint-config-next` passent à `16.4.5` (versions exactes), `experimental.agentUpgrade: "security"` ajouté à
+`next.config.ts`. Fait dans un worktree séparé (branche `maj-nextjs-16-4-5`), **pas encore fusionné dans `main`**. Vérifié : `tsc`, `eslint`,
+`prettier`, `npm run build` propres ; serveur de production démarré, `/connexion` répond 200 et les routes protégées redirigent (307) sans session.
+Reste à faire avant fusion : parcours connecté en local (comme pour 16.4.0), puis contrôle en production après déploiement. Vérification des PR
+ouvertes impossible (`gh` non authentifié).
+
 ## À faire
 
 Voir [Backlog.md](Backlog.md) — liste unique désormais (25/08/2026, cette section faisait doublon,
