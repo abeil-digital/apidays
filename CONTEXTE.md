@@ -8743,10 +8743,17 @@ son adresse.
 
 **Next.js 16.4.0 → 16.4.5 (06/11/2026, faille de sécurité publiée)** : lancé via `next upgrade --agent=security`, mise à jour de même version majeure
 (pas de codemod). `next` et `eslint-config-next` passent à `16.4.5` (versions exactes), `experimental.agentUpgrade: "security"` ajouté à
-`next.config.ts`. Fait dans un worktree séparé (branche `maj-nextjs-16-4-5`), **pas encore fusionné dans `main`**. Vérifié : `tsc`, `eslint`,
-`prettier`, `npm run build` propres ; serveur de production démarré, `/connexion` répond 200 et les routes protégées redirigent (307) sans session.
-Reste à faire avant fusion : parcours connecté en local (comme pour 16.4.0), puis contrôle en production après déploiement. Vérification des PR
-ouvertes impossible (`gh` non authentifié).
+`next.config.ts`. Préparé dans un worktree séparé (branche `maj-nextjs-16-4-5`), puis **fusionné dans `main` et poussé sur `origin` le 06/11/2026**
+(`df0ebb1`) ; worktree et branche supprimés. Vérifié : `tsc`, `eslint`, `prettier`, `npm run build` propres ; serveur de production démarré
+(`/connexion` répond 200, routes protégées redirigées en 307 sans session) ; **parcours complet en local sur le sandbox**, collaborateur (accueil,
+soldes, calendrier, popin « Poser un congé », Historique + export Excel, accès `/suivre` refusé, feedback anonyme) et manager (calendrier des
+absences, demandes, soldes, transmissions paie, Paramétrer, page Feedback), sans erreur console ni serveur. Non testé : validation d'une demande de
+bout en bout et génération d'une transmission paie (écritures en base). `/connexion` de production répond 200 après le push ; **contrôle connecté en
+production à faire par Vincent** une fois le déploiement Vercel terminé. Vérification des PR ouvertes impossible (`gh` non authentifié).
+- **À surveiller** : avec 16.4.5, `next dev` réécrit `AGENTS.md` (titre abaissé d'un niveau, deux phrases ajoutées par Next.js) ; modification
+  laissée de côté, à valider ou refuser par Vincent si elle apparaît dans le dossier de travail.
+- **Règle de test rappelée par Vincent (06/11/2026)** : tests uniquement sur le tenant `abeil-sandbox`, jamais de lecture ni d'écriture du tenant
+  `abeil` (même base Supabase que le sandbox) ; requêtes de contrôle toujours filtrées par tenant.
 
 ## À faire
 
